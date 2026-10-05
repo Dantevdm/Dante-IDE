@@ -133,7 +133,15 @@ private struct FileRow: View {
 
     private var icon: String {
         if node.isDirectory { return node.isExpanded ? "folder.fill" : "folder" }
-        switch Language(url: node.url) {
+        return FileIcon.symbol(for: node.url, isDirectory: false)
+    }
+}
+
+/// The SF Symbol for a file, shared by the explorer and the command palette.
+enum FileIcon {
+    static func symbol(for url: URL, isDirectory: Bool) -> String {
+        if isDirectory { return "folder" }
+        switch Language(url: url) {
         case .swift: return "swift"
         case .json, .yaml, .toml: return "curlybraces"
         case .markdown: return "doc.richtext"

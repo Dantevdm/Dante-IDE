@@ -117,3 +117,51 @@ struct FileChangedTests {
         #expect(workspace.root.children?.map(\.name) == ["added.swift"])
     }
 }
+
+@MainActor
+struct ExternalChangeTests {
+    @Test func reloadsTabsRefreshesFoldersAndSpotsBranchMoves() throws {
+        let folder = try TemporaryFolder()
+        let open = try folder.write("a.txt", "one")
+        let workspace = Workspace(url: folder.url)
+        let document = try workspace.open(open)
+
+        try "two".write(to: open, atomically: true, encoding: .utf8)
+        let added = try folder.write("b.txt", "")
+        let changes = workspace.applyExternalChanges([open, added, folder.url.appending(path: ".git/HEAD")])
+
+        #expect(document.text == "two")
+        #expect(workspace.root.children?.map(\.name) == ["a.txt", "b.txt"])
+        #expect(changes.gitHeadChanged)
+        #expect(changes.conflicts.isEmpty)
+    }
+
+    @Test func reportsConflictsInsteadOfOverwritingEdits() throws {
+        let folder = try TemporaryFolder()
+        let file = try folder.write("a.txt", "one")
+        let workspace = Workspace(url: folder.url)
+        let document = try workspace.open(file)
+        document.text = "mine"
+        try "theirs".write(to: file, atomically: true, encoding: .utf8)
+        #expect(workspace.applyExternalChanges([file]).conflicts == [file])
+        #expect(document.text == "mine")
+    }
+
+    @Test func mapsSymlinkResolvedPathsBackToTheProject() throws {
+        let folder = try TemporaryFolder()
+        let file = try folder.write("a.txt", "one")
+        let workspace = Workspace(url: folder.url)
+        let document = try workspace.open(file)
+        try "two".write(to: file, atomically: true, encoding: .utf8)
+        // FSEvents reports /private/var/... for files under /var/...
+        workspace.applyExternalChanges([file.resolvingSymlinksInPath()])
+        #expect(document.text == "two")
+    }
+
+    @Test func ignoresBuildFolders() throws {
+        let folder = try TemporaryFolder()
+        let workspace = Workspace(url: folder.url)
+        let changes = workspace.applyExternalChanges([folder.url.appending(path: ".build/x.o")])
+        #expect(changes == .init())
+    }
+}

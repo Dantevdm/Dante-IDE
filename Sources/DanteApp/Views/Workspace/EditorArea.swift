@@ -16,6 +16,9 @@ struct EditorArea: View {
             }
             if let document = workspace.activeDocument {
                 PathBar(document: document, root: workspace.url)
+                if session.conflicts.contains(document.url) {
+                    ConflictBar(session: session, document: document)
+                }
                 DocumentEditor(document: document, theme: theme, fontSize: themeStore.editorFontSize) { position in
                     session.cursor = position
                 }
@@ -180,5 +183,30 @@ private struct EmptyEditor: View {
             Text(label).font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
             Text(keys).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
         }
+    }
+}
+
+/// Shown when the open file changed on disk while it had unsaved edits.
+private struct ConflictBar: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let document: EditorDocument
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(theme.amber.color)
+            Text("\(document.name) changed on disk. Your unsaved edits are still here.")
+                .font(.system(size: 12))
+                .foregroundStyle(theme.text.color)
+            Spacer()
+            Button("Keep mine") { session.resolveConflict(document, reload: false) }
+                .buttonStyle(DanteButtonStyle())
+            Button("Reload from disk") { session.resolveConflict(document, reload: true) }
+                .buttonStyle(DanteButtonStyle(primary: true))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(theme.amber.opacity(0.1).color)
+        .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
     }
 }

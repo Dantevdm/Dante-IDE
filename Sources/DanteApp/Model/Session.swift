@@ -62,6 +62,12 @@ enum Area: String, CaseIterable, Identifiable {
     static let footer: [Area] = [.docs, .spec]
 }
 
+/// What the command palette searches. ⌘K opens it on everything, ⌘P on files.
+enum PaletteScope: String, CaseIterable, Identifiable {
+    case all = "All", files = "Files", docs = "Docs", actions = "Actions"
+    var id: String { rawValue }
+}
+
 struct TerminalInput: Equatable {
     let id = UUID()
     let text: String
@@ -75,11 +81,16 @@ final class Session {
     private(set) var workspace: Workspace?
     private(set) var branch: String?
     private(set) var claude: ClaudeSession?
+    private var watcher: DirectoryWatcher?
+    /// Open files that changed on disk while they had unsaved edits.
+    private(set) var conflicts: Set<URL> = []
 
     var area: Area = .code
     var showsTerminal = true
     var terminalHeight: Double = 240
     var showsClaude = true
+    /// The command palette, when it's open.
+    var palette: PaletteScope?
     var claudeWidth: Double = 380
     /// Text queued for the integrated terminal's shell.
     private(set) var terminalInput: TerminalInput?
@@ -135,6 +146,10 @@ final class Session {
         let workspace = Workspace(url: url)
         self.workspace = workspace
         claude = makeClaude(for: workspace)
+        conflicts = []
+        workspace.refreshFileIndex()
+        watcher?.stop()
+        watcher = DirectoryWatcher(url: url) { [weak self] changed in self?.filesChanged(changed) }
         branch = Git.currentBranch(in: url)
         area = .code
         recents.note(url)
@@ -144,8 +159,26 @@ final class Session {
         guard confirmDiscardingChanges(in: workspace?.documents ?? []) else { return }
         claude?.stop()
         claude = nil
+        watcher?.stop()
+        watcher = nil
+        palette = nil
         workspace = nil
         branch = nil
+    }
+
+    private func filesChanged(_ changed: [URL]) {
+        guard let workspace else { return }
+        let result = workspace.applyExternalChanges(changed)
+        if result.gitHeadChanged { refreshBranch() }
+        conflicts.formUnion(result.conflicts)
+    }
+
+    /// Resolves a disk conflict: reload from disk, or keep the editor's version.
+    func resolveConflict(_ document: EditorDocument, reload: Bool) {
+        conflicts.remove(document.url)
+        if reload {
+            do { try document.reloadFromDisk() } catch { errorMessage = error.localizedDescription }
+        }
     }
 
     func refreshBranch() {
@@ -213,6 +246,7 @@ final class Session {
     private func save(_ document: EditorDocument) {
         do {
             try document.save()
+            conflicts.remove(document.url)
             if document.url.path.contains("/.dante/") { workspace?.reloadLifecycle() }
         } catch {
             errorMessage = "Couldn’t save \(document.name): \(error.localizedDescription)"

@@ -49,6 +49,20 @@ struct WorkspaceView: View {
             }
         }
         .background(theme.ground.color)
+        .overlay {
+            if let scope = session.palette {
+                ZStack(alignment: .top) {
+                    theme.scrim.color
+                        .ignoresSafeArea()
+                        .onTapGesture { session.palette = nil }
+                    CommandPalette(session: session, workspace: workspace, scope: scope)
+                        .padding(.top, 90)
+                        .id(scope)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: session.palette)
     }
 }
 

@@ -33,6 +33,19 @@ struct DanteCommands: Commands {
                 .keyboardShortcut("w")
         }
 
+        // ⌘P is Open Quickly here, as in Xcode and VS Code.
+        CommandGroup(replacing: .printItem) {}
+
+        CommandGroup(after: .textEditing) {
+            Divider()
+            Button("Search or Ask…") { session?.palette = .all }
+                .keyboardShortcut("k")
+                .disabled(session?.workspace == nil)
+            Button("Open Quickly…") { session?.palette = .files }
+                .keyboardShortcut("p")
+                .disabled(session?.workspace == nil)
+        }
+
         CommandGroup(before: .toolbar) {
             Button(session?.showsTerminal == true ? "Hide Terminal" : "Show Terminal") {
                 session?.showsTerminal.toggle()

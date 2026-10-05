@@ -46,7 +46,8 @@ public final class EditorDocument: Identifiable {
 
     /// Replaces the text with the file's current contents and clears the dirty flag.
     public func reloadFromDisk() throws {
-        text = try Self.read(url)
+        let current = try Self.read(url)
+        if current != text { text = current }
         isDirty = false
     }
 

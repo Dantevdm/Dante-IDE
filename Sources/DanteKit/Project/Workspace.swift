@@ -10,6 +10,13 @@ public final class Workspace {
     public var activeDocumentID: EditorDocument.ID?
     public private(set) var lifecycle: Lifecycle
 
+    /// Every file in the project, relative to the root, for quick open. Filled in the background.
+    public private(set) var files: [String] = []
+    private var fileSet: Set<String> = []
+    private var indexTask: Task<Void, Never>?
+    /// The root with symlinks resolved, which is how FSEvents reports paths.
+    private let resolvedRootPath: String
+
     public var url: URL { root.url }
     public var name: String { root.url.lastPathComponent }
 
@@ -22,6 +29,65 @@ public final class Workspace {
         root.loadChildren()
         root.isExpanded = true
         lifecycle = Lifecycle.load(projectRoot: url)
+        resolvedRootPath = url.resolvingSymlinksInPath().standardizedFileURL.path
+    }
+
+    /// Rescans the project's files off the main thread.
+    public func refreshFileIndex() {
+        indexTask?.cancel()
+        let root = url
+        indexTask = Task { [weak self] in
+            let paths = await Task.detached(priority: .utility) { FileIndex.scan(root) }.value
+            guard !Task.isCancelled, let self else { return }
+            self.files = paths
+            self.fileSet = Set(paths)
+        }
+    }
+
+    public struct ExternalChanges: Equatable, Sendable {
+        /// `.git/HEAD` or a branch ref moved, so the current branch may differ.
+        public var gitHeadChanged = false
+        /// Open documents that changed on disk but kept their unsaved edits.
+        public var conflicts: [URL] = []
+    }
+
+    /// Applies a batch of changed paths from the file watcher: refreshes explorer folders,
+    /// reloads clean tabs, notes git branch moves and updates the file index.
+    @discardableResult
+    public func applyExternalChanges(_ changed: [URL]) -> ExternalChanges {
+        var result = ExternalChanges()
+        let rootPath = url.standardizedFileURL.path
+        var folders = Set<URL>()
+        var needsIndex = false
+
+        for raw in changed {
+            var path = raw.standardizedFileURL.path
+            if path.hasPrefix(resolvedRootPath + "/") { path = rootPath + path.dropFirst(resolvedRootPath.count) }
+            guard path.hasPrefix(rootPath + "/") else { continue }
+            let relative = String(path.dropFirst(rootPath.count + 1))
+            let components = relative.split(separator: "/").map(String.init)
+            if components.first == ".git" {
+                if relative == ".git/HEAD" || relative.hasPrefix(".git/refs/heads/") { result.gitHeadChanged = true }
+                continue
+            }
+            if components.contains(where: FileTree.ignoredNames.contains) { continue }
+
+            let file = URL(filePath: path)
+            folders.insert(file.deletingLastPathComponent().standardizedFileURL)
+            let exists = FileManager.default.fileExists(atPath: path)
+            if exists != fileSet.contains(relative) { needsIndex = true }
+            if relative.hasPrefix(".dante/") { reloadLifecycle() }
+            if let document = documents.first(where: { $0.url.standardizedFileURL.path == path }), exists {
+                if document.isDirty {
+                    result.conflicts.append(document.url)
+                } else {
+                    try? document.reloadFromDisk()
+                }
+            }
+        }
+        for folder in folders { root.node(for: folder)?.loadChildren() }
+        if needsIndex { refreshFileIndex() }
+        return result
     }
 
     /// Opens a file in a tab, or switches to its tab if it's already open.
