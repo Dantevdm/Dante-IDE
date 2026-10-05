@@ -6,6 +6,8 @@ final class LineNumberRuler: NSRulerView {
     var textColor = NSColor.secondaryLabelColor { didSet { needsDisplay = true } }
     var activeTextColor = NSColor.labelColor { didSet { needsDisplay = true } }
     var backgroundColor = NSColor.textBackgroundColor { didSet { needsDisplay = true } }
+    /// Lines with a diagnostic, and the colour of the most severe one.
+    var diagnosticMarks: [Int: NSColor] = [:] { didSet { if diagnosticMarks != oldValue { needsDisplay = true } } }
 
     /// UTF-16 offsets where each line starts.
     private var lineStarts: [Int] = [0]
@@ -83,6 +85,10 @@ final class LineNumberRuler: NSRulerView {
             let point = convert(NSPoint(x: 0, y: top + textView.textContainerOrigin.y), from: textView)
             let box = NSRect(x: 0, y: point.y + (height - size.height) / 2, width: ruleThickness - 14, height: size.height)
             label.draw(in: box, withAttributes: attributes)
+            if let marker = diagnosticMarks[line] {
+                marker.setFill()
+                NSBezierPath(ovalIn: NSRect(x: 7, y: box.midY - 3, width: 6, height: 6)).fill()
+            }
         }
 
         var lastLine = -1

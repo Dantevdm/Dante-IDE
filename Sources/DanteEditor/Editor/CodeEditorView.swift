@@ -12,6 +12,21 @@ public struct CursorPosition: Equatable, Sendable {
     }
 }
 
+/// A problem a language server reported, already converted to a range in the editor's text.
+public struct EditorDiagnostic: Equatable, Sendable {
+    public enum Severity: Sendable { case error, warning, note }
+
+    public var range: NSRange
+    public var severity: Severity
+    public var message: String
+
+    public init(range: NSRange, severity: Severity, message: String) {
+        self.range = range
+        self.severity = severity
+        self.message = message
+    }
+}
+
 /// A TextKit 2 code editor: monospaced, unwrapped, with a line-number gutter,
 /// syntax colours from the theme and auto-indent.
 ///
@@ -21,20 +36,30 @@ public struct CodeEditorView: NSViewRepresentable {
     let language: Language
     let theme: Theme
     var fontSize: CGFloat
+    var diagnostics: [EditorDiagnostic]
+    @Binding var reveal: NSRange?
     var onCursorChange: (CursorPosition) -> Void
+    /// Called with the UTF-16 offset of a ⌘-click or "Jump to Definition".
+    var onDefinition: ((Int) -> Void)?
 
     public init(
         text: Binding<String>,
         language: Language,
         theme: Theme,
         fontSize: CGFloat = 13,
-        onCursorChange: @escaping (CursorPosition) -> Void = { _ in }
+        diagnostics: [EditorDiagnostic] = [],
+        reveal: Binding<NSRange?> = .constant(nil),
+        onCursorChange: @escaping (CursorPosition) -> Void = { _ in },
+        onDefinition: ((Int) -> Void)? = nil
     ) {
         _text = text
         self.language = language
         self.theme = theme
         self.fontSize = fontSize
+        self.diagnostics = diagnostics
+        _reveal = reveal
         self.onCursorChange = onCursorChange
+        self.onDefinition = onDefinition
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -83,6 +108,7 @@ public struct CodeEditorView: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.textView = textView
         coordinator.ruler = ruler
+        textView.onDefinition = { [weak coordinator] offset in coordinator?.parent.onDefinition?(offset) }
         coordinator.apply(theme: theme, fontSize: fontSize)
         textView.string = text
         coordinator.textDidChangeExternally()
@@ -114,6 +140,20 @@ public struct CodeEditorView: NSViewRepresentable {
             textView.string = text
             coordinator.textDidChangeExternally()
         }
+        textView.canJumpToDefinition = onDefinition != nil
+        if coordinator.diagnostics != diagnostics {
+            coordinator.diagnostics = diagnostics
+            coordinator.applyTokens()
+        }
+        if let range = reveal {
+            let length = (textView.string as NSString).length
+            let clamped = NSRange(location: min(range.location, length), length: min(range.length, length - min(range.location, length)))
+            textView.setSelectedRange(clamped)
+            textView.scrollRangeToVisible(clamped)
+            textView.window?.makeFirstResponder(textView)
+            if clamped.length > 0 { textView.showFindIndicator(for: clamped) }
+            DispatchQueue.main.async { reveal = nil }
+        }
     }
 
     @MainActor
@@ -127,6 +167,7 @@ public struct CodeEditorView: NSViewRepresentable {
         private var highlightTask: Task<Void, Never>?
         /// The last tokens computed, and the text they were computed for.
         private var tokens: (text: String, tokens: [Token])?
+        var diagnostics: [EditorDiagnostic] = []
         private var baseAttributes: [NSAttributedString.Key: Any] = [:]
         /// NSTextView reports the new selection before `textDidChange`, so an edit marks the
         /// line index stale and whichever callback runs first rebuilds it.
@@ -266,7 +307,7 @@ public struct CodeEditorView: NSViewRepresentable {
         }
 
         /// Attributes go straight onto the text storage, which doesn't touch undo or the selection.
-        private func applyTokens() {
+        func applyTokens() {
             guard let textView, let storage = textView.textStorage, let theme = appliedTheme, let tokens else { return }
             let length = (textView.string as NSString).length
             storage.beginEditing()
@@ -274,7 +315,53 @@ public struct CodeEditorView: NSViewRepresentable {
             for token in tokens.tokens where NSMaxRange(token.range) <= length {
                 storage.addAttribute(.foregroundColor, value: color(for: token.kind, in: theme), range: token.range)
             }
+            var markers: [Int: NSColor] = [:]
+            // Most severe last, so an error's underline wins where problems overlap.
+            for diagnostic in diagnostics.sorted(by: { rank($0.severity) < rank($1.severity) }) where diagnostic.range.location < max(length, 1) {
+                var range = NSIntersectionRange(diagnostic.range, NSRange(location: 0, length: length))
+                // An empty range marks a point; underline the word there so it shows.
+                if range.length == 0, length > 0 {
+                    range = Self.word(at: min(range.location, length - 1), in: textView.string as NSString)
+                }
+                let color = diagnosticColor(diagnostic.severity, in: theme)
+                storage.addAttributes([
+                    .underlineStyle: NSUnderlineStyle.thick.rawValue | NSUnderlineStyle.patternDot.rawValue,
+                    .underlineColor: color,
+                    .toolTip: diagnostic.message,
+                ], range: range)
+                if let line = ruler?.lineIndex(forOffset: range.location) { markers[line] = color }
+            }
             storage.endEditing()
+            ruler?.diagnosticMarks = markers
+        }
+
+        static func word(at index: Int, in text: NSString) -> NSRange {
+            func isWord(_ i: Int) -> Bool {
+                guard let scalar = Unicode.Scalar(text.character(at: i)) else { return false }
+                return CharacterSet.alphanumerics.contains(scalar) || scalar == "_"
+            }
+            guard isWord(index) else { return NSRange(location: index, length: 1) }
+            var start = index
+            var end = index + 1
+            while start > 0, isWord(start - 1) { start -= 1 }
+            while end < text.length, isWord(end) { end += 1 }
+            return NSRange(location: start, length: end - start)
+        }
+
+        private func rank(_ severity: EditorDiagnostic.Severity) -> Int {
+            switch severity {
+            case .note: 0
+            case .warning: 1
+            case .error: 2
+            }
+        }
+
+        private func diagnosticColor(_ severity: EditorDiagnostic.Severity, in theme: Theme) -> NSColor {
+            switch severity {
+            case .error: theme.red.nsColor
+            case .warning: theme.amber.nsColor
+            case .note: theme.text3.nsColor
+            }
         }
 
         private func color(for kind: TokenKind, in theme: Theme) -> NSColor {
@@ -293,6 +380,37 @@ public struct CodeEditorView: NSViewRepresentable {
 /// Draws a soft band behind the line with the caret.
 public final class CodeTextView: NSTextView {
     var currentLineColor: NSColor = .clear
+    var canJumpToDefinition = false
+    var onDefinition: ((Int) -> Void)?
+
+    /// ⌘-click jumps to the definition of what's under the pointer.
+    public override func mouseDown(with event: NSEvent) {
+        if canJumpToDefinition, event.modifierFlags.contains(.command) {
+            let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+            setSelectedRange(NSRange(location: index, length: 0))
+            onDefinition?(index)
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    public override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        guard canJumpToDefinition else { return menu }
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        let item = NSMenuItem(title: "Jump to Definition", action: #selector(jumpToDefinition(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = index
+        menu.insertItem(item, at: 0)
+        menu.insertItem(.separator(), at: 1)
+        return menu
+    }
+
+    @objc private func jumpToDefinition(_ sender: NSMenuItem) {
+        guard let index = sender.representedObject as? Int else { return }
+        setSelectedRange(NSRange(location: index, length: 0))
+        onDefinition?(index)
+    }
 
     public override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)

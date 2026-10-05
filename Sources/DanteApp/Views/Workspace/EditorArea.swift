@@ -19,10 +19,18 @@ struct EditorArea: View {
                 if session.conflicts.contains(document.url) {
                     ConflictBar(session: session, document: document)
                 }
-                DocumentEditor(document: document, theme: theme, fontSize: themeStore.editorFontSize) { position in
-                    session.cursor = position
-                }
+                DocumentEditor(
+                    document: document,
+                    theme: theme,
+                    fontSize: themeStore.editorFontSize,
+                    diagnostics: session.languages?.diagnostics(for: document) ?? [],
+                    canJump: session.languages?.existingClient(for: document.language) != nil,
+                    onCursorChange: { session.cursor = $0 },
+                    onDefinition: { session.jumpToDefinition(in: document, at: $0) }
+                )
                 .id(document.id)
+                .task(id: document.id) { session.languages?.opened(document) }
+                .onChange(of: document.text) { session.languages?.changed(document) }
             } else {
                 EmptyEditor(hasTabs: !workspace.documents.isEmpty)
             }
@@ -35,7 +43,10 @@ private struct DocumentEditor: View {
     @Bindable var document: EditorDocument
     let theme: Theme
     let fontSize: Double
+    let diagnostics: [LSPDiagnostic]
+    let canJump: Bool
     let onCursorChange: (CursorPosition) -> Void
+    let onDefinition: (Int) -> Void
 
     var body: some View {
         CodeEditorView(
@@ -43,8 +54,24 @@ private struct DocumentEditor: View {
             language: document.language,
             theme: theme,
             fontSize: fontSize,
-            onCursorChange: onCursorChange
+            diagnostics: editorDiagnostics,
+            reveal: $document.revealRange,
+            onCursorChange: onCursorChange,
+            onDefinition: canJump ? onDefinition : nil
         )
+    }
+
+    private var editorDiagnostics: [EditorDiagnostic] {
+        guard !diagnostics.isEmpty else { return [] }
+        let lines = LineIndex(document.text as NSString)
+        return diagnostics.map { diagnostic in
+            let severity: EditorDiagnostic.Severity = switch diagnostic.severity {
+            case .error: .error
+            case .warning: .warning
+            case .information, .hint: .note
+            }
+            return EditorDiagnostic(range: lines.range(of: diagnostic.range), severity: severity, message: diagnostic.message)
+        }
     }
 }
 

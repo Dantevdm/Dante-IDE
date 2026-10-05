@@ -23,13 +23,14 @@ struct DanteApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// A folder passed on the command line (`Dante path/to/project`), opened by the first window.
-    @MainActor static var launchFolder: URL? = CommandLine.arguments.dropFirst()
-        .first { !$0.hasPrefix("-") }
+    /// Paths passed on the command line (`Dante path/to/project [file …]`): the first window
+    /// opens the folder, then any files after it.
+    @MainActor static var launchPaths: [URL] = CommandLine.arguments.dropFirst()
+        .filter { !$0.hasPrefix("-") }
         .map { URL(filePath: $0, relativeTo: URL(filePath: FileManager.default.currentDirectoryPath)).standardizedFileURL }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // `launchFolder` handles the folder argument. Left to AppKit, it becomes an open-file
+        // `launchPaths` handles the folder argument. Left to AppKit, it becomes an open-file
         // event, and SwiftUI then skips the window it would make at launch.
         UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])
     }
@@ -83,9 +84,11 @@ struct RootView: View {
         .focusedSceneValue(\.session, session)
         .navigationTitle(session.workspace?.name ?? "Dante")
         .onAppear {
-            if let folder = AppDelegate.launchFolder {
-                AppDelegate.launchFolder = nil
+            let paths = AppDelegate.launchPaths
+            AppDelegate.launchPaths = []
+            if let folder = paths.first {
                 session.open(folder: folder)
+                for file in paths.dropFirst() { session.open(file: file) }
             }
         }
         .sheet(isPresented: $session.isCloning) {

@@ -4,13 +4,14 @@ A native macOS IDE organised around the whole software lifecycle: Discover, Defi
 
 Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dante/`, so you and Claude are reading the same source of truth.
 
-**Status:** milestone 3. Every lifecycle area has a working screen: Home, Plan, Map, Code, Tests, Env, Ship, Run, Docs and Spec. Language servers are next. See the [design canvas](https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi).
+**Status:** milestone 3. Every lifecycle area has a working screen: Home, Plan, Map, Code, Tests, Env, Ship, Run, Docs and Spec, and the editor has tree-sitter highlighting and language servers. See the [design canvas](https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi).
 
 ## What works today
 
 - Launch screen with recent projects, plus new project, open folder and clone
 - Dark, Light and Paper themes (⌥⌘T to cycle)
 - File explorer, tabs, and a TextKit 2 code editor with tree-sitter highlighting (Swift, Python, JavaScript, TypeScript, Go, Rust, JSON; regex for the rest), line numbers and auto-indent
+- Language servers for diagnostics and Jump to Definition (⌘-click or ⌃⌘J): SourceKit-LSP, typescript-language-server, Pyright, gopls, rust-analyzer and clangd, whichever are installed. Problems are underlined, marked in the gutter and listed from the status bar
 - Integrated terminal running your login shell (⌃`)
 - Claude pair panel (⌘L): runs Claude Code headless in the project. Every edit arrives as a diff to apply or decline, and every command waits for your go-ahead. Claude knows the `.dante` format and the current phase, and sees which file you have open
 - Command palette (⌘K, or ⌘P for files): fuzzy file search, docs, actions, and Tab to ask Claude
@@ -45,6 +46,8 @@ This builds a release binary and wraps it in `build/Dante.app`. Use `scripts/bun
 ```bash
 open build/Dante.app --args ~/path/to/project
 ```
+
+Files after the folder open in tabs: `--args ~/project ~/project/Sources/main.swift`.
 
 Run the tests:
 

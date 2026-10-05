@@ -79,7 +79,7 @@ public enum JSONValue: Equatable, Sendable, Codable {
 }
 
 extension JSONValue: ExpressibleByStringLiteral, ExpressibleByDictionaryLiteral, ExpressibleByArrayLiteral,
-    ExpressibleByBooleanLiteral, ExpressibleByNilLiteral {
+    ExpressibleByBooleanLiteral, ExpressibleByNilLiteral, ExpressibleByIntegerLiteral {
     public init(stringLiteral value: String) { self = .string(value) }
     public init(dictionaryLiteral elements: (String, JSONValue)...) {
         self = .object(Dictionary(elements, uniquingKeysWith: { _, last in last }))
@@ -87,4 +87,5 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByDictionaryLiteral,
     public init(arrayLiteral elements: JSONValue...) { self = .array(elements) }
     public init(booleanLiteral value: Bool) { self = .bool(value) }
     public init(nilLiteral: ()) { self = .null }
+    public init(integerLiteral value: Int) { self = .number(Double(value)) }
 }

@@ -78,6 +78,8 @@ final class Session {
     private(set) var workspace: Workspace?
     private(set) var branch: String?
     private(set) var claude: ClaudeSession?
+    /// Language servers for the open project's files.
+    private(set) var languages: LanguageServices?
     private var watcher: DirectoryWatcher?
     /// Open files that changed on disk while they had unsaved edits.
     private(set) var conflicts: Set<URL> = []
@@ -168,9 +170,11 @@ final class Session {
         }
         guard confirmDiscardingChanges(in: workspace?.documents ?? []) else { return }
         claude?.stop()
+        languages?.stop()
         let workspace = Workspace(url: url)
         self.workspace = workspace
         claude = makeClaude(for: workspace)
+        languages = LanguageServices(root: url)
         conflicts = []
         workspace.refreshFileIndex()
         watcher?.stop()
@@ -184,6 +188,8 @@ final class Session {
         guard confirmDiscardingChanges(in: workspace?.documents ?? []) else { return }
         claude?.stop()
         claude = nil
+        languages?.stop()
+        languages = nil
         watcher?.stop()
         watcher = nil
         palette = nil
@@ -260,6 +266,28 @@ final class Session {
         }
     }
 
+    /// Opens where the symbol at `offset` in `document` is defined.
+    func jumpToDefinition(in document: EditorDocument, at offset: Int) {
+        guard let languages else { return }
+        Task {
+            let locations = await languages.definition(in: document, at: offset)
+            guard let location = locations.first else {
+                NSSound.beep()
+                return
+            }
+            open(file: location.url)
+            guard let target = workspace?.activeDocument, target.url.standardizedFileURL == location.url else { return }
+            target.revealRange = location.range.nsRange(in: target.text as NSString)
+        }
+    }
+
+    /// The same, for the caret in the active editor (Navigate › Jump to Definition).
+    func jumpToDefinitionAtCursor() {
+        guard let document = workspace?.activeDocument else { return }
+        let position = LSPPosition(line: cursor.line - 1, character: cursor.column - 1)
+        jumpToDefinition(in: document, at: position.offset(in: document.text as NSString))
+    }
+
     func saveActive() {
         guard let document = workspace?.activeDocument else { return }
         save(document)
@@ -272,6 +300,7 @@ final class Session {
     func save(_ document: EditorDocument) {
         do {
             try document.save()
+            languages?.saved(document)
             conflicts.remove(document.url)
             if document.url.path.contains("/.dante/") { workspace?.reloadSpec() }
         } catch {
@@ -281,6 +310,7 @@ final class Session {
 
     func close(_ document: EditorDocument) {
         guard confirmDiscardingChanges(in: [document]) else { return }
+        languages?.closed(document)
         workspace?.close(document)
     }
 

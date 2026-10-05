@@ -44,6 +44,9 @@ struct DanteCommands: Commands {
             Button("Open Quickly…") { session?.palette = .files }
                 .keyboardShortcut("p")
                 .disabled(session?.workspace == nil)
+            Button("Jump to Definition") { session?.jumpToDefinitionAtCursor() }
+                .keyboardShortcut("j", modifiers: [.control, .command])
+                .disabled(session?.workspace?.activeDocument == nil)
         }
 
         CommandGroup(before: .toolbar) {

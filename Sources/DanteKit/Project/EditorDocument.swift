@@ -31,6 +31,10 @@ public final class EditorDocument: Identifiable {
 
     public var name: String { url.lastPathComponent }
 
+    /// A range for the editor to select and scroll to, such as a jump to a definition.
+    /// The editor clears it once shown.
+    public var revealRange: NSRange?
+
     public init(url: URL) throws {
         self.url = url
         self.language = Language(url: url)
