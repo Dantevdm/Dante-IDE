@@ -102,6 +102,11 @@ final class Session {
 
     init(recents: RecentProjects) {
         self.recents = recents
+        Sessions.register(self)
+    }
+
+    var hasUnsavedChanges: Bool {
+        workspace?.documents.contains(where: \.isDirty) ?? false
     }
 
     // MARK: Projects
@@ -191,7 +196,8 @@ final class Session {
         let claude = ClaudeSession(
             root: workspace.url,
             executable: SystemStatus.detect().claudePath,
-            systemPrompt: { [weak workspace] in ClaudeBrief.systemPrompt(for: workspace) }
+            systemPrompt: { [weak workspace] in ClaudeBrief.systemPrompt(for: workspace) },
+            rules: { [weak workspace] in workspace?.claudeRules ?? ClaudeRules() }
         )
         claude.onFileChanged = { [weak workspace] url in workspace?.fileChanged(at: url) }
         return claude
@@ -243,7 +249,7 @@ final class Session {
         workspace?.documents.filter(\.isDirty).forEach(save)
     }
 
-    private func save(_ document: EditorDocument) {
+    func save(_ document: EditorDocument) {
         do {
             try document.save()
             conflicts.remove(document.url)
@@ -275,6 +281,11 @@ final class Session {
 
     /// Asks before throwing away unsaved edits. Returns false if the user cancels.
     private func confirmDiscardingChanges(in documents: [EditorDocument]) -> Bool {
+        Self.confirmDiscardingChanges(in: documents, save: save)
+    }
+
+    /// Asks before throwing away unsaved edits. Returns false if the user cancels or a save fails.
+    static func confirmDiscardingChanges(in documents: [EditorDocument], save: (EditorDocument) -> Void) -> Bool {
         let dirty = documents.filter(\.isDirty)
         guard !dirty.isEmpty else { return true }
         let alert = NSAlert()
@@ -295,4 +306,18 @@ final class Session {
             return false
         }
     }
+}
+
+/// Every open window's session, so app-wide events (quit) can reach them all.
+@MainActor
+enum Sessions {
+    private final class Weak { weak var session: Session?; init(_ session: Session) { self.session = session } }
+    private static var entries: [Weak] = []
+
+    static func register(_ session: Session) {
+        entries.removeAll { $0.session == nil }
+        entries.append(Weak(session))
+    }
+
+    static var all: [Session] { entries.compactMap(\.session) }
 }

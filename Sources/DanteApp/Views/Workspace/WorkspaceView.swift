@@ -63,6 +63,7 @@ struct WorkspaceView: View {
             }
         }
         .animation(.easeOut(duration: 0.12), value: session.palette)
+        .background(WindowEditedMarker(isEdited: session.hasUnsavedChanges))
     }
 }
 
@@ -100,5 +101,17 @@ struct ResizeHandle: View {
                     .onEnded { _ in start = nil }
             )
             .zIndex(1)
+    }
+}
+
+/// Puts the standard "unsaved changes" dot in the window's close button.
+private struct WindowEditedMarker: NSViewRepresentable {
+    let isEdited: Bool
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        let isEdited = isEdited
+        DispatchQueue.main.async { view.window?.isDocumentEdited = isEdited }
     }
 }

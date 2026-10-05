@@ -7,13 +7,13 @@ Native macOS IDE in Swift 6 / SwiftUI, built with SwiftPM (no Xcode project). De
 - Build: `swift build`
 - Test: `swift test` (Swift Testing: `import Testing`, `@Test`, `#expect`)
 - App bundle: `scripts/bundle.sh [debug] [--open]` → `build/Dante.app` (bundle id `dev.dante.ide`)
-- Open a folder on launch: `open build/Dante.app --args "$PWD"`
+- Open a folder on launch: `open build/Dante.app --args "$PWD"` (AppDelegate turns off `NSTreatUnknownArgumentsAsOpen`; otherwise AppKit treats the path as an open-file event and SwiftUI makes no window)
 
 ## Modules
 
 - `DanteKit`: UI-free models. `@MainActor @Observable` classes, value types elsewhere. Must not import SwiftUI views.
 - `DanteEditor`: the AppKit editor (`CodeEditorView` wraps a TextKit 2 `NSTextView`). Highlighters sit behind the `Highlighter` protocol so tree-sitter can replace `RegexHighlighter` later.
-- `DanteKit/Claude`: talks to Claude Code with `claude --input-format stream-json --output-format stream-json --permission-prompt-tool stdio` (the Agent SDK's wire protocol). `ClaudeEvent` parses output lines, `ClaudeInput` builds stdin messages, `ClaudeSession` keeps the transcript, and `ProposedChange` turns Edit/MultiEdit/Write calls into diffs. Child processes must not inherit `CLAUDECODE`, or Claude Code refuses to start as a nested session.
+- `DanteKit/Claude`: talks to Claude Code with `claude --input-format stream-json --output-format stream-json --permission-prompt-tool stdio` (the Agent SDK's wire protocol). `ClaudeEvent` parses output lines, `ClaudeInput` builds stdin messages, `ClaudeSession` keeps the transcript, and `ProposedChange` turns Edit/MultiEdit/Write calls into diffs. Child processes must not inherit `CLAUDECODE`, or Claude Code refuses to start as a nested session. `ClaudeRules` reads `claude:` from `project.yaml`: `never` paths go to Claude Code as `--settings` deny rules and are also refused in `can_use_tool`; `flag` and out-of-`propose` edits get a `ruleNote` on the diff.
 - `DanteKit/Plan`: `.dante/tasks.yaml` (`TaskBoard`, via Yams) and `.dante/phases/<phase>.md` (`PhaseDoc`, plain markdown checklists). `Workspace.reloadSpec()` re-reads all of `.dante/`; the file watcher calls it on any change there. Edits to `project.yaml` are made line by line (`Lifecycle.settingCurrent`) so comments survive.
 - `DanteApp`: the SwiftUI app. `Session` holds per-window state; `ThemeStore` is app-wide.
 

@@ -30,11 +30,11 @@ tasks:
 - id: DI-7
   title: Enforce Claude's propose, flag and never rules from project.yaml
   phase: build
-  state: ready
+  state: review
 - id: DI-8
   title: Ask about unsaved changes on quit
   phase: build
-  state: ready
+  state: review
 - id: DI-9
   title: Home area with the project at a glance
   phase: build

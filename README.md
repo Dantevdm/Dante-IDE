@@ -17,6 +17,8 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Live file watching: the explorer, open tabs and branch stay current when files change outside the editor
 - Plan: lifecycle phases, "ready" and "done" checklists from `.dante/phases/<phase>.md`, and a drag-and-drop task board stored in `.dante/tasks.yaml`. "Work on this with Claude" hands a task to the pair panel
 - Lifecycle ribbon read from `.dante/project.yaml`
+- Claude rules in `.dante/project.yaml` (`claude: propose / flag / never`): flagged paths are called out on the diff, and never-paths are refused, reads included
+- Quitting with unsaved files asks once for every window: save, discard or cancel
 
 ## Requirements
 

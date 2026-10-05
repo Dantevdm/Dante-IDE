@@ -12,6 +12,14 @@ public enum ClaudeBrief {
             "Phases are guidance, not gates: favour work that fits the current phase, but don't refuse other work.",
         ]
         if let workspace {
+            let rules = workspace.claudeRules
+            if !rules.isEmpty {
+                var parts: [String] = []
+                if !rules.propose.isEmpty { parts.append("propose changes in \(rules.propose.joined(separator: ", "))") }
+                if !rules.flag.isEmpty { parts.append("call out any change to \(rules.flag.joined(separator: ", ")) and explain why it's needed") }
+                if !rules.never.isEmpty { parts.append("never read or change \(rules.never.joined(separator: ", "))") }
+                lines.append("This project's rules for you (.dante/project.yaml): " + parts.joined(separator: "; ") + ".")
+            }
             let lifecycle = workspace.lifecycle
             if let current = lifecycle.currentIndex {
                 lines.append("The project is in the \(lifecycle.phases[current]) phase (\(current + 1) of \(lifecycle.phases.count): \(lifecycle.phases.joined(separator: ", "))).")

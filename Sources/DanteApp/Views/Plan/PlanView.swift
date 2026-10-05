@@ -29,6 +29,7 @@ struct PlanView: View {
                     if !lifecycle.hasSpec { NoSpecBanner(session: session, workspace: workspace, phase: phase) }
                     header
                     Checklists(session: session, workspace: workspace, phase: phase)
+                    ClaudeRulesCard(session: session, workspace: workspace)
                     TaskBoardView(session: session, workspace: workspace, phase: phase) { isAddingTask = true }
                 }
                 .padding(28)
@@ -335,6 +336,128 @@ private struct ChecklistCard: View {
             }
         }
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: Claude rules
+
+/// "What Claude may propose here": the `claude:` rules from project.yaml.
+private struct ClaudeRulesCard: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+
+    var body: some View {
+        let rules = workspace.claudeRules
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("What Claude may propose", systemImage: "sparkle")
+                    .labelStyle(.titleAndIcon)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(theme.text.color)
+                Spacer()
+                Button(".dante/project.yaml") { session.open(file: workspace.danteFolder.appending(path: "project.yaml")) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .foregroundStyle(theme.accent.color)
+                    .disabled(!workspace.lifecycle.hasSpec)
+            }
+            if rules.isEmpty {
+                Text("No rules yet. Add a `claude:` block to project.yaml with `propose`, `flag` and `never` lists of folders and globs. Claude is still asked before every change.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.text2.color)
+            } else {
+                HStack(alignment: .top, spacing: 18) {
+                    column("Changes to", rules.propose.isEmpty ? ["anywhere"] : rules.propose, color: theme.green.color)
+                    column("Flag first", rules.flag, color: theme.amber.color)
+                    column("Never", rules.never, color: theme.red.color)
+                }
+                Text("You apply every change. Flagged paths are called out in the diff; never-paths are refused before you see them, reads included.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(theme.text3.color)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
+    }
+
+    private func column(_ title: String, _ patterns: [String], color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle().fill(color).frame(width: 6, height: 6)
+                Text(title).font(.system(size: 11.5, weight: .medium)).foregroundStyle(theme.text2.color)
+            }
+            if patterns.isEmpty {
+                Text("—").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+            }
+            FlowChips(items: patterns)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Small monospaced chips that wrap onto new lines.
+private struct FlowChips: View {
+    @Environment(\.theme) private var theme
+    let items: [String]
+
+    var body: some View {
+        FlowLayout(spacing: 5) {
+            ForEach(items, id: \.self) { item in
+                Text(item)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(theme.text.color)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(theme.raised.color))
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(theme.line.color))
+            }
+        }
+    }
+}
+
+/// Lays children out left to right, wrapping when a row is full.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = rows(for: subviews, width: proposal.width ?? .infinity)
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
+        let width = rows.map(\.width).max() ?? 0
+        return CGSize(width: proposal.width ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in rows(for: subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func rows(for subviews: Subviews, width: CGFloat) -> [Row] {
+        var rows: [Row] = [Row()]
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            if !rows[rows.count - 1].indices.isEmpty, rows[rows.count - 1].width + spacing + size.width > width {
+                rows.append(Row())
+            }
+            var row = rows[rows.count - 1]
+            row.width += (row.indices.isEmpty ? 0 : spacing) + size.width
+            row.height = max(row.height, size.height)
+            row.indices.append(index)
+            rows[rows.count - 1] = row
+        }
+        return rows.filter { !$0.indices.isEmpty }
     }
 }
 

@@ -31,6 +31,14 @@ struct ToolRow: View {
             .buttonStyle(.plain)
             .help(tool.change != nil && !tool.isAwaitingApproval ? (expanded ? "Hide changes" : "Show changes") : "")
 
+            if let note = tool.ruleNote {
+                Label(note, systemImage: tool.blockedByRule ? "lock.fill" : "flag.fill")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(tool.blockedByRule ? theme.red.color : theme.amber.color)
+                    .padding(.leading, 21)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if let change = tool.change, tool.isAwaitingApproval || expanded {
                 DiffCard(change: change)
             } else if tool.isAwaitingApproval, let command = tool.input["command"]?.string {
@@ -72,6 +80,7 @@ struct ToolRow: View {
 
     private var verb: String {
         let resolved = !tool.isAwaitingApproval && tool.status != .running
+        if tool.blockedByRule { return "Blocked" }
         switch tool.name {
         case "Read": return "Read"
         case "Edit", "MultiEdit": return tool.status == .declined ? "Declined edit" : (resolved ? "Edited" : "Edit")

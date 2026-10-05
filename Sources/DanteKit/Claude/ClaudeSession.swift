@@ -17,6 +17,10 @@ public struct ToolActivity: Equatable, Sendable {
     public var status: Status
     /// The diff to review, for Edit, MultiEdit and Write.
     public var change: ProposedChange?
+    /// What the project's Claude rules said about this call, if anything.
+    public var ruleNote: String?
+    /// Refused automatically by a `never` rule.
+    public var blockedByRule = false
 
     public var isAwaitingApproval: Bool {
         if case .awaitingApproval = status { true } else { false }
@@ -59,6 +63,9 @@ public final class ClaudeSession {
     public let root: URL
     public let executable: String?
     private let systemPrompt: () -> String
+    private let rules: () -> ClaudeRules
+    private var startedRules = ClaudeRules()
+    private var sessionID: String?
 
     private var process: Process?
     private var stdin: FileHandle?
@@ -71,10 +78,11 @@ public final class ClaudeSession {
     private var streamedTextBlocks: [String: Int] = [:]
     private var finishedTextBlocks: [String: Int] = [:]
 
-    public init(root: URL, executable: String?, systemPrompt: @escaping () -> String) {
+    public init(root: URL, executable: String?, systemPrompt: @escaping () -> String, rules: @escaping () -> ClaudeRules = { ClaudeRules() }) {
         self.root = root
         self.executable = executable
         self.systemPrompt = systemPrompt
+        self.rules = rules
         if executable == nil {
             state = .unavailable("Claude Code isn’t installed. Install it from claude.com/claude-code, then reopen the project.")
         }
@@ -92,6 +100,10 @@ public final class ClaudeSession {
     public func send(_ text: String, context: String? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, state != .working else { return }
+        // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
+        if process != nil, rules() != startedRules {
+            stop()
+        }
         if process == nil {
             guard start() else { return }
         }
@@ -127,6 +139,7 @@ public final class ClaudeSession {
         index = [:]
         totalCostUSD = 0
         needsLogin = false
+        sessionID = nil
         if executable != nil { state = .idle }
     }
 
@@ -145,15 +158,9 @@ public final class ClaudeSession {
         let process = Process()
         process.executableURL = URL(filePath: executable)
         process.currentDirectoryURL = root
-        process.arguments = [
-            "--output-format", "stream-json",
-            "--input-format", "stream-json",
-            "--verbose",
-            "--include-partial-messages",
-            "--permission-prompt-tool", "stdio",
-            "--permission-mode", "default",
-            "--append-system-prompt", systemPrompt(),
-        ]
+        let rules = rules()
+        process.arguments = Self.arguments(systemPrompt: systemPrompt(), rules: rules, resume: sessionID)
+        startedRules = rules
         process.environment = Self.environment()
 
         let input = Pipe(), output = Pipe(), errors = Pipe()
@@ -220,6 +227,21 @@ public final class ClaudeSession {
         }
     }
 
+    nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?) -> [String] {
+        var arguments = [
+            "--output-format", "stream-json",
+            "--input-format", "stream-json",
+            "--verbose",
+            "--include-partial-messages",
+            "--permission-prompt-tool", "stdio",
+            "--permission-mode", "default",
+            "--append-system-prompt", systemPrompt,
+        ]
+        if let settings = rules.settingsJSON { arguments += ["--settings", settings] }
+        if let sessionID { arguments += ["--resume", sessionID] }
+        return arguments
+    }
+
     private func processEnded(status: Int32) {
         process = nil
         stdin = nil
@@ -266,8 +288,9 @@ public final class ClaudeSession {
 
     func handle(_ event: ClaudeEvent) {
         switch event {
-        case .started(_, let model):
+        case .started(let sessionID, let model):
             self.model = model
+            if !sessionID.isEmpty { self.sessionID = sessionID }
 
         case .messageStarted(let id):
             streamingMessageID = id
@@ -322,10 +345,29 @@ public final class ClaudeSession {
             if index[id] == nil {
                 append(TranscriptItem(id: id, content: .tool(ToolActivity(id: id, name: request.toolName, input: request.input, status: .running))))
             }
-            updateTool(id) {
-                $0.input = request.input
-                $0.change = change
-                $0.status = .awaitingApproval(requestID: request.requestID)
+            switch rules().verdict(toolName: request.toolName, input: request.input, root: root) {
+            case .blocked(let message):
+                write(ClaudeInput.deny(requestID: request.requestID, message: message))
+                updateTool(id) {
+                    $0.input = request.input
+                    $0.change = change
+                    $0.ruleNote = message
+                    $0.blockedByRule = true
+                    $0.status = .declined
+                }
+            case .note(let note):
+                updateTool(id) {
+                    $0.input = request.input
+                    $0.change = change
+                    $0.ruleNote = note
+                    $0.status = .awaitingApproval(requestID: request.requestID)
+                }
+            case .allowed:
+                updateTool(id) {
+                    $0.input = request.input
+                    $0.change = change
+                    $0.status = .awaitingApproval(requestID: request.requestID)
+                }
             }
 
         case .result(let result):

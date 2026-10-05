@@ -11,6 +11,8 @@ public final class Workspace {
     public private(set) var lifecycle: Lifecycle
     /// Tasks from `.dante/tasks.yaml`.
     public let tasks: TaskBoard
+    /// What Claude may touch, from `claude:` in project.yaml.
+    public private(set) var claudeRules = ClaudeRules()
     /// Phase docs from `.dante/phases/`, keyed by lower-case phase name.
     public private(set) var phaseDocs: [String: PhaseDoc] = [:]
 
@@ -50,6 +52,8 @@ public final class Workspace {
     public func reloadSpec() {
         let next = Lifecycle.load(projectRoot: url)
         if next != lifecycle { lifecycle = next }
+        let rules = ClaudeRules.load(projectRoot: url)
+        if rules != claudeRules { claudeRules = rules }
         tasks.reload()
         var docs: [String: PhaseDoc] = [:]
         for phase in lifecycle.phases {

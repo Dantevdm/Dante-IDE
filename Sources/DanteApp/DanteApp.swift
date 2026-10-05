@@ -28,10 +28,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         .first { !$0.hasPrefix("-") }
         .map { URL(filePath: $0, relativeTo: URL(filePath: FileManager.default.currentDirectoryPath)).standardizedFileURL }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // `launchFolder` handles the folder argument. Left to AppKit, it becomes an open-file
+        // event, and SwiftUI then skips the window it would make at launch.
+        UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Needed when running the bare executable (`swift run`) rather than the .app bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
+    }
+
+    /// Quitting with unsaved files asks once for all windows: save, cancel or discard.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let sessions = Sessions.all
+        let documents = sessions.flatMap { $0.workspace?.documents ?? [] }
+        let proceed = Session.confirmDiscardingChanges(in: documents) { document in
+            sessions.first { $0.workspace?.documents.contains { $0 === document } == true }?.save(document)
+        }
+        return proceed ? .terminateNow : .terminateCancel
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        for session in Sessions.all { session.claude?.stop() }
     }
 }
 

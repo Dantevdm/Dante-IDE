@@ -7,3 +7,8 @@ lifecycle:
 
 # Milestone 1: app shell + editor (window, launch, themes, explorer, tabs, editor, terminal).
 # Design canvas: https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi
+
+claude:
+  propose: [Sources/, Tests/, design/, scripts/, .dante/, README.md, CLAUDE.md]
+  flag: [Package.swift, Package.resolved, .gitignore]
+  never: [".env*", "*.pem", "*.p12", "*.mobileprovision"]

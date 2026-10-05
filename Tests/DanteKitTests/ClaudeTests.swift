@@ -174,3 +174,62 @@ struct PipeLineReaderTests {
         #expect(received == ["one", "two", "three"])
     }
 }
+
+struct ClaudeRulesTests {
+    private let rules = ClaudeRules.parse(projectYAML: """
+    name: ledger
+    claude:
+      propose: [src/, test/, docs/]
+      flag: [migrations/, package.json]
+      never: [".env*", secrets/]
+    """)
+    private let root = URL(filePath: "/p")
+
+    @Test func parsesLists() {
+        #expect(rules == ClaudeRules(propose: ["src/", "test/", "docs/"], flag: ["migrations/", "package.json"], never: [".env*", "secrets/"]))
+        #expect(ClaudeRules.parse(projectYAML: "name: x\n").isEmpty)
+        #expect(ClaudeRules.parse(projectYAML: "claude:\n  never: secrets/\n").never == ["secrets/"])
+    }
+
+    @Test func neverBlocksReadsEditsAndCommands() {
+        guard case .blocked = rules.verdict(toolName: "Edit", input: ["file_path": "/p/.env.local"], root: root) else { Issue.record("edit"); return }
+        guard case .blocked = rules.verdict(toolName: "Read", input: ["file_path": "/p/config/secrets/key.pem"], root: root) else { Issue.record("read"); return }
+        guard case .blocked = rules.verdict(toolName: "Bash", input: ["command": "cat ./.env | grep KEY"], root: root) else { Issue.record("bash"); return }
+        #expect(rules.verdict(toolName: "Bash", input: ["command": "swift test"], root: root) == .allowed)
+    }
+
+    @Test func flagAndOutsideProposeAddNotes() {
+        guard case .note = rules.verdict(toolName: "Edit", input: ["file_path": "/p/db/migrations/001.sql"], root: root) else { Issue.record("flag"); return }
+        guard case .note = rules.verdict(toolName: "Write", input: ["file_path": "/p/package.json"], root: root) else { Issue.record("file flag"); return }
+        guard case .note = rules.verdict(toolName: "Edit", input: ["file_path": "/p/README.md"], root: root) else { Issue.record("outside"); return }
+        #expect(rules.verdict(toolName: "Edit", input: ["file_path": "/p/src/app.ts"], root: root) == .allowed)
+        #expect(rules.verdict(toolName: "Read", input: ["file_path": "/p/README.md"], root: root) == .allowed)
+    }
+
+    @Test func denyRulesForClaudeCode() {
+        #expect(rules.denyRules == ["Read(**/.env*)", "Edit(**/.env*)", "Read(./secrets/**)", "Edit(./secrets/**)"])
+        #expect(ClaudeRules().settingsJSON == nil)
+        #expect(rules.settingsJSON?.contains(#""deny":["Read(**/.env*)""#) == true)
+    }
+
+    @Test func argumentsCarryRulesAndResume() {
+        let arguments = ClaudeSession.arguments(systemPrompt: "p", rules: rules, resume: "s1")
+        #expect(arguments.contains("--settings"))
+        #expect(Array(arguments.suffix(2)) == ["--resume", "s1"])
+        #expect(!ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil).contains("--settings"))
+    }
+}
+
+@MainActor
+struct ClaudeSessionRulesTests {
+    @Test func neverRuleDeclinesWithoutAsking() {
+        let session = ClaudeSession(
+            root: URL(filePath: "/p"), executable: "/usr/bin/false", systemPrompt: { "" },
+            rules: { ClaudeRules(never: [".env*"]) }
+        )
+        session.handle(.permissionRequest(.init(requestID: "r1", toolName: "Edit", input: ["file_path": "/p/.env"], toolUseID: "t1")))
+        guard case .tool(let tool) = session.items.first?.content else { Issue.record("no tool"); return }
+        #expect(tool.blockedByRule && tool.status == .declined)
+        #expect(session.pendingApprovals.isEmpty)
+    }
+}
