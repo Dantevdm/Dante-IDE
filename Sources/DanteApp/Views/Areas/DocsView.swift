@@ -287,6 +287,8 @@ private struct DocumentBody: View {
                 Rectangle().fill(theme.line2.color).frame(width: 3)
                 inline(text).font(font(bodySize).italic()).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             }
+        case .code(let code, let language) where language?.lowercased() == "mermaid":
+            MermaidBlock(source: code)
         case .code(let code, let language):
             CodeBlock(text: code, language: language)
         case .table(let header, let rows):

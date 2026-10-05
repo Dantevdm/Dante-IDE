@@ -102,7 +102,7 @@ tasks:
 - id: DI-25
   title: Diagrams beyond the architecture map (flows, data model, deployment) and Mermaid in Docs
   phase: build
-  state: ready
+  state: done
 - id: DI-26
   title: Print and PDF export of docs in the Paper theme
   phase: build
@@ -111,3 +111,7 @@ tasks:
   title: Operate alarms (CloudWatch and friends) linked to tasks
   phase: build
   state: ready
+- id: DI-28
+  title: Attach files to Claude (drop, paste, pick) and turn them into docs
+  phase: build
+  state: in_progress
