@@ -13,6 +13,9 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - File explorer, tabs, and a TextKit 2 code editor with syntax highlighting, line numbers and auto-indent
 - Integrated terminal running your login shell (⌃`)
 - Claude pair panel (⌘L): runs Claude Code headless in the project. Every edit arrives as a diff to apply or decline, and every command waits for your go-ahead. Claude knows the `.dante` format and the current phase, and sees which file you have open
+- Command palette (⌘K, or ⌘P for files): fuzzy file search, docs, actions, and Tab to ask Claude
+- Live file watching: the explorer, open tabs and branch stay current when files change outside the editor
+- Plan: lifecycle phases, "ready" and "done" checklists from `.dante/phases/<phase>.md`, and a drag-and-drop task board stored in `.dante/tasks.yaml`. "Work on this with Claude" hands a task to the pair panel
 - Lifecycle ribbon read from `.dante/project.yaml`
 
 ## Requirements
@@ -60,4 +63,30 @@ lifecycle:
   current: build
 ```
 
-`lifecycle.current` sets the highlighted phase. You can set your own phase list with `lifecycle.phases: [Discover, Build, Ship]`. Phases are guidance and never block anything. Tasks (`.dante/tasks.yaml`) and phase docs are coming in a later milestone.
+`lifecycle.current` sets the highlighted phase. You can set your own phase list with `lifecycle.phases: [Discover, Build, Ship]`. Phases are guidance and never block anything.
+
+```yaml
+# .dante/tasks.yaml
+prefix: APP
+tasks:
+- id: APP-1
+  title: Sign-in screen
+  phase: build
+  state: in_progress   # ready, in_progress, review or done
+  spec: specs/sign-in.md
+```
+
+```markdown
+<!-- .dante/phases/build.md -->
+# Build
+
+Turn the agreed design into working, reviewed code.
+
+## Ready when
+- [x] Design phase done
+
+## Done when
+- [ ] All Build tasks done
+```
+
+Dante's own `.dante/` folder is a working example.

@@ -3,7 +3,7 @@ import DanteEditor
 import DanteKit
 import Observation
 
-/// The areas in the workspace rail. Only Code is built so far; the rest are
+/// The areas in the workspace rail. Code and Plan are built so far; the rest are
 /// designed (see the design canvas) and land in later milestones.
 enum Area: String, CaseIterable, Identifiable {
     case home, plan, map, code, tests, environments, ship, run, docs, spec
@@ -40,7 +40,7 @@ enum Area: String, CaseIterable, Identifiable {
         }
     }
 
-    var isBuilt: Bool { self == .code }
+    var isBuilt: Bool { self == .code || self == .plan }
 
     /// What the screen will do, shown until it's built.
     var summary: String {
@@ -247,7 +247,7 @@ final class Session {
         do {
             try document.save()
             conflicts.remove(document.url)
-            if document.url.path.contains("/.dante/") { workspace?.reloadLifecycle() }
+            if document.url.path.contains("/.dante/") { workspace?.reloadSpec() }
         } catch {
             errorMessage = "Couldn’t save \(document.name): \(error.localizedDescription)"
         }

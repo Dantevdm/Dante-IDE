@@ -28,6 +28,7 @@ struct StatusDot: View {
 /// Secondary and primary buttons in the theme's style.
 struct DanteButtonStyle: ButtonStyle {
     @Environment(\.theme) private var theme
+    @Environment(\.isEnabled) private var isEnabled
     var primary = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -44,7 +45,7 @@ struct DanteButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(primary ? theme.accent.color : theme.line2.color, lineWidth: 1)
             )
-            .opacity(configuration.isPressed ? 0.8 : 1)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
             .contentShape(Rectangle())
     }
 }

@@ -1,0 +1,49 @@
+# Tasks for this project. Edit here or on Dante's Plan board.
+prefix: DI
+tasks:
+- id: DI-1
+  title: App shell, editor and terminal
+  phase: build
+  state: done
+- id: DI-2
+  title: Claude pair panel with diff approval
+  phase: build
+  state: done
+  claude: true
+- id: DI-3
+  title: Command palette and live file watching
+  phase: build
+  state: done
+- id: DI-4
+  title: Plan area with phases, checklists and tasks.yaml
+  phase: build
+  state: review
+  claude: true
+- id: DI-5
+  title: Tree-sitter highlighting behind the Highlighter protocol
+  phase: build
+  state: ready
+- id: DI-6
+  title: Language servers for diagnostics and go to definition
+  phase: build
+  state: ready
+- id: DI-7
+  title: Enforce Claude's propose, flag and never rules from project.yaml
+  phase: build
+  state: ready
+- id: DI-8
+  title: Ask about unsaved changes on quit
+  phase: build
+  state: ready
+- id: DI-9
+  title: Home area with the project at a glance
+  phase: build
+  state: ready
+- id: DI-10
+  title: Unit tests for the Claude panel's tool summaries
+  phase: test
+  state: ready
+- id: DI-11
+  title: Bundle the Geist fonts from the design
+  phase: build
+  state: ready

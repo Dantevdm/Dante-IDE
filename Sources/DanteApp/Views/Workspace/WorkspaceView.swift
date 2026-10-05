@@ -20,10 +20,10 @@ struct WorkspaceView: View {
                 }
                 VStack(spacing: 0) {
                     Group {
-                        if session.area == .code {
-                            EditorArea(session: session, workspace: workspace)
-                        } else {
-                            PlaceholderView(area: session.area)
+                        switch session.area {
+                        case .code: EditorArea(session: session, workspace: workspace)
+                        case .plan: PlanView(session: session, workspace: workspace)
+                        default: PlaceholderView(area: session.area)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -9,6 +9,10 @@ public final class Workspace {
     public private(set) var documents: [EditorDocument] = []
     public var activeDocumentID: EditorDocument.ID?
     public private(set) var lifecycle: Lifecycle
+    /// Tasks from `.dante/tasks.yaml`.
+    public let tasks: TaskBoard
+    /// Phase docs from `.dante/phases/`, keyed by lower-case phase name.
+    public private(set) var phaseDocs: [String: PhaseDoc] = [:]
 
     /// Every file in the project, relative to the root, for quick open. Filled in the background.
     public private(set) var files: [String] = []
@@ -29,7 +33,57 @@ public final class Workspace {
         root.loadChildren()
         root.isExpanded = true
         lifecycle = Lifecycle.load(projectRoot: url)
+        tasks = TaskBoard(projectRoot: url)
         resolvedRootPath = url.resolvingSymlinksInPath().standardizedFileURL.path
+        reloadSpec()
+    }
+
+    // MARK: Plan
+
+    public var danteFolder: URL { url.appending(path: ".dante") }
+
+    public func phaseDocURL(_ phase: String) -> URL {
+        danteFolder.appending(path: "phases/\(phase.lowercased()).md")
+    }
+
+    /// Re-reads everything under `.dante/`: lifecycle, tasks and phase docs.
+    public func reloadSpec() {
+        let next = Lifecycle.load(projectRoot: url)
+        if next != lifecycle { lifecycle = next }
+        tasks.reload()
+        var docs: [String: PhaseDoc] = [:]
+        for phase in lifecycle.phases {
+            if let markdown = try? String(contentsOf: phaseDocURL(phase), encoding: .utf8) {
+                docs[phase.lowercased()] = PhaseDoc.parse(markdown)
+            }
+        }
+        if docs != phaseDocs { phaseDocs = docs }
+    }
+
+    /// Moves the project to another phase by editing `lifecycle.current` in project.yaml.
+    public func setCurrentPhase(_ phase: String) throws {
+        let file = danteFolder.appending(path: "project.yaml")
+        let yaml = (try? String(contentsOf: file, encoding: .utf8))
+            .map { Lifecycle.settingCurrent(phase, inProjectYAML: $0) }
+            ?? Lifecycle.projectYAMLTemplate(name: name, current: phase)
+        try write(yaml, to: file)
+    }
+
+    public func createPhaseDoc(_ phase: String) throws {
+        let file = phaseDocURL(phase)
+        guard !FileManager.default.fileExists(atPath: file.path) else { return }
+        try write(PhaseDoc.template(for: phase), to: file)
+    }
+
+    public func toggle(_ item: PhaseDoc.Item, inPhase phase: String) throws {
+        guard let doc = phaseDocs[phase.lowercased()] else { return }
+        try write(doc.toggling(item), to: phaseDocURL(phase))
+    }
+
+    private func write(_ text: String, to file: URL) throws {
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: file, options: .atomic)
+        fileChanged(at: file)
     }
 
     /// Rescans the project's files off the main thread.
@@ -59,6 +113,7 @@ public final class Workspace {
         let rootPath = url.standardizedFileURL.path
         var folders = Set<URL>()
         var needsIndex = false
+        var specChanged = false
 
         for raw in changed {
             var path = raw.standardizedFileURL.path
@@ -76,7 +131,7 @@ public final class Workspace {
             folders.insert(file.deletingLastPathComponent().standardizedFileURL)
             let exists = FileManager.default.fileExists(atPath: path)
             if exists != fileSet.contains(relative) { needsIndex = true }
-            if relative.hasPrefix(".dante/") { reloadLifecycle() }
+            if relative.hasPrefix(".dante/") { specChanged = true }
             if let document = documents.first(where: { $0.url.standardizedFileURL.path == path }), exists {
                 if document.isDirty {
                     result.conflicts.append(document.url)
@@ -87,6 +142,7 @@ public final class Workspace {
         }
         for folder in folders { root.node(for: folder)?.loadChildren() }
         if needsIndex { refreshFileIndex() }
+        if specChanged { reloadSpec() }
         return result
     }
 
@@ -118,14 +174,10 @@ public final class Workspace {
     @discardableResult
     public func fileChanged(at url: URL) -> Bool {
         root.node(for: url.deletingLastPathComponent())?.loadChildren()
-        if url.path.contains("/.dante/") { reloadLifecycle() }
+        if url.path.contains("/.dante/") { reloadSpec() }
         guard let document = documents.first(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) else { return true }
         guard !document.isDirty else { return false }
         try? document.reloadFromDisk()
         return true
-    }
-
-    public func reloadLifecycle() {
-        lifecycle = Lifecycle.load(projectRoot: url)
     }
 }

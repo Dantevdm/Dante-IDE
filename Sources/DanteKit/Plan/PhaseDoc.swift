@@ -1,0 +1,154 @@
+import Foundation
+
+/// `.dante/phases/<phase>.md`: what a phase is for and its checklists, as plain markdown.
+///
+///     # Build
+///
+///     Turn the agreed design into working, reviewed code.
+///
+///     ## Ready when
+///     - [x] Design phase done
+///
+///     ## Done when
+///     - [ ] API contract frozen
+///
+/// Checklists are guidance, never gates.
+public struct PhaseDoc: Equatable, Sendable {
+    public struct Item: Equatable, Sendable, Identifiable {
+        /// Line number in the file (0-based), used to toggle the box in place.
+        public var line: Int
+        public var text: String
+        public var done: Bool
+        public var id: Int { line }
+    }
+
+    public var summary: String
+    public var readyWhen: [Item]
+    public var doneWhen: [Item]
+    public var markdown: String
+
+    public static func parse(_ markdown: String) -> PhaseDoc {
+        var summary: [String] = []
+        var readyWhen: [Item] = [], doneWhen: [Item] = []
+        var section = Section.intro
+
+        for (number, line) in markdown.components(separatedBy: "\n").enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("## ") {
+                let heading = trimmed.dropFirst(3).lowercased()
+                section = heading.contains("ready") || heading.contains("start") ? .ready
+                    : heading.contains("done") || heading.contains("exit") ? .done : .other
+                continue
+            }
+            if trimmed.hasPrefix("# ") { continue }
+            switch section {
+            case .intro:
+                if !trimmed.isEmpty { summary.append(trimmed) } else if !summary.isEmpty { section = .other }
+            case .ready, .done:
+                guard let item = checklistItem(trimmed, line: number) else { continue }
+                if section == .ready { readyWhen.append(item) } else { doneWhen.append(item) }
+            case .other:
+                continue
+            }
+        }
+        return PhaseDoc(summary: summary.joined(separator: " "), readyWhen: readyWhen, doneWhen: doneWhen, markdown: markdown)
+    }
+
+    /// The markdown with one item's box ticked or cleared.
+    public func toggling(_ item: Item) -> String {
+        var lines = markdown.components(separatedBy: "\n")
+        guard lines.indices.contains(item.line) else { return markdown }
+        let line = lines[item.line]
+        lines[item.line] = item.done
+            ? line.replacingOccurrences(of: "[x]", with: "[ ]").replacingOccurrences(of: "[X]", with: "[ ]")
+            : line.replacingOccurrences(of: "[ ]", with: "[x]")
+        return lines.joined(separator: "\n")
+    }
+
+    public static func template(for phase: String) -> String {
+        let (summary, ready, done) = defaults[phase.lowercased()] ?? ("What this phase is for.", ["Previous phase done"], ["Agreed with yourself that it's done"])
+        return """
+        # \(phase.capitalized)
+
+        \(summary)
+
+        ## Ready when
+        \(ready.map { "- [ ] \($0)" }.joined(separator: "\n"))
+
+        ## Done when
+        \(done.map { "- [ ] \($0)" }.joined(separator: "\n"))
+
+        """
+    }
+
+    private enum Section { case intro, ready, done, other }
+
+    private static func checklistItem(_ line: String, line number: Int) -> Item? {
+        for prefix in ["- [ ] ", "* [ ] "] where line.hasPrefix(prefix) {
+            return Item(line: number, text: String(line.dropFirst(prefix.count)), done: false)
+        }
+        for prefix in ["- [x] ", "- [X] ", "* [x] ", "* [X] "] where line.hasPrefix(prefix) {
+            return Item(line: number, text: String(line.dropFirst(prefix.count)), done: true)
+        }
+        return nil
+    }
+
+    private static let defaults: [String: (String, [String], [String])] = [
+        "discover": ("Understand the problem, the people who have it and what already exists.",
+                     ["A problem worth solving"], ["Problem statement written", "Users and constraints listed"]),
+        "define": ("Decide what to build and what “done” means for it.",
+                   ["Discovery notes written"], ["Scope agreed", "Acceptance criteria for each feature", "Tasks drafted for Build"]),
+        "design": ("Shape the solution: architecture, data, flows and the decisions behind them.",
+                   ["Requirements agreed"], ["Architecture sketched", "Key decisions recorded", "Risky parts prototyped"]),
+        "build": ("Turn the agreed design into working, reviewed code.",
+                  ["Design phase done", "Local environment boots"], ["Features implemented", "Code reviewed", "All Build tasks done"]),
+        "test": ("Prove it works: automated tests, edge cases and real usage.",
+                 ["Features complete"], ["Tests pass in CI", "Coverage targets met", "Known bugs triaged"]),
+        "release": ("Ship it: version, changelog, and a release you can roll back.",
+                    ["Tests green"], ["Changelog written", "Release tagged", "Rollback plan noted"]),
+        "operate": ("Run it: watch health, respond to issues and feed lessons back into the plan.",
+                    ["Released"], ["Monitoring in place", "Runbooks for likely incidents"]),
+    ]
+}
+
+public extension Lifecycle {
+    /// `project.yaml` with `lifecycle.current` set to `phase`, editing the line in place so
+    /// comments and other keys survive. Adds the key or block if it's missing.
+    static func settingCurrent(_ phase: String, inProjectYAML yaml: String) -> String {
+        var lines = yaml.components(separatedBy: "\n")
+        let value = phase.lowercased()
+        guard let blockStart = lines.firstIndex(where: { $0.hasPrefix("lifecycle:") }) else {
+            if lines.last == "" { lines.removeLast() }
+            lines += ["", "lifecycle:", "  current: \(value)", ""]
+            return lines.joined(separator: "\n")
+        }
+        var index = blockStart + 1
+        var childIndent = "  "
+        while index < lines.count {
+            let line = lines[index]
+            let indent = line.prefix { $0 == " " }
+            if !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                if indent.isEmpty { break }
+                childIndent = String(indent)
+                if line.trimmingCharacters(in: .whitespaces).hasPrefix("current:") {
+                    lines[index] = "\(indent)current: \(value)"
+                    return lines.joined(separator: "\n")
+                }
+            }
+            index += 1
+        }
+        lines.insert("\(childIndent)current: \(value)", at: blockStart + 1)
+        return lines.joined(separator: "\n")
+    }
+
+    static func projectYAMLTemplate(name: String, current: String) -> String {
+        """
+        name: \(name)
+
+        lifecycle:
+          template: app@1
+          current: \(current.lowercased())
+
+        """
+    }
+}

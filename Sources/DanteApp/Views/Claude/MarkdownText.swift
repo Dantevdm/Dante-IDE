@@ -1,3 +1,4 @@
+import DanteKit
 import SwiftUI
 
 /// Renders Claude's replies: paragraphs with inline markdown, headings, lists and fenced
@@ -27,13 +28,18 @@ struct MarkdownText: View {
     }
 
     private func inline(_ text: String) -> Text {
+        Text(Self.attributed(text, theme: theme))
+    }
+
+    /// Inline markdown (bold, italics, links, `code`) with code in the theme's accent.
+    static func attributed(_ text: String, theme: Theme, codeSize: CGFloat = 11.5) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         var attributed = (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
         for run in attributed.runs where run.inlinePresentationIntent?.contains(.code) == true {
-            attributed[run.range].font = .system(size: 11.5, design: .monospaced)
+            attributed[run.range].font = .system(size: codeSize, design: .monospaced)
             attributed[run.range].foregroundColor = theme.accent.color
         }
-        return Text(attributed)
+        return attributed
     }
 
     enum Block: Equatable {

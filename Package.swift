@@ -9,10 +9,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.2.0"),
+        .package(url: "https://github.com/jpsim/Yams", from: "6.2.0"),
     ],
     targets: [
-        // Models with no UI: themes, workspace, documents, lifecycle.
-        .target(name: "DanteKit"),
+        // Models with no UI: themes, workspace, documents, lifecycle, tasks, Claude.
+        .target(name: "DanteKit", dependencies: [.product(name: "Yams", package: "Yams")]),
         // The TextKit 2 code editor and syntax highlighting.
         .target(name: "DanteEditor", dependencies: ["DanteKit"]),
         // The SwiftUI app shell.
