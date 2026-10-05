@@ -46,6 +46,19 @@ public final class Workspace {
         }
     }
 
+    /// Brings the editor and file tree up to date after something outside the editor
+    /// (Claude, the terminal) changed a file. Unsaved edits are never overwritten; returns
+    /// false when an open document kept its edits instead of reloading.
+    @discardableResult
+    public func fileChanged(at url: URL) -> Bool {
+        root.node(for: url.deletingLastPathComponent())?.loadChildren()
+        if url.path.contains("/.dante/") { reloadLifecycle() }
+        guard let document = documents.first(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) else { return true }
+        guard !document.isDirty else { return false }
+        try? document.reloadFromDisk()
+        return true
+    }
+
     public func reloadLifecycle() {
         lifecycle = Lifecycle.load(projectRoot: url)
     }

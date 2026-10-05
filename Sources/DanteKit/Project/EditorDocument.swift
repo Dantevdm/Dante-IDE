@@ -32,12 +32,22 @@ public final class EditorDocument: Identifiable {
     public var name: String { url.lastPathComponent }
 
     public init(url: URL) throws {
-        let data = try Data(contentsOf: url)
-        guard data.count <= Self.maxBytes else { throw DocumentError.tooLarge(url, data.count) }
-        guard let text = String(data: data, encoding: .utf8) else { throw DocumentError.notText(url) }
         self.url = url
         self.language = Language(url: url)
-        self.text = text
+        self.text = try Self.read(url)
+    }
+
+    private static func read(_ url: URL) throws -> String {
+        let data = try Data(contentsOf: url)
+        guard data.count <= maxBytes else { throw DocumentError.tooLarge(url, data.count) }
+        guard let text = String(data: data, encoding: .utf8) else { throw DocumentError.notText(url) }
+        return text
+    }
+
+    /// Replaces the text with the file's current contents and clears the dirty flag.
+    public func reloadFromDisk() throws {
+        text = try Self.read(url)
+        isDirty = false
     }
 
     public func save() throws {

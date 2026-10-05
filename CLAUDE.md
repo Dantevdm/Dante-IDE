@@ -13,6 +13,7 @@ Native macOS IDE in Swift 6 / SwiftUI, built with SwiftPM (no Xcode project). De
 
 - `DanteKit`: UI-free models. `@MainActor @Observable` classes, value types elsewhere. Must not import SwiftUI views.
 - `DanteEditor`: the AppKit editor (`CodeEditorView` wraps a TextKit 2 `NSTextView`). Highlighters sit behind the `Highlighter` protocol so tree-sitter can replace `RegexHighlighter` later.
+- `DanteKit/Claude`: talks to Claude Code with `claude --input-format stream-json --output-format stream-json --permission-prompt-tool stdio` (the Agent SDK's wire protocol). `ClaudeEvent` parses output lines, `ClaudeInput` builds stdin messages, `ClaudeSession` keeps the transcript, and `ProposedChange` turns Edit/MultiEdit/Write calls into diffs. Child processes must not inherit `CLAUDECODE`, or Claude Code refuses to start as a nested session.
 - `DanteApp`: the SwiftUI app. `Session` holds per-window state; `ThemeStore` is app-wide.
 
 ## Conventions

@@ -7,6 +7,7 @@ import SwiftUI
 struct TerminalPane: View {
     @Environment(\.theme) private var theme
     let directory: URL
+    var input: TerminalInput?
     var onBranchMayHaveChanged: () -> Void = {}
 
     @State private var title = "zsh"
@@ -35,7 +36,7 @@ struct TerminalPane: View {
             .frame(height: 34)
             .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
 
-            TerminalHost(directory: directory, theme: theme) { newTitle in
+            TerminalHost(directory: directory, theme: theme, input: input) { newTitle in
                 title = newTitle
             } onDirectoryChange: {
                 onBranchMayHaveChanged()
@@ -53,6 +54,7 @@ struct TerminalPane: View {
 private struct TerminalHost: NSViewRepresentable {
     let directory: URL
     let theme: Theme
+    let input: TerminalInput?
     let onTitle: (String) -> Void
     let onDirectoryChange: () -> Void
     let onExit: (Int32?) -> Void
@@ -89,6 +91,11 @@ private struct TerminalHost: NSViewRepresentable {
             apply(theme, to: view)
             context.coordinator.appliedTheme = theme
         }
+        if let input, input.id != context.coordinator.sentInputID {
+            context.coordinator.sentInputID = input.id
+            view.send(txt: input.text)
+            view.window?.makeFirstResponder(view)
+        }
     }
 
     static func dismantleNSView(_ view: LocalProcessTerminalView, coordinator: Coordinator) {
@@ -107,10 +114,13 @@ private struct TerminalHost: NSViewRepresentable {
     final class Coordinator: NSObject {
         var parent: TerminalHost
         var appliedTheme: Theme?
+        var sentInputID: UUID?
 
         init(_ parent: TerminalHost) {
             self.parent = parent
             appliedTheme = parent.theme
+            // Input queued before this terminal existed was meant for a previous shell.
+            sentInputID = parent.input?.id
         }
     }
 }

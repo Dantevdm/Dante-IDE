@@ -31,7 +31,7 @@ struct WorkspaceView: View {
                     // The terminal stays alive when hidden so its shell keeps running.
                     VStack(spacing: 0) {
                         ResizeHandle(axis: .vertical, value: Bindable(session).terminalHeight, range: 120...600, inverted: true)
-                        TerminalPane(directory: workspace.url, onBranchMayHaveChanged: session.refreshBranch)
+                        TerminalPane(directory: workspace.url, input: session.terminalInput, onBranchMayHaveChanged: session.refreshBranch)
                     }
                     .frame(height: session.showsTerminal ? session.terminalHeight : 0)
                     .clipped()
@@ -39,6 +39,12 @@ struct WorkspaceView: View {
                     .allowsHitTesting(session.showsTerminal)
 
                     StatusBar(session: session, workspace: workspace)
+                }
+                if session.showsClaude, let claude = session.claude {
+                    ResizeHandle(axis: .horizontal, value: Bindable(session).claudeWidth, range: 300...640, inverted: true)
+                    ClaudePanel(session: session, workspace: workspace, claude: claude)
+                        .frame(width: session.claudeWidth)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
         }

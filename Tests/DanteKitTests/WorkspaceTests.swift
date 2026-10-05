@@ -89,3 +89,31 @@ struct WorkspaceTests {
         #expect(Language(url: URL(filePath: "/a/LICENSE")) == .plain)
     }
 }
+
+@MainActor
+struct FileChangedTests {
+    @Test func reloadsCleanDocumentsAndKeepsDirtyOnes() throws {
+        let folder = try TemporaryFolder()
+        let clean = try folder.write("clean.txt", "old")
+        let dirty = try folder.write("dirty.txt", "old")
+        let workspace = Workspace(url: folder.url)
+        let cleanDocument = try workspace.open(clean)
+        let dirtyDocument = try workspace.open(dirty)
+        dirtyDocument.text = "my edit"
+
+        try "new".write(to: clean, atomically: true, encoding: .utf8)
+        try "new".write(to: dirty, atomically: true, encoding: .utf8)
+        #expect(workspace.fileChanged(at: clean))
+        #expect(!workspace.fileChanged(at: dirty))
+        #expect(cleanDocument.text == "new" && !cleanDocument.isDirty)
+        #expect(dirtyDocument.text == "my edit")
+    }
+
+    @Test func newFilesAppearInLoadedFolders() throws {
+        let folder = try TemporaryFolder()
+        let workspace = Workspace(url: folder.url)
+        let file = try folder.write("added.swift", "")
+        workspace.fileChanged(at: file)
+        #expect(workspace.root.children?.map(\.name) == ["added.swift"])
+    }
+}

@@ -4,7 +4,7 @@ A native macOS IDE organised around the whole software lifecycle: Discover, Defi
 
 Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dante/`, so you and Claude are reading the same source of truth.
 
-**Status:** milestone 1, the app shell and editor. Most of the lifecycle areas (Plan, Map, Tests, Environments, Ship, Run, Docs, Spec) are designed but not built yet. See the [design canvas](https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi).
+**Status:** milestone 2, the app shell, the editor, and Claude as a pair. Most of the lifecycle areas (Plan, Map, Tests, Environments, Ship, Run, Docs, Spec) are designed but not built yet. See the [design canvas](https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi).
 
 ## What works today
 
@@ -12,12 +12,14 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Dark, Light and Paper themes (⌥⌘T to cycle)
 - File explorer, tabs, and a TextKit 2 code editor with syntax highlighting, line numbers and auto-indent
 - Integrated terminal running your login shell (⌃`)
+- Claude pair panel (⌘L): runs Claude Code headless in the project. Every edit arrives as a diff to apply or decline, and every command waits for your go-ahead. Claude knows the `.dante` format and the current phase, and sees which file you have open
 - Lifecycle ribbon read from `.dante/project.yaml`
 
 ## Requirements
 
 - macOS 15 or later
 - Xcode 16 or later (Swift 6)
+- [Claude Code](https://claude.com/claude-code), installed and signed in (`claude auth login`), for the Claude panel
 
 ## Build and run
 
@@ -41,7 +43,7 @@ swift test
 
 | Path | What's there |
 | --- | --- |
-| `Sources/DanteKit` | Models: themes, workspace, documents, file tree, lifecycle, git, recents |
+| `Sources/DanteKit` | Models: themes, workspace, documents, file tree, lifecycle, git, recents, and the Claude Code session |
 | `Sources/DanteEditor` | The TextKit 2 editor, line-number gutter and highlighters |
 | `Sources/DanteApp` | The SwiftUI app: launch screen, workspace, terminal, menus |
 | `Tests/` | Swift Testing suites for DanteKit and DanteEditor |

@@ -40,6 +40,15 @@ struct DanteCommands: Commands {
             .keyboardShortcut("`", modifiers: .control)
             .disabled(session?.workspace == nil)
 
+            Button("Ask Claude") { session?.focusClaude() }
+                .keyboardShortcut("l")
+                .disabled(session?.claude == nil)
+            Button(session?.showsClaude == true ? "Hide Claude" : "Show Claude") {
+                session?.showsClaude.toggle()
+            }
+            .keyboardShortcut("l", modifiers: [.command, .option])
+            .disabled(session?.claude == nil)
+
             Button("Next Tab") { session?.selectTab(offset: 1) }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
             Button("Previous Tab") { session?.selectTab(offset: -1) }

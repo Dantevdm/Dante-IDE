@@ -62,6 +62,11 @@ enum Area: String, CaseIterable, Identifiable {
     static let footer: [Area] = [.docs, .spec]
 }
 
+struct TerminalInput: Equatable {
+    let id = UUID()
+    let text: String
+}
+
 /// Everything one window shows: the open folder, the selected area and panel state.
 @MainActor
 @Observable
@@ -69,10 +74,17 @@ final class Session {
     let recents: RecentProjects
     private(set) var workspace: Workspace?
     private(set) var branch: String?
+    private(set) var claude: ClaudeSession?
 
     var area: Area = .code
     var showsTerminal = true
     var terminalHeight: Double = 240
+    var showsClaude = true
+    var claudeWidth: Double = 380
+    /// Text queued for the integrated terminal's shell.
+    private(set) var terminalInput: TerminalInput?
+    /// Bumped to move keyboard focus to Claude's message box.
+    var claudeFocusRequest = 0
     var cursor = CursorPosition()
     var isCloning = false
     var errorMessage: String?
@@ -119,7 +131,10 @@ final class Session {
             return
         }
         guard confirmDiscardingChanges(in: workspace?.documents ?? []) else { return }
-        workspace = Workspace(url: url)
+        claude?.stop()
+        let workspace = Workspace(url: url)
+        self.workspace = workspace
+        claude = makeClaude(for: workspace)
         branch = Git.currentBranch(in: url)
         area = .code
         recents.note(url)
@@ -127,12 +142,51 @@ final class Session {
 
     func closeProject() {
         guard confirmDiscardingChanges(in: workspace?.documents ?? []) else { return }
+        claude?.stop()
+        claude = nil
         workspace = nil
         branch = nil
     }
 
     func refreshBranch() {
         if let url = workspace?.url { branch = Git.currentBranch(in: url) }
+    }
+
+    // MARK: Claude
+
+    private func makeClaude(for workspace: Workspace) -> ClaudeSession {
+        let claude = ClaudeSession(
+            root: workspace.url,
+            executable: SystemStatus.detect().claudePath,
+            systemPrompt: { [weak workspace] in ClaudeBrief.systemPrompt(for: workspace) }
+        )
+        claude.onFileChanged = { [weak workspace] url in workspace?.fileChanged(at: url) }
+        return claude
+    }
+
+    /// Types a command into the integrated terminal and runs it.
+    func runInTerminal(_ command: String) {
+        showsTerminal = true
+        terminalInput = TerminalInput(text: command + "\n")
+    }
+
+    /// Starts Claude Code's sign-in in the terminal; the next message starts a fresh session.
+    func signInToClaude() {
+        guard let claude, let executable = claude.executable else { return }
+        claude.reset()
+        runInTerminal("'\(executable.replacingOccurrences(of: "'", with: "'\\''"))' auth login")
+    }
+
+    func focusClaude() {
+        showsClaude = true
+        claudeFocusRequest += 1
+    }
+
+    /// Sends a message to Claude with what's on screen as context.
+    func askClaude(_ text: String) {
+        guard let claude, let workspace else { return }
+        showsClaude = true
+        claude.send(text, context: ClaudeBrief.context(workspace: workspace, line: cursor.line))
     }
 
     // MARK: Files

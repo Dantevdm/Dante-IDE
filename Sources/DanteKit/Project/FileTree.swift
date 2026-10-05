@@ -59,6 +59,15 @@ public final class FileNode: Identifiable {
         children = entries.map { existing[$0.url] ?? FileNode(url: $0.url, isDirectory: $0.isDirectory) }
     }
 
+    /// The loaded node for `url`, searching only folders already listed.
+    public func node(for url: URL) -> FileNode? {
+        let target = url.standardizedFileURL.path
+        let own = self.url.standardizedFileURL.path
+        if target == own { return self }
+        guard target.hasPrefix(own + "/") else { return nil }
+        return children?.lazy.compactMap { $0.node(for: url) }.first
+    }
+
     public func toggle() {
         guard isDirectory else { return }
         if children == nil { loadChildren() }

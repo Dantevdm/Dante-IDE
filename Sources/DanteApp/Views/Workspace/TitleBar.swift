@@ -22,6 +22,7 @@ struct TitleBar: View {
                 ProjectMenu(session: session, workspace: workspace)
                 Spacer(minLength: 12)
                 ThemeMenu()
+                ClaudeToggle(session: session)
                 IconButton(
                     symbol: session.showsTerminal ? "terminal.fill" : "terminal",
                     label: session.showsTerminal ? "Hide terminal (⌃`)" : "Show terminal (⌃`)"
@@ -139,6 +140,26 @@ private struct ThemeMenu: View {
         case .dark: "moon"
         case .light: "sun.max"
         case .paper: "book"
+        }
+    }
+}
+
+/// Shows or hides the Claude panel; a dot marks changes waiting for review.
+private struct ClaudeToggle: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+
+    var body: some View {
+        IconButton(
+            symbol: "sparkle",
+            label: session.showsClaude ? "Hide Claude (⌥⌘L)" : "Show Claude (⌥⌘L)"
+        ) {
+            withAnimation(.snappy(duration: 0.22)) { session.showsClaude.toggle() }
+        }
+        .overlay(alignment: .topTrailing) {
+            if session.claude?.pendingApprovals.isEmpty == false, !session.showsClaude {
+                StatusDot(color: theme.amber.color, size: 6).offset(x: -3, y: 3)
+            }
         }
     }
 }
