@@ -64,3 +64,14 @@ struct TreeSitterHighlighterTests {
         #expect(TreeSitterHighlighter.kind(forCapture: "punctuation.bracket") == nil)
     }
 }
+
+struct HoverSegmentsTests {
+    @Test func fencesBecomeCodeAndTheRestProse() {
+        let segments = HoverView.segments("```swift\nlet count: Int\n```\n\nThe number of items.\n\n```\nunlabelled\n")
+        #expect(segments == [.code("let count: Int", .swift), .prose("The number of items."), .code("unlabelled", .plain)])
+    }
+
+    @Test func plainTextIsOneProseSegment() {
+        #expect(HoverView.segments("just words") == [.prose("just words")])
+    }
+}

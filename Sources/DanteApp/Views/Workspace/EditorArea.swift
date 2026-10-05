@@ -26,7 +26,8 @@ struct EditorArea: View {
                     diagnostics: session.languages?.diagnostics(for: document) ?? [],
                     canJump: session.languages?.existingClient(for: document.language) != nil,
                     onCursorChange: { session.cursor = $0 },
-                    onDefinition: { session.jumpToDefinition(in: document, at: $0) }
+                    onDefinition: { session.jumpToDefinition(in: document, at: $0) },
+                    hover: { await session.languages?.hover(in: document, at: $0) }
                 )
                 .id(document.id)
                 .task(id: document.id) { session.languages?.opened(document) }
@@ -47,6 +48,7 @@ private struct DocumentEditor: View {
     let canJump: Bool
     let onCursorChange: (CursorPosition) -> Void
     let onDefinition: (Int) -> Void
+    let hover: (Int) async -> String?
 
     var body: some View {
         CodeEditorView(
@@ -57,7 +59,8 @@ private struct DocumentEditor: View {
             diagnostics: editorDiagnostics,
             reveal: $document.revealRange,
             onCursorChange: onCursorChange,
-            onDefinition: canJump ? onDefinition : nil
+            onDefinition: canJump ? onDefinition : nil,
+            hover: canJump ? hover : nil
         )
     }
 

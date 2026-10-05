@@ -76,6 +76,15 @@ struct LSPPositionTests {
         #expect(diagnostic?.range.nsRange(in: "let a = 1") == NSRange(location: 4, length: 1))
     }
 
+    @Test func hoverContentsInEveryShape() {
+        #expect(LSPClient.hoverText("plain") == "plain")
+        #expect(LSPClient.hoverText(["kind": "markdown", "value": "**bold**"]) == "**bold**")
+        #expect(LSPClient.hoverText(["language": "swift", "value": "let a: Int"]) == "```swift\nlet a: Int\n```")
+        #expect(LSPClient.hoverText(["first", ["language": "go", "value": "func f()"]]) == "first\n\n```go\nfunc f()\n```")
+        #expect(LSPClient.hoverText(.null) == nil)
+        #expect(LSPClient.hoverText(["kind": "markdown", "value": "  "]) == nil)
+    }
+
     @Test func serversByLanguage() {
         #expect(LanguageServer.for(.swift)?.name == "SourceKit-LSP")
         #expect(LanguageServer.for(.typescript) == LanguageServer.for(.javascript))
@@ -106,6 +115,9 @@ struct LSPClientTests {
 
         let locations = await client.definition(of: LSPPosition(line: 1, character: 8), in: file)
         #expect(locations.first?.range.start.line == 0)
+
+        let hover = await client.hover(at: LSPPosition(line: 1, character: 8), in: file)
+        #expect(hover?.contains("count") == true)
     }
 }
 

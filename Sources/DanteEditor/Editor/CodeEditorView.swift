@@ -41,6 +41,8 @@ public struct CodeEditorView: NSViewRepresentable {
     var onCursorChange: (CursorPosition) -> Void
     /// Called with the UTF-16 offset of a ⌘-click or "Jump to Definition".
     var onDefinition: ((Int) -> Void)?
+    /// Markdown about the symbol at a UTF-16 offset, shown when the pointer rests on it.
+    var hover: ((Int) async -> String?)?
 
     public init(
         text: Binding<String>,
@@ -50,7 +52,8 @@ public struct CodeEditorView: NSViewRepresentable {
         diagnostics: [EditorDiagnostic] = [],
         reveal: Binding<NSRange?> = .constant(nil),
         onCursorChange: @escaping (CursorPosition) -> Void = { _ in },
-        onDefinition: ((Int) -> Void)? = nil
+        onDefinition: ((Int) -> Void)? = nil,
+        hover: ((Int) async -> String?)? = nil
     ) {
         _text = text
         self.language = language
@@ -60,6 +63,7 @@ public struct CodeEditorView: NSViewRepresentable {
         _reveal = reveal
         self.onCursorChange = onCursorChange
         self.onDefinition = onDefinition
+        self.hover = hover
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -109,6 +113,7 @@ public struct CodeEditorView: NSViewRepresentable {
         coordinator.textView = textView
         coordinator.ruler = ruler
         textView.onDefinition = { [weak coordinator] offset in coordinator?.parent.onDefinition?(offset) }
+        textView.onHover = { [weak coordinator] index in coordinator?.hover(at: index) }
         coordinator.apply(theme: theme, fontSize: fontSize)
         textView.string = text
         coordinator.textDidChangeExternally()
@@ -141,6 +146,7 @@ public struct CodeEditorView: NSViewRepresentable {
             coordinator.textDidChangeExternally()
         }
         textView.canJumpToDefinition = onDefinition != nil
+        textView.canHover = hover != nil
         if coordinator.diagnostics != diagnostics {
             coordinator.diagnostics = diagnostics
             coordinator.applyTokens()
@@ -226,6 +232,7 @@ public struct CodeEditorView: NSViewRepresentable {
 
         public func textDidChange(_ notification: Notification) {
             guard let textView else { return }
+            closeHover()
             parent.text = textView.string
             refreshLinesIfNeeded(textView)
             scheduleHighlight()
@@ -279,6 +286,56 @@ public struct CodeEditorView: NSViewRepresentable {
                 }
             }
             textView.insertText("\n" + indent, replacementRange: selection)
+        }
+
+        // MARK: Hover
+
+        private var hoverTask: Task<Void, Never>?
+        private var hoverPopover: NSPopover?
+        private var hoverRange: NSRange?
+
+        /// The pointer rested on `index` (nil when it left the text or typing started).
+        func hover(at index: Int?) {
+            guard let textView, let index else {
+                hoverTask?.cancel()
+                return
+            }
+            let text = textView.string as NSString
+            guard index < text.length else { return closeHover() }
+            let word = Self.word(at: index, in: text)
+            if let hoverRange, NSLocationInRange(index, hoverRange) { return }
+            closeHover()
+            guard word.length > 1 || CharacterSet.alphanumerics.contains(Unicode.Scalar(text.character(at: index)) ?? " "),
+                  let provider = parent.hover else { return }
+            hoverTask?.cancel()
+            hoverTask = Task { @MainActor [weak self] in
+                guard let markdown = await provider(index), !Task.isCancelled, let self, let textView = self.textView,
+                      let theme = self.appliedTheme else { return }
+                self.showHover(markdown, for: word, in: textView, theme: theme)
+            }
+        }
+
+        private func showHover(_ markdown: String, for range: NSRange, in textView: NSTextView, theme: Theme) {
+            guard textView.window?.isKeyWindow == true else { return }
+            var actual = NSRange()
+            let screenRect = textView.firstRect(forCharacterRange: range, actualRange: &actual)
+            guard let window = textView.window, screenRect != .zero else { return }
+            let rect = textView.convert(window.convertFromScreen(screenRect), from: nil)
+            let popover = NSPopover()
+            popover.behavior = .semitransient
+            popover.animates = false
+            popover.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+            popover.contentViewController = NSHostingController(rootView: HoverView(markdown: markdown, theme: theme, fontSize: appliedFontSize))
+            popover.show(relativeTo: rect, of: textView, preferredEdge: .maxY)
+            hoverPopover = popover
+            hoverRange = range
+        }
+
+        func closeHover() {
+            hoverTask?.cancel()
+            hoverPopover?.close()
+            hoverPopover = nil
+            hoverRange = nil
         }
 
         /// Re-highlights after typing pauses. Tokens are computed off the main thread (a
@@ -382,6 +439,53 @@ public final class CodeTextView: NSTextView {
     var currentLineColor: NSColor = .clear
     var canJumpToDefinition = false
     var onDefinition: ((Int) -> Void)?
+    var canHover = false
+    /// Where the pointer rests, after a pause; nil when it moves off the text.
+    var onHover: ((Int?) -> Void)?
+    private var hoverTimer: Timer?
+    private var hoverTracking: NSTrackingArea?
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverTracking = area
+    }
+
+    public override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard canHover else { return }
+        hoverTimer?.invalidate()
+        let point = convert(event.locationInWindow, from: nil)
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reportHover(at: point) }
+        }
+    }
+
+    public override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hoverTimer?.invalidate()
+        onHover?(nil)
+    }
+
+    private func reportHover(at point: NSPoint) {
+        // Only over a glyph: past the end of a line, the nearest index isn't under the pointer.
+        guard let layoutManager = textLayoutManager,
+              let fragment = layoutManager.textLayoutFragment(for: CGPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)) else {
+            return onHover?(nil) ?? ()
+        }
+        let local = CGPoint(x: point.x - textContainerOrigin.x - fragment.layoutFragmentFrame.minX,
+                            y: point.y - textContainerOrigin.y - fragment.layoutFragmentFrame.minY)
+        guard fragment.textLineFragments.contains(where: { $0.typographicBounds.contains(local) }) else {
+            return onHover?(nil) ?? ()
+        }
+        guard let window else { return }
+        // NSTextInputClient's lookup takes screen coordinates and returns the character under them.
+        let screenPoint = window.convertToScreen(convert(NSRect(origin: point, size: .zero), to: nil)).origin
+        onHover?(characterIndex(for: screenPoint))
+    }
+
 
     /// ⌘-click jumps to the definition of what's under the pointer.
     public override func mouseDown(with event: NSEvent) {

@@ -73,12 +73,22 @@ public final class LanguageServices {
     /// Where the symbol at `offset` is defined. Sends pending edits first so positions line up.
     public func definition(in document: EditorDocument, at offset: Int) async -> [LSPLocation] {
         guard let client = existingClient(for: document.language) else { return [] }
+        await flush(document, to: client)
+        let position = LSPPosition(offset: offset, in: document.text as NSString)
+        return await client.definition(of: position, in: document.url)
+    }
+
+    public func hover(in document: EditorDocument, at offset: Int) async -> String? {
+        guard let client = existingClient(for: document.language) else { return nil }
+        await flush(document, to: client)
+        return await client.hover(at: LSPPosition(offset: offset, in: document.text as NSString), in: document.url)
+    }
+
+    private func flush(_ document: EditorDocument, to client: LSPClient) async {
         if let pending = pendingChanges.removeValue(forKey: document.url.path) {
             pending.cancel()
             await client.change(document.url, text: document.text)
         }
-        let position = LSPPosition(offset: offset, in: document.text as NSString)
-        return await client.definition(of: position, in: document.url)
     }
 
     public func stop() {

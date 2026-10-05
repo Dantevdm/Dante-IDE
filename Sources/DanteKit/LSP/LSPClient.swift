@@ -111,6 +111,27 @@ public final class LSPClient {
         return LSPLocation.list(result)
     }
 
+    /// What the server says about the symbol at `position`, as markdown.
+    public func hover(at position: LSPPosition, in url: URL) async -> String? {
+        guard await isReady else { return nil }
+        let result = await request("textDocument/hover", [
+            "textDocument": ["uri": .string(Self.uri(url))], "position": position.json,
+        ])
+        return Self.hoverText(result["contents"] ?? .null)
+    }
+
+    /// Hover contents come as a string, MarkupContent, a MarkedString, or an array of them.
+    nonisolated static func hoverText(_ contents: JSONValue) -> String? {
+        func text(_ value: JSONValue) -> String? {
+            if let string = value.string { return string }
+            guard let body = value["value"]?.string else { return nil }
+            if let language = value["language"]?.string { return "```\(language)\n\(body)\n```" }
+            return body
+        }
+        let parts = (contents.array ?? [contents]).compactMap(text).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+    }
+
     public func stop() {
         guard process.isRunning else { return }
         Task {
@@ -140,6 +161,7 @@ public final class LSPClient {
                     "synchronization": ["didSave": true],
                     "publishDiagnostics": ["relatedInformation": false],
                     "definition": ["linkSupport": true],
+                    "hover": ["contentFormat": ["markdown", "plaintext"]],
                 ],
                 "workspace": ["workspaceFolders": true, "configuration": true],
             ],
