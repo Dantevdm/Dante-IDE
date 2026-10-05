@@ -15,6 +15,8 @@ struct DocsView: View {
     @State private var markdown: MarkdownDocument?
     @State private var loadError: String?
     @State private var dropTargeted = false
+    /// Reading width: a comfortable column, or the whole window.
+    @AppStorage("docsWide") private var wide = false
 
     private var library: DocLibrary { DocLibrary(paths: workspace.files) }
 
@@ -153,6 +155,13 @@ struct DocsView: View {
             Spacer()
             if doc.kind == .markdown {
                 Button {
+                    wide.toggle()
+                } label: {
+                    Label(wide ? "Narrow" : "Wide", systemImage: wide ? "arrow.right.and.line.vertical.and.arrow.left" : "arrow.left.and.line.vertical.and.arrow.right")
+                }
+                .buttonStyle(DanteButtonStyle())
+                .help(wide ? "Read in a comfortable column" : "Use the whole width of the window")
+                Button {
                     session.askClaude("Read \(doc.path) and tell me what's out of date or missing compared with the code. Don't change anything yet.")
                 } label: {
                     Label("Check against the code", systemImage: "sparkle")
@@ -251,31 +260,11 @@ private struct DocsSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .help("Copy PDFs, images or documents into docs/. You can also drop them on Docs.")
-                if let outline = markdown?.outline.filter({ $0.level > 1 }), !outline.isEmpty {
-                    Eyebrow("On this page").padding(.horizontal, 12)
-                    VStack(alignment: .leading, spacing: 1) {
-                        ForEach(outline, id: \.anchor) { entry in
-                            Button { session.docAnchor = entry.anchor } label: {
-                                Text(MarkdownText.attributed(entry.text, theme: theme, codeSize: 11.5))
-                                    .font(.system(size: 12.5))
-                                    .foregroundStyle(theme.text2.color)
-                                    .lineLimit(1)
-                                    .padding(.leading, CGFloat(entry.level - 2) * 12)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 5)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    Rectangle().fill(theme.line.color).frame(height: 1).padding(.horizontal, 12)
-                }
                 ForEach(library.groups) { group in
                     VStack(alignment: .leading, spacing: 1) {
                         Eyebrow(group.title).padding(.horizontal, 12).padding(.bottom, 5)
                         ForEach(group.docs) { doc in
-                            DocRow(doc: doc, isSelected: doc == selected) { session.showDoc(doc.path) }
+                            DocRow(doc: doc, folder: library.folder(distinguishing: doc), isSelected: doc == selected) { session.showDoc(doc.path) }
                         }
                     }
                 }
@@ -290,6 +279,8 @@ private struct DocsSidebar: View {
 private struct DocRow: View {
     @Environment(\.theme) private var theme
     let doc: DocLibrary.Doc
+    /// The folder, when another doc in the group has the same title.
+    var folder: String?
     let isSelected: Bool
     let action: () -> Void
     @State private var hovering = false
@@ -305,6 +296,14 @@ private struct DocRow: View {
                     .foregroundStyle(isSelected ? theme.text.color : theme.text2.color)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .layoutPriority(1)
+                if let folder {
+                    Text(folder)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(theme.text3.color)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
             }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
@@ -474,6 +473,27 @@ private struct LinkedPanel: View {
         let files = mentionedFiles
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
+                if let outline = markdown?.outline.filter({ $0.level > 1 }), !outline.isEmpty {
+                    Eyebrow("On this page")
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(outline, id: \.anchor) { entry in
+                            Button { session.docAnchor = entry.anchor } label: {
+                                Text(MarkdownText.attributed(entry.text, theme: theme, codeSize: 11.5))
+                                    .font(.system(size: 12.5))
+                                    .foregroundStyle(entry.level == 2 ? theme.text2.color : theme.text3.color)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                                    .padding(.leading, CGFloat(entry.level - 2) * 12)
+                                    .padding(.vertical, 4)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(entry.text)
+                        }
+                    }
+                    Rectangle().fill(theme.line.color).frame(height: 1).padding(.vertical, 6)
+                }
                 Eyebrow("Linked to this doc")
                 if tasks.isEmpty, files.isEmpty {
                     Text("No tasks use this doc as their spec, and it doesn’t mention any project files.")

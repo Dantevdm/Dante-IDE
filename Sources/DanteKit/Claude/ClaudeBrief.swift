@@ -16,6 +16,12 @@ public enum ClaudeBrief {
         public var estimatedTokens: Int { max(1, text.count / 4) }
     }
 
+    /// Added to the system prompt while "Ask questions first" is on.
+    public static let clarifyingQuestions = """
+    # Clarifying questions
+    Get it right the first time. Before starting a request that is ambiguous, underspecified, or has several reasonable readings, ask the user with the AskUserQuestion tool and wait for the answers. Ask everything you need in one go (up to four questions), give 2–4 concrete options each with the one you recommend first, and say briefly what each option means for the result. Don't ask what you can find out from the code, the .dante folder or git history; look first. For small, clear requests, just do them.
+    """
+
     public static func systemPrompt(for workspace: Workspace?) -> String {
         sections(for: workspace).map(\.text).joined(separator: "\n\n")
     }

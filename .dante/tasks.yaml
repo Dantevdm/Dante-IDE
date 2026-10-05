@@ -119,3 +119,27 @@ tasks:
   title: Offer to set up projects without .dante on open, with detection and Claude filling in the spec
   phase: build
   state: done
+- id: DI-30
+  title: Clone progress and a Terminal fallback when git needs credentials
+  phase: build
+  state: review
+- id: DI-31
+  title: Terminal tabs
+  phase: build
+  state: review
+- id: DI-32
+  title: Back and forward navigation (mouse buttons, ⌃⌘←/→)
+  phase: build
+  state: review
+- id: DI-33
+  title: Claude asks clarifying questions first (AskUserQuestion cards, Ask first toggle)
+  phase: build
+  state: review
+- id: DI-34
+  title: Docs outline in the right column, folder names for same-named docs
+  phase: build
+  state: review
+- id: DI-35
+  title: Layouts follow wide and ultra-wide windows
+  phase: build
+  state: review

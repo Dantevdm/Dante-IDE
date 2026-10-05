@@ -3,57 +3,113 @@ import DanteKit
 @preconcurrency import SwiftTerm
 import SwiftUI
 
-/// The integrated terminal: the user's login shell, started in the project folder.
+/// The integrated terminal: tabs of the user's login shell, started in the project folder.
+/// Hidden tabs keep running.
 struct TerminalPane: View {
     @Environment(\.theme) private var theme
+    let session: Session
     let directory: URL
-    var input: TerminalInput?
-    var onBranchMayHaveChanged: () -> Void = {}
-
-    @State private var title = "zsh"
-    @State private var generation = 0
-    @State private var exited: Int32?
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Label(title, systemImage: "terminal")
-                    .font(.system(size: 12))
-                    .foregroundStyle(theme.text.color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(theme.raised.color))
-                if let exited {
-                    Text("exited (\(exited))").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+            HStack(spacing: 4) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(session.terminalTabs) { tab in
+                            TerminalTabButton(
+                                tab: tab,
+                                isSelected: tab.id == session.selectedTerminal,
+                                canClose: session.terminalTabs.count > 1,
+                                select: { session.selectedTerminal = tab.id },
+                                close: { session.closeTerminal(tab.id) }
+                            )
+                        }
+                    }
                 }
-                Spacer()
-                IconButton(symbol: "arrow.counterclockwise", label: "Restart shell", size: 11) {
-                    exited = nil
-                    generation += 1
+                IconButton(symbol: "plus", label: "New terminal (⌃⇧`)", size: 11) { session.newTerminal() }
+                Spacer(minLength: 8)
+                IconButton(symbol: "arrow.counterclockwise", label: "Restart this shell", size: 11) {
+                    update(session.selectedTerminal) {
+                        $0.exitCode = nil
+                        $0.generation += 1
+                    }
                 }
             }
             .padding(.horizontal, 10)
             .frame(height: 34)
             .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
 
-            TerminalHost(directory: directory, theme: theme, input: input) { newTitle in
-                title = newTitle
-            } onDirectoryChange: {
-                onBranchMayHaveChanged()
-            } onExit: { code in
-                exited = code
+            ZStack {
+                ForEach(session.terminalTabs) { tab in
+                    let selected = tab.id == session.selectedTerminal
+                    TerminalHost(directory: directory, theme: theme, tab: tab.id, isSelected: selected, input: session.terminalInput) { title in
+                        update(tab.id) { $0.title = title }
+                    } onDirectoryChange: {
+                        session.refreshBranch()
+                    } onExit: { code in
+                        update(tab.id) { $0.exitCode = .some(code) }
+                    }
+                    .id("\(tab.id)-\(tab.generation)")
+                    .opacity(selected ? 1 : 0)
+                    .allowsHitTesting(selected)
+                }
             }
-            .id(generation)
             .padding(.leading, 10)
             .padding(.top, 6)
         }
         .background(theme.panel.color)
+    }
+
+    private func update(_ id: UUID, _ change: (inout TerminalTab) -> Void) {
+        guard let index = session.terminalTabs.firstIndex(where: { $0.id == id }) else { return }
+        change(&session.terminalTabs[index])
+    }
+}
+
+private struct TerminalTabButton: View {
+    @Environment(\.theme) private var theme
+    let tab: TerminalTab
+    let isSelected: Bool
+    let canClose: Bool
+    let select: () -> Void
+    let close: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "terminal").font(.system(size: 10.5))
+            Text(tab.title).lineLimit(1).frame(maxWidth: 160, alignment: .leading)
+            if let code = tab.exitCode {
+                Text(code.map { "exited \($0)" } ?? "exited").foregroundStyle(theme.text3.color)
+            }
+            if canClose {
+                Button(action: close) {
+                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                        .frame(width: 14, height: 14)
+                        .foregroundStyle(theme.text3.color)
+                        .opacity(hovering || isSelected ? 1 : 0)
+                }
+                .buttonStyle(.plain)
+                .help("Close this shell")
+            }
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(isSelected ? theme.text.color : theme.text2.color)
+        .padding(.leading, 9)
+        .padding(.trailing, canClose ? 5 : 9)
+        .padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 6).fill(isSelected ? theme.raised.color : (hovering ? theme.raised.opacity(0.5).color : .clear)))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: select)
+        .onHover { hovering = $0 }
     }
 }
 
 private struct TerminalHost: NSViewRepresentable {
     let directory: URL
     let theme: Theme
+    let tab: UUID
+    let isSelected: Bool
     let input: TerminalInput?
     let onTitle: (String) -> Void
     let onDirectoryChange: () -> Void
@@ -93,9 +149,15 @@ private struct TerminalHost: NSViewRepresentable {
         }
         if let input, input.id != context.coordinator.sentInputID {
             context.coordinator.sentInputID = input.id
-            view.send(txt: input.text)
-            view.window?.makeFirstResponder(view)
+            if input.tab == tab {
+                view.send(txt: input.text)
+                view.window?.makeFirstResponder(view)
+            }
         }
+        if isSelected, !context.coordinator.wasSelected {
+            DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
+        }
+        context.coordinator.wasSelected = isSelected
     }
 
     static func dismantleNSView(_ view: LocalProcessTerminalView, coordinator: Coordinator) {
@@ -115,6 +177,7 @@ private struct TerminalHost: NSViewRepresentable {
         var parent: TerminalHost
         var appliedTheme: Theme?
         var sentInputID: UUID?
+        var wasSelected = true
 
         init(_ parent: TerminalHost) {
             self.parent = parent

@@ -19,6 +19,14 @@ struct TitleBar: View {
             PhaseRibbon(lifecycle: workspace.lifecycle, selected: session.area == .plan ? session.planPhase : nil) { session.showPhase($0) }
 
             HStack(spacing: 6) {
+                HStack(spacing: 0) {
+                    IconButton(symbol: "chevron.left", label: "Back (⌃⌘← or the mouse’s back button)", size: 11) { session.goBack() }
+                        .disabled(!session.history.canGoBack)
+                        .opacity(session.history.canGoBack ? 1 : 0.35)
+                    IconButton(symbol: "chevron.right", label: "Forward (⌃⌘→)", size: 11) { session.goForward() }
+                        .disabled(!session.history.canGoForward)
+                        .opacity(session.history.canGoForward ? 1 : 0.35)
+                }
                 ProjectMenu(session: session, workspace: workspace)
                 Spacer(minLength: 12)
                 ThemeMenu()

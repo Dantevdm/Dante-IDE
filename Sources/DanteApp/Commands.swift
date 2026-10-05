@@ -60,6 +60,16 @@ struct DanteCommands: Commands {
             }
             .keyboardShortcut("`", modifiers: .control)
             .disabled(session?.workspace == nil)
+            Button("Back") { session?.goBack() }
+                .keyboardShortcut(.leftArrow, modifiers: [.control, .command])
+                .disabled(session?.history.canGoBack != true)
+            Button("Forward") { session?.goForward() }
+                .keyboardShortcut(.rightArrow, modifiers: [.control, .command])
+                .disabled(session?.history.canGoForward != true)
+            Divider()
+            Button("New Terminal") { session?.newTerminal() }
+                .keyboardShortcut("`", modifiers: [.control, .shift])
+                .disabled(session?.workspace == nil)
 
             Button("Ask Claude") { session?.focusClaude() }
                 .keyboardShortcut("l")

@@ -49,6 +49,7 @@ public struct ToolActivity: Equatable, Sendable {
         case "WebSearch": return "Searched the web for"
         case "TodoWrite": return "Updated its to-do list"
         case "Task", "Agent": return "Delegated"
+        case "AskUserQuestion": return isAwaitingApproval ? "Asks" : (status == .declined ? "Skipped questions" : "Asked")
         default: return name
         }
     }
@@ -60,6 +61,9 @@ public struct ToolActivity: Equatable, Sendable {
         }
         if let command = input["command"]?.string {
             return command.split(separator: "\n").first.map(String.init) ?? command
+        }
+        if name == "AskUserQuestion" {
+            return ClarifyingQuestion.parse(input).map { $0.header.isEmpty ? $0.question : $0.header }.joined(separator: ", ")
         }
         return input["pattern"]?.string ?? input["url"]?.string ?? input["query"]?.string ?? input["description"]?.string ?? ""
     }
@@ -104,6 +108,9 @@ public final class ClaudeSession {
     private let systemPrompt: () -> String
     private let rules: () -> ClaudeRules
     private var startedRules = ClaudeRules()
+    /// Ask clarifying questions before starting ambiguous work. Takes effect on the next message.
+    public var asksFirst = true
+    private var startedAsksFirst = true
     private var sessionID: String?
 
     private var process: Process?
@@ -140,7 +147,7 @@ public final class ClaudeSession {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty, state != .working else { return }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
-        if process != nil, rules() != startedRules {
+        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst {
             stop()
         }
         if process == nil {
@@ -164,6 +171,19 @@ public final class ClaudeSession {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status else { return }
         write(ClaudeInput.allow(requestID: requestID, input: tool.input))
         updateTool(toolID) { $0.status = .running }
+    }
+
+    /// Answers an AskUserQuestion call: Claude gets its input back with `answers` filled in,
+    /// keyed by question text (several picks are joined with ", ").
+    public func answer(_ toolID: String, answers: [String: String]) {
+        guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status,
+              case .object(var input) = tool.input else { return }
+        input["answers"] = .object(answers.mapValues { .string($0) })
+        write(ClaudeInput.allow(requestID: requestID, input: .object(input)))
+        updateTool(toolID) {
+            $0.input = .object(input)
+            $0.status = .running
+        }
     }
 
     public func decline(_ toolID: String, message: String = "The user declined this. Ask what they’d like instead.") {
@@ -199,8 +219,10 @@ public final class ClaudeSession {
         process.executableURL = URL(filePath: executable)
         process.currentDirectoryURL = root
         let rules = rules()
-        process.arguments = Self.arguments(systemPrompt: systemPrompt(), rules: rules, resume: sessionID)
+        let prompt = asksFirst ? systemPrompt() + "\n\n" + ClaudeBrief.clarifyingQuestions : systemPrompt()
+        process.arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID)
         startedRules = rules
+        startedAsksFirst = asksFirst
         process.environment = Self.environment()
 
         let input = Pipe(), output = Pipe(), errors = Pipe()

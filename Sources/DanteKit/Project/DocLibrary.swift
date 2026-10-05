@@ -44,6 +44,15 @@ public struct DocLibrary: Equatable, Sendable {
     public var groups: [Group]
 
     public var all: [Doc] { groups.flatMap(\.docs) }
+
+    /// The doc's folder when another doc in its group has the same title, so three
+    /// READMEs read "README  frontend", "README  api"… Nil when the title is unique.
+    public func folder(distinguishing doc: Doc) -> String? {
+        guard let group = groups.first(where: { $0.docs.contains(doc) }),
+              group.docs.contains(where: { $0 != doc && $0.title == doc.title }) else { return nil }
+        let folder = (doc.path as NSString).deletingLastPathComponent
+        return folder.isEmpty ? "root" : folder
+    }
     public var isEmpty: Bool { groups.isEmpty }
 
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdx"]

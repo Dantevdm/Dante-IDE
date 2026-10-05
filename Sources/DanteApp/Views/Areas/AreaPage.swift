@@ -8,7 +8,8 @@ struct AreaPage<Actions: View, Content: View>: View {
     let eyebrow: String
     let title: String
     let subtitle: String?
-    var maxWidth: CGFloat = 1180
+    /// Pages fill the window by default, so wide and ultra-wide screens get more columns.
+    var maxWidth: CGFloat = .infinity
     @ViewBuilder let actions: Actions
     @ViewBuilder let content: Content
 
@@ -44,7 +45,7 @@ struct AreaPage<Actions: View, Content: View>: View {
 }
 
 extension AreaPage where Actions == EmptyView {
-    init(eyebrow: String, title: String, subtitle: String?, maxWidth: CGFloat = 1180, @ViewBuilder content: () -> Content) {
+    init(eyebrow: String, title: String, subtitle: String?, maxWidth: CGFloat = .infinity, @ViewBuilder content: () -> Content) {
         self.init(eyebrow: eyebrow, title: title, subtitle: subtitle, maxWidth: maxWidth, actions: { EmptyView() }, content: content)
     }
 }

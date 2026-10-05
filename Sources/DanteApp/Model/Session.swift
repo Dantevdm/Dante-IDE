@@ -68,6 +68,18 @@ enum PaletteScope: String, CaseIterable, Identifiable {
 struct TerminalInput: Equatable {
     let id = UUID()
     let text: String
+    /// The tab it's for; the one in front when it was sent.
+    let tab: UUID
+}
+
+/// One shell in the terminal panel.
+struct TerminalTab: Identifiable, Equatable {
+    let id = UUID()
+    var title = "zsh"
+    /// Bumped to restart the shell.
+    var generation = 0
+    var exitCode: Int32??
+    var exited: Bool { exitCode != nil }
 }
 
 /// Everything one window shows: the open folder, the selected area and panel state.
@@ -204,6 +216,8 @@ final class Session {
         claude = makeClaude(for: workspace)
         languages = LanguageServices(root: url)
         conflicts = []
+        terminalTabs = [TerminalTab()]
+        history = NavigationHistory()
         workspace.refreshFileIndex()
         watcher?.stop()
         watcher = DirectoryWatcher(url: url) { [weak self] changed in self?.filesChanged(changed) }
@@ -310,6 +324,9 @@ final class Session {
 
     // MARK: Claude
 
+    /// Whether Claude asks clarifying questions before ambiguous work; on unless turned off.
+    static let asksFirstKey = "claudeAsksFirst"
+
     private func makeClaude(for workspace: Workspace) -> ClaudeSession {
         let claude = ClaudeSession(
             root: workspace.url,
@@ -318,13 +335,105 @@ final class Session {
             rules: { [weak workspace] in workspace?.claudeRules ?? ClaudeRules() }
         )
         claude.onFileChanged = { [weak workspace] url in workspace?.fileChanged(at: url) }
+        claude.asksFirst = UserDefaults.standard.object(forKey: Self.asksFirstKey) as? Bool ?? true
         return claude
     }
 
-    /// Types a command into the integrated terminal and runs it.
+    // MARK: Back and forward
+
+    /// Where the window is: the area, plus the doc, file or phase it shows.
+    struct Place: Equatable, Sendable {
+        var area: Area
+        var docPath: String?
+        var file: URL?
+        var planPhase: String?
+    }
+
+    var history = NavigationHistory<Place>()
+    /// Where going back or forward landed, so that move isn't recorded as a new visit.
+    private var restoredPlace: Place?
+
+    var place: Place {
+        Place(
+            area: area,
+            docPath: area == .docs ? docPath : nil,
+            file: area == .code ? workspace?.activeDocument?.url : nil,
+            planPhase: area == .plan ? planPhase : nil
+        )
+    }
+
+    /// Called when `place` changes.
+    func placeChanged(from previous: Place) {
+        guard previous != place else { return }
+        if restoredPlace == place {
+            restoredPlace = nil
+            return
+        }
+        restoredPlace = nil
+        history.moved(from: previous)
+    }
+
+    func goBack() {
+        if let target = history.goBack(from: place) { restore(target) }
+    }
+
+    func goForward() {
+        if let target = history.goForward(from: place) { restore(target) }
+    }
+
+    private func restore(_ target: Place) {
+        if let file = target.file {
+            if FileManager.default.fileExists(atPath: file.path) {
+                _ = try? workspace?.open(file)
+            } else {
+                history.removeAll { $0.file == file }
+            }
+        }
+        if let docPath = target.docPath { self.docPath = docPath }
+        if target.area == .plan { planPhase = target.planPhase }
+        area = target.area
+        restoredPlace = place
+    }
+
+    /// Types a command into the integrated terminal's front tab and runs it.
     func runInTerminal(_ command: String) {
         showsTerminal = true
-        terminalInput = TerminalInput(text: command + "\n")
+        terminalInput = TerminalInput(text: command + "\n", tab: selectedTerminal)
+    }
+
+    // MARK: Terminal tabs
+
+    var terminalTabs: [TerminalTab] = [TerminalTab()]
+    private var selectedTerminalID: UUID?
+    /// The tab in front; the first one until another is picked.
+    var selectedTerminal: UUID {
+        get { terminalTabs.first { $0.id == selectedTerminalID }?.id ?? terminalTabs[0].id }
+        set { selectedTerminalID = newValue }
+    }
+
+    func newTerminal() {
+        let tab = TerminalTab()
+        terminalTabs.append(tab)
+        selectedTerminal = tab.id
+        showsTerminal = true
+    }
+
+    /// Closes a shell. Closing the last one hides the panel and leaves a fresh shell for next time.
+    func closeTerminal(_ id: UUID) {
+        guard let index = terminalTabs.firstIndex(where: { $0.id == id }) else { return }
+        terminalTabs.remove(at: index)
+        if terminalTabs.isEmpty {
+            terminalTabs = [TerminalTab()]
+            showsTerminal = false
+        }
+        if !terminalTabs.contains(where: { $0.id == selectedTerminalID }) {
+            selectedTerminal = terminalTabs[min(index, terminalTabs.count - 1)].id
+        }
+    }
+
+    func selectTerminal(offset: Int) {
+        guard let index = terminalTabs.firstIndex(where: { $0.id == selectedTerminal }) else { return }
+        selectedTerminal = terminalTabs[(index + offset + terminalTabs.count) % terminalTabs.count].id
     }
 
     /// Starts Claude Code's sign-in in the terminal; the next message starts a fresh session.

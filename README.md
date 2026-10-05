@@ -23,6 +23,11 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Home: the project at a glance, with the lifecycle timeline, the current phase's tasks, recent commits, local services, and what Claude is told about the project
 - Docs: renders the project's markdown with an outline, links tasks that use a doc as their spec, and opens files it mentions. ```mermaid blocks (flowcharts, sequence and ER diagrams) are drawn natively in the theme's colours. PDFs, images and Word files under docs/ show alongside; drop files on Docs to add them, then ask Claude about one or have it written up as a markdown spec. Markdown images render inline
 - Attach files for Claude: drop, paste or pick images, PDFs, Word/RTF/HTML documents or code into the Claude panel. Images and PDFs go to Claude as themselves; documents are converted to text
+- Claude asks before it guesses: with Ask first on (the default), Claude asks clarifying questions before ambiguous work, and you answer them as cards in the panel
+- Back and forward through the screens you've visited: the mouse's back and forward buttons, ⌃⌘← / ⌃⌘→, or the arrows in the title bar
+- Several terminals as tabs (⌃⇧` for a new one); hidden tabs keep running
+- Cloning shows git's progress, and if the server wants a password git can't ask for, Dante finishes the clone in Terminal and opens it when done
+- Layouts follow the window: pages fill wide and ultra-wide screens, panels can be dragged much wider, and Docs can switch to full width
 - Spec: the `.dante` folder with validation, plus exactly what Claude receives and roughly how many tokens it costs
 - Tests (⌘U): runs the project's tests (Swift, cargo, go, npm/pnpm/yarn/bun, pytest, or `test.command`), groups results by suite, and hands failures to Claude
 - Env: Docker Compose services with start, stop, logs, and Dockerfiles that are missing

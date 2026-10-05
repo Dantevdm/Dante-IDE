@@ -39,7 +39,13 @@ struct ToolRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let change = tool.change, tool.isAwaitingApproval || expanded {
+            if tool.name == "AskUserQuestion" {
+                if tool.isAwaitingApproval {
+                    QuestionCard(tool: tool, claude: claude)
+                } else {
+                    AnsweredQuestions(input: tool.input)
+                }
+            } else if let change = tool.change, tool.isAwaitingApproval || expanded {
                 DiffCard(change: change)
             } else if tool.isAwaitingApproval, let command = tool.input["command"]?.string {
                 CodeBlock(text: command, language: "shell")
@@ -56,7 +62,7 @@ struct ToolRow: View {
                     .padding(.leading, 21)
             }
 
-            if tool.isAwaitingApproval {
+            if tool.isAwaitingApproval, tool.name != "AskUserQuestion" {
                 ApprovalBar(tool: tool, claude: claude)
             }
         }
@@ -252,6 +258,141 @@ struct CodeBlock: View {
             if let language {
                 Text(language).font(.system(size: 9.5)).foregroundStyle(theme.text3.color).padding(6)
             }
+        }
+    }
+}
+
+/// Claude's clarifying questions, answered by picking options or writing your own.
+private struct QuestionCard: View {
+    @Environment(\.theme) private var theme
+    let tool: ToolActivity
+    let claude: ClaudeSession
+    @State private var picks: [String: Set<String>] = [:]
+    @State private var other: [String: String] = [:]
+
+    private var questions: [ClarifyingQuestion] { ClarifyingQuestion.parse(tool.input) }
+
+    private func answer(_ question: ClarifyingQuestion) -> String? {
+        var parts = question.options.map(\.label).filter { picks[question.id]?.contains($0) == true }
+        if let text = other[question.id]?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty { parts.append(text) }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
+    private var complete: Bool { questions.allSatisfy { answer($0) != nil } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(questions) { question in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        if !question.header.isEmpty {
+                            Text(question.header.uppercased())
+                                .font(.system(size: 9.5, weight: .semibold))
+                                .foregroundStyle(theme.accent.color)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(theme.accentTint.color))
+                        }
+                        if question.multiSelect {
+                            Text("pick any").font(.system(size: 10.5)).foregroundStyle(theme.text3.color)
+                        }
+                    }
+                    Text(question.question)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(theme.text.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(question.options) { option in
+                        optionRow(option, in: question)
+                    }
+                    TextField("Something else…", text: Binding(
+                        get: { other[question.id] ?? "" },
+                        set: { text in
+                            other[question.id] = text
+                            if !question.multiSelect, !text.isEmpty { picks[question.id] = [] }
+                        }
+                    ))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 7).strokeBorder(theme.line2.color))
+                }
+            }
+            HStack(spacing: 8) {
+                Button("Answer") {
+                    var answers: [String: String] = [:]
+                    for question in questions { answers[question.question] = answer(question) }
+                    claude.answer(tool.id, answers: answers)
+                }
+                .buttonStyle(DanteButtonStyle(primary: true))
+                .disabled(!complete)
+                Button("Skip, use your judgement") {
+                    claude.decline(tool.id, message: "The user skipped these questions. Go with your best judgement, and say what you assumed.")
+                }
+                .buttonStyle(DanteButtonStyle())
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card.color))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.accentLine.color))
+    }
+
+    private func optionRow(_ option: ClarifyingQuestion.Option, in question: ClarifyingQuestion) -> some View {
+        let selected = picks[question.id]?.contains(option.label) == true
+        return Button {
+            var set = picks[question.id] ?? []
+            if question.multiSelect {
+                if selected { set.remove(option.label) } else { set.insert(option.label) }
+            } else {
+                set = selected ? [] : [option.label]
+                other[question.id] = nil
+            }
+            picks[question.id] = set
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: question.multiSelect ? (selected ? "checkmark.square.fill" : "square") : (selected ? "largecircle.fill.circle" : "circle"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(selected ? theme.accent.color : theme.text3.color)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.label).font(.system(size: 12.5)).foregroundStyle(theme.text.color)
+                    if !option.description.isEmpty {
+                        Text(option.description).font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 7).fill(selected ? theme.accentTint.color : theme.raised.color))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// What was asked and answered, once it's done.
+private struct AnsweredQuestions: View {
+    @Environment(\.theme) private var theme
+    let input: JSONValue
+
+    var body: some View {
+        let answers = ClarifyingQuestion.answers(in: input)
+        if !answers.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(ClarifyingQuestion.parse(input)) { question in
+                    if let answer = answers[question.question] {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(question.header.isEmpty ? question.question : question.header)
+                                .foregroundStyle(theme.text3.color)
+                            Text(answer).foregroundStyle(theme.text.color)
+                        }
+                        .font(.system(size: 11.5))
+                    }
+                }
+            }
+            .padding(.leading, 21)
         }
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import DanteKit
 import SwiftUI
 
@@ -16,7 +17,7 @@ struct WorkspaceView: View {
                 if session.area == .code {
                     ExplorerView(session: session, workspace: workspace)
                         .frame(width: explorerWidth)
-                    ResizeHandle(axis: .horizontal, value: $explorerWidth, range: 180...480)
+                    ResizeHandle(axis: .horizontal, value: $explorerWidth, range: 180...900)
                 }
                 VStack(spacing: 0) {
                     Group {
@@ -37,8 +38,8 @@ struct WorkspaceView: View {
 
                     // The terminal stays alive when hidden so its shell keeps running.
                     VStack(spacing: 0) {
-                        ResizeHandle(axis: .vertical, value: Bindable(session).terminalHeight, range: 120...600, inverted: true)
-                        TerminalPane(directory: workspace.url, input: session.terminalInput, onBranchMayHaveChanged: session.refreshBranch)
+                        ResizeHandle(axis: .vertical, value: Bindable(session).terminalHeight, range: 120...1400, inverted: true)
+                        TerminalPane(session: session, directory: workspace.url)
                     }
                     .frame(height: session.showsTerminal ? session.terminalHeight : 0)
                     .clipped()
@@ -48,7 +49,7 @@ struct WorkspaceView: View {
                     StatusBar(session: session, workspace: workspace)
                 }
                 if session.showsClaude, let claude = session.claude {
-                    ResizeHandle(axis: .horizontal, value: Bindable(session).claudeWidth, range: 300...640, inverted: true)
+                    ResizeHandle(axis: .horizontal, value: Bindable(session).claudeWidth, range: 300...1400, inverted: true)
                     ClaudePanel(session: session, workspace: workspace, claude: claude)
                         .frame(width: session.claudeWidth)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -56,6 +57,8 @@ struct WorkspaceView: View {
             }
         }
         .background(theme.ground.color)
+        .background(MouseNavigation(back: session.goBack, forward: session.goForward))
+        .onChange(of: session.place) { previous, _ in session.placeChanged(from: previous) }
         .overlay {
             if let scope = session.palette {
                 ZStack(alignment: .top) {
@@ -120,5 +123,47 @@ private struct WindowEditedMarker: NSViewRepresentable {
     func updateNSView(_ view: NSView, context: Context) {
         let isEdited = isEdited
         DispatchQueue.main.async { view.window?.isDocumentEdited = isEdited }
+    }
+}
+
+/// The back and forward buttons on a mouse (buttons 3 and 4), for this window only.
+private struct MouseNavigation: NSViewRepresentable {
+    let back: @MainActor () -> Void
+    let forward: @MainActor () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        let coordinator = context.coordinator
+        coordinator.view = view
+        coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: .otherMouseUp) { [weak coordinator] event in
+            let button = event.buttonNumber
+            guard button == 3 || button == 4 else { return event }
+            let handled = MainActor.assumeIsolated { () -> Bool in
+                guard let coordinator, let window = coordinator.view?.window, window.isKeyWindow else { return false }
+                if button == 3 { coordinator.back?() } else { coordinator.forward?() }
+                return true
+            }
+            return handled ? nil : event
+        }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.back = back
+        context.coordinator.forward = forward
+    }
+
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
+        if let monitor = coordinator.monitor { NSEvent.removeMonitor(monitor) }
+    }
+
+    @MainActor
+    final class Coordinator {
+        weak var view: NSView?
+        var back: (@MainActor () -> Void)?
+        var forward: (@MainActor () -> Void)?
+        var monitor: Any?
     }
 }

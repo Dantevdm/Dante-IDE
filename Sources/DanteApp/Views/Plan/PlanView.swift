@@ -32,7 +32,7 @@ struct PlanView: View {
                     TaskBoardView(session: session, workspace: workspace, phase: phase) { isAddingTask = true }
                 }
                 .padding(28)
-                .frame(maxWidth: 1100, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
