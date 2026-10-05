@@ -115,3 +115,7 @@ tasks:
   title: Attach files to Claude (drop, paste, pick) and turn them into docs
   phase: build
   state: done
+- id: DI-29
+  title: Offer to set up projects without .dante on open, with detection and Claude filling in the spec
+  phase: build
+  state: done

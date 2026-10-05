@@ -210,6 +210,57 @@ final class Session {
         branch = Git.currentBranch(in: url)
         area = .code
         recents.note(url)
+        if !workspace.lifecycle.hasSpec { offerSetup() }
+    }
+
+    // MARK: Project setup
+
+    /// Shows the setup sheet for a project without `.dante/project.yaml` once Dante has
+    /// looked at its files and history. Projects the user said "Not now" to are skipped
+    /// unless `force` is set.
+    var setupProfile: ProjectProfile?
+    private static let declinedSetupKey = "declinedSetup"
+
+    func offerSetup(force: Bool = false) {
+        guard let workspace else { return }
+        let root = workspace.url
+        if !force, UserDefaults.standard.stringArray(forKey: Self.declinedSetupKey)?.contains(root.path) == true { return }
+        Task {
+            let paths = await Task.detached(priority: .userInitiated) { FileIndex.scan(root) }.value
+            let commits = await Shell.run(["git", "rev-list", "--count", "HEAD"], in: root)
+            let tags = await Shell.run(["git", "tag"], in: root)
+            let profile = ProjectProfile.detect(
+                paths: paths,
+                commits: commits.status == 0 ? Int(commits.stdout) ?? 0 : 0,
+                tags: tags.status == 0 ? tags.stdout.split(separator: "\n").count : 0,
+                testCommand: TestCommand.detect(projectRoot: root)?.label,
+                summary: Workspace.readmeSummary(in: root)
+            ) { path in try? String(contentsOf: root.appending(path: path), encoding: .utf8) }
+            guard self.workspace?.url == root else { return }
+            setupProfile = profile
+        }
+    }
+
+    func declineSetup() {
+        guard let root = workspace?.url.path else { return }
+        var declined = UserDefaults.standard.stringArray(forKey: Self.declinedSetupKey) ?? []
+        if !declined.contains(root) { declined.append(root) }
+        UserDefaults.standard.set(declined, forKey: Self.declinedSetupKey)
+        setupProfile = nil
+    }
+
+    /// Writes the skeleton `.dante/` and, if any parts were picked, asks Claude to fill it in.
+    func setUpProject(_ request: ProjectSetupRequest) {
+        guard let workspace, let profile = setupProfile else { return }
+        do {
+            try workspace.setUp(with: request.template, current: request.phase)
+        } catch {
+            errorMessage = "Couldn’t create .dante/: \(error.localizedDescription)"
+            return
+        }
+        setupProfile = nil
+        area = .plan
+        if !request.parts.isEmpty { askClaude(request.summary, instructions: request.prompt(profile: profile)) }
     }
 
     func closeProject() {
@@ -289,11 +340,14 @@ final class Session {
     }
 
     /// Sends a message to Claude with what's on screen as context, and any attached files.
-    func askClaude(_ text: String, attachments extra: [Attachment] = []) {
+    /// `instructions` go with the message but aren't shown in the transcript, for long prompts
+    /// Dante writes on the user's behalf.
+    func askClaude(_ text: String, instructions: String? = nil, attachments extra: [Attachment] = []) {
         guard let claude, let workspace else { return }
         showsClaude = true
         let diagnostics = workspace.activeDocument.flatMap { languages?.diagnostics(for: $0) } ?? []
-        claude.send(text, context: ClaudeBrief.context(workspace: workspace, line: cursor.line, diagnostics: diagnostics),
+        let brief = ClaudeBrief.context(workspace: workspace, line: cursor.line, diagnostics: diagnostics)
+        claude.send(text, context: [instructions, brief].compactMap { $0 }.joined(separator: "\n\n"),
                     attachments: claudeAttachments + extra)
         claudeAttachments = []
     }

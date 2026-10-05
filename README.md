@@ -88,7 +88,7 @@ lifecycle:
 | `apple@1` (Swift and Apple platforms) | Discover, Define, Design, Build, Test, Beta, Release, Operate |
 | `data@1` (data and scripts) | Explore, Define, Build, Validate, Schedule, Monitor |
 
-You can also list your own with `lifecycle.phases: [Discover, Build, Ship]`. Phases are guidance and never block anything. A project without `.dante/` gets a template suggested from its files: set it up in one click, or have Claude draft the spec for you to review.
+You can also list your own with `lifecycle.phases: [Discover, Build, Ship]`. Phases are guidance and never block anything. When you open a project without `.dante/`, Dante offers to set it up. It works out the stack, lifecycle and current phase from the files and git history (no Claude needed), and spots secrets such as `.env` files. You then pick what Claude should fill in: the summary and goals, phase checklists for this codebase, tasks from TODOs and open issues, the test command, never-rules for the secrets, architecture notes, and Operate checks. Dante writes the skeleton straight away and Claude's edits come through for review. "Not now" is remembered per project; File › Set Up Project for Dante… brings the sheet back.
 
 ```yaml
 # .dante/tasks.yaml

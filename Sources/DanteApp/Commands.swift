@@ -17,6 +17,8 @@ struct DanteCommands: Commands {
                 .keyboardShortcut("o")
             Button("Clone Repository…") { session?.isCloning = true }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
+            Button("Set Up Project for Dante…") { session?.offerSetup(force: true) }
+                .disabled(session?.workspace == nil)
             Button("Close Project") { session?.closeProject() }
                 .disabled(session?.workspace == nil)
         }
