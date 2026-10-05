@@ -172,3 +172,35 @@ import Testing
         #expect(commits == [GitSnapshot.Commit(hash: "abc", subject: "Add limits", date: Date(timeIntervalSince1970: 1_700_000_000))])
     }
 }
+
+@Suite struct ReleaseDraftTests {
+    private func commits(_ subjects: [String]) -> [GitSnapshot.Commit] {
+        subjects.enumerated().map { GitSnapshot.Commit(hash: "h\($0.offset)", subject: $0.element, date: .now) }
+    }
+
+    @Test func groupsConventionalCommits() {
+        let draft = ReleaseDraft(previousTag: "v0.3.2", commits: commits([
+            "feat(api): add transfer limits", "fix: seed data duplicates", "Refactor the parser", "chore: bump deps", "Merge branch 'x'",
+        ]))
+        #expect(draft.version == "v0.4.0")
+        #expect(draft.sections.map(\.title) == ["Added", "Changed", "Fixed"])
+        #expect(draft.sections[0].entries.map(\.text) == ["Add transfer limits"])
+        #expect(draft.skipped == 2)
+        #expect(draft.markdown.hasPrefix("## v0.4.0\n\n### Added\n- Add transfer limits"))
+    }
+
+    @Test func versionBumps() {
+        #expect(ReleaseDraft.next(after: nil, breaking: false, features: true) == "v0.1.0")
+        #expect(ReleaseDraft.next(after: "1.2.3", breaking: false, features: false) == "1.2.4")
+        #expect(ReleaseDraft.next(after: "v1.2.3", breaking: true, features: false) == "v2.0.0")
+        #expect(ReleaseDraft.next(after: "v0.2.3", breaking: true, features: false) == "v0.3.0")
+    }
+
+    @Test func ciRuns() {
+        let runs = CIRun.parse(#"[{"databaseId":214,"displayTitle":"Add limits","workflowName":"CI","headBranch":"main","status":"completed","conclusion":"failure","createdAt":"2026-10-01T10:00:00Z","url":"https://github.com/o/r/actions/runs/214"}]"#)
+        #expect(runs.count == 1)
+        #expect(runs[0].isRunning == false)
+        #expect(runs[0].succeeded == false)
+        #expect(runs[0].created != nil)
+    }
+}
