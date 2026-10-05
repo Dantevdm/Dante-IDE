@@ -22,7 +22,7 @@ tasks:
 - id: DI-5
   title: Tree-sitter highlighting behind the Highlighter protocol
   phase: build
-  state: ready
+  state: done
 - id: DI-6
   title: Language servers for diagnostics and go to definition
   phase: build

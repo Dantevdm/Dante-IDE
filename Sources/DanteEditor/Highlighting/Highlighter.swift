@@ -15,16 +15,15 @@ public struct Token: Sendable, Equatable {
     }
 }
 
-/// Turns source text into coloured tokens. The built-in `RegexHighlighter`
-/// covers common languages; a tree-sitter highlighter will slot in behind
-/// this protocol.
+/// Turns source text into coloured tokens. `TreeSitterHighlighter` handles the
+/// languages Dante bundles a grammar for; `RegexHighlighter` covers the rest.
 public protocol Highlighter: Sendable {
     func tokens(in text: String) -> [Token]
 }
 
 public enum Highlighters {
     public static func make(for language: Language) -> any Highlighter {
-        RegexHighlighter(spec: .for(language))
+        TreeSitterHighlighter.make(for: language) ?? RegexHighlighter(spec: .for(language))
     }
 }
 

@@ -3,10 +3,11 @@ import DanteKit
 import Foundation
 import Testing
 
+/// The regex fallback, used for languages without a bundled grammar.
 struct HighlighterTests {
     private func kinds(_ text: String, _ language: Language) -> [(String, TokenKind)] {
         let ns = text as NSString
-        return Highlighters.make(for: language).tokens(in: text).map { (ns.substring(with: $0.range), $0.kind) }
+        return RegexHighlighter(spec: .for(language)).tokens(in: text).map { (ns.substring(with: $0.range), $0.kind) }
     }
 
     private func kind(of word: String, in text: String, _ language: Language) -> TokenKind? {
@@ -64,7 +65,7 @@ struct HighlighterTests {
 
     @Test func tokensDoNotOverlap() {
         let source = #"const s = `tpl ${x}`; function f(A) { return 0x1F + 2.5e3 } // done"#
-        let ranges = Highlighters.make(for: .javascript).tokens(in: source).map(\.range)
+        let ranges = RegexHighlighter(spec: .for(.javascript)).tokens(in: source).map(\.range)
         for (lhs, rhs) in zip(ranges, ranges.dropFirst()) {
             #expect(NSMaxRange(lhs) <= rhs.location)
         }

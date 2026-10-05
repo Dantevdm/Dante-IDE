@@ -125,6 +125,8 @@ public struct CodeEditorView: NSViewRepresentable {
         var appliedFontSize: CGFloat = 0
         private let highlighter: any Highlighter
         private var highlightTask: Task<Void, Never>?
+        /// The last tokens computed, and the text they were computed for.
+        private var tokens: (text: String, tokens: [Token])?
         private var baseAttributes: [NSAttributedString.Key: Any] = [:]
         /// NSTextView reports the new selection before `textDidChange`, so an edit marks the
         /// line index stale and whichever callback runs first rebuilds it.
@@ -238,25 +240,38 @@ public struct CodeEditorView: NSViewRepresentable {
             textView.insertText("\n" + indent, replacementRange: selection)
         }
 
+        /// Re-highlights after typing pauses. Tokens are computed off the main thread (a
+        /// tree-sitter pass over a few thousand lines takes tens of milliseconds) and only
+        /// applied if the text hasn't changed since.
         private func scheduleHighlight() {
             highlightTask?.cancel()
-            highlightTask = Task { @MainActor [weak self] in
+            highlightTask = Task { @MainActor [weak self, highlighter] in
                 try? await Task.sleep(for: .milliseconds(60))
-                guard !Task.isCancelled else { return }
-                self?.highlightNow()
+                guard !Task.isCancelled, let text = self?.textView?.string else { return }
+                let tokens = await Task.detached(priority: .userInitiated) { highlighter.tokens(in: text) }.value
+                guard !Task.isCancelled, let self, self.textView?.string == text else { return }
+                self.tokens = (text, tokens)
+                self.applyTokens()
             }
         }
 
-        /// Colours the whole document. Attributes go straight onto the text
-        /// storage, which doesn't touch undo or the selection.
+        /// Colours the whole document now, reusing the last tokens when the text is unchanged
+        /// (for example after a theme switch).
         func highlightNow() {
-            guard let textView, let storage = textView.textStorage, let theme = appliedTheme else { return }
-            let text = textView.string
-            let tokens = highlighter.tokens(in: text)
-            let length = (text as NSString).length
+            guard let text = textView?.string else { return }
+            if tokens?.text != text {
+                tokens = (text, highlighter.tokens(in: text))
+            }
+            applyTokens()
+        }
+
+        /// Attributes go straight onto the text storage, which doesn't touch undo or the selection.
+        private func applyTokens() {
+            guard let textView, let storage = textView.textStorage, let theme = appliedTheme, let tokens else { return }
+            let length = (textView.string as NSString).length
             storage.beginEditing()
             storage.setAttributes(baseAttributes, range: NSRange(location: 0, length: length))
-            for token in tokens where NSMaxRange(token.range) <= length {
+            for token in tokens.tokens where NSMaxRange(token.range) <= length {
                 storage.addAttribute(.foregroundColor, value: color(for: token.kind, in: theme), range: token.range)
             }
             storage.endEditing()
