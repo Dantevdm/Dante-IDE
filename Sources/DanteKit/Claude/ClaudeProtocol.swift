@@ -125,8 +125,11 @@ public enum ClaudeInput {
         ["type": "control_request", "request_id": .string(requestID), "request": ["subtype": "initialize", "hooks": nil]]
     }
 
-    public static func userMessage(_ text: String) -> JSONValue {
-        ["type": "user", "message": ["role": "user", "content": .string(text)], "parent_tool_use_id": nil]
+    public static func userMessage(_ text: String, attachments: [Attachment] = []) -> JSONValue {
+        let content: JSONValue = attachments.isEmpty
+            ? .string(text)
+            : .array(attachments.map(\.contentBlock) + [["type": "text", "text": .string(text)]])
+        return ["type": "user", "message": ["role": "user", "content": content], "parent_tool_use_id": nil]
     }
 
     public static func allow(requestID: String, input: JSONValue) -> JSONValue {

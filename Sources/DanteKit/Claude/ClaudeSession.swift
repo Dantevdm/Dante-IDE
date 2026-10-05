@@ -67,7 +67,8 @@ public struct ToolActivity: Equatable, Sendable {
 
 public struct TranscriptItem: Identifiable, Equatable, Sendable {
     public enum Content: Equatable, Sendable {
-        case user(String)
+        /// What the user wrote, and the names of the files they attached.
+        case user(String, attachments: [String] = [])
         case assistant(String)
         case tool(ToolActivity)
         case notice(String, isError: Bool)
@@ -135,9 +136,9 @@ public final class ClaudeSession {
     // MARK: Conversation
 
     /// Sends a message. `context` is passed to Claude but not shown in the transcript.
-    public func send(_ text: String, context: String? = nil) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, state != .working else { return }
+    public func send(_ text: String, context: String? = nil, attachments: [Attachment] = []) {
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty || !attachments.isEmpty, state != .working else { return }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
         if process != nil, rules() != startedRules {
             stop()
@@ -145,9 +146,10 @@ public final class ClaudeSession {
         if process == nil {
             guard start() else { return }
         }
-        append(TranscriptItem(id: "user-\(UUID().uuidString)", content: .user(trimmed)))
+        append(TranscriptItem(id: "user-\(UUID().uuidString)", content: .user(trimmed, attachments: attachments.map(\.name))))
+        if trimmed.isEmpty { trimmed = "Take a look at \(attachments.count == 1 ? "this file" : "these files")." }
         let message = context.map { "\(trimmed)\n\n<dante-context>\n\($0)\n</dante-context>" } ?? trimmed
-        write(ClaudeInput.userMessage(message))
+        write(ClaudeInput.userMessage(message, attachments: attachments))
         state = .working
     }
 

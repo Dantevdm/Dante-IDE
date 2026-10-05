@@ -143,6 +143,9 @@ final class Session {
     private(set) var terminalInput: TerminalInput?
     /// Bumped to move keyboard focus to Claude's message box.
     var claudeFocusRequest = 0
+    /// Files waiting to go with the next message to Claude.
+    var claudeAttachments: [Attachment] = []
+    var attachmentsLoading = 0
     var cursor = CursorPosition()
     var isCloning = false
     var errorMessage: String?
@@ -285,12 +288,54 @@ final class Session {
         claudeFocusRequest += 1
     }
 
-    /// Sends a message to Claude with what's on screen as context.
-    func askClaude(_ text: String) {
+    /// Sends a message to Claude with what's on screen as context, and any attached files.
+    func askClaude(_ text: String, attachments extra: [Attachment] = []) {
         guard let claude, let workspace else { return }
         showsClaude = true
         let diagnostics = workspace.activeDocument.flatMap { languages?.diagnostics(for: $0) } ?? []
-        claude.send(text, context: ClaudeBrief.context(workspace: workspace, line: cursor.line, diagnostics: diagnostics))
+        claude.send(text, context: ClaudeBrief.context(workspace: workspace, line: cursor.line, diagnostics: diagnostics),
+                    attachments: claudeAttachments + extra)
+        claudeAttachments = []
+    }
+
+    /// Reads files for the next message to Claude. Files that can't be read are reported.
+    func attach(_ urls: [URL]) async {
+        let fresh = urls.filter { url in !claudeAttachments.contains { $0.url == url } }
+        guard !fresh.isEmpty else { return }
+        showsClaude = true
+        attachmentsLoading += fresh.count
+        defer { attachmentsLoading -= fresh.count }
+        for url in fresh {
+            do {
+                claudeAttachments.append(try await Attachment.load(url))
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        claudeFocusRequest += 1
+    }
+
+    /// An image from the pasteboard or a drag, saved outside the project.
+    func attachImage(_ data: Data) {
+        do {
+            let folder = FileManager.default.temporaryDirectory.appending(path: "Dante attachments")
+            claudeAttachments.append(try Attachment.image(data: data, savingIn: folder))
+            showsClaude = true
+            claudeFocusRequest += 1
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Asks Claude to work on a file: attached, with an instruction.
+    func askClaude(_ text: String, about url: URL) {
+        Task {
+            do {
+                askClaude(text, attachments: [try await Attachment.load(url)])
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     // MARK: Files

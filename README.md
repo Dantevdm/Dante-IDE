@@ -21,7 +21,8 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Plan: lifecycle phases, "ready" and "done" checklists from `.dante/phases/<phase>.md`, and a drag-and-drop task board stored in `.dante/tasks.yaml`. "Work on this with Claude" hands a task to the pair panel
 - Lifecycle ribbon read from `.dante/project.yaml`; click a phase to open it in Plan
 - Home: the project at a glance, with the lifecycle timeline, the current phase's tasks, recent commits, local services, and what Claude is told about the project
-- Docs: renders the project's markdown with an outline, links tasks that use a doc as their spec, and opens files it mentions. ```mermaid blocks (flowcharts, sequence and ER diagrams) are drawn natively in the theme's colours
+- Docs: renders the project's markdown with an outline, links tasks that use a doc as their spec, and opens files it mentions. ```mermaid blocks (flowcharts, sequence and ER diagrams) are drawn natively in the theme's colours. PDFs, images and Word files under docs/ show alongside; drop files on Docs to add them, then ask Claude about one or have it written up as a markdown spec. Markdown images render inline
+- Attach files for Claude: drop, paste or pick images, PDFs, Word/RTF/HTML documents or code into the Claude panel. Images and PDFs go to Claude as themselves; documents are converted to text
 - Spec: the `.dante` folder with validation, plus exactly what Claude receives and roughly how many tokens it costs
 - Tests (⌘U): runs the project's tests (Swift, cargo, go, npm/pnpm/yarn/bun, pytest, or `test.command`), groups results by suite, and hands failures to Claude
 - Env: Docker Compose services with start, stop, logs, and Dockerfiles that are missing

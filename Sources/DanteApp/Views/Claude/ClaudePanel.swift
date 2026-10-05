@@ -20,6 +20,7 @@ struct ClaudePanel: View {
             Composer(session: session, claude: claude)
         }
         .background(theme.panel.color)
+        .modifier(AcceptsAttachments(session: session))
     }
 
     private var header: some View {
@@ -230,11 +231,29 @@ private struct TranscriptRow: View {
 
     var body: some View {
         switch item.content {
-        case .user(let text):
-            Text(text)
-                .font(.system(size: 12.5))
-                .foregroundStyle(theme.text.color)
-                .textSelection(.enabled)
+        case .user(let text, let attachments):
+            VStack(alignment: .leading, spacing: 6) {
+                if !attachments.isEmpty {
+                    FlowLayout(spacing: 5) {
+                        ForEach(attachments, id: \.self) { name in
+                            Label(name, systemImage: AttachmentChip.symbol(for: name))
+                                .font(.system(size: 11))
+                                .foregroundStyle(theme.text2.color)
+                                .lineLimit(1)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(theme.card.color))
+                                .overlay(Capsule().strokeBorder(theme.line.color))
+                        }
+                    }
+                }
+                if !text.isEmpty {
+                    Text(text)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(theme.text.color)
+                        .textSelection(.enabled)
+                }
+            }
                 .padding(.horizontal, 11)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)

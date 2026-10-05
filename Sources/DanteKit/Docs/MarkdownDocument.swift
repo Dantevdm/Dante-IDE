@@ -2,7 +2,8 @@ import Foundation
 
 /// A markdown document split into blocks for the Docs reader. Inline syntax (bold, links,
 /// `code`) stays in the text; the view renders it. Covers what specs and READMEs use:
-/// headings, paragraphs, lists and checklists, quotes, fenced code, tables and rules.
+/// headings, paragraphs, lists and checklists, quotes, fenced code, tables, rules and
+/// images on a line of their own.
 public struct MarkdownDocument: Equatable, Sendable {
     public enum Block: Equatable, Sendable {
         case heading(level: Int, text: String, anchor: String)
@@ -12,6 +13,8 @@ public struct MarkdownDocument: Equatable, Sendable {
         case code(String, language: String?)
         case table(header: [String], rows: [[String]])
         case rule
+        /// A paragraph that is just `![alt](source)`.
+        case image(alt: String, source: String)
     }
 
     public struct ListItem: Equatable, Sendable {
@@ -51,7 +54,11 @@ public struct MarkdownDocument: Equatable, Sendable {
 
         func flush() {
             let text = paragraph.joined(separator: " ").trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { blocks.append(.paragraph(text)) }
+            if let match = text.wholeMatch(of: /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/) {
+                blocks.append(.image(alt: String(match.1), source: String(match.2)))
+            } else if !text.isEmpty {
+                blocks.append(.paragraph(text))
+            }
             paragraph = []
         }
 

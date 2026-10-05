@@ -9,13 +9,27 @@ public struct DocLibrary: Equatable, Sendable {
         public var path: String
         public var id: String { path }
 
+        public enum Kind: Equatable, Sendable {
+            case markdown, pdf, image
+            /// Word, RTF, OpenDocument: previewed as text.
+            case document
+        }
+
         public init(path: String) { self.path = path }
+
+        public var kind: Kind {
+            let ext = (path as NSString).pathExtension.lowercased()
+            if DocLibrary.markdownExtensions.contains(ext) { return .markdown }
+            if ext == "pdf" { return .pdf }
+            if DocLibrary.imageExtensions.contains(ext) { return .image }
+            return .document
+        }
 
         /// The file name without `.md`, with dashes and underscores as spaces.
         public var title: String {
             let name = (path as NSString).lastPathComponent
-            let base = (name as NSString).deletingPathExtension
-            if base.uppercased() == base { return base }
+            let base = kind == .markdown ? (name as NSString).deletingPathExtension : name
+            if base.uppercased() == base || kind != .markdown { return base }
             let spaced = base.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
             return spaced.prefix(1).uppercased() + spaced.dropFirst()
         }
@@ -33,10 +47,36 @@ public struct DocLibrary: Equatable, Sendable {
     public var isEmpty: Bool { groups.isEmpty }
 
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdx"]
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "tiff"]
+    static let documentExtensions: Set<String> = ["pdf", "doc", "docx", "rtf", "odt"]
+    /// Where PDFs, images and Word files count as docs. Elsewhere they're app assets.
+    static let documentFolders: Set<String> = ["docs", "documentation", ".dante"]
+    /// Where files added in Docs go.
+    public static let importFolder = "docs"
+
+    public static func isDoc(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        if markdownExtensions.contains(ext) { return true }
+        guard imageExtensions.contains(ext) || documentExtensions.contains(ext),
+              let top = path.split(separator: "/").first, path.contains("/") else { return false }
+        return documentFolders.contains(top.lowercased())
+    }
+
+    /// Where a file added in Docs lands: `docs/<name>`, numbered if that's taken.
+    public static func importPath(for name: String, existing: Set<String>) -> String {
+        let base = (name as NSString).deletingPathExtension, ext = (name as NSString).pathExtension
+        var candidate = "\(importFolder)/\(name)"
+        var number = 2
+        while existing.contains(candidate) {
+            candidate = "\(importFolder)/\(base) \(number)" + (ext.isEmpty ? "" : ".\(ext)")
+            number += 1
+        }
+        return candidate
+    }
 
     public init(paths: [String]) {
         var buckets: [String: [Doc]] = [:]
-        for path in paths where Self.markdownExtensions.contains((path as NSString).pathExtension.lowercased()) {
+        for path in paths where Self.isDoc(path) {
             buckets[Self.group(for: path), default: []].append(Doc(path: path))
         }
         groups = Self.order.compactMap { title in
@@ -71,6 +111,8 @@ public struct DocLibrary: Equatable, Sendable {
             if let index = Lifecycle.defaultPhases.firstIndex(where: { $0.lowercased() + ".md" == name }) { return 1 + index }
             return 100
         }
+        // Markdown before the files it describes.
+        if (a.kind == .markdown) != (b.kind == .markdown) { return a.kind == .markdown }
         let (ra, rb) = (rank(a), rank(b))
         return ra != rb ? ra < rb : a.path.localizedStandardCompare(b.path) == .orderedAscending
     }
