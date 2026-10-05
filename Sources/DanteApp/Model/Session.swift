@@ -92,6 +92,28 @@ final class Session {
     var showsClaude = true
     /// The command palette, when it's open.
     var palette: PaletteScope?
+
+    enum Sidebar { case files, search }
+    var sidebar: Sidebar = .files
+    let search = SearchState()
+    var searchFocusRequest = 0
+
+    /// Edit › Find in Project (⇧⌘F).
+    func showSearch() {
+        area = .code
+        sidebar = .search
+        searchFocusRequest += 1
+    }
+
+    /// Opens a search result with the match selected.
+    func open(_ match: ProjectSearch.Match, in path: String) {
+        guard let workspace else { return }
+        open(file: workspace.url.appending(path: path))
+        guard let document = workspace.activeDocument, document.url.standardizedFileURL == workspace.url.appending(path: path).standardizedFileURL else { return }
+        let lines = LineIndex(document.text as NSString)
+        let start = lines.offset(of: LSPPosition(line: match.line, character: match.column))
+        document.revealRange = NSRange(location: start, length: match.length)
+    }
     var claudeWidth: Double = 380
 
     /// Opens Plan on a phase, as the title bar's ribbon does.

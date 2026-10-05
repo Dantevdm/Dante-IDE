@@ -10,15 +10,43 @@ struct ExplorerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Eyebrow("Explorer")
+            HStack(spacing: 12) {
+                tab("Explorer", .files)
+                tab("Search", .search)
                 Spacer()
-                IconButton(symbol: "arrow.clockwise", label: "Refresh", size: 11) { refresh(workspace.root) }
-                IconButton(symbol: "rectangle.compress.vertical", label: "Collapse all", size: 11) { collapse(workspace.root) }
+                if session.sidebar == .files {
+                    IconButton(symbol: "arrow.clockwise", label: "Refresh", size: 11) { refresh(workspace.root) }
+                    IconButton(symbol: "rectangle.compress.vertical", label: "Collapse all", size: 11) { collapse(workspace.root) }
+                }
             }
             .padding(.leading, 14)
             .padding(.trailing, 8)
             .frame(height: 38)
+
+            if session.sidebar == .search {
+                SearchPanel(session: session, workspace: workspace)
+            } else {
+                tree
+            }
+        }
+        .background(theme.panel.color)
+    }
+
+    private func tab(_ title: String, _ sidebar: Session.Sidebar) -> some View {
+        Button { session.sidebar = sidebar } label: {
+            Text(title.uppercased())
+                .font(.system(size: 10.5, weight: .medium))
+                .tracking(0.9)
+                .foregroundStyle(session.sidebar == sidebar ? theme.text.color : theme.text3.color)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(sidebar == .search ? "Find in Project (⇧⌘F)" : "Files")
+        .accessibilityAddTraits(session.sidebar == sidebar ? .isSelected : [])
+    }
+
+    private var tree: some View {
+        VStack(alignment: .leading, spacing: 0) {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
@@ -42,7 +70,6 @@ struct ExplorerView: View {
             }
             .scrollIndicators(.automatic)
         }
-        .background(theme.panel.color)
     }
 
     private struct Row {
