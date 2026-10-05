@@ -83,6 +83,7 @@ struct RootView: View {
         .tint(theme.accent.color)
         .focusedSceneValue(\.session, session)
         .navigationTitle(session.workspace?.name ?? "Dante")
+        .onDisappear { session.shutdown() }
         .onAppear {
             let paths = AppDelegate.launchPaths
             AppDelegate.launchPaths = []

@@ -222,6 +222,16 @@ final class Session {
         branch = nil
     }
 
+    /// The window closed: stop every process and watcher it started. Unsaved changes were
+    /// already handled by the close or quit prompt.
+    func shutdown() {
+        claude?.stop()
+        languages?.stop()
+        watcher?.stop()
+        logWatch?.stop()
+        health.stop()
+    }
+
     private func filesChanged(_ changed: [URL]) {
         guard let workspace else { return }
         let result = workspace.applyExternalChanges(changed)
