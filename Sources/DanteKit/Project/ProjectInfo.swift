@@ -7,6 +7,8 @@ public struct ProjectInfo: Equatable, Sendable {
     public var summary: String?
     /// Health checks the Run area polls: `operate: { checks: [{ name, url }] }`.
     public var checks: [HealthCheck]
+    /// A command that streams production logs: `operate: { logs: "fly logs" }`.
+    public var logsCommand: String?
 
     public struct HealthCheck: Equatable, Sendable, Identifiable {
         public var name: String
@@ -19,16 +21,18 @@ public struct ProjectInfo: Equatable, Sendable {
         }
     }
 
-    public init(name: String? = nil, summary: String? = nil, checks: [HealthCheck] = []) {
+    public init(name: String? = nil, summary: String? = nil, checks: [HealthCheck] = [], logsCommand: String? = nil) {
         self.name = name
         self.summary = summary
         self.checks = checks
+        self.logsCommand = logsCommand
     }
 
     public static func parse(projectYAML yaml: String) -> ProjectInfo {
         guard let root = (try? Yams.load(yaml: yaml)) as? [String: Any] else { return ProjectInfo() }
         var checks: [HealthCheck] = []
-        if let operate = root["operate"] as? [String: Any], let list = operate["checks"] as? [Any] {
+        let operate = root["operate"] as? [String: Any]
+        if let list = operate?["checks"] as? [Any] {
             for case let entry as [String: Any] in list {
                 guard let address = entry["url"] as? String, let url = URL(string: address), url.scheme?.hasPrefix("http") == true else { continue }
                 checks.append(HealthCheck(name: (entry["name"] as? String) ?? url.host() ?? address, url: url))
@@ -37,7 +41,8 @@ public struct ProjectInfo: Equatable, Sendable {
         return ProjectInfo(
             name: (root["name"] as? String)?.nonEmptyTrimmed,
             summary: (root["summary"] as? String)?.nonEmptyTrimmed,
-            checks: checks
+            checks: checks,
+            logsCommand: (operate?["logs"] as? String)?.nonEmptyTrimmed
         )
     }
 

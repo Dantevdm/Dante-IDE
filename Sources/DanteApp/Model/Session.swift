@@ -3,8 +3,7 @@ import DanteEditor
 import DanteKit
 import Observation
 
-/// The areas in the workspace rail. Code and Plan are built so far; the rest are
-/// designed (see the design canvas) and land in later milestones.
+/// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
     case home, plan, map, code, tests, environments, ship, run, docs, spec
 
@@ -40,15 +39,13 @@ enum Area: String, CaseIterable, Identifiable {
         }
     }
 
-    var isBuilt: Bool { self != .run }
-
-    /// What the screen will do, shown until it's built.
+    /// What the area is for, shown as the rail button's tooltip.
     var summary: String {
         switch self {
         case .home: "Where the project is: the current phase and its checklist, tasks, environment and docs at a glance."
         case .plan: "Phases, what “done” means in each, and a task board stored in .dante/tasks.yaml."
         case .map: "Architecture, process flows, data model and cloud diagrams generated from the code."
-        case .code: ""
+        case .code: "The editor, file explorer and terminal."
         case .tests: "Tests traced to specs and code paths, coverage by component, and tests Claude can draft."
         case .environments: "Docker Compose services with logs, shells and restarts, and Docker files Claude can write."
         case .ship: "A release checklist, a changelog drafted from tasks and commits, and the CI pipeline."
@@ -107,6 +104,9 @@ final class Session {
     var docAnchor: String?
     /// The latest test run, kept while the window is open so it runs on in the background.
     var testRun: TestRun?
+    /// Health checks and the production log stream for the Run area.
+    let health = HealthMonitor()
+    var logWatch: LogWatch?
 
     func showDoc(_ path: String) {
         docPath = path

@@ -30,7 +30,7 @@ struct WorkspaceView: View {
                         case .ship: ShipView(session: session, workspace: workspace)
                         case .environments: EnvironmentView(session: session, workspace: workspace)
                         case .map: MapView(session: session, workspace: workspace)
-                        default: PlaceholderView(area: session.area)
+                        case .run: RunView(session: session, workspace: workspace)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

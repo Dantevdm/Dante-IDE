@@ -223,3 +223,30 @@ import Testing
         #expect(graph?.nodes.first?.detail == "2 files")
     }
 }
+
+@Suite struct OperateTests {
+    @Test func errorDigestGroupsVaryingLines() {
+        var digest = ErrorDigest()
+        digest.consume("2026-10-05T14:02:13Z worker Error: connect ECONNREFUSED 127.0.0.1:4222")
+        digest.consume("2026-10-05T14:02:18Z worker Error: connect ECONNREFUSED 127.0.0.1:4222")
+        digest.consume("14:02:20 api GET /health 200 3ms")
+        digest.consume("14:02:21 api TimeoutError: balance query over 2 s (req 9f86d081884c7d65)")
+        #expect(digest.linesSeen == 4)
+        #expect(digest.issues.count == 2)
+        #expect(digest.issues[0].count == 2)
+        #expect(digest.issues[0].example.hasPrefix("2026-10-05T14:02:18Z"))
+        #expect(digest.issues[0].summary == "worker Error: connect ECONNREFUSED 127.0.0.1:4222")
+    }
+
+    @Test func errorDetection() {
+        #expect(ErrorDigest.isError("panic: runtime error: index out of range"))
+        #expect(ErrorDigest.isError(#"10.0.0.1 - - "GET /x HTTP/1.1" 502 12"#))
+        #expect(!ErrorDigest.isError("Listening on :8080"))
+        #expect(!ErrorDigest.isError("errors_total=0"))
+    }
+
+    @Test func projectInfoReadsLogsCommand() {
+        let info = ProjectInfo.parse(projectYAML: "operate:\n  logs: fly logs -a ledger\n")
+        #expect(info.logsCommand == "fly logs -a ledger")
+    }
+}

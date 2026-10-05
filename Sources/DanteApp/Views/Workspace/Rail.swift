@@ -50,37 +50,8 @@ private struct RailItem: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help(area.isBuilt ? area.title : "\(area.title) (designed, not built yet)")
+        .help(area.summary.isEmpty ? area.title : "\(area.title): \(area.summary)")
         .accessibilityLabel(area.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-/// Stands in for areas that are designed but not built yet.
-struct PlaceholderView: View {
-    @Environment(\.theme) private var theme
-    let area: Area
-
-    var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: area.symbol)
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(theme.accent.color)
-            Text(area.title == "Env" ? "Environments" : area.title)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(theme.text.color)
-            Text(area.summary)
-                .font(.system(size: 13.5))
-                .foregroundStyle(theme.text2.color)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 440)
-            Text("Designed, not built yet.")
-                .font(.system(size: 12))
-                .foregroundStyle(theme.text3.color)
-                .padding(.top, 4)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(theme.ground.color)
     }
 }
