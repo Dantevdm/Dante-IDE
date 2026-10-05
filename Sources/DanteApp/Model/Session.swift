@@ -40,7 +40,7 @@ enum Area: String, CaseIterable, Identifiable {
         }
     }
 
-    var isBuilt: Bool { [.code, .plan, .home, .docs, .spec].contains(self) }
+    var isBuilt: Bool { [.code, .plan, .home, .docs, .spec, .tests].contains(self) }
 
     /// What the screen will do, shown until it's built.
     var summary: String {
@@ -105,6 +105,8 @@ final class Session {
     var docPath: String?
     /// A heading to scroll the open doc to.
     var docAnchor: String?
+    /// The latest test run, kept while the window is open so it runs on in the background.
+    var testRun: TestRun?
 
     func showDoc(_ path: String) {
         docPath = path

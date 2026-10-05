@@ -136,6 +136,8 @@ public struct MarkdownDocument: Equatable, Sendable {
                 let ordered = Self.listItem(line)?.number != nil
                 while index < lines.count {
                     if let item = Self.listItem(lines[index]) {
+                        // A top-level switch between bullets and numbers starts a new list.
+                        if item.depth == 0, (item.number != nil) != ordered { break }
                         items.append(item)
                     } else if !lines[index].trimmingCharacters(in: .whitespaces).isEmpty, lines[index].hasPrefix("  "), !items.isEmpty {
                         // A wrapped continuation line.

@@ -26,6 +26,7 @@ struct WorkspaceView: View {
                         case .home: HomeView(session: session, workspace: workspace)
                         case .docs: DocsView(session: session, workspace: workspace)
                         case .spec: SpecView(session: session, workspace: workspace)
+                        case .tests: TestsView(session: session, workspace: workspace)
                         default: PlaceholderView(area: session.area)
                         }
                     }
