@@ -1,0 +1,64 @@
+import DanteKit
+import SwiftUI
+
+struct DanteCommands: Commands {
+    let themeStore: ThemeStore
+    @FocusedValue(\.session) private var session
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Project…") { session?.newProject() }
+                .keyboardShortcut("n")
+            Button("New Window") { openWindow(id: "workspace") }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+            Divider()
+            Button("Open Folder…") { session?.openFolderPanel() }
+                .keyboardShortcut("o")
+            Button("Clone Repository…") { session?.isCloning = true }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+            Button("Close Project") { session?.closeProject() }
+                .disabled(session?.workspace == nil)
+        }
+
+        CommandGroup(replacing: .saveItem) {
+            Button("Save") { session?.saveActive() }
+                .keyboardShortcut("s")
+                .disabled(session?.workspace?.activeDocument == nil)
+            Button("Save All") { session?.saveAll() }
+                .keyboardShortcut("s", modifiers: [.command, .option])
+                .disabled(session?.workspace == nil)
+            Divider()
+            Button("Close Tab") { session?.closeActiveTab() }
+                .keyboardShortcut("w")
+        }
+
+        CommandGroup(before: .toolbar) {
+            Button(session?.showsTerminal == true ? "Hide Terminal" : "Show Terminal") {
+                session?.showsTerminal.toggle()
+            }
+            .keyboardShortcut("`", modifiers: .control)
+            .disabled(session?.workspace == nil)
+
+            Button("Next Tab") { session?.selectTab(offset: 1) }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+            Button("Previous Tab") { session?.selectTab(offset: -1) }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+            Divider()
+
+            Picker("Theme", selection: Binding(get: { themeStore.id }, set: { themeStore.id = $0 })) {
+                ForEach(ThemeID.allCases, id: \.self) { Text($0.displayName).tag($0) }
+            }
+            Button("Next Theme") { themeStore.cycle() }
+                .keyboardShortcut("t", modifiers: [.command, .option])
+            Divider()
+            Button("Bigger Text") { themeStore.adjustFontSize(by: 1) }
+                .keyboardShortcut("+")
+            Button("Smaller Text") { themeStore.adjustFontSize(by: -1) }
+                .keyboardShortcut("-")
+            Button("Actual Size") { themeStore.editorFontSize = 13 }
+                .keyboardShortcut("0")
+            Divider()
+        }
+    }
+}

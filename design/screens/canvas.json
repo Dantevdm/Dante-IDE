@@ -1,0 +1,232 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Launch",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Onboarding.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 920,
+      "title": "First open: Claude drafts the spec",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Overview.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Project home",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    },
+    "Build.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Code + Claude",
+      "w": 1440,
+      "x": 4560,
+      "y": 0
+    },
+    "Palette.dc.html": {
+      "x": 6080,
+      "y": 0,
+      "w": 1440,
+      "h": 920,
+      "title": "\u2318K: search or ask",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Architecture.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Architecture",
+      "w": 1440,
+      "x": 0,
+      "y": 1340
+    },
+    "Flow.dc.html": {
+      "x": 1520,
+      "y": 1340,
+      "w": 1440,
+      "h": 920,
+      "title": "Process flow",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "DataModel.dc.html": {
+      "x": 3040,
+      "y": 1340,
+      "w": 1440,
+      "h": 920,
+      "title": "Data model",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Cloud.dc.html": {
+      "x": 4560,
+      "y": 1340,
+      "w": 1440,
+      "h": 920,
+      "title": "Cloud (infra project)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Plan.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Phases and tasks",
+      "w": 1440,
+      "x": 0,
+      "y": 2680
+    },
+    "Test.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Tests",
+      "w": 1440,
+      "x": 1520,
+      "y": 2680
+    },
+    "Environments.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Docker environments",
+      "w": 1440,
+      "x": 3040,
+      "y": 2680
+    },
+    "Release.dc.html": {
+      "x": 4560,
+      "y": 2680,
+      "w": 1440,
+      "h": 920,
+      "title": "Release",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Operate.dc.html": {
+      "x": 6080,
+      "y": 2680,
+      "w": 1440,
+      "h": 920,
+      "title": "Runtime health",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Themes.dc.html": {
+      "x": 0,
+      "y": 4020,
+      "w": 1440,
+      "h": 1240,
+      "title": "Themes: Dark, Light, Paper",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Overview.light.dc.html": {
+      "x": 1520,
+      "y": 4020,
+      "w": 1440,
+      "h": 920,
+      "title": "Project home \u00b7 Light",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Spec.paper.dc.html": {
+      "x": 3040,
+      "y": 4020,
+      "w": 1440,
+      "h": 1240,
+      "title": "Spec \u00b7 Paper mode",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "ProjectFormat.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Project spec (.dante)",
+      "w": 1440,
+      "x": 4560,
+      "y": 4020
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-05T07:43:32Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "row1": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Launch and daily workspace",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "row2": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Understand: maps generated from the code",
+      "w": 240,
+      "x": 0,
+      "y": 1040
+    },
+    "row3": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Lifecycle: plan, test, run, ship, operate",
+      "w": 240,
+      "x": 0,
+      "y": 2380
+    },
+    "row4": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Themes, docs and the project spec",
+      "w": 240,
+      "x": 0,
+      "y": 3720
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Onboarding.dc.html",
+    "Overview.dc.html",
+    "Build.dc.html",
+    "Palette.dc.html",
+    "Architecture.dc.html",
+    "Flow.dc.html",
+    "DataModel.dc.html",
+    "Cloud.dc.html",
+    "Plan.dc.html",
+    "Test.dc.html",
+    "Environments.dc.html",
+    "Release.dc.html",
+    "Operate.dc.html",
+    "Themes.dc.html",
+    "Overview.light.dc.html",
+    "Spec.paper.dc.html",
+    "ProjectFormat.dc.html"
+  ],
+  "pages": [],
+  "title": "Dante IDE"
+}
