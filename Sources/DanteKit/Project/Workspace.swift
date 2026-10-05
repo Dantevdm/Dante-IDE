@@ -15,6 +15,11 @@ public final class Workspace {
     public private(set) var claudeRules = ClaudeRules()
     /// Phase docs from `.dante/phases/`, keyed by lower-case phase name.
     public private(set) var phaseDocs: [String: PhaseDoc] = [:]
+    /// Name, summary and health checks from project.yaml.
+    public private(set) var info = ProjectInfo()
+    /// Bumped whenever files change on disk or through the editor, so views that read
+    /// git or other tools know to refresh.
+    public private(set) var revision = 0
 
     /// Every file in the project, relative to the root, for quick open. Filled in the background.
     public private(set) var files: [String] = []
@@ -54,6 +59,8 @@ public final class Workspace {
         if next != lifecycle { lifecycle = next }
         let rules = ClaudeRules.load(projectRoot: url)
         if rules != claudeRules { claudeRules = rules }
+        let nextInfo = ProjectInfo.load(projectRoot: url)
+        if nextInfo != info { info = nextInfo }
         tasks.reload()
         var docs: [String: PhaseDoc] = [:]
         for phase in lifecycle.phases {
@@ -118,6 +125,7 @@ public final class Workspace {
         var folders = Set<URL>()
         var needsIndex = false
         var specChanged = false
+        var relevant = false
 
         for raw in changed {
             var path = raw.standardizedFileURL.path
@@ -126,11 +134,15 @@ public final class Workspace {
             let relative = String(path.dropFirst(rootPath.count + 1))
             let components = relative.split(separator: "/").map(String.init)
             if components.first == ".git" {
-                if relative == ".git/HEAD" || relative.hasPrefix(".git/refs/heads/") { result.gitHeadChanged = true }
+                if relative == ".git/HEAD" || relative.hasPrefix(".git/refs/") || relative == ".git/index" {
+                    if relative != ".git/index" { result.gitHeadChanged = true }
+                    relevant = true
+                }
                 continue
             }
             if components.contains(where: FileTree.ignoredNames.contains) { continue }
 
+            relevant = true
             let file = URL(filePath: path)
             folders.insert(file.deletingLastPathComponent().standardizedFileURL)
             let exists = FileManager.default.fileExists(atPath: path)
@@ -147,6 +159,7 @@ public final class Workspace {
         for folder in folders { root.node(for: folder)?.loadChildren() }
         if needsIndex { refreshFileIndex() }
         if specChanged { reloadSpec() }
+        if relevant { revision += 1 }
         return result
     }
 
@@ -179,6 +192,7 @@ public final class Workspace {
     public func fileChanged(at url: URL) -> Bool {
         root.node(for: url.deletingLastPathComponent())?.loadChildren()
         if url.path.contains("/.dante/") { reloadSpec() }
+        revision += 1
         guard let document = documents.first(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) else { return true }
         guard !document.isDirty else { return false }
         try? document.reloadFromDisk()

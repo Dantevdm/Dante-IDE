@@ -40,7 +40,7 @@ enum Area: String, CaseIterable, Identifiable {
         }
     }
 
-    var isBuilt: Bool { self == .code || self == .plan }
+    var isBuilt: Bool { [.code, .plan, .home, .docs, .spec].contains(self) }
 
     /// What the screen will do, shown until it's built.
     var summary: String {
@@ -99,6 +99,16 @@ final class Session {
     func showPhase(_ phase: String) {
         planPhase = phase
         area = .plan
+    }
+
+    /// The document the Docs area shows, as a project-relative path.
+    var docPath: String?
+    /// A heading to scroll the open doc to.
+    var docAnchor: String?
+
+    func showDoc(_ path: String) {
+        docPath = path
+        area = .docs
     }
     /// Text queued for the integrated terminal's shell.
     private(set) var terminalInput: TerminalInput?

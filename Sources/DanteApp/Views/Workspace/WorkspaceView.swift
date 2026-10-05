@@ -23,6 +23,9 @@ struct WorkspaceView: View {
                         switch session.area {
                         case .code: EditorArea(session: session, workspace: workspace)
                         case .plan: PlanView(session: session, workspace: workspace)
+                        case .home: HomeView(session: session, workspace: workspace)
+                        case .docs: DocsView(session: session, workspace: workspace)
+                        case .spec: SpecView(session: session, workspace: workspace)
                         default: PlaceholderView(area: session.area)
                         }
                     }

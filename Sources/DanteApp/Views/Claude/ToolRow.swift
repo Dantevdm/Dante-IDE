@@ -266,9 +266,9 @@ struct CodeBlock: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            Text(text)
+            Text(HighlightedCode.attributed(text, language: HighlightedCode.language(forTag: language), theme: theme))
                 .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(theme.text.color)
+                .foregroundStyle(theme.syntax.plain.color)
                 .textSelection(.enabled)
                 .fixedSize()
                 .padding(10)
