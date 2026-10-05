@@ -58,6 +58,15 @@ private struct LanguageStatus: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .frame(maxWidth: 420, alignment: .trailing)
+                    if here.severity <= .warning {
+                        Button { session.fixWithClaude(here, in: document) } label: {
+                            Label("Fix", systemImage: "sparkle")
+                        }
+                        .accessibilityLabel("Fix with Claude")
+                        .buttonStyle(.plain)
+                        .foregroundStyle(theme.accent.color)
+                        .help("Ask Claude to fix this \(here.severity == .error ? "error" : "warning")")
+                    }
                 }
                 if let client = languages.existingClient(for: document.language) {
                     Button { showsList.toggle() } label: {
@@ -69,7 +78,7 @@ private struct LanguageStatus: View {
                     .buttonStyle(.plain)
                     .help(state(client))
                     .popover(isPresented: $showsList, arrowEdge: .top) {
-                        ProblemsList(diagnostics: diagnostics, document: document, server: server.name) { showsList = false }
+                        ProblemsList(diagnostics: diagnostics, document: document, server: server.name, fix: { session.fixWithClaude($0, in: document) }, fixAll: { session.fixAllWithClaude(in: document) }) { showsList = false }
                     }
                 } else if let reason = languages.unavailable[server.name] {
                     Text("No language server").help(reason + " Install it for diagnostics and Jump to Definition.")
@@ -92,6 +101,8 @@ private struct ProblemsList: View {
     let diagnostics: [LSPDiagnostic]
     let document: EditorDocument
     let server: String
+    let fix: (LSPDiagnostic) -> Void
+    let fixAll: () -> Void
     let dismiss: () -> Void
 
     var body: some View {
@@ -105,33 +116,58 @@ private struct ProblemsList: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(diagnostics) { diagnostic in
-                            Button {
-                                document.revealRange = LineIndex(document.text as NSString).range(of: diagnostic.range)
-                                dismiss()
-                            } label: {
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                    Image(systemName: diagnostic.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                                        .font(.system(size: 10.5))
-                                        .foregroundStyle(diagnostic.severity == .error ? theme.red.color : theme.amber.color)
-                                    Text(diagnostic.message)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(theme.text.color)
-                                        .multilineTextAlignment(.leading)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                    Spacer(minLength: 8)
-                                    Text("\(diagnostic.range.start.line + 1)")
-                                        .font(.system(size: 11.5, design: .monospaced))
-                                        .foregroundStyle(theme.text3.color)
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Button {
+                                    document.revealRange = LineIndex(document.text as NSString).range(of: diagnostic.range)
+                                    dismiss()
+                                } label: {
+                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                        Image(systemName: diagnostic.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
+                                            .font(.system(size: 10.5))
+                                            .foregroundStyle(diagnostic.severity == .error ? theme.red.color : theme.amber.color)
+                                        Text(diagnostic.message)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(theme.text.color)
+                                            .multilineTextAlignment(.leading)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                        Spacer(minLength: 8)
+                                        Text("\(diagnostic.range.start.line + 1)")
+                                            .font(.system(size: 11.5, design: .monospaced))
+                                            .foregroundStyle(theme.text3.color)
+                                    }
+                                    .contentShape(Rectangle())
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain)
+                                .help("Show in the editor")
+                                Button {
+                                    fix(diagnostic)
+                                    dismiss()
+                                } label: {
+                                    Image(systemName: "sparkle").font(.system(size: 11))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(theme.accent.color)
+                                .help("Ask Claude to fix this")
+                                .accessibilityLabel("Fix with Claude")
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
                         }
                     }
                 }
                 .frame(maxHeight: 320)
+            }
+            if diagnostics.contains(where: { $0.severity <= .warning }) {
+                Rectangle().fill(theme.line.color).frame(height: 1)
+                HStack {
+                    Spacer()
+                    Button("Fix all with Claude") {
+                        fixAll()
+                        dismiss()
+                    }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+                }
+                .padding(10)
             }
         }
         .frame(width: 420)

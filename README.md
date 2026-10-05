@@ -11,7 +11,7 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Launch screen with recent projects, plus new project, open folder and clone
 - Dark, Light and Paper themes (⌥⌘T to cycle)
 - File explorer, tabs, and a TextKit 2 code editor with tree-sitter highlighting (Swift, Python, JavaScript, TypeScript, Go, Rust, JSON; regex for the rest), line numbers and auto-indent
-- Language servers for diagnostics and Jump to Definition (⌘-click or ⌃⌘J): SourceKit-LSP, typescript-language-server, Pyright, gopls, rust-analyzer and clangd, whichever are installed. Problems are underlined, marked in the gutter and listed from the status bar
+- Language servers for diagnostics and Jump to Definition (⌘-click or ⌃⌘J): SourceKit-LSP, typescript-language-server, Pyright, gopls, rust-analyzer and clangd, whichever are installed. Problems are underlined, marked in the gutter and listed from the status bar, and Fix hands one, or all of them, to Claude. Claude always sees the open file's problems
 - Integrated terminal running your login shell (⌃`)
 - Claude pair panel (⌘L): runs Claude Code headless in the project. Every edit arrives as a diff to apply or decline, and every command waits for your go-ahead. Claude knows the `.dante` format and the current phase, and sees which file you have open
 - Command palette (⌘K, or ⌘P for files): fuzzy file search, docs, actions, and Tab to ask Claude

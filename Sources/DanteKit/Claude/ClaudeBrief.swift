@@ -59,11 +59,18 @@ public enum ClaudeBrief {
     }
 
     /// Hidden context sent with a message: the open file and cursor line.
-    public static func context(workspace: Workspace, line: Int?) -> String? {
+    public static func context(workspace: Workspace, line: Int?, diagnostics: [LSPDiagnostic] = []) -> String? {
         guard let document = workspace.activeDocument else { return nil }
         let path = ProposedChange.relativePath(of: document.url, in: workspace.url)
         let position = line.map { ", cursor on line \($0)" } ?? ""
         let unsaved = document.isDirty ? " It has unsaved edits, so the file on disk may differ from what the user sees." : ""
-        return "The user has \(path) open in the editor\(position).\(unsaved)"
+        var text = "The user has \(path) open in the editor\(position).\(unsaved)"
+        let problems = diagnostics.filter { $0.severity <= .warning }
+        if !problems.isEmpty {
+            let shown = problems.prefix(10).map { "- line \($0.range.start.line + 1), \($0.severity == .error ? "error" : "warning"): \($0.message)" }
+            let more = problems.count > 10 ? "\n- and \(problems.count - 10) more" : ""
+            text += "\nThe language server reports these problems in it:\n" + shown.joined(separator: "\n") + more
+        }
+        return text
     }
 }

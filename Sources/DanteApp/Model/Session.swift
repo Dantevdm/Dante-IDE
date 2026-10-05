@@ -251,7 +251,8 @@ final class Session {
     func askClaude(_ text: String) {
         guard let claude, let workspace else { return }
         showsClaude = true
-        claude.send(text, context: ClaudeBrief.context(workspace: workspace, line: cursor.line))
+        let diagnostics = workspace.activeDocument.flatMap { languages?.diagnostics(for: $0) } ?? []
+        claude.send(text, context: ClaudeBrief.context(workspace: workspace, line: cursor.line, diagnostics: diagnostics))
     }
 
     // MARK: Files
@@ -264,6 +265,20 @@ final class Session {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Hands one problem from the language server to Claude.
+    func fixWithClaude(_ diagnostic: LSPDiagnostic, in document: EditorDocument) {
+        guard let workspace else { return }
+        let path = ProposedChange.relativePath(of: document.url, in: workspace.url)
+        let kind = diagnostic.severity == .error ? "error" : "warning"
+        askClaude("Fix this \(kind) in \(path) on line \(diagnostic.range.start.line + 1): \(diagnostic.message)")
+    }
+
+    /// The problems themselves travel in the message context (`ClaudeBrief.context`).
+    func fixAllWithClaude(in document: EditorDocument) {
+        guard let workspace else { return }
+        askClaude("Fix the errors and warnings the language server reports in \(ProposedChange.relativePath(of: document.url, in: workspace.url)).")
     }
 
     /// Opens where the symbol at `offset` in `document` is defined.

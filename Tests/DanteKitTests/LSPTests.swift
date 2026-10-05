@@ -108,3 +108,22 @@ struct LSPClientTests {
         #expect(locations.first?.range.start.line == 0)
     }
 }
+
+@MainActor
+struct ClaudeContextDiagnosticsTests {
+    @Test func problemsInTheOpenFileReachClaude() throws {
+        let folder = try TemporaryFolder()
+        let file = try folder.write("main.swift", "let a: String = 1\n")
+        let workspace = Workspace(url: folder.url)
+        try workspace.open(file)
+        let range = LSPRange(start: LSPPosition(line: 0, character: 16), end: LSPPosition(line: 0, character: 17))
+        let diagnostics = [
+            LSPDiagnostic(range: range, severity: .error, message: "cannot convert value"),
+            LSPDiagnostic(range: range, severity: .hint, message: "just a hint"),
+        ]
+        let context = try #require(ClaudeBrief.context(workspace: workspace, line: 1, diagnostics: diagnostics))
+        #expect(context.contains("line 1, error: cannot convert value"))
+        #expect(!context.contains("just a hint"))
+        #expect(ClaudeBrief.context(workspace: workspace, line: 1)?.contains("language server") == false)
+    }
+}
