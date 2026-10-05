@@ -57,3 +57,33 @@ struct RecentProjectsTests {
         #expect(ThemeID.paper.next == .dark)
     }
 }
+
+struct GitGutterTests {
+    let base = "one\ntwo\nthree\nfour\n"
+
+    @Test func addedModifiedAndDeleted() {
+        #expect(GitGutter.changes(base: base, current: base).isEmpty)
+        #expect(GitGutter.changes(base: base, current: "one\ntwo\nnew\nthree\nfour\n") == [2: .added])
+        #expect(GitGutter.changes(base: base, current: "one\nTWO\nthree\nfour\n") == [1: .modified])
+        #expect(GitGutter.changes(base: base, current: "one\nthree\nfour\n") == [1: .deleted])
+    }
+
+    @Test func replacingWithMoreLinesIsModifiedThenAdded() {
+        #expect(GitGutter.changes(base: base, current: "one\nA\nB\nthree\nfour\n") == [1: .modified, 2: .added])
+    }
+
+    @Test func deletingTheEndMarksTheLastLine() {
+        #expect(GitGutter.changes(base: base, current: "one\ntwo\n") == [1: .deleted])
+    }
+
+    @Test func headTextOfACommittedFile() async throws {
+        let folder = try TemporaryFolder()
+        let file = try folder.write("a.txt", "  indented\n")
+        _ = await Shell.run(["git", "init", "-q"], in: folder.url)
+        _ = await Shell.run(["git", "add", "."], in: folder.url)
+        _ = await Shell.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x"], in: folder.url)
+        #expect(await GitGutter.headText(of: file, in: folder.url) == "  indented\n")
+        let untracked = try folder.write("b.txt", "new\n")
+        #expect(await GitGutter.headText(of: untracked, in: folder.url) == nil)
+    }
+}

@@ -93,6 +93,9 @@ final class Session {
     /// The command palette, when it's open.
     var palette: PaletteScope?
 
+    /// Bumped when HEAD moves (a commit, checkout or reset), so views comparing against it reload.
+    var gitRevision = 0
+
     enum Sidebar { case files, search }
     var sidebar: Sidebar = .files
     let search = SearchState()
@@ -222,7 +225,10 @@ final class Session {
     private func filesChanged(_ changed: [URL]) {
         guard let workspace else { return }
         let result = workspace.applyExternalChanges(changed)
-        if result.gitHeadChanged { refreshBranch() }
+        if result.gitHeadChanged {
+            refreshBranch()
+            gitRevision += 1
+        }
         conflicts.formUnion(result.conflicts)
     }
 

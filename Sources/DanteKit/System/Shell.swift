@@ -16,7 +16,8 @@ public enum Shell {
 
     /// Runs to completion. Both pipes are drained while the process runs, so large output
     /// can't fill a pipe and stall it. A missing tool comes back as status 127.
-    public static func run(_ arguments: [String], in directory: URL) async -> Output {
+    /// `trimming: false` keeps stdout exactly as written, for file contents.
+    public static func run(_ arguments: [String], in directory: URL, trimming: Bool = true) async -> Output {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
@@ -46,7 +47,7 @@ public enum Shell {
                 process.waitUntilExit()
                 continuation.resume(returning: Output(
                     status: process.terminationStatus,
-                    stdout: String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines),
+                    stdout: trimming ? String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) : String(decoding: data, as: UTF8.self),
                     stderr: String(decoding: errors.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
                 ))
             }

@@ -16,6 +16,11 @@ public enum LineDiff {
     /// A line diff of two texts, keeping `context` unchanged lines around each change and
     /// folding longer unchanged runs into a single `.gap` row.
     public static func lines(old: String, new: String, context: Int = 3) -> [DiffLine] {
+        fold(unfolded(old: old, new: new), context: context)
+    }
+
+    /// Every line of both texts, unchanged ones included.
+    static func unfolded(old: String, new: String) -> [DiffLine] {
         let a = split(old), b = split(new)
         let difference = b.difference(from: a)
         var removed = Set<Int>(), inserted = Set<Int>()
@@ -43,8 +48,10 @@ public enum LineDiff {
                 j += 1
             }
         }
-        return fold(all, context: context)
+        return all
     }
+
+    static func lineCount(_ text: String) -> Int { split(text).count }
 
     private static func split(_ text: String) -> [String] {
         if text.isEmpty { return [] }

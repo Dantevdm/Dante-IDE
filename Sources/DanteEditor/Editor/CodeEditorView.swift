@@ -37,6 +37,8 @@ public struct CodeEditorView: NSViewRepresentable {
     let theme: Theme
     var fontSize: CGFloat
     var diagnostics: [EditorDiagnostic]
+    /// Zero-based lines that differ from the last commit.
+    var lineChanges: [Int: LineChange]
     @Binding var reveal: NSRange?
     var onCursorChange: (CursorPosition) -> Void
     /// Called with the UTF-16 offset of a ⌘-click or "Jump to Definition".
@@ -50,6 +52,7 @@ public struct CodeEditorView: NSViewRepresentable {
         theme: Theme,
         fontSize: CGFloat = 13,
         diagnostics: [EditorDiagnostic] = [],
+        lineChanges: [Int: LineChange] = [:],
         reveal: Binding<NSRange?> = .constant(nil),
         onCursorChange: @escaping (CursorPosition) -> Void = { _ in },
         onDefinition: ((Int) -> Void)? = nil,
@@ -60,6 +63,7 @@ public struct CodeEditorView: NSViewRepresentable {
         self.theme = theme
         self.fontSize = fontSize
         self.diagnostics = diagnostics
+        self.lineChanges = lineChanges
         _reveal = reveal
         self.onCursorChange = onCursorChange
         self.onDefinition = onDefinition
@@ -136,7 +140,8 @@ public struct CodeEditorView: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.parent = self
         guard let textView = coordinator.textView else { return }
-        if coordinator.appliedTheme != theme || coordinator.appliedFontSize != fontSize {
+        let themeChanged = coordinator.appliedTheme != theme
+        if themeChanged || coordinator.appliedFontSize != fontSize {
             coordinator.apply(theme: theme, fontSize: fontSize)
             coordinator.highlightNow()
         }
@@ -147,6 +152,10 @@ public struct CodeEditorView: NSViewRepresentable {
         }
         textView.canJumpToDefinition = onDefinition != nil
         textView.canHover = hover != nil
+        if coordinator.lineChanges != lineChanges || themeChanged {
+            coordinator.lineChanges = lineChanges
+            coordinator.applyLineChanges()
+        }
         if coordinator.diagnostics != diagnostics {
             coordinator.diagnostics = diagnostics
             coordinator.applyTokens()
@@ -174,6 +183,19 @@ public struct CodeEditorView: NSViewRepresentable {
         /// The last tokens computed, and the text they were computed for.
         private var tokens: (text: String, tokens: [Token])?
         var diagnostics: [EditorDiagnostic] = []
+        var lineChanges: [Int: LineChange] = [:]
+
+        func applyLineChanges() {
+            guard let theme = appliedTheme else { return }
+            ruler?.changeMarks = lineChanges.mapValues { change in
+                let color: NSColor = switch change {
+                case .added: theme.green.nsColor
+                case .modified: theme.accent.nsColor
+                case .deleted: theme.red.nsColor
+                }
+                return (change, color)
+            }
+        }
         private var baseAttributes: [NSAttributedString.Key: Any] = [:]
         /// NSTextView reports the new selection before `textDidChange`, so an edit marks the
         /// line index stale and whichever callback runs first rebuilds it.

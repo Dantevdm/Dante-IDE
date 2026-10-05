@@ -25,6 +25,8 @@ struct EditorArea: View {
                     fontSize: themeStore.editorFontSize,
                     diagnostics: session.languages?.diagnostics(for: document) ?? [],
                     canJump: session.languages?.existingClient(for: document.language) != nil,
+                    root: workspace.url,
+                    gitRevision: session.gitRevision,
                     onCursorChange: { session.cursor = $0 },
                     onDefinition: { session.jumpToDefinition(in: document, at: $0) },
                     hover: { await session.languages?.hover(in: document, at: $0) }
@@ -46,9 +48,14 @@ private struct DocumentEditor: View {
     let fontSize: Double
     let diagnostics: [LSPDiagnostic]
     let canJump: Bool
+    let root: URL
+    let gitRevision: Int
     let onCursorChange: (CursorPosition) -> Void
     let onDefinition: (Int) -> Void
     let hover: (Int) async -> String?
+    /// The file as of HEAD; nil when it isn't tracked.
+    @State private var base: String?
+    @State private var lineChanges: [Int: LineChange] = [:]
 
     var body: some View {
         CodeEditorView(
@@ -57,11 +64,28 @@ private struct DocumentEditor: View {
             theme: theme,
             fontSize: fontSize,
             diagnostics: editorDiagnostics,
+            lineChanges: lineChanges,
             reveal: $document.revealRange,
             onCursorChange: onCursorChange,
             onDefinition: canJump ? onDefinition : nil,
             hover: canJump ? hover : nil
         )
+        .task(id: gitRevision) {
+            base = await GitGutter.headText(of: document.url, in: root)
+            await updateChanges()
+        }
+        .task(id: document.text) {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            await updateChanges()
+        }
+    }
+
+    private func updateChanges() async {
+        guard let base else { return lineChanges = [:] }
+        let text = document.text
+        let changes = await Task.detached(priority: .utility) { GitGutter.changes(base: base, current: text) }.value
+        if !Task.isCancelled { lineChanges = changes }
     }
 
     private var editorDiagnostics: [EditorDiagnostic] {

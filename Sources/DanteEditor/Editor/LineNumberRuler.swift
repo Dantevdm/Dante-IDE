@@ -1,4 +1,5 @@
 import AppKit
+import DanteKit
 
 /// The editor gutter: line numbers for the visible lines, drawn from TextKit 2 layout fragments.
 final class LineNumberRuler: NSRulerView {
@@ -6,6 +7,8 @@ final class LineNumberRuler: NSRulerView {
     var textColor = NSColor.secondaryLabelColor { didSet { needsDisplay = true } }
     var activeTextColor = NSColor.labelColor { didSet { needsDisplay = true } }
     var backgroundColor = NSColor.textBackgroundColor { didSet { needsDisplay = true } }
+    /// Lines that differ from the last commit, and the colour to mark them in.
+    var changeMarks: [Int: (change: LineChange, color: NSColor)] = [:] { didSet { needsDisplay = true } }
     /// Lines with a diagnostic, and the colour of the most severe one.
     var diagnosticMarks: [Int: NSColor] = [:] { didSet { if diagnosticMarks != oldValue { needsDisplay = true } } }
 
@@ -85,6 +88,22 @@ final class LineNumberRuler: NSRulerView {
             let point = convert(NSPoint(x: 0, y: top + textView.textContainerOrigin.y), from: textView)
             let box = NSRect(x: 0, y: point.y + (height - size.height) / 2, width: ruleThickness - 14, height: size.height)
             label.draw(in: box, withAttributes: attributes)
+            if let mark = changeMarks[line] {
+                mark.color.setFill()
+                let x = ruleThickness - 5
+                let lineTop = point.y
+                switch mark.change {
+                case .added, .modified:
+                    NSRect(x: x, y: lineTop, width: 3, height: height).fill()
+                case .deleted:
+                    let path = NSBezierPath()
+                    path.move(to: NSPoint(x: x - 1, y: lineTop - 4))
+                    path.line(to: NSPoint(x: x + 4, y: lineTop))
+                    path.line(to: NSPoint(x: x - 1, y: lineTop + 4))
+                    path.close()
+                    path.fill()
+                }
+            }
             if let marker = diagnosticMarks[line] {
                 marker.setFill()
                 NSBezierPath(ovalIn: NSRect(x: 7, y: box.midY - 3, width: 6, height: 6)).fill()
