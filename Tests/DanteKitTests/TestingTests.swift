@@ -204,3 +204,22 @@ import Testing
         #expect(runs[0].created != nil)
     }
 }
+
+@Suite struct ArchitectureGraphTests {
+    @Test func swiftPackageLayers() throws {
+        let json = #"{"name":"Dante","dependencies":[{"identity":"yams","url":"https://github.com/jpsim/Yams"}],"targets":[{"name":"DanteKitTests","type":"test","sources":8,"target_dependencies":["DanteKit"],"path":"Tests/DanteKitTests"},{"name":"DanteKit","type":"library","sources":29,"product_dependencies":["Yams"],"path":"Sources/DanteKit"},{"name":"DanteEditor","type":"library","sources":["a.swift","b.swift"],"target_dependencies":["DanteKit"]},{"name":"DanteApp","type":"executable","sources":31,"target_dependencies":["DanteKit","DanteEditor"]}]}"#
+        let graph = try #require(ArchitectureGraph.swiftPackage(describeJSON: json))
+        #expect(graph.node("DanteEditor")?.detail == "2 files")
+        #expect(graph.node("pkg:Yams")?.detail == "github.com")
+        let columns = graph.withoutTests.columns.map { $0.map(\.name) }
+        #expect(columns == [["DanteApp"], ["DanteEditor"], ["DanteKit"], ["Yams"]])
+        #expect(graph.dependents(of: "DanteKit").map(\.name).sorted() == ["DanteApp", "DanteEditor", "DanteKitTests"])
+        #expect(graph.undocumented(in: "DanteKit holds the models. DanteApp is the UI.").map(\.name) == ["DanteEditor"])
+    }
+
+    @Test func foldersFallback() {
+        let graph = ArchitectureGraph.folders(["src/api/a.ts", "src/api/b.ts", "src/web/c.ts", "README.md", "src/x.ts"])
+        #expect(graph?.nodes.map(\.name) == ["api", "web"])
+        #expect(graph?.nodes.first?.detail == "2 files")
+    }
+}

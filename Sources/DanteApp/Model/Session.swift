@@ -40,7 +40,7 @@ enum Area: String, CaseIterable, Identifiable {
         }
     }
 
-    var isBuilt: Bool { [.code, .plan, .home, .docs, .spec, .tests, .ship, .environments].contains(self) }
+    var isBuilt: Bool { self != .run }
 
     /// What the screen will do, shown until it's built.
     var summary: String {
