@@ -15,7 +15,9 @@ Native macOS IDE in Swift 6 / SwiftUI, built with SwiftPM (no Xcode project). De
 - `DanteEditor`: the AppKit editor (`CodeEditorView` wraps a TextKit 2 `NSTextView`). Highlighters sit behind the `Highlighter` protocol so tree-sitter can replace `RegexHighlighter` later.
 - `DanteKit/Claude`: talks to Claude Code with `claude --input-format stream-json --output-format stream-json --permission-prompt-tool stdio` (the Agent SDK's wire protocol). `ClaudeEvent` parses output lines, `ClaudeInput` builds stdin messages, `ClaudeSession` keeps the transcript, and `ProposedChange` turns Edit/MultiEdit/Write calls into diffs. Child processes must not inherit `CLAUDECODE`, or Claude Code refuses to start as a nested session. `ClaudeRules` reads `claude:` from `project.yaml`: `never` paths go to Claude Code as `--settings` deny rules and are also refused in `can_use_tool`; `flag` and out-of-`propose` edits get a `ruleNote` on the diff.
 - `DanteKit/Plan`: `.dante/tasks.yaml` (`TaskBoard`, via Yams) and `.dante/phases/<phase>.md` (`PhaseDoc`, plain markdown checklists). `Workspace.reloadSpec()` re-reads all of `.dante/`; the file watcher calls it on any change there. Edits to `project.yaml` are made line by line (`Lifecycle.settingCurrent`) so comments survive.
-- `DanteApp`: the SwiftUI app. `Session` holds per-window state; `ThemeStore` is app-wide.
+- `DanteKit/System/Shell`: `Shell.run` (drains both pipes) and `Shell.stream` (merged lines) for every external command, with the user's login-shell environment.
+- Area data, one folder each in `DanteKit`: `Docs` (`MarkdownDocument`), `Testing` (`TestCommand`, `TestOutputParser`, xUnit), `Environments` (`ComposeFile`, `ContainerState`), `Map` (`ArchitectureGraph`), `Release` (`ReleaseDraft`, `CIRun`), `Operate` (`HealthMonitor`, `ErrorDigest`, `LogWatch`). `Project/ProjectInfo` reads the rest of `project.yaml` (`test:`, `operate:`). Keep parsers pure and tested.
+- `DanteApp`: the SwiftUI app. `Session` holds per-window state; `ThemeStore` is app-wide. Area screens live in `Views/Areas` and are built from the shared pieces in `AreaPage.swift` (`AreaPage`, `Card`, `RowList`, `EmptyState`, `CardGrid`, `Chip`, `LinkButton`). Views reload with `.task(id: workspace.revision)`.
 
 ## Conventions
 
@@ -24,5 +26,4 @@ Native macOS IDE in Swift 6 / SwiftUI, built with SwiftPM (no Xcode project). De
 - Menu commands reach the window's state via `@FocusedValue(\.session)`.
 - `Section` is SwiftUI's; the workspace's areas are `Session.Area`.
 - Dante plans itself: real tasks live in `.dante/tasks.yaml`. Move a task's state when you finish it.
-- Areas still to build show `PlaceholderView`; flip `Area.isBuilt` once one is real.
 - Verify UI changes by running the bundled app, not just by compiling.

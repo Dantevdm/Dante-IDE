@@ -4,7 +4,7 @@ A native macOS IDE organised around the whole software lifecycle: Discover, Defi
 
 Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dante/`, so you and Claude are reading the same source of truth.
 
-**Status:** milestone 2, the app shell, the editor, and Claude as a pair. Most of the lifecycle areas (Plan, Map, Tests, Environments, Ship, Run, Docs, Spec) are designed but not built yet. See the [design canvas](https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi).
+**Status:** milestone 3. Every lifecycle area has a working screen: Home, Plan, Map, Code, Tests, Env, Ship, Run, Docs and Spec. Tree-sitter highlighting and language servers are next. See the [design canvas](https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi).
 
 ## What works today
 
@@ -16,7 +16,15 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Command palette (⌘K, or ⌘P for files): fuzzy file search, docs, actions, and Tab to ask Claude
 - Live file watching: the explorer, open tabs and branch stay current when files change outside the editor
 - Plan: lifecycle phases, "ready" and "done" checklists from `.dante/phases/<phase>.md`, and a drag-and-drop task board stored in `.dante/tasks.yaml`. "Work on this with Claude" hands a task to the pair panel
-- Lifecycle ribbon read from `.dante/project.yaml`
+- Lifecycle ribbon read from `.dante/project.yaml`; click a phase to open it in Plan
+- Home: the project at a glance, with the lifecycle timeline, the current phase's tasks, recent commits, local services, and what Claude is told about the project
+- Docs: renders the project's markdown with an outline, links tasks that use a doc as their spec, and opens files it mentions
+- Spec: the `.dante` folder with validation, plus exactly what Claude receives and roughly how many tokens it costs
+- Tests (⌘U): runs the project's tests (Swift, cargo, go, npm/pnpm/yarn/bun, pytest, or `test.command`), groups results by suite, and hands failures to Claude
+- Env: Docker Compose services with start, stop, logs, and Dockerfiles that are missing
+- Map: the architecture from `Package.swift`, Docker Compose or source folders, with an inspector and drift against `.dante/architecture.md`
+- Ship: CI runs from `gh`, a changelog drafted from conventional commits since the last tag, a release checklist, and local tagging
+- Run: health checks and a production log stream from `operate:` in `.dante/project.yaml`, with errors grouped so each can become a task
 - Claude rules in `.dante/project.yaml` (`claude: propose / flag / never`): flagged paths are called out on the diff, and never-paths are refused, reads included
 - Quitting with unsaved files asks once for every window: save, discard or cancel
 
@@ -48,9 +56,9 @@ swift test
 
 | Path | What's there |
 | --- | --- |
-| `Sources/DanteKit` | Models: themes, workspace, documents, file tree, lifecycle, git, recents, and the Claude Code session |
+| `Sources/DanteKit` | Models: themes, workspace, documents, lifecycle, git, the Claude Code session, and the data behind each area (Docs, Testing, Environments, Map, Release, Operate) |
 | `Sources/DanteEditor` | The TextKit 2 editor, line-number gutter and highlighters |
-| `Sources/DanteApp` | The SwiftUI app: launch screen, workspace, terminal, menus |
+| `Sources/DanteApp` | The SwiftUI app: launch screen, workspace, the area screens (`Views/Areas`), terminal, menus |
 | `Tests/` | Swift Testing suites for DanteKit and DanteEditor |
 | `design/` | Generator for the design canvas and its HTML screens |
 | `.dante/` | Dante's own project spec |
@@ -89,6 +97,16 @@ Turn the agreed design into working, reviewed code.
 
 ## Done when
 - [ ] All Build tasks done
+```
+
+```yaml
+# .dante/project.yaml, optional extras
+test:
+  command: make test           # otherwise Dante works it out
+operate:
+  checks:
+    - { name: api, url: "https://api.example.com/health" }
+  logs: fly logs -a my-app     # any command that streams production logs
 ```
 
 Dante's own `.dante/` folder is a working example.

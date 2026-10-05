@@ -38,7 +38,7 @@ tasks:
 - id: DI-9
   title: Home area with the project at a glance
   phase: build
-  state: ready
+  state: done
 - id: DI-10
   title: Unit tests for the Claude panel's tool summaries
   phase: test
@@ -47,3 +47,31 @@ tasks:
   title: Bundle the Geist fonts from the design
   phase: build
   state: ready
+- id: DI-12
+  title: Docs area: markdown rendering, outline and linked tasks
+  phase: build
+  state: done
+- id: DI-13
+  title: Spec area: .dante validation and what Claude receives
+  phase: build
+  state: done
+- id: DI-14
+  title: Tests area: run, parse and hand failures to Claude
+  phase: build
+  state: done
+- id: DI-15
+  title: Env area: Docker Compose services and logs
+  phase: build
+  state: done
+- id: DI-16
+  title: Map area: architecture diagram and drift
+  phase: build
+  state: done
+- id: DI-17
+  title: Ship area: CI, changelog and release checklist
+  phase: build
+  state: done
+- id: DI-18
+  title: Run area: health checks and production errors
+  phase: build
+  state: done
