@@ -36,7 +36,14 @@ struct DanteCommands: Commands {
         }
 
         // ⌘P is Open Quickly here, as in Xcode and VS Code.
-        CommandGroup(replacing: .printItem) {}
+        CommandGroup(replacing: .printItem) {
+            Button("Export Doc as PDF…") { session?.exportDoc() }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(session?.area != .docs)
+            Button("Print Doc…") { session?.exportDoc(printing: true) }
+                .keyboardShortcut("p")
+                .disabled(session?.area != .docs)
+        }
 
         CommandGroup(after: .textEditing) {
             Divider()

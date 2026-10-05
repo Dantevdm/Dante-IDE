@@ -2,6 +2,8 @@ import AppKit
 import DanteEditor
 import DanteKit
 import Observation
+import PDFKit
+import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
@@ -337,6 +339,37 @@ final class Session {
         claude.onFileChanged = { [weak workspace] url in workspace?.fileChanged(at: url) }
         claude.asksFirst = UserDefaults.standard.object(forKey: Self.asksFirstKey) as? Bool ?? true
         return claude
+    }
+
+    // MARK: Export
+
+    /// The markdown doc Docs is showing, exported as a Paper-theme PDF to save or print.
+    func exportDoc(printing: Bool = false) {
+        guard let workspace, let doc = DocLibrary(paths: workspace.files).doc(preferring: docPath), doc.kind == .markdown else { return }
+        let url = workspace.url.appending(path: doc.path)
+        guard let text = try? String(contentsOf: url, encoding: .utf8),
+              let data = DocExport.pdf(MarkdownDocument(text), path: doc.path, root: workspace.url) else {
+            errorMessage = "Couldn’t export \(doc.path)."
+            return
+        }
+        if printing {
+            guard let pdf = PDFDocument(data: data),
+                  let operation = pdf.printOperation(for: .shared, scalingMode: .pageScaleNone, autoRotate: true) else { return }
+            operation.jobTitle = (doc.path as NSString).lastPathComponent
+            operation.runModal(for: NSApp.keyWindow ?? NSWindow(), delegate: nil, didRun: nil, contextInfo: nil)
+            return
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = ((doc.path as NSString).lastPathComponent as NSString).deletingPathExtension + ".pdf"
+        panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        do {
+            try data.write(to: destination)
+            NSWorkspace.shared.activateFileViewerSelecting([destination])
+        } catch {
+            errorMessage = "Couldn’t save the PDF: \(error.localizedDescription)"
+        }
     }
 
     // MARK: Back and forward

@@ -20,11 +20,7 @@ struct DocsView: View {
 
     private var library: DocLibrary { DocLibrary(paths: workspace.files) }
 
-    private var selected: DocLibrary.Doc? {
-        let all = library.all
-        if let path = session.docPath, let doc = all.first(where: { $0.path == path }) { return doc }
-        return all.first { $0.path.lowercased() == "readme.md" } ?? all.first
-    }
+    private var selected: DocLibrary.Doc? { library.doc(preferring: session.docPath) }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -161,6 +157,15 @@ struct DocsView: View {
                 }
                 .buttonStyle(DanteButtonStyle())
                 .help(wide ? "Read in a comfortable column" : "Use the whole width of the window")
+                Menu {
+                    Button("Export as PDF…") { session.exportDoc() }
+                    Button("Print…") { session.exportDoc(printing: true) }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .menuStyle(.button)
+                .fixedSize()
+                .help("Export or print this doc, set in the Paper theme")
                 Button {
                     session.askClaude("Read \(doc.path) and tell me what's out of date or missing compared with the code. Don't change anything yet.")
                 } label: {
@@ -336,16 +341,21 @@ private struct DocumentBody: View {
     let document: MarkdownDocument
     let path: String
     let root: URL
+    /// Some of the blocks, for export, which lays out pages one block at a time.
+    var only: [MarkdownDocument.Block]?
+    var showsPath = true
 
     private var serif: Bool { theme.id == .paper }
     private var bodySize: CGFloat { serif ? 17 : 14.5 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(path)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(theme.text3.color)
-            ForEach(Array(document.blocks.enumerated()), id: \.offset) { _, block in
+            if showsPath {
+                Text(path)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(theme.text3.color)
+            }
+            ForEach(Array((only ?? document.blocks).enumerated()), id: \.offset) { _, block in
                 view(for: block)
             }
         }
@@ -668,5 +678,88 @@ private struct PDFPreview: NSViewRepresentable {
 
     func updateNSView(_ view: PDFView, context: Context) {
         if view.document?.documentURL != url { view.document = PDFDocument(url: url) }
+    }
+}
+
+// MARK: Export
+
+/// Docs as PDF, set in the Paper theme on A4. Each block is rendered on its own so a page
+/// break never cuts through a paragraph, list or diagram that fits on a page.
+@MainActor
+enum DocExport {
+    static let page = CGSize(width: 595, height: 842)
+    static let margin: CGFloat = 54
+    static let gap: CGFloat = 14
+
+    static func pdf(_ document: MarkdownDocument, path: String, root: URL) -> Data? {
+        let theme = Theme.paper
+        let width = page.width - margin * 2
+        let usable = page.height - margin * 2 - 18
+        func renderer(_ blocks: [MarkdownDocument.Block]?, path showsPath: Bool) -> ImageRenderer<some View> {
+            let view = DocumentBody(document: document, path: path, root: root, only: blocks ?? [], showsPath: showsPath)
+                .frame(width: width, alignment: .leading)
+                .environment(\.theme, theme)
+            let renderer = ImageRenderer(content: view)
+            renderer.proposedSize = ProposedViewSize(width: width, height: nil)
+            return renderer
+        }
+        let pieces = [renderer(nil, path: true)] + document.blocks.map { renderer([$0], path: false) }
+        var heights: [CGFloat] = []
+        for piece in pieces { piece.render { size, _ in heights.append(size.height) } }
+
+        let data = NSMutableData()
+        var box = CGRect(origin: .zero, size: page)
+        guard let consumer = CGDataConsumer(data: data as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: &box, [kCGPDFContextTitle as String: (path as NSString).lastPathComponent] as CFDictionary)
+        else { return nil }
+
+        var pageNumber = 0
+        var y: CGFloat = 0   // from the top of the page's usable area
+        func newPage() {
+            if pageNumber > 0 { footer(); context.endPDFPage() }
+            pageNumber += 1
+            context.beginPDFPage(nil)
+            context.setFillColor(theme.ground.nsColor.cgColor)
+            context.fill(CGRect(origin: .zero, size: page))
+            y = 0
+        }
+        func footer() {
+            let label = "\((path as NSString).lastPathComponent) · \(pageNumber)" as NSString
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 8.5), .foregroundColor: theme.text3.nsColor]
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+            label.draw(at: CGPoint(x: margin, y: margin / 2), withAttributes: attributes)
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        /// Draws the slice of a piece from `offset` (from its top) into the page at `y`.
+        func draw(_ piece: ImageRenderer<some View>, height: CGFloat, offset: CGFloat, slice: CGFloat) {
+            piece.render { _, render in
+                context.saveGState()
+                let top = page.height - margin - y
+                context.clip(to: CGRect(x: margin - 4, y: top - slice, width: width + 8, height: slice))
+                // The piece draws upwards from its bottom-left corner.
+                context.translateBy(x: margin, y: top - height + offset)
+                render(context)
+                context.restoreGState()
+            }
+        }
+
+        newPage()
+        for (piece, height) in zip(pieces, heights) where height > 0 {
+            if y > 0, y + height > usable, height <= usable { newPage() }
+            var offset: CGFloat = 0
+            while offset < height {
+                if y >= usable - 20 { newPage() }
+                let slice = min(height - offset, usable - y)
+                draw(piece, height: height, offset: offset, slice: slice)
+                offset += slice
+                y += slice
+            }
+            y += gap
+        }
+        footer()
+        context.endPDFPage()
+        context.closePDF()
+        return data as Data
     }
 }

@@ -45,6 +45,12 @@ public struct DocLibrary: Equatable, Sendable {
 
     public var all: [Doc] { groups.flatMap(\.docs) }
 
+    /// The doc Docs opens on: `path` if it's here, else the README, else the first.
+    public func doc(preferring path: String?) -> Doc? {
+        if let path, let doc = all.first(where: { $0.path == path }) { return doc }
+        return all.first { $0.path.lowercased() == "readme.md" } ?? all.first
+    }
+
     /// The doc's folder when another doc in its group has the same title, so three
     /// READMEs read "README  frontend", "README  api"… Nil when the title is unique.
     public func folder(distinguishing doc: Doc) -> String? {
