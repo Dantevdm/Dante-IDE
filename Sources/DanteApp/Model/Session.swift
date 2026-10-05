@@ -86,12 +86,20 @@ final class Session {
     private(set) var conflicts: Set<URL> = []
 
     var area: Area = .code
+    /// The phase Plan shows; nil follows the project's current phase.
+    var planPhase: String?
     var showsTerminal = true
     var terminalHeight: Double = 240
     var showsClaude = true
     /// The command palette, when it's open.
     var palette: PaletteScope?
     var claudeWidth: Double = 380
+
+    /// Opens Plan on a phase, as the title bar's ribbon does.
+    func showPhase(_ phase: String) {
+        planPhase = phase
+        area = .plan
+    }
     /// Text queued for the integrated terminal's shell.
     private(set) var terminalInput: TerminalInput?
     /// Bumped to move keyboard focus to Claude's message box.

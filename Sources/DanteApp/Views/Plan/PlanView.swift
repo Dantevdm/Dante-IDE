@@ -7,13 +7,12 @@ struct PlanView: View {
     let session: Session
     let workspace: Workspace
 
-    @State private var selectedPhase: String?
     @State private var isAddingTask = false
 
     private var lifecycle: Lifecycle { workspace.lifecycle }
 
     private var phase: String {
-        if let selectedPhase, lifecycle.phases.contains(selectedPhase) { return selectedPhase }
+        if let selected = session.planPhase, lifecycle.phases.contains(selected) { return selected }
         return lifecycle.currentIndex.map { lifecycle.phases[$0] } ?? lifecycle.phases.first ?? "Build"
     }
 
@@ -21,7 +20,7 @@ struct PlanView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            PhaseList(workspace: workspace, selected: phase) { selectedPhase = $0 }
+            PhaseList(workspace: workspace, selected: phase) { session.planPhase = $0 }
                 .frame(width: 228)
             Rectangle().fill(theme.line.color).frame(width: 1)
             ScrollView {
@@ -84,7 +83,7 @@ struct PlanView: View {
     private func setPhase(_ phase: String) {
         do {
             try workspace.setCurrentPhase(phase)
-            selectedPhase = phase
+            session.planPhase = phase
         } catch {
             session.errorMessage = "Couldn’t update project.yaml: \(error.localizedDescription)"
         }

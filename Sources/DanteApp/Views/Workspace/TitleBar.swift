@@ -16,7 +16,7 @@ struct TitleBar: View {
     var body: some View {
         ZStack {
             // Ribbon centred on the window, not on the space left between the side groups.
-            PhaseRibbon(lifecycle: workspace.lifecycle)
+            PhaseRibbon(lifecycle: workspace.lifecycle, selected: session.area == .plan ? session.planPhase : nil) { session.showPhase($0) }
 
             HStack(spacing: 6) {
                 ProjectMenu(session: session, workspace: workspace)
