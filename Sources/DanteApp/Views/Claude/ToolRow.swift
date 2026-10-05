@@ -15,8 +15,8 @@ struct ToolRow: View {
             } label: {
                 HStack(spacing: 7) {
                     statusIcon.frame(width: 14)
-                    Text(verb).font(.system(size: 12, weight: .medium)).foregroundStyle(theme.text2.color)
-                    Text(target)
+                    Text(tool.verb).font(.system(size: 12, weight: .medium)).foregroundStyle(theme.text2.color)
+                    Text(tool.target(in: claude.root))
                         .font(.system(size: 11.5, design: .monospaced))
                         .foregroundStyle(theme.text3.color)
                         .lineLimit(1)
@@ -78,34 +78,6 @@ struct ToolRow: View {
         }
     }
 
-    private var verb: String {
-        let resolved = !tool.isAwaitingApproval && tool.status != .running
-        if tool.blockedByRule { return "Blocked" }
-        switch tool.name {
-        case "Read": return "Read"
-        case "Edit", "MultiEdit": return tool.status == .declined ? "Declined edit" : (resolved ? "Edited" : "Edit")
-        case "Write": return tool.status == .declined ? "Declined" : (tool.change?.isNewFile == true ? (resolved ? "Created" : "Create") : (resolved ? "Wrote" : "Write"))
-        case "Bash": return tool.status == .declined ? "Didn’t run" : (resolved ? "Ran" : "Run")
-        case "Grep": return "Searched for"
-        case "Glob": return "Listed"
-        case "WebFetch": return "Fetched"
-        case "WebSearch": return "Searched the web for"
-        case "TodoWrite": return "Updated its to-do list"
-        case "Task", "Agent": return "Delegated"
-        default: return tool.name
-        }
-    }
-
-    private var target: String {
-        let input = tool.input
-        if let path = input["file_path"]?.string ?? input["notebook_path"]?.string {
-            return ProposedChange.relativePath(of: URL(filePath: path), in: claude.root)
-        }
-        if let command = input["command"]?.string {
-            return command.split(separator: "\n").first.map(String.init) ?? command
-        }
-        return input["pattern"]?.string ?? input["url"]?.string ?? input["query"]?.string ?? input["description"]?.string ?? ""
-    }
 }
 
 private struct ApprovalBar: View {

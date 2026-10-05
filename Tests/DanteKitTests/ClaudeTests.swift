@@ -233,3 +233,47 @@ struct ClaudeSessionRulesTests {
         #expect(session.pendingApprovals.isEmpty)
     }
 }
+
+struct ToolSummaryTests {
+    let root = URL(filePath: "/project")
+
+    private func tool(_ name: String, _ input: JSONValue, _ status: ToolActivity.Status = .done) -> ToolActivity {
+        ToolActivity(id: "t", name: name, input: input, status: status)
+    }
+
+    @Test func editVerbFollowsStatus() {
+        #expect(tool("Edit", [:], .running).verb == "Edit")
+        #expect(tool("MultiEdit", [:], .awaitingApproval(requestID: "r")).verb == "Edit")
+        #expect(tool("Edit", [:]).verb == "Edited")
+        #expect(tool("Edit", [:], .declined).verb == "Declined edit")
+    }
+
+    @Test func bashVerbAndFirstLineOfCommand() {
+        let ran = tool("Bash", ["command": "swift build\nswift test"])
+        #expect(ran.verb == "Ran")
+        #expect(ran.target(in: root) == "swift build")
+        #expect(tool("Bash", ["command": "rm -rf build"], .declined).verb == "Didn’t run")
+        #expect(tool("Bash", ["command": "ls"], .running).verb == "Run")
+    }
+
+    @Test func filePathsAreProjectRelative() {
+        #expect(tool("Read", ["file_path": "/project/Sources/App.swift"]).target(in: root) == "Sources/App.swift")
+        #expect(tool("NotebookEdit", ["notebook_path": "/project/a.ipynb"]).target(in: root) == "a.ipynb")
+    }
+
+    @Test func searchesShowTheirPatternOrQuery() {
+        #expect(tool("Grep", ["pattern": "TODO"]).verb == "Searched for")
+        #expect(tool("Grep", ["pattern": "TODO"]).target(in: root) == "TODO")
+        #expect(tool("WebSearch", ["query": "swift regex"]).target(in: root) == "swift regex")
+        #expect(tool("WebFetch", ["url": "https://example.com"]).target(in: root) == "https://example.com")
+        #expect(tool("Agent", ["description": "Find the parser"]).target(in: root) == "Find the parser")
+    }
+
+    @Test func blockedAndUnknownTools() {
+        var blocked = tool("Read", ["file_path": "/project/.env"])
+        blocked.blockedByRule = true
+        #expect(blocked.verb == "Blocked")
+        #expect(tool("mcp__thing__do", [:]).verb == "mcp__thing__do")
+        #expect(tool("TodoWrite", [:]).target(in: root) == "")
+    }
+}

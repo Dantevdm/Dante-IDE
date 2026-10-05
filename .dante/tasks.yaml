@@ -42,7 +42,7 @@ tasks:
 - id: DI-10
   title: Unit tests for the Claude panel's tool summaries
   phase: test
-  state: ready
+  state: done
 - id: DI-11
   title: Bundle the Geist fonts from the design
   phase: build
