@@ -28,6 +28,7 @@ struct WorkspaceView: View {
                         case .spec: SpecView(session: session, workspace: workspace)
                         case .tests: TestsView(session: session, workspace: workspace)
                         case .ship: ShipView(session: session, workspace: workspace)
+                        case .environments: EnvironmentView(session: session, workspace: workspace)
                         default: PlaceholderView(area: session.area)
                         }
                     }
