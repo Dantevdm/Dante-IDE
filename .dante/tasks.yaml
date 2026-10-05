@@ -75,3 +75,39 @@ tasks:
   title: Run area: health checks and production errors
   phase: build
   state: done
+- id: DI-19
+  title: Fix with Claude from language-server problems
+  phase: build
+  state: done
+- id: DI-20
+  title: Hover info from the language server
+  phase: build
+  state: done
+- id: DI-21
+  title: Find in Project
+  phase: build
+  state: done
+- id: DI-22
+  title: Git change marks in the gutter
+  phase: build
+  state: done
+- id: DI-23
+  title: Stop a window's processes when it closes
+  phase: build
+  state: done
+- id: DI-24
+  title: Lifecycle templates per project type and one-click setup
+  phase: build
+  state: done
+- id: DI-25
+  title: Diagrams beyond the architecture map (flows, data model, deployment) and Mermaid in Docs
+  phase: build
+  state: ready
+- id: DI-26
+  title: Print and PDF export of docs in the Paper theme
+  phase: build
+  state: ready
+- id: DI-27
+  title: Operate alarms (CloudWatch and friends) linked to tasks
+  phase: build
+  state: ready

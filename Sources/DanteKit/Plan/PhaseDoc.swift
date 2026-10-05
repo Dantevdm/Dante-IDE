@@ -65,20 +65,9 @@ public struct PhaseDoc: Equatable, Sendable {
         return lines.joined(separator: "\n")
     }
 
+    /// The app template's starting checklist; `Lifecycle.phaseDocTemplate` picks the project's own.
     public static func template(for phase: String) -> String {
-        let (summary, ready, done) = defaults[phase.lowercased()] ?? ("What this phase is for.", ["Previous phase done"], ["Agreed with yourself that it's done"])
-        return """
-        # \(phase.capitalized)
-
-        \(summary)
-
-        ## Ready when
-        \(ready.map { "- [ ] \($0)" }.joined(separator: "\n"))
-
-        ## Done when
-        \(done.map { "- [ ] \($0)" }.joined(separator: "\n"))
-
-        """
+        LifecycleTemplate.app.phaseDoc(phase)
     }
 
     private enum Section { case intro, ready, done, other }
@@ -92,23 +81,6 @@ public struct PhaseDoc: Equatable, Sendable {
         }
         return nil
     }
-
-    private static let defaults: [String: (String, [String], [String])] = [
-        "discover": ("Understand the problem, the people who have it and what already exists.",
-                     ["A problem worth solving"], ["Problem statement written", "Users and constraints listed"]),
-        "define": ("Decide what to build and what “done” means for it.",
-                   ["Discovery notes written"], ["Scope agreed", "Acceptance criteria for each feature", "Tasks drafted for Build"]),
-        "design": ("Shape the solution: architecture, data, flows and the decisions behind them.",
-                   ["Requirements agreed"], ["Architecture sketched", "Key decisions recorded", "Risky parts prototyped"]),
-        "build": ("Turn the agreed design into working, reviewed code.",
-                  ["Design phase done", "Local environment boots"], ["Features implemented", "Code reviewed", "All Build tasks done"]),
-        "test": ("Prove it works: automated tests, edge cases and real usage.",
-                 ["Features complete"], ["Tests pass in CI", "Coverage targets met", "Known bugs triaged"]),
-        "release": ("Ship it: version, changelog, and a release you can roll back.",
-                    ["Tests green"], ["Changelog written", "Release tagged", "Rollback plan noted"]),
-        "operate": ("Run it: watch health, respond to issues and feed lessons back into the plan.",
-                    ["Released"], ["Monitoring in place", "Runbooks for likely incidents"]),
-    ]
 }
 
 public extension Lifecycle {

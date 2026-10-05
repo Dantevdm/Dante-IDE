@@ -78,7 +78,16 @@ lifecycle:
   current: build
 ```
 
-`lifecycle.current` sets the highlighted phase. You can set your own phase list with `lifecycle.phases: [Discover, Build, Ship]`. Phases are guidance and never block anything.
+`lifecycle.current` sets the highlighted phase. `lifecycle.template` picks the phases and starting checklists for the kind of project:
+
+| Template | Phases |
+| --- | --- |
+| `app@1` (web or backend) | Discover, Define, Design, Build, Test, Release, Operate |
+| `infra@1` (infrastructure and cloud) | Discover, Design, Build, Validate, Release, Operate |
+| `apple@1` (Swift and Apple platforms) | Discover, Define, Design, Build, Test, Beta, Release, Operate |
+| `data@1` (data and scripts) | Explore, Define, Build, Validate, Schedule, Monitor |
+
+You can also list your own with `lifecycle.phases: [Discover, Build, Ship]`. Phases are guidance and never block anything. A project without `.dante/` gets a template suggested from its files: set it up in one click, or have Claude draft the spec for you to review.
 
 ```yaml
 # .dante/tasks.yaml

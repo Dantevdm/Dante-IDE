@@ -83,7 +83,65 @@ public final class Workspace {
     public func createPhaseDoc(_ phase: String) throws {
         let file = phaseDocURL(phase)
         guard !FileManager.default.fileExists(atPath: file.path) else { return }
-        try write(PhaseDoc.template(for: phase), to: file)
+        try write(lifecycle.phaseDocTemplate(phase), to: file)
+    }
+
+    /// The template that best fits this project's files.
+    public var suggestedTemplate: LifecycleTemplate {
+        LifecycleTemplate.suggest(for: files) { [url] path in
+            try? String(contentsOf: url.appending(path: path), encoding: .utf8)
+        }
+    }
+
+    /// Creates `.dante/` from a template: project.yaml, a checklist per phase and an empty
+    /// task list. Leaves any file that already exists alone.
+    public func setUp(with template: LifecycleTemplate, current: String) throws {
+        let project = danteFolder.appending(path: "project.yaml")
+        if !FileManager.default.fileExists(atPath: project.path) {
+            try write(template.projectYAML(name: name, summary: Self.readmeSummary(in: url), current: current), to: project)
+        }
+        for phase in template.phaseNames {
+            let file = phaseDocURL(phase)
+            if !FileManager.default.fileExists(atPath: file.path) { try write(template.phaseDoc(phase), to: file) }
+        }
+        let tasks = danteFolder.appending(path: "tasks.yaml")
+        if !FileManager.default.fileExists(atPath: tasks.path) {
+            try write("# Tasks for this project. Edit here or on Dante's Plan board.\nprefix: \(Self.taskPrefix(for: name))\ntasks: []\n", to: tasks)
+        }
+        reloadSpec()
+    }
+
+    /// The first paragraph of the README that isn't a heading, badge or image.
+    public static func readmeSummary(in root: URL) -> String? {
+        let names = ["README.md", "Readme.md", "readme.md", "README"]
+        guard let text = names.lazy.compactMap({ try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }).first else { return nil }
+        var paragraph: [String] = []
+        for line in text.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                if !paragraph.isEmpty { break }
+                continue
+            }
+            if trimmed.hasPrefix("#") || trimmed.hasPrefix("![") || trimmed.hasPrefix("[![") || trimmed.hasPrefix("<") || trimmed.hasPrefix("```") {
+                if !paragraph.isEmpty { break }
+                continue
+            }
+            paragraph.append(trimmed)
+        }
+        guard !paragraph.isEmpty else { return nil }
+        let joined = paragraph.joined(separator: " ")
+            .replacingOccurrences(of: #"\*\*|__|`"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
+        guard joined.count > 200 else { return joined }
+        let cut = joined.prefix(200)
+        return (cut.range(of: ". ", options: .backwards).map { String(cut[..<$0.lowerBound]) + "." }) ?? String(cut) + "…"
+    }
+
+    /// Initials of the project name, for task ids: "Dante IDE" → "DI", "billing" → "BIL".
+    public static func taskPrefix(for name: String) -> String {
+        let words = name.split { !$0.isLetter && !$0.isNumber }.filter { !$0.isEmpty }
+        let prefix = words.count > 1 ? String(words.prefix(3).compactMap(\.first)) : String((words.first ?? "TASK").prefix(3))
+        return prefix.uppercased()
     }
 
     public func toggle(_ item: PhaseDoc.Item, inPhase phase: String) throws {

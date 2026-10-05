@@ -12,11 +12,20 @@ public struct Lifecycle: Equatable, Sendable {
     public var currentIndex: Int?
     /// Whether the project has a `.dante/project.yaml`.
     public var hasSpec: Bool
+    /// From `lifecycle.template`; supplies the phases unless `lifecycle.phases` lists its own.
+    public var template: LifecycleTemplate?
 
-    public init(phases: [String] = Lifecycle.defaultPhases, currentIndex: Int? = nil, hasSpec: Bool = false) {
+    public init(phases: [String] = Lifecycle.defaultPhases, currentIndex: Int? = nil, hasSpec: Bool = false, template: LifecycleTemplate? = nil) {
         self.phases = phases
         self.currentIndex = currentIndex
         self.hasSpec = hasSpec
+        self.template = template
+    }
+
+    /// The starting checklist for a phase: the template's, or the app template's.
+    public func phaseDocTemplate(_ phase: String) -> String {
+        if let template, template.phase(phase) != nil { return template.phaseDoc(phase) }
+        return LifecycleTemplate.app.phaseDoc(phase)
     }
 
     /// Reads `.dante/project.yaml` from a project root.
@@ -30,7 +39,8 @@ public struct Lifecycle: Equatable, Sendable {
     /// This is a deliberately small reader for the keys the shell needs; the
     /// full `.dante` schema gets a real YAML parser when the spec features land.
     public static func parse(projectYAML yaml: String) -> Lifecycle {
-        var phases = defaultPhases
+        var phases: [String]?
+        var template: LifecycleTemplate?
         var current: String?
         var inLifecycle = false
 
@@ -48,6 +58,8 @@ public struct Lifecycle: Equatable, Sendable {
 
             if let value = value(of: "current", in: trimmed) {
                 current = value
+            } else if let value = value(of: "template", in: trimmed) {
+                template = LifecycleTemplate.named(value)
             } else if let value = value(of: "phases", in: trimmed), value.hasPrefix("[") {
                 let list = value.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
                     .split(separator: ",")
@@ -57,8 +69,9 @@ public struct Lifecycle: Equatable, Sendable {
             }
         }
 
-        let index = current.flatMap { name in phases.firstIndex { $0.lowercased() == name.lowercased() } }
-        return Lifecycle(phases: phases, currentIndex: index, hasSpec: true)
+        let resolved = phases ?? template?.phaseNames ?? defaultPhases
+        let index = current.flatMap { name in resolved.firstIndex { $0.lowercased() == name.lowercased() } }
+        return Lifecycle(phases: resolved, currentIndex: index, hasSpec: true, template: template)
     }
 
     private static func value(of key: String, in line: String) -> String? {

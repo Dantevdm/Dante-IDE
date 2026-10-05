@@ -58,7 +58,7 @@ struct PlanView: View {
                 .disabled(workspace.tasks.loadError != nil)
                 phaseButton
             }
-            Text(workspace.phaseDocs[phase.lowercased()]?.summary.nonEmpty ?? PhaseDoc.parse(PhaseDoc.template(for: phase)).summary)
+            Text(workspace.phaseDocs[phase.lowercased()]?.summary.nonEmpty ?? PhaseDoc.parse(workspace.lifecycle.phaseDocTemplate(phase)).summary)
                 .font(.system(size: 13.5))
                 .foregroundStyle(theme.text2.color)
                 .frame(maxWidth: 640, alignment: .leading)
@@ -193,23 +193,50 @@ private struct NoSpecBanner: View {
     let session: Session
     let workspace: Workspace
     let phase: String
+    @State private var templateID: String?
+
+    private var template: LifecycleTemplate {
+        templateID.flatMap(LifecycleTemplate.named) ?? workspace.suggestedTemplate
+    }
+
+    /// The phase picked on the ribbon if this template has it, otherwise its first.
+    private var startPhase: String {
+        template.phase(phase)?.name ?? template.phaseNames.first ?? phase
+    }
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "sparkles").foregroundStyle(theme.accent.color)
             VStack(alignment: .leading, spacing: 3) {
                 Text("This project has no .dante spec yet").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text("Pick where you are, or let Claude draft the spec from the README, code and history for you to review.")
+                Text("Set it up from a template, or let Claude draft it from the README, code and history for you to review.")
                     .font(.system(size: 12))
                     .foregroundStyle(theme.text2.color)
+                Text(template.phaseNames.joined(separator: " → "))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(theme.text3.color)
             }
             Spacer()
-            Button("Start at \(phase)") {
-                do { try workspace.setCurrentPhase(phase) } catch { session.errorMessage = error.localizedDescription }
+            Menu {
+                ForEach(LifecycleTemplate.all) { option in
+                    Button {
+                        templateID = option.id
+                    } label: {
+                        Text(option.id == workspace.suggestedTemplate.id ? "\(option.name) (suggested)" : option.name)
+                    }
+                }
+            } label: {
+                Text(template.name)
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            .help(template.summary)
+            Button("Set up at \(startPhase)") {
+                do { try workspace.setUp(with: template, current: startPhase) } catch { session.errorMessage = error.localizedDescription }
             }
             .buttonStyle(DanteButtonStyle())
             Button("Ask Claude to draft it") {
-                session.askClaude("Set this project up for Dante: read the README, docs, code and git history, then draft .dante/project.yaml (name, summary, lifecycle.current) and a phase doc for the current phase in .dante/phases/. Propose the files for me to review.")
+                session.askClaude("Set this project up for Dante using the \(template.name.lowercased()) lifecycle (template: \(template.id)@1, phases: \(template.phaseNames.joined(separator: ", "))). Read the README, docs, code and git history, then draft .dante/project.yaml (name, summary, lifecycle.template and lifecycle.current set to the phase the project is really in), a phase doc for each phase in .dante/phases/ with \"## Ready when\" and \"## Done when\" checklists specific to this codebase, and .dante/tasks.yaml with the open work you can see. Propose the files for me to review.")
             }
             .buttonStyle(DanteButtonStyle(primary: true))
             .disabled(session.claude == nil)

@@ -146,7 +146,7 @@ private struct CurrentPhaseCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Eyebrow("Current phase")
                     Text(phase ?? "None set").font(.system(size: 20, weight: .semibold)).foregroundStyle(theme.text.color)
-                    if let summary = doc?.summary.nonEmpty ?? phase.map({ PhaseDoc.parse(PhaseDoc.template(for: $0)).summary }) {
+                    if let summary = doc?.summary.nonEmpty ?? phase.map({ PhaseDoc.parse(workspace.lifecycle.phaseDocTemplate($0)).summary }) {
                         Text(summary).font(.system(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
                     }
                 }
