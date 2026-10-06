@@ -239,7 +239,7 @@ public enum SchemaQueries {
     }
 
     /// "PostgreSQL 17.2 on aarch64…" → "PostgreSQL 17.2"
-    static func shortVersion(_ text: String) -> String {
+    public static func shortVersion(_ text: String) -> String {
         if text.hasPrefix("PostgreSQL") { return text.split(separator: " ").prefix(2).joined(separator: " ") }
         if text.hasPrefix("SQLite") { return text }
         return "MySQL " + (text.split(separator: "-").first.map(String.init) ?? text)

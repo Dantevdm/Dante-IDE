@@ -133,3 +133,11 @@ import Testing
         #expect(MigrationPreview.isDownMigration(URL(filePath: "/m/1_init.down.sql")))
     }
 }
+
+@Suite struct DatabaseVersionTests {
+    @Test func shortensServerVersions() {
+        #expect(SchemaQueries.shortVersion("PostgreSQL 17.2 on aarch64-apple-darwin, compiled by clang") == "PostgreSQL 17.2")
+        #expect(SchemaQueries.shortVersion("8.4.3-0ubuntu0.24.04.1") == "MySQL 8.4.3")
+        #expect(SchemaQueries.shortVersion("SQLite 3.46.1") == "SQLite 3.46.1")
+    }
+}

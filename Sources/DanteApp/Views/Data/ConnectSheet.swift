@@ -195,8 +195,8 @@ struct ConnectSheet: View {
         if let error = run.error {
             test = .failure(TestFailure(message: error))
         } else {
-            let version = run.results.first?.rows.first?.first.flatMap { $0 } ?? "OK"
-            test = .success(SchemaQueriesVersion.short(version))
+            let version = run.results.first?.rows.first?.first.flatMap { $0 }
+            test = .success(version.map(SchemaQueries.shortVersion) ?? "OK")
         }
     }
 
@@ -210,11 +210,5 @@ struct ConnectSheet: View {
                                     "select datname from pg_database where not datistemplate order by datname"], in: workspace.url, extra: ["PGCONNECT_TIMEOUT": "3"])
         guard list.succeeded else { return }
         localDatabases = list.stdout.components(separatedBy: .newlines).filter { !$0.isEmpty }
-    }
-}
-
-enum SchemaQueriesVersion {
-    static func short(_ text: String) -> String {
-        text.hasPrefix("PostgreSQL") ? text.split(separator: " ").prefix(2).joined(separator: " ") : text.split(separator: "-").first.map(String.init) ?? text
     }
 }
