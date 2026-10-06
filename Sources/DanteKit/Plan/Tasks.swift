@@ -32,8 +32,10 @@ public struct PlanTask: Codable, Equatable, Identifiable, Sendable {
     public var note: String?
     /// Being worked on with Claude.
     public var claude: Bool?
+    /// The monitoring alarm the task came from (`Alarm.id`), so Operate can show its state.
+    public var alarm: String?
 
-    public init(id: String, title: String, phase: String, state: TaskState = .ready, spec: String? = nil, note: String? = nil, claude: Bool? = nil) {
+    public init(id: String, title: String, phase: String, state: TaskState = .ready, spec: String? = nil, note: String? = nil, claude: Bool? = nil, alarm: String? = nil) {
         self.id = id
         self.title = title
         self.phase = phase
@@ -41,6 +43,7 @@ public struct PlanTask: Codable, Equatable, Identifiable, Sendable {
         self.spec = spec
         self.note = note
         self.claude = claude
+        self.alarm = alarm
     }
 }
 
@@ -122,8 +125,9 @@ public final class TaskBoard {
     }
 
     @discardableResult
-    public func add(title: String, phase: String, state: TaskState = .ready, spec: String? = nil) throws -> PlanTask {
-        let task = PlanTask(id: nextID, title: title, phase: phase.lowercased(), state: state, spec: spec?.isEmpty == true ? nil : spec)
+    public func add(title: String, phase: String, state: TaskState = .ready, spec: String? = nil, note: String? = nil, alarm: String? = nil) throws -> PlanTask {
+        let task = PlanTask(id: nextID, title: title, phase: phase.lowercased(), state: state, spec: spec?.isEmpty == true ? nil : spec,
+                            note: note, alarm: alarm)
         try update { $0.tasks.append(task) }
         return task
     }

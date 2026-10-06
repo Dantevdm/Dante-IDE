@@ -9,6 +9,8 @@ public struct ProjectInfo: Equatable, Sendable {
     public var checks: [HealthCheck]
     /// A command that streams production logs: `operate: { logs: "fly logs" }`.
     public var logsCommand: String?
+    /// Monitoring alarms to show in Run: `operate: { alarms: [{ source: cloudwatch, … }] }`.
+    public var alarms: [AlarmSource]
 
     public struct HealthCheck: Equatable, Sendable, Identifiable {
         public var name: String
@@ -21,11 +23,12 @@ public struct ProjectInfo: Equatable, Sendable {
         }
     }
 
-    public init(name: String? = nil, summary: String? = nil, checks: [HealthCheck] = [], logsCommand: String? = nil) {
+    public init(name: String? = nil, summary: String? = nil, checks: [HealthCheck] = [], logsCommand: String? = nil, alarms: [AlarmSource] = []) {
         self.name = name
         self.summary = summary
         self.checks = checks
         self.logsCommand = logsCommand
+        self.alarms = alarms
     }
 
     public static func parse(projectYAML yaml: String) -> ProjectInfo {
@@ -42,7 +45,8 @@ public struct ProjectInfo: Equatable, Sendable {
             name: (root["name"] as? String)?.nonEmptyTrimmed,
             summary: (root["summary"] as? String)?.nonEmptyTrimmed,
             checks: checks,
-            logsCommand: (operate?["logs"] as? String)?.nonEmptyTrimmed
+            logsCommand: (operate?["logs"] as? String)?.nonEmptyTrimmed,
+            alarms: (operate?["alarms"] as? [Any] ?? []).compactMap(AlarmSource.parse)
         )
     }
 

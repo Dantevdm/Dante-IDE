@@ -179,6 +179,8 @@ final class Session {
     var testRun: TestRun?
     /// Health checks and the production log stream for the Run area.
     let health = HealthMonitor()
+    /// Monitoring alarms from `operate.alarms`, polled while the window is open.
+    let alarms = AlarmMonitor()
     var logWatch: LogWatch?
 
     func showDoc(_ path: String) {
@@ -336,6 +338,7 @@ final class Session {
         watcher?.stop()
         logWatch?.stop()
         health.stop()
+        alarms.stop()
     }
 
     /// Notes how the project looks now, for the next "since you were last here".

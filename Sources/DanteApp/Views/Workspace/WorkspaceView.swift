@@ -63,6 +63,8 @@ struct WorkspaceView: View {
         .onChange(of: session.place) { previous, _ in session.placeChanged(from: previous) }
         // Git status feeds the Changes tab, the branch button and its sync arrows.
         .task(id: "\(workspace.revision)#\(session.gitRevision)") { await session.git.load(workspace.url) }
+        // Alarms are watched for the whole window, so one that starts firing can notify.
+        .task(id: workspace.info.alarms) { session.watchAlarms() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             session.autoSaveOnFocusChange()
         }

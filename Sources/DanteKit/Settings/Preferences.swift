@@ -51,6 +51,8 @@ public final class Preferences {
     public var claudeModel: ClaudeModel { didSet { defaults.set(claudeModel.rawValue, forKey: Keys.claudeModel) } }
     /// Geist and Geist Mono, as in the design; off uses the system fonts.
     public var usesGeist: Bool { didSet { defaults.set(usesGeist, forKey: Keys.usesGeist) } }
+    /// A macOS notification when a monitoring alarm starts firing. Off until asked for.
+    public var notifiesOnAlarms: Bool { didSet { defaults.set(notifiesOnAlarms, forKey: Keys.notifiesOnAlarms) } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -65,6 +67,7 @@ public final class Preferences {
         claudeAsksFirst = bool(Keys.claudeAsksFirst, true)
         claudeModel = defaults.string(forKey: Keys.claudeModel).flatMap(ClaudeModel.init(rawValue:)) ?? .default
         usesGeist = bool(Keys.usesGeist, true)
+        notifiesOnAlarms = bool(Keys.notifiesOnAlarms, false)
     }
 
     /// The indent width for a file: the chosen one, or the language's usual one.
@@ -96,6 +99,7 @@ public final class Preferences {
         static let claudeAsksFirst = "claudeAsksFirst"
         static let claudeModel = "claudeModel"
         static let usesGeist = "usesGeist"
+        static let notifiesOnAlarms = "notifiesOnAlarms"
     }
 }
 
