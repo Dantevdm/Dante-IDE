@@ -44,6 +44,8 @@ import Testing
         let sqlite = "SCAN orders\nSEARCH customers USING INTEGER PRIMARY KEY (rowid=?)"
         let sqliteFound = QueryPlan.findings(plan: sqlite, query: "select * from orders where customer_id = ? and status like 'o%'", engine: .sqlite, schema: schema)
         #expect(sqliteFound.first?.columns == ["customer_id", "status"])
+        let tree = QueryPlan.findings(plan: "QUERY PLAN\n`--SCAN o", query: "select * from orders o where o.status = 'open'", engine: .sqlite, schema: schema)
+        #expect(tree.first?.columns == ["status"])
         // Filtering on the primary key alone isn't worth an index.
         #expect(QueryPlan.findings(plan: "SCAN orders", query: "select * from orders where id > 5", engine: .sqlite, schema: schema).isEmpty)
     }

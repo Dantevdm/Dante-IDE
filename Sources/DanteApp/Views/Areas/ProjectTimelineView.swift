@@ -25,21 +25,25 @@ struct ProjectTimelineView: View {
             title: "Timeline",
             subtitle: "What happened to the project, newest first: commits and tags, Claude Code sessions, test runs and CI."
         ) {
-            Picker("Show", selection: $kind) {
-                Text("Everything").tag(TimelineEvent.Kind?.none)
-                ForEach(TimelineEvent.Kind.allCases, id: \.self) { kind in
-                    Text(label(kind)).tag(Optional(kind))
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            Toggle("Quick Claude runs", isOn: $showsQuick)
-                .toggleStyle(.checkbox)
-                .font(.system(size: 12))
-                .help("One-prompt sessions, such as commit messages and inline edits")
             IconButton(symbol: "arrow.clockwise", label: "Reload") { Task { await load() } }
         } content: {
+            HStack(spacing: 14) {
+                Picker("Show", selection: $kind) {
+                    Text("Everything").tag(TimelineEvent.Kind?.none)
+                    ForEach(TimelineEvent.Kind.allCases, id: \.self) { kind in
+                        Text(label(kind)).tag(Optional(kind))
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                Toggle("Quick Claude runs", isOn: $showsQuick)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 12))
+                    .fixedSize()
+                    .help("One-prompt sessions, such as commit messages and inline edits")
+                Spacer()
+            }
             if loading, events.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)

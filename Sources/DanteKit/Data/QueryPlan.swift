@@ -98,8 +98,10 @@ public enum QueryPlan {
                 scans.append(Scan(name: unqualified(name), alias: nil, filter: filter))
             case .sqlite:
                 // "SCAN orders", "SCAN TABLE orders AS o"; "SCAN … USING INDEX" already uses one.
-                guard trimmed.hasPrefix("SCAN "), !trimmed.contains("USING") else { continue }
-                var words = trimmed.split(separator: " ").map(String.init).dropFirst()
+                // The sqlite3 shell draws the plan as a tree: "`--SCAN o", "|--SEARCH …".
+                let node = String(trimmed.drop { "|`- ".contains($0) })
+                guard node.hasPrefix("SCAN "), !node.contains("USING") else { continue }
+                var words = node.split(separator: " ").map(String.init).dropFirst()
                 if words.first == "TABLE" { words = words.dropFirst() }
                 guard let name = words.first else { continue }
                 let rest = Array(words.dropFirst())
