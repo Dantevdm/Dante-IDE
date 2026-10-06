@@ -174,6 +174,11 @@ struct DocsView: View {
                 onCursorChange: { position in
                     let anchor = MarkdownDocument.anchor(atLine: position.line, in: editing.text)
                     if anchor != cursorAnchor { cursorAnchor = anchor }
+                },
+                // Scrolling the source moves the preview too, a section at a time.
+                onScroll: { line in
+                    let anchor = MarkdownDocument.anchor(atLine: line, in: editing.text)
+                    if anchor != cursorAnchor { cursorAnchor = anchor }
                 }
             )
             .id(editing.id)

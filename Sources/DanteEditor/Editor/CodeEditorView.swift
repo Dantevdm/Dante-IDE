@@ -61,6 +61,8 @@ public struct CodeEditorView: NSViewRepresentable {
     var onFocus: (() -> Void)?
     /// Turning this on moves keyboard focus here, as when a split's focus changes from the menu.
     var takesFocus: Bool
+    /// Called with the one-based line at the top of the view when the user scrolls.
+    var onScroll: ((Int) -> Void)?
 
     public init(
         text: Binding<String>,
@@ -79,7 +81,8 @@ public struct CodeEditorView: NSViewRepresentable {
         wrapsLines: Bool = false,
         completesWhileTyping: Bool = true,
         onFocus: (() -> Void)? = nil,
-        takesFocus: Bool = true
+        takesFocus: Bool = true,
+        onScroll: ((Int) -> Void)? = nil
     ) {
         _text = text
         self.language = language
@@ -98,6 +101,7 @@ public struct CodeEditorView: NSViewRepresentable {
         self.completesWhileTyping = completesWhileTyping
         self.onFocus = onFocus
         self.takesFocus = takesFocus
+        self.onScroll = onScroll
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -447,6 +451,25 @@ public struct CodeEditorView: NSViewRepresentable {
             // The gutter widens when line numbers gain a digit.
             if appliedWrap == true { fitWidthToClipView() }
             if completion?.isShowing == true { completion?.close() }
+            reportTopLine()
+        }
+
+        private var lastTopLine = 0
+
+        /// The line at the top of the visible area, for `onScroll`.
+        private func reportTopLine() {
+            guard let onScroll = parent.onScroll, let textView, let layoutManager = textView.textLayoutManager,
+                  let contentManager = layoutManager.textContentManager else { return }
+            let top = CGPoint(x: 0, y: textView.visibleRect.minY + 1)
+            guard let fragment = layoutManager.textLayoutFragment(for: top) else { return }
+            let offset = contentManager.offset(from: contentManager.documentRange.location, to: fragment.rangeInElement.location)
+            // A layout fragment is a paragraph, so the line is one more than the newlines before it.
+            let text = textView.string as NSString
+            var line = 1
+            for index in 0..<min(offset, text.length) where text.character(at: index) == 0x0A { line += 1 }
+            guard line != lastTopLine else { return }
+            lastTopLine = line
+            onScroll(line)
         }
 
         private var indentWidth: Int {
