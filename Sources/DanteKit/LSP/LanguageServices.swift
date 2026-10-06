@@ -86,6 +86,28 @@ public final class LanguageServices {
         return await client.definition(of: position, in: document.url)
     }
 
+    /// A file's symbols from its server, or from `DeclarationScanner` without one.
+    public func symbols(in document: EditorDocument) async -> [CodeSymbol] {
+        if let client = existingClient(for: document.language), client.listsSymbols {
+            await flush(document, to: client)
+            let symbols = await client.documentSymbols(in: document.url)
+            if !symbols.isEmpty { return symbols }
+        }
+        return DeclarationScanner.symbols(in: document.text, language: document.language, url: document.url)
+    }
+
+    /// Project-wide matches from every running server that can search.
+    public func workspaceSymbols(matching query: String) async -> [CodeSymbol] {
+        var result: [CodeSymbol] = []
+        var asked = Set<ObjectIdentifier>()
+        for language in Language.allCases {
+            // One server can cover several languages (TypeScript and JavaScript).
+            guard let client = existingClient(for: language), client.searchesSymbols, asked.insert(ObjectIdentifier(client)).inserted else { continue }
+            result += await client.workspaceSymbols(matching: query)
+        }
+        return result
+    }
+
     public func hover(in document: EditorDocument, at offset: Int) async -> String? {
         guard let client = existingClient(for: document.language) else { return nil }
         await flush(document, to: client)

@@ -68,6 +68,9 @@ struct DanteCommands: Commands {
             Button("Find in Project…") { session?.showSearch() }
                 .keyboardShortcut("f", modifiers: [.shift, .command])
                 .disabled(session?.workspace == nil)
+            Button("Go to Symbol…") { session?.palette = .symbols }
+                .keyboardShortcut("o", modifiers: [.shift, .command])
+                .disabled(session?.workspace == nil)
             Button("Jump to Definition") { session?.jumpToDefinitionAtCursor() }
                 .keyboardShortcut("j", modifiers: [.control, .command])
                 .disabled(session?.workspace?.activeDocument == nil)

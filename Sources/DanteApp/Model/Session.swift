@@ -69,7 +69,7 @@ enum Area: String, CaseIterable, Identifiable {
 
 /// What the command palette searches. ⌘K opens it on everything, ⌘P on files.
 enum PaletteScope: String, CaseIterable, Identifiable {
-    case all = "All", files = "Files", docs = "Docs", actions = "Actions"
+    case all = "All", files = "Files", symbols = "Symbols", docs = "Docs", actions = "Actions"
     var id: String { rawValue }
 }
 
@@ -112,6 +112,8 @@ final class Session {
     var showsClaude = true
     /// The command palette, when it's open.
     var palette: PaletteScope?
+    /// Go to Symbol's scan of the project, for the workspace revision it was made at.
+    @ObservationIgnored var symbolIndex: (revision: Int, symbols: [CodeSymbol])?
 
     /// Bumped when HEAD moves (a commit, checkout or reset), so views comparing against it reload.
     var gitRevision = 0

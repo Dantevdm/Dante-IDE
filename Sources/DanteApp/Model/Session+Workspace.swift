@@ -30,6 +30,24 @@ extension Session {
         askClaude("Fix the errors and warnings the language server reports in \(ProposedChange.relativePath(of: document.url, in: workspace.url)).")
     }
 
+    /// Declarations across the project, scanned off the main thread and kept until the
+    /// files change.
+    func projectSymbols() async -> [CodeSymbol] {
+        guard let workspace else { return [] }
+        if let cached = symbolIndex, cached.revision == workspace.revision { return cached.symbols }
+        let root = workspace.url, files = workspace.files, revision = workspace.revision
+        let symbols = await Task.detached(priority: .userInitiated) { DeclarationScanner.project(root: root, files: files) }.value
+        symbolIndex = (revision, symbols)
+        return symbols
+    }
+
+    /// Opens a symbol from Go to Symbol and selects its name.
+    func reveal(_ symbol: CodeSymbol) {
+        open(file: symbol.url)
+        guard let target = workspace?.activeDocument, target.url.standardizedFileURL == symbol.url.standardizedFileURL else { return }
+        target.revealRange = symbol.range.nsRange(in: target.text as NSString)
+    }
+
     /// Opens where the symbol at `offset` in `document` is defined.
     func jumpToDefinition(in document: EditorDocument, at offset: Int) {
         guard let languages else { return }

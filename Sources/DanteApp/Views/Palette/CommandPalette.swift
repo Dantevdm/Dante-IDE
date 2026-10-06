@@ -12,6 +12,9 @@ struct CommandPalette: View {
     @State private var scope: PaletteScope
     @State private var selection = 0
     @FocusState private var fieldFocused: Bool
+    /// The active file's symbols, and project-wide matches for the query.
+    @State private var fileSymbols: [CodeSymbol] = []
+    @State private var projectSymbols: [CodeSymbol] = []
 
     init(session: Session, workspace: Workspace, scope: PaletteScope) {
         self.session = session
@@ -39,6 +42,31 @@ struct CommandPalette: View {
         .onAppear { fieldFocused = true }
         .onChange(of: query) { selection = defaultSelection }
         .onChange(of: scope) { selection = defaultSelection; fieldFocused = true }
+        .task(id: scope) {
+            guard scope == .symbols, let document = workspace.activeDocument else { return }
+            fileSymbols = await session.languages?.symbols(in: document)
+                ?? DeclarationScanner.symbols(in: document.text, language: document.language, url: document.url)
+        }
+        .task(id: "\(scope.rawValue):\(query)") {
+            projectSymbols = []
+            let trimmed = query.trimmingCharacters(in: .whitespaces)
+            guard scope == .symbols, !trimmed.isEmpty else { return }
+            let languages = session.languages
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            async let index = session.projectSymbols()
+            // Only the project's own code: not .build, and not compiler-mangled test names.
+            let root = workspace.url.standardizedFileURL.path + "/"
+            let found = (await languages?.workspaceSymbols(matching: trimmed) ?? []).filter {
+                let path = $0.url.standardizedFileURL.path
+                return path.hasPrefix(root) && !path.dropFirst(root.count).hasPrefix(".build/") && !$0.name.hasPrefix("$")
+            }
+            // The server's matches first; Dante's own scan fills in what it doesn't know.
+            var seen = Set(found.map { "\($0.url.standardizedFileURL.path):\($0.range.start.line):\($0.name)" })
+            let scanned = await index.filter { seen.insert("\($0.url.standardizedFileURL.path):\($0.range.start.line):\($0.name)").inserted }
+            guard !Task.isCancelled else { return }
+            projectSymbols = found + scanned
+        }
         .onExitCommand { close() }
     }
 
@@ -47,7 +75,7 @@ struct CommandPalette: View {
     private func searchField(rows: [PaletteRow]) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(theme.text3.color)
-            TextField(scope == .files ? "Open a file…" : "Search or ask Claude…", text: $query)
+            TextField(scope == .files ? "Open a file…" : scope == .symbols ? "Go to a symbol…" : "Search or ask Claude…", text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 16))
                 .foregroundStyle(theme.text.color)
@@ -87,7 +115,8 @@ struct CommandPalette: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     if rows.isEmpty {
-                        Text(workspace.files.isEmpty && scope != .actions ? "Indexing files…" : "No matches")
+                        Text(scope == .symbols ? (query.isEmpty ? "No symbols in this file" : "No matching symbols")
+                             : workspace.files.isEmpty && scope != .actions ? "Indexing files…" : "No matches")
                             .font(.system(size: 12.5))
                             .foregroundStyle(theme.text3.color)
                             .frame(maxWidth: .infinity)
@@ -191,6 +220,15 @@ struct CommandPalette: View {
             ]))
         }
 
+        if scope == .symbols {
+            let inFile = SymbolSearch.rank(trimmed, in: fileSymbols, limit: trimmed.isEmpty ? 200 : 30)
+            if !inFile.isEmpty { sections.append(PaletteSection(title: "In this file", rows: inFile.map(symbolRow))) }
+            let fileIDs = Set(fileSymbols.map(\.id))
+            let elsewhere = SymbolSearch.rank(trimmed, in: projectSymbols.filter { !fileIDs.contains($0.id) }, limit: 40)
+            if !elsewhere.isEmpty { sections.append(PaletteSection(title: "In the project", rows: elsewhere.map(symbolRow))) }
+            return sections
+        }
+
         if scope != .actions {
             if trimmed.isEmpty, scope != .docs {
                 let open = workspace.documents.reversed().map { fileRow(path: ProposedChange.relativePath(of: $0.url, in: workspace.url), match: nil) }
@@ -221,6 +259,31 @@ struct CommandPalette: View {
 
     static func isDoc(_ path: String) -> Bool {
         path.hasPrefix(".dante/") || ["md", "markdown", "txt", "rst", "adoc"].contains((path as NSString).pathExtension.lowercased())
+    }
+
+    private func symbolRow(_ symbol: CodeSymbol) -> PaletteRow {
+        let path = ProposedChange.relativePath(of: symbol.url, in: workspace.url)
+        let place = "\(path):\(symbol.range.start.line + 1)"
+        return PaletteRow(
+            id: "symbol:\(symbol.id)",
+            symbol: Self.symbolIcon(symbol.kind),
+            title: AttributedString(symbol.name),
+            detail: AttributedString(symbol.container.map { "\($0) · \(place)" } ?? place),
+            trailing: nil
+        ) { [session] in session.reveal(symbol) }
+    }
+
+    static func symbolIcon(_ kind: CodeSymbol.Kind) -> String {
+        switch kind {
+        case .type: "t.square"
+        case .function, .method: "f.cursive"
+        case .property, .variable: "v.square"
+        case .constant: "c.square"
+        case .enumCase: "e.square"
+        case .module: "shippingbox"
+        case .heading: "number"
+        case .other: "circle.dashed"
+        }
     }
 
     private func fileRow(path: String, match: FuzzyMatch.Result?) -> PaletteRow {

@@ -6,3 +6,6 @@
 xcuserdata/
 DerivedData/
 *.xcodeproj
+
+# Written to the working directory by SwiftTerm's build plugin when sourcekit-lsp builds
+SwiftTermBuildInfo-*

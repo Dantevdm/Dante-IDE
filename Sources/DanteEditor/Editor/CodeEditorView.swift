@@ -215,11 +215,44 @@ public struct CodeEditorView: NSViewRepresentable {
             let length = (textView.string as NSString).length
             let clamped = NSRange(location: min(range.location, length), length: min(range.length, length - min(range.location, length)))
             textView.setSelectedRange(clamped)
-            textView.scrollRangeToVisible(clamped)
             textView.window?.makeFirstResponder(textView)
-            if clamped.length > 0 { textView.showFindIndicator(for: clamped) }
-            DispatchQueue.main.async { reveal = nil }
+            DispatchQueue.main.async { [weak textView] in
+                reveal = nil
+                guard let textView else { return }
+                Self.center(clamped, in: textView)
+            }
         }
+    }
+
+    /// Scrolls `range` to the middle of the view without moving sideways, unless the range is
+    /// off to the right. (`scrollRangeToVisible` also scrolls the gutter out of sight.) A view
+    /// that was just opened has no layout yet, so it tries again for a moment.
+    static func center(_ range: NSRange, in textView: NSTextView, attempts: Int = 20) {
+        func retry() {
+            guard attempts > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak textView] in
+                if let textView { center(range, in: textView, attempts: attempts - 1) }
+            }
+        }
+        guard let clip = textView.enclosingScrollView?.contentView, let window = textView.window, clip.bounds.width > 40 else { return retry() }
+        // TextKit 2 lays out lazily; lay out up to the range so its position is known.
+        var lineFrame: CGRect?
+        if let layout = textView.textLayoutManager, let content = layout.textContentManager,
+           let start = content.location(content.documentRange.location, offsetBy: range.location),
+           let upTo = NSTextRange(location: content.documentRange.location, end: start) {
+            layout.ensureLayout(for: upTo)
+            lineFrame = layout.textLayoutFragment(for: start)?.layoutFragmentFrame
+        }
+        let onScreen = textView.firstRect(forCharacterRange: range, actualRange: nil)
+        guard onScreen != .zero || lineFrame != nil else { return retry() }
+        let rect = textView.convert(window.convertFromScreen(onScreen), from: nil)
+        let x = onScreen != .zero && rect.maxX > clip.bounds.maxX ? rect.minX - clip.bounds.width / 3 : clip.bounds.origin.x
+        let midY = lineFrame.map { $0.midY + textView.textContainerOrigin.y } ?? rect.midY
+        let maxY = max(textView.frame.height - clip.bounds.height, 0)
+        let y = min(max(midY - clip.bounds.height / 2, 0), maxY)
+        clip.scroll(to: NSPoint(x: x, y: y))
+        textView.enclosingScrollView?.reflectScrolledClipView(clip)
+        if range.length > 0 { textView.showFindIndicator(for: range) }
     }
 
     @MainActor

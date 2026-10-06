@@ -27,6 +27,8 @@ public final class LSPClient {
     public var findsReferences: Bool { Self.supports(capabilities["referencesProvider"]) }
     public var renames: Bool { Self.supports(capabilities["renameProvider"]) }
     public var formats: Bool { Self.supports(capabilities["documentFormattingProvider"]) }
+    public var listsSymbols: Bool { Self.supports(capabilities["documentSymbolProvider"]) }
+    public var searchesSymbols: Bool { Self.supports(capabilities["workspaceSymbolProvider"]) }
 
     /// A capability is `true` or an options object; absent or `false` means no.
     nonisolated static func supports(_ value: JSONValue?) -> Bool {
@@ -150,6 +152,19 @@ public final class LSPClient {
             "textDocument": ["uri": .string(Self.uri(url))], "position": position.json, "context": context,
         ])
         return LSPCompletionItem.list(result)
+    }
+
+    /// The symbols declared in a file, nested ones flattened.
+    public func documentSymbols(in url: URL) async -> [CodeSymbol] {
+        guard await isReady, listsSymbols else { return [] }
+        let result = await request("textDocument/documentSymbol", ["textDocument": ["uri": .string(Self.uri(url))]])
+        return CodeSymbol.list(result, in: url)
+    }
+
+    /// Symbols across the project whose names match `query`, from the server's index.
+    public func workspaceSymbols(matching query: String) async -> [CodeSymbol] {
+        guard await isReady, searchesSymbols else { return [] }
+        return CodeSymbol.list(await request("workspace/symbol", ["query": .string(query)]), in: nil)
     }
 
     public func references(at position: LSPPosition, in url: URL) async -> [LSPLocation] {
