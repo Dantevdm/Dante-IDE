@@ -5,6 +5,7 @@ import SwiftUI
 /// draw yet show their source.
 struct MermaidBlock: View {
     @Environment(\.theme) private var theme
+    @Environment(\.isExporting) private var isExporting
     let source: String
     @State private var showsSource = false
 
@@ -24,7 +25,7 @@ struct MermaidBlock: View {
                 Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 10.5))
                 Text(caption(diagram))
                 Spacer()
-                if case .unsupported = diagram {} else {
+                if case .unsupported = diagram {} else if !isExporting {
                     Button(showsSource ? "Show diagram" : "Show source") { showsSource.toggle() }
                         .buttonStyle(.plain)
                         .foregroundStyle(theme.accent.color)
@@ -54,13 +55,33 @@ struct MermaidBlock: View {
 
 /// Centred when the diagram fits the doc's width, scrolling sideways when it doesn't.
 private struct FitOrScroll<Content: View>: View {
+    @Environment(\.isExporting) private var isExporting
+    @Environment(\.exportWidth) private var exportWidth
+    @Environment(\.theme) private var theme
     @ViewBuilder let content: Content
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            content.frame(maxWidth: .infinity)
-            ScrollView(.horizontal) { content }
+        if isExporting {
+            // Paper can't scroll, so a wide diagram is scaled down to the page.
+            let natural = Self.size(of: content.fixedSize().environment(\.theme, theme))
+            let scale = natural.width > exportWidth ? exportWidth / natural.width : 1
+            content.fixedSize()
+                .scaleEffect(scale, anchor: .topLeading)
+                .frame(width: natural.width * scale, height: natural.height * scale, alignment: .topLeading)
+                .frame(maxWidth: .infinity)
+        } else {
+            ViewThatFits(in: .horizontal) {
+                content.frame(maxWidth: .infinity)
+                ScrollView(.horizontal) { content }
+            }
         }
+    }
+
+    @MainActor
+    private static func size(of view: some View) -> CGSize {
+        var size = CGSize.zero
+        ImageRenderer(content: view).render { measured, _ in size = measured }
+        return size
     }
 }
 

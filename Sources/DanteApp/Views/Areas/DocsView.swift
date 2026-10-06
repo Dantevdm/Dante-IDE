@@ -699,6 +699,8 @@ enum DocExport {
             let view = DocumentBody(document: document, path: path, root: root, only: blocks ?? [], showsPath: showsPath)
                 .frame(width: width, alignment: .leading)
                 .environment(\.theme, theme)
+                .environment(\.isExporting, true)
+                .environment(\.exportWidth, width - 2)
             let renderer = ImageRenderer(content: view)
             renderer.proposedSize = ProposedViewSize(width: width, height: nil)
             return renderer
@@ -713,49 +715,38 @@ enum DocExport {
               let context = CGContext(consumer: consumer, mediaBox: &box, [kCGPDFContextTitle as String: (path as NSString).lastPathComponent] as CFDictionary)
         else { return nil }
 
-        var pageNumber = 0
-        var y: CGFloat = 0   // from the top of the page's usable area
-        func newPage() {
-            if pageNumber > 0 { footer(); context.endPDFPage() }
-            pageNumber += 1
-            context.beginPDFPage(nil)
-            context.setFillColor(theme.ground.nsColor.cgColor)
-            context.fill(CGRect(origin: .zero, size: page))
-            y = 0
-        }
+        var pageNumber = -1
         func footer() {
-            let label = "\((path as NSString).lastPathComponent) · \(pageNumber)" as NSString
+            let label = "\((path as NSString).lastPathComponent) · \(pageNumber + 1)" as NSString
             let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 8.5), .foregroundColor: theme.text3.nsColor]
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
             label.draw(at: CGPoint(x: margin, y: margin / 2), withAttributes: attributes)
             NSGraphicsContext.restoreGraphicsState()
         }
-        /// Draws the slice of a piece from `offset` (from its top) into the page at `y`.
-        func draw(_ piece: ImageRenderer<some View>, height: CGFloat, offset: CGFloat, slice: CGFloat) {
-            piece.render { _, render in
+        func newPage() {
+            if pageNumber >= 0 { footer(); context.endPDFPage() }
+            pageNumber += 1
+            context.beginPDFPage(nil)
+            context.setFillColor(theme.ground.nsColor.cgColor)
+            context.fill(CGRect(origin: .zero, size: page))
+        }
+
+        // A heading stays with the start of the block after it.
+        let keepsWithNext = [false] + document.blocks.map { if case .heading = $0 { true } else { false } }
+        newPage()
+        for slice in PageLayout.slices(heights: heights, keepsWithNext: keepsWithNext, usable: usable, gap: gap) {
+            while pageNumber < slice.page { newPage() }
+            let height = heights[slice.block]
+            pieces[slice.block].render { _, render in
                 context.saveGState()
-                let top = page.height - margin - y
-                context.clip(to: CGRect(x: margin - 4, y: top - slice, width: width + 8, height: slice))
+                let top = page.height - margin - slice.y
+                context.clip(to: CGRect(x: margin - 4, y: top - slice.height, width: width + 8, height: slice.height))
                 // The piece draws upwards from its bottom-left corner.
-                context.translateBy(x: margin, y: top - height + offset)
+                context.translateBy(x: margin, y: top - height + slice.offset)
                 render(context)
                 context.restoreGState()
             }
-        }
-
-        newPage()
-        for (piece, height) in zip(pieces, heights) where height > 0 {
-            if y > 0, y + height > usable, height <= usable { newPage() }
-            var offset: CGFloat = 0
-            while offset < height {
-                if y >= usable - 20 { newPage() }
-                let slice = min(height - offset, usable - y)
-                draw(piece, height: height, offset: offset, slice: slice)
-                offset += slice
-                y += slice
-            }
-            y += gap
         }
         footer()
         context.endPDFPage()

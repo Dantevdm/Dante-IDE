@@ -105,3 +105,26 @@ import Testing
         #expect(library.folder(distinguishing: elsewhere.first { $0.path == "tools/setup.md" }!) == nil)
     }
 }
+
+@Suite struct PageLayoutTests {
+    @Test func blocksThatFitMoveWhole() {
+        let slices = PageLayout.slices(heights: [500, 300], usable: 700, gap: 10)
+        #expect(slices.map(\.page) == [0, 1])
+        #expect(slices[1].y == 0)
+    }
+
+    @Test func longBlocksAreSliced() {
+        let slices = PageLayout.slices(heights: [100, 1500], usable: 700, gap: 10)
+        #expect(slices.map(\.page) == [0, 0, 1, 2])
+        #expect(slices.map(\.height).reduce(0, +) == 1600)
+        #expect(slices[2].offset == 590)
+    }
+
+    @Test func headingsStayWithTheBlockAfterThem() {
+        // A heading would fit at the bottom of page one, but its diagram wouldn't.
+        let slices = PageLayout.slices(heights: [600, 40, 400], keepsWithNext: [false, true, false], usable: 700, gap: 10)
+        #expect(slices.map(\.page) == [0, 1, 1])
+        // Without the rule the heading stays behind.
+        #expect(PageLayout.slices(heights: [600, 40, 400], usable: 700, gap: 10).map(\.page) == [0, 0, 1])
+    }
+}

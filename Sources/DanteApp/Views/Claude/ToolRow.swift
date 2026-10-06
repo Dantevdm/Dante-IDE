@@ -239,17 +239,23 @@ private struct DiffLineRow: View {
 
 struct CodeBlock: View {
     @Environment(\.theme) private var theme
+    @Environment(\.isExporting) private var isExporting
     let text: String
     let language: String?
 
     var body: some View {
-        ScrollView(.horizontal) {
-            Text(HighlightedCode.attributed(text, language: HighlightedCode.language(forTag: language), theme: theme))
-                .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(theme.syntax.plain.color)
-                .textSelection(.enabled)
-                .fixedSize()
-                .padding(10)
+        let code = Text(HighlightedCode.attributed(text, language: HighlightedCode.language(forTag: language), theme: theme))
+            .font(.system(size: 11.5, design: .monospaced))
+            .foregroundStyle(theme.syntax.plain.color)
+        Group {
+            if isExporting {
+                // Paper doesn't scroll: long lines wrap.
+                code.fixedSize(horizontal: false, vertical: true).padding(10).padding(.trailing, language == nil ? 0 : 40)
+            } else {
+                ScrollView(.horizontal) {
+                    code.textSelection(.enabled).fixedSize().padding(10)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.codeBackground.color))
@@ -395,4 +401,11 @@ private struct AnsweredQuestions: View {
             .padding(.leading, 21)
         }
     }
+}
+
+extension EnvironmentValues {
+    /// True while a view is drawn for a PDF or print, where nothing can scroll.
+    @Entry var isExporting = false
+    /// The width a diagram has to fit in when exporting.
+    @Entry var exportWidth: CGFloat = 480
 }
