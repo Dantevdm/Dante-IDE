@@ -6,9 +6,12 @@ import SwiftUI
 public struct CursorPosition: Equatable, Sendable {
     public var line = 1
     public var column = 1
-    public init(line: Int = 1, column: Int = 1) {
+    /// The selection in UTF-16 offsets; empty at the caret.
+    public var selection = NSRange(location: 0, length: 0)
+    public init(line: Int = 1, column: Int = 1, selection: NSRange = NSRange(location: 0, length: 0)) {
         self.line = line
         self.column = column
+        self.selection = selection
     }
 }
 
@@ -388,7 +391,7 @@ public struct CodeEditorView: NSViewRepresentable {
             let text = textView.string as NSString
             let line = ruler?.lineIndex(forOffset: location) ?? 0
             let lineStart = text.lineRange(for: NSRange(location: min(location, text.length), length: 0)).location
-            parent.onCursorChange(CursorPosition(line: line + 1, column: location - lineStart + 1))
+            parent.onCursorChange(CursorPosition(line: line + 1, column: location - lineStart + 1, selection: textView.selectedRange()))
         }
 
         public func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -586,12 +589,16 @@ public struct EditorActions {
     public var rename: ((Int) -> Void)?
     public var format: (() -> Void)?
     public var askClaude: ((NSRange) -> Void)?
+    /// Claude rewrites the selection in place (⌘I).
+    public var editWithClaude: ((NSRange) -> Void)?
 
-    public init(references: ((Int) -> Void)? = nil, rename: ((Int) -> Void)? = nil, format: (() -> Void)? = nil, askClaude: ((NSRange) -> Void)? = nil) {
+    public init(references: ((Int) -> Void)? = nil, rename: ((Int) -> Void)? = nil, format: (() -> Void)? = nil,
+                askClaude: ((NSRange) -> Void)? = nil, editWithClaude: ((NSRange) -> Void)? = nil) {
         self.references = references
         self.rename = rename
         self.format = format
         self.askClaude = askClaude
+        self.editWithClaude = editWithClaude
     }
 }
 
@@ -703,6 +710,7 @@ public final class CodeTextView: NSTextView {
         if actions?.references != nil { add("Find References", #selector(findReferences(_:))) }
         if actions?.rename != nil { add("Rename Symbol…", #selector(renameSymbol(_:))) }
         if actions?.format != nil { add("Format Document", #selector(formatDocument(_:))) }
+        if actions?.editWithClaude != nil { add("Edit with Claude…", #selector(editWithClaude(_:))) }
         if actions?.askClaude != nil, selectedRange().length > 0 { add("Ask Claude About Selection…", #selector(askClaude(_:))) }
         guard !items.isEmpty else { return menu }
         for (offset, item) in items.enumerated() { menu.insertItem(item, at: offset) }
@@ -723,6 +731,10 @@ public final class CodeTextView: NSTextView {
 
     @objc private func formatDocument(_ sender: NSMenuItem) {
         actions?.format?()
+    }
+
+    @objc private func editWithClaude(_ sender: NSMenuItem) {
+        actions?.editWithClaude?(selectedRange())
     }
 
     @objc private func askClaude(_ sender: NSMenuItem) {

@@ -180,7 +180,7 @@ struct DiffCard: View {
     }
 }
 
-private struct DiffLineRow: View {
+struct DiffLineRow: View {
     @Environment(\.theme) private var theme
     let line: DiffLine
 

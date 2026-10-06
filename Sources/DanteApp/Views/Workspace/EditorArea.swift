@@ -41,6 +41,9 @@ struct EditorArea: View {
             if session.conflicts.contains(document.url) {
                 ConflictBar(session: session, document: document)
             }
+            if focused, let inline = session.inlineEdit, inline.document === document {
+                InlineEditBar(session: session, model: inline)
+            }
             DocumentEditor(
                 document: document,
                 theme: theme,

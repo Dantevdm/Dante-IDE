@@ -122,6 +122,8 @@ final class Session {
     var showsBranches = false
     /// The Finish Task sheet, while open.
     var finishing: FinishTaskModel?
+    /// Claude rewriting code in the editor (⌘I), while its bar is open.
+    var inlineEdit: InlineEditModel?
     /// The Data area's connections, schema and tabs.
     let data = DataModel()
     var searchFocusRequest = 0

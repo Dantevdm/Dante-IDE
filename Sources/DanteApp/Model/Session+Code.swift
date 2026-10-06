@@ -38,8 +38,39 @@ extension Session {
             format: client?.formats == true ? { [weak self, weak document] in
                 guard let self, let document else { return }
                 self.formatDocument(document)
-            } : nil
+            } : nil,
+            askClaude: claude == nil ? nil : { [weak self, weak document] range in
+                guard let self, let document else { return }
+                self.askClaude(about: range, in: document)
+            },
+            editWithClaude: { [weak self, weak document] range in
+                guard let self, let document else { return }
+                self.editWithClaude(document, selection: range)
+            }
         )
+    }
+
+    // MARK: Claude in the editor
+
+    /// ⌘I: Claude rewrites the selected lines, or writes code at the caret.
+    func editWithClaude(_ document: EditorDocument? = nil, selection: NSRange? = nil) {
+        guard let workspace, let document = document ?? workspace.activeDocument else { return }
+        inlineEdit?.cancel()
+        inlineEdit = InlineEditModel(document: document, root: workspace.url, selection: selection ?? cursor.selection)
+    }
+
+    /// Attaches the selection to the Claude panel's next message and puts the cursor there.
+    func askClaude(about range: NSRange, in document: EditorDocument) {
+        let text = document.text as NSString
+        guard range.length > 0, NSMaxRange(range) <= text.length else { return }
+        let first = text.substring(to: range.location).components(separatedBy: "\n").count
+        let code = text.substring(with: range)
+        let last = first + code.components(separatedBy: "\n").count - 1
+        let lines = first == last ? "L\(first)" : "L\(first)-\(last)"
+        let url = URL(string: document.url.absoluteString + "#" + lines) ?? document.url
+        claudeAttachments.removeAll { $0.url == url }
+        claudeAttachments.append(Attachment(url: url, kind: .text(code), note: first == last ? "line \(first)" : "lines \(first)–\(last)"))
+        focusClaude()
     }
 
     // MARK: Menu commands, at the caret

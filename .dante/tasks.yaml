@@ -182,7 +182,7 @@ tasks:
 - id: DI-45
   title: Claude inline in the editor (select, ask, review the change as an inline diff)
   phase: build
-  state: ready
+  state: in_progress
 - id: DI-46
   title: "Home: what changed since you were last here"
   phase: build
