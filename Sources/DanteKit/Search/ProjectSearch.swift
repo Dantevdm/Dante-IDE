@@ -33,6 +33,8 @@ public enum ProjectSearch {
         /// The line, trimmed and shortened, with where the match sits in it.
         public var preview: String
         public var previewRange: NSRange
+        /// The text matched, cut at 200 characters; for showing what a replace makes of it.
+        public var matched: String = ""
         public var id: String { "\(line):\(column)" }
     }
 
@@ -53,13 +55,14 @@ public enum ProjectSearch {
     public static let limit = 5_000
     static let maxFileBytes = 2 * 1_048_576
 
-    public static func run(_ query: Query, root: URL, paths: [String]) async -> Result {
+    /// `overrides` are texts to search instead of what's on disk: open files with unsaved edits.
+    public static func run(_ query: Query, root: URL, paths: [String], overrides: [String: String] = [:]) async -> Result {
         guard let expression = query.expression else { return Result() }
         return await Task.detached(priority: .userInitiated) {
             var result = Result()
             for path in paths {
                 if Task.isCancelled { break }
-                guard let text = readText(root.appending(path: path)) else { continue }
+                guard let text = overrides[path] ?? readText(root.appending(path: path)) else { continue }
                 let matches = Self.matches(in: text, expression: expression, limit: limit - result.matchCount)
                 guard !matches.isEmpty else { continue }
                 result.files.append(FileMatches(path: path, matches: matches))
@@ -102,7 +105,8 @@ public enum ProjectSearch {
             let column = found.range.location - lineStart
             let length = min(found.range.length, lineText.length - column)
             let (preview, previewRange) = Self.preview(lineText, column: column, length: max(length, 0))
-            matches.append(Match(line: line, column: column, length: found.range.length, preview: preview, previewRange: previewRange))
+            let matched = ns.substring(with: NSRange(location: found.range.location, length: min(found.range.length, 200)))
+            matches.append(Match(line: line, column: column, length: found.range.length, preview: preview, previewRange: previewRange, matched: matched))
             if matches.count >= limit { stop.pointee = true }
         }
         return matches

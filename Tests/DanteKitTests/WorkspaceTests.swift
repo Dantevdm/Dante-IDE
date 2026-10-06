@@ -68,10 +68,16 @@ struct WorkspaceTests {
 
         document.text = "# Hello"
         #expect(document.isDirty)
+        // Undoing back to the saved text isn't a change.
+        document.text = "# Hi"
+        #expect(!document.isDirty)
+        document.text = "# Hello"
 
         try document.save()
         #expect(!document.isDirty)
         #expect(try String(contentsOf: file, encoding: .utf8) == "# Hello")
+        document.text = "# Hi"
+        #expect(document.isDirty)
     }
 
     @Test func refusesBinaryFiles() throws {

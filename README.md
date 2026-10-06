@@ -15,7 +15,7 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Code completion from the language server as you type (or ⌃Space), fuzzy-filtered, with snippets whose first placeholder is selected; Tab or Return accepts. Find References (⌃⇧⌘F) lists every use in the Search tab; Rename Symbol (⌃⌘E) renames across open and closed files; Format Document (⌃⇧I). Rename and format are undoable
 - Settings (⌘,): theme and font size; indent width, line wrapping and completion while typing; on save, format with the language server, trim trailing whitespace and end with a newline; auto-save after a delay or when Dante loses focus; Claude's model and whether it asks clarifying questions first
 - Git changes in the gutter: added, modified and deleted lines since the last commit, updated as you type and when HEAD moves
-- Find in Project (⇧⌘F): search every file with match case, whole word and regex, grouped by file; click a result to open it with the match selected
+- Find in Project (⇧⌘F): search every file (open ones as edited) with match case, whole word and regex, grouped by file; click a result to open it with the match selected. The chevron opens Replace: each result previews its change, hover to replace one match, a file, or leave a match out, and Replace All (⌥⌘↩) asks first. Open files change in the editor, undoable; others are saved
 - Integrated terminal running your login shell (⌃`)
 - Claude pair panel (⌘L): runs Claude Code headless in the project. Every edit arrives as a diff to apply or decline, and every command waits for your go-ahead. Claude knows the `.dante` format and the current phase, and sees which file you have open
 - Command palette (⌘K, or ⌘P for files): fuzzy file search, docs, actions, and Tab to ask Claude

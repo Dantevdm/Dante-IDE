@@ -31,37 +31,37 @@ struct SearchPanel: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             } else {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 4) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(theme.text3.color)
-                    TextField("Search files", text: $search.query.text)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12.5))
-                        .focused($fieldFocused)
-                        .onSubmit { search.run(in: workspace, delay: .zero) }
-                    toggle("textformat", "Match case", $search.query.caseSensitive)
-                    toggle("character.cursor.ibeam", "Whole word", $search.query.wholeWord)
-                    toggle("asterisk", "Regular expression", $search.query.isRegex)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 2) {
+                        replaceToggle
+                        VStack(spacing: 6) {
+                            searchField
+                            if search.showsReplace { replaceField }
+                        }
+                    }
+                    summary
                 }
-                .padding(.horizontal, 8)
-                .frame(height: 30)
-                .background(theme.raised.color, in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(search.isInvalid ? theme.red.color : (fieldFocused ? theme.accentLine.color : theme.line.color)))
-                summary
-            }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 8)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
             }
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    let replacing = search.showsReplace && search.references == nil
                     ForEach(shown.files) { file in
-                        FileHeader(file: file, isCollapsed: search.collapsed.contains(file.path)) {
+                        FileHeader(file: file, isCollapsed: search.collapsed.contains(file.path),
+                                   replace: replacing ? { session.replaceMatches(in: file) } : nil) {
                             if search.collapsed.contains(file.path) { search.collapsed.remove(file.path) } else { search.collapsed.insert(file.path) }
                         }
                         if !search.collapsed.contains(file.path) {
-                            ForEach(file.matches) { match in
-                                MatchRow(match: match) { session.open(match, in: file.path) }
+                            ForEach(file.matches.filter { !replacing || !search.isDismissed($0, in: file.path) }) { match in
+                                MatchRow(
+                                    match: match,
+                                    replacement: replacing ? ProjectReplace.preview(of: match.matched, query: search.query, replacement: search.replacement) : nil,
+                                    open: { session.open(match, in: file.path) },
+                                    replace: { session.replaceMatch(match, in: file.path) },
+                                    dismiss: { search.dismissed.insert("\(file.path)#\(match.id)") }
+                                )
                             }
                         }
                     }
@@ -70,15 +70,81 @@ struct SearchPanel: View {
                 .padding(.bottom, 12)
             }
         }
-        .onChange(of: search.query) { search.run(in: workspace) }
+        .onChange(of: search.query) {
+            search.replaceNotice = nil
+            search.run(in: workspace)
+        }
+        .onChange(of: search.replacement) { search.replaceNotice = nil }
         .onChange(of: session.searchFocusRequest, initial: true) { fieldFocused = true }
+    }
+
+    private var replaceToggle: some View {
+        Button { search.showsReplace.toggle() } label: {
+            Image(systemName: search.showsReplace ? "chevron.down" : "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(theme.text3.color)
+                .frame(width: 16, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(search.showsReplace ? "Hide Replace" : "Replace")
+        .accessibilityLabel(search.showsReplace ? "Hide Replace" : "Show Replace")
+    }
+
+    private var searchField: some View {
+        @Bindable var search = search
+        return HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(theme.text3.color)
+            TextField("Search files", text: $search.query.text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .focused($fieldFocused)
+                .onSubmit { search.run(in: workspace, delay: .zero) }
+            toggle("textformat", "Match case", $search.query.caseSensitive)
+            toggle("character.cursor.ibeam", "Whole word", $search.query.wholeWord)
+            toggle("asterisk", "Regular expression", $search.query.isRegex)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 30)
+        .background(theme.raised.color, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(search.isInvalid ? theme.red.color : (fieldFocused ? theme.accentLine.color : theme.line.color)))
+    }
+
+    private var replaceField: some View {
+        @Bindable var search = search
+        let count = search.replaceable.reduce(0) { $0 + $1.ids.count }
+        return HStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.turn.down.right").font(.system(size: 10.5)).foregroundStyle(theme.text3.color)
+                TextField("Replace", text: $search.replacement)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5))
+                    .onSubmit { session.replaceAllInProject() }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .background(theme.raised.color, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line.color))
+            Button("Replace All") { session.replaceAllInProject() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(count > 0 ? theme.onAccent.color : theme.text3.color)
+                .padding(.horizontal, 8)
+                .frame(height: 26)
+                .background(count > 0 ? theme.accent.color : theme.raised.color, in: RoundedRectangle(cornerRadius: 6))
+                .disabled(count == 0)
+                .help("Replace every match shown (⌥⌘↩)")
+                .keyboardShortcut(.return, modifiers: [.command, .option])
+        }
     }
 
     @ViewBuilder
     private var summary: some View {
         let result = search.result
         Group {
-            if search.isInvalid {
+            if let notice = search.replaceNotice {
+                Text(notice).foregroundStyle(theme.green.color)
+            } else if search.isInvalid {
                 Text("That regular expression doesn’t compile.").foregroundStyle(theme.red.color)
             } else if search.query.text.isEmpty {
                 Text("Searches every file in the project except ignored ones.")
@@ -116,9 +182,23 @@ private struct FileHeader: View {
     @Environment(\.theme) private var theme
     let file: ProjectSearch.FileMatches
     let isCollapsed: Bool
+    var replace: (() -> Void)?
     let toggle: () -> Void
+    @State private var hovering = false
 
     var body: some View {
+        header
+            .overlay(alignment: .trailing) {
+                if let replace {
+                    IconButton(symbol: "arrow.turn.down.right", label: "Replace in \((file.path as NSString).lastPathComponent)", size: 10, action: replace)
+                        .background(theme.panel.color, in: RoundedRectangle(cornerRadius: 6))
+                        .opacity(hovering ? 1 : 0)
+                }
+            }
+            .onHover { hovering = $0 }
+    }
+
+    private var header: some View {
         Button(action: toggle) {
             HStack(spacing: 6) {
                 Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
@@ -154,37 +234,65 @@ private struct FileHeader: View {
 private struct MatchRow: View {
     @Environment(\.theme) private var theme
     let match: ProjectSearch.Match
+    /// What the match becomes, while Replace is open.
+    var replacement: String?
     let open: () -> Void
+    let replace: () -> Void
+    let dismiss: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        Button(action: open) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("\(match.line + 1)")
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(theme.text3.color)
-                    .frame(width: 30, alignment: .trailing)
-                Text(highlighted)
-                    .font(.system(size: 11.5, design: .monospaced))
-                    .lineLimit(1)
+        HStack(spacing: 0) {
+            Button(action: open) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(match.line + 1)")
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(theme.text3.color)
+                        .frame(width: 30, alignment: .trailing)
+                    Text(highlighted)
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .lineLimit(1)
+                }
+                .padding(.leading, 6)
+                .padding(.vertical, 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(.leading, 6)
-            .padding(.vertical, 3)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(hovering ? theme.raised.color : .clear, in: RoundedRectangle(cornerRadius: 4))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .background(hovering ? theme.raised.color : .clear, in: RoundedRectangle(cornerRadius: 4))
+        // Over the end of the preview rather than beside it, so previews keep the width.
+        .overlay(alignment: .trailing) {
+            if replacement != nil {
+                HStack(spacing: 0) {
+                    IconButton(symbol: "arrow.turn.down.right", label: "Replace this match", size: 9.5, action: replace)
+                    IconButton(symbol: "xmark", label: "Leave this match out", size: 9.5, action: dismiss)
+                }
+                .frame(height: 20)
+                .background(theme.raised.color, in: RoundedRectangle(cornerRadius: 4))
+                .opacity(hovering ? 1 : 0)
+            }
+        }
         .onHover { hovering = $0 }
     }
 
     private var highlighted: AttributedString {
         var text = AttributedString(match.preview)
         text.foregroundColor = theme.text2.color
-        if let range = Range(match.previewRange, in: match.preview), let target = Range(range, in: text) {
+        guard let range = Range(match.previewRange, in: match.preview), let target = Range(range, in: text) else { return text }
+        guard let replacement else {
             text[target].foregroundColor = theme.text.color
             text[target].backgroundColor = theme.accent.opacity(0.22).color
+            return text
         }
+        // Old text struck through, the new text after it.
+        text[target].foregroundColor = theme.red.color
+        text[target].strikethroughStyle = .single
+        text[target].backgroundColor = theme.red.opacity(0.12).color
+        var added = AttributedString(replacement)
+        added.foregroundColor = theme.text.color
+        added.backgroundColor = theme.greenTint.color
+        text.insert(added, at: target.upperBound)
         return text
     }
 }

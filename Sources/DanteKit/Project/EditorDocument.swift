@@ -24,10 +24,12 @@ public final class EditorDocument: Identifiable {
     public private(set) var language: Language
     public private(set) var isDirty = false
 
-    /// The current text. Set on every edit; marks the document dirty.
+    /// The current text. Set on every edit; dirty while it differs from the file as last
+    /// read or saved, so undoing back to it clears the mark.
     public var text: String {
-        didSet { if text != oldValue { isDirty = true } }
+        didSet { if text != oldValue { isDirty = text.utf8.count != savedText.utf8.count || text != savedText } }
     }
+    private var savedText: String
 
     public var name: String { url.lastPathComponent }
 
@@ -38,7 +40,9 @@ public final class EditorDocument: Identifiable {
     public init(url: URL) throws {
         self.url = url
         self.language = Language(url: url)
-        self.text = try Self.read(url)
+        let text = try Self.read(url)
+        self.text = text
+        savedText = text
     }
 
     private static func read(_ url: URL) throws -> String {
@@ -51,6 +55,7 @@ public final class EditorDocument: Identifiable {
     /// Replaces the text with the file's current contents and clears the dirty flag.
     public func reloadFromDisk() throws {
         let current = try Self.read(url)
+        savedText = current
         if current != text { text = current }
         isDirty = false
     }
@@ -63,6 +68,7 @@ public final class EditorDocument: Identifiable {
 
     public func save() throws {
         try Data(text.utf8).write(to: url, options: .atomic)
+        savedText = text
         isDirty = false
     }
 }

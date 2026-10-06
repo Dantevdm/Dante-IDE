@@ -170,7 +170,7 @@ tasks:
 - id: DI-42
   title: Replace across the project from Search
   phase: build
-  state: ready
+  state: review
 - id: DI-43
   title: Split editor (two files side by side)
   phase: build
