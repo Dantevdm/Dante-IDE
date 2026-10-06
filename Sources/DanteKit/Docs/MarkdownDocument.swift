@@ -212,6 +212,39 @@ public struct MarkdownDocument: Equatable, Sendable {
         return trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
+    /// The anchor of the last heading at or above a one-based line of the raw text, so a
+    /// preview can follow the cursor in the source. Mirrors the parser's fences and anchors.
+    public static func anchor(atLine target: Int, in markdown: String) -> String? {
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        var anchors: [String: Int] = [:]
+        var found: String?
+        var index = 0
+        if lines.first == "---", let end = lines.dropFirst().firstIndex(of: "---") { index = end + 1 }
+        var fence: String?
+        while index < lines.count, index < target {
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            index += 1
+            if let open = fence {
+                if trimmed.hasPrefix(open) { fence = nil }
+                continue
+            }
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                fence = String(trimmed.prefix(3))
+                continue
+            }
+            guard let heading = heading(trimmed) else { continue }
+            var anchor = slug(heading.text)
+            if let seen = anchors[anchor] {
+                anchors[anchor] = seen + 1
+                anchor += "-\(seen + 1)"
+            } else {
+                anchors[anchor] = 0
+            }
+            found = anchor
+        }
+        return found
+    }
+
     /// GitHub-style heading anchors: lower case, punctuation dropped, spaces as dashes.
     public static func slug(_ text: String) -> String {
         let plain = text.replacingOccurrences(of: "`", with: "").replacingOccurrences(of: "*", with: "")

@@ -1,3 +1,4 @@
+import DanteEditor
 import DanteKit
 import PDFKit
 import SwiftUI
@@ -9,6 +10,7 @@ import UniformTypeIdentifiers
 /// alongside, for Claude to read or write up; dropping files here copies them into docs/.
 struct DocsView: View {
     @Environment(\.theme) private var theme
+    @Environment(ThemeStore.self) private var themeStore
     let session: Session
     let workspace: Workspace
 
@@ -17,6 +19,32 @@ struct DocsView: View {
     @State private var dropTargeted = false
     /// Reading width: a comfortable column, or the whole window.
     @AppStorage("docsWide") private var wide = false
+    /// Read the rendered doc, edit its markdown, or both side by side.
+    @State private var mode: Mode = .preview
+    /// The doc's editor document while it's being edited. The same one the Code area
+    /// shows, so unsaved changes and ⌘S are shared.
+    @State private var editing: EditorDocument?
+    /// The heading above the cursor, which the side-by-side preview keeps in view.
+    @State private var cursorAnchor: String?
+
+    enum Mode: String, CaseIterable, Identifiable {
+        case preview, edit, split
+        var id: Self { self }
+        var title: String {
+            switch self {
+            case .preview: "Preview"
+            case .edit: "Markdown"
+            case .split: "Side by Side"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .preview: "doc.richtext"
+            case .edit: "chevron.left.forwardslash.chevron.right"
+            case .split: "rectangle.split.2x1"
+            }
+        }
+    }
 
     private var library: DocLibrary { DocLibrary(paths: workspace.files) }
 
@@ -34,30 +62,21 @@ struct DocsView: View {
                     if selected.kind != .markdown {
                         FilePreview(url: workspace.url.appending(path: selected.path), kind: selected.kind)
                     } else {
-                        HStack(spacing: 0) {
-                            ScrollViewReader { proxy in
-                                ScrollView {
-                                    Group {
-                                        if let markdown {
-                                            DocumentBody(document: markdown, path: selected.path, root: workspace.url)
-                                        } else if let loadError {
-                                            Text(loadError).foregroundStyle(theme.red.color)
-                                        }
-                                    }
-                                    .padding(.horizontal, 44)
-                                    .padding(.vertical, 40)
-                                    .frame(maxWidth: 780, alignment: .leading)
-                                    .frame(maxWidth: .infinity)
-                                }
-                                .onChange(of: session.docAnchor) { _, anchor in
-                                    guard let anchor else { return }
-                                    withAnimation(.snappy) { proxy.scrollTo(anchor, anchor: .top) }
-                                    session.docAnchor = nil
-                                }
+                        switch mode {
+                        case .preview:
+                            HStack(spacing: 0) {
+                                preview(selected)
+                                Rectangle().fill(theme.line.color).frame(width: 1)
+                                LinkedPanel(session: session, workspace: workspace, doc: selected, markdown: markdown)
+                                    .frame(width: 250)
                             }
-                            Rectangle().fill(theme.line.color).frame(width: 1)
-                            LinkedPanel(session: session, workspace: workspace, doc: selected, markdown: markdown)
-                                .frame(width: 250)
+                        case .edit:
+                            sourceEditor
+                        case .split:
+                            HSplitView {
+                                sourceEditor.frame(minWidth: 280, maxWidth: .infinity)
+                                preview(selected).frame(minWidth: 280, maxWidth: .infinity)
+                            }
                         }
                     }
                 }
@@ -103,6 +122,87 @@ struct DocsView: View {
             return true
         }
         .task(id: "\(selected?.path ?? "")#\(workspace.revision)") { load() }
+        .task(id: "\(selected?.path ?? "")#\(mode)") {
+            startEditing()
+            load()
+        }
+        // Re-render while typing, once the keys pause.
+        .task(id: editing?.text) {
+            guard let editing, mode != .preview else { return }
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            markdown = MarkdownDocument(editing.text)
+            loadError = nil
+        }
+    }
+
+    private func preview(_ doc: DocLibrary.Doc) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                Group {
+                    if let markdown {
+                        DocumentBody(document: markdown, path: doc.path, root: workspace.url)
+                    } else if let loadError {
+                        Text(loadError).foregroundStyle(theme.red.color)
+                    }
+                }
+                .padding(.horizontal, mode == .split ? 32 : 44)
+                .padding(.vertical, mode == .split ? 28 : 40)
+                .frame(maxWidth: wide || mode == .split ? .infinity : 780, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: session.docAnchor) { _, anchor in
+                guard let anchor else { return }
+                withAnimation(.snappy) { proxy.scrollTo(anchor, anchor: .top) }
+                session.docAnchor = nil
+            }
+            .onChange(of: cursorAnchor) { _, anchor in
+                guard mode == .split, let anchor else { return }
+                withAnimation(.snappy) { proxy.scrollTo(anchor, anchor: .top) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sourceEditor: some View {
+        if let editing {
+            CodeEditorView(
+                text: Binding(get: { editing.text }, set: { editing.text = $0 }),
+                language: editing.language,
+                theme: theme,
+                fontSize: themeStore.editorFontSize,
+                onCursorChange: { position in
+                    let anchor = MarkdownDocument.anchor(atLine: position.line, in: editing.text)
+                    if anchor != cursorAnchor { cursorAnchor = anchor }
+                }
+            )
+            .id(editing.id)
+            .background(theme.ground.color)
+        } else {
+            Color.clear
+        }
+    }
+
+    /// The doc's tab in the editor, if it has one.
+    private func openDocument(for doc: DocLibrary.Doc) -> EditorDocument? {
+        let url = workspace.url.appending(path: doc.path).standardizedFileURL
+        return workspace.documents.first { $0.url.standardizedFileURL == url }
+    }
+
+    /// Opens the doc as an editor document for the Markdown and Side by Side modes.
+    private func startEditing() {
+        guard mode != .preview, let selected, selected.kind == .markdown else {
+            editing = nil
+            cursorAnchor = nil
+            return
+        }
+        let url = workspace.url.appending(path: selected.path)
+        do {
+            editing = try workspace.open(url)
+        } catch {
+            session.errorMessage = error.localizedDescription
+            mode = .preview
+        }
     }
 
     private func pickFiles() {
@@ -150,13 +250,15 @@ struct DocsView: View {
             }
             Spacer()
             if doc.kind == .markdown {
-                Button {
-                    wide.toggle()
-                } label: {
-                    Label(wide ? "Narrow" : "Wide", systemImage: wide ? "arrow.right.and.line.vertical.and.arrow.left" : "arrow.left.and.line.vertical.and.arrow.right")
+                if mode == .preview {
+                    Button {
+                        wide.toggle()
+                    } label: {
+                        Label(wide ? "Narrow" : "Wide", systemImage: wide ? "arrow.right.and.line.vertical.and.arrow.left" : "arrow.left.and.line.vertical.and.arrow.right")
+                    }
+                    .buttonStyle(DanteButtonStyle())
+                    .help(wide ? "Read in a comfortable column" : "Use the whole width of the window")
                 }
-                .buttonStyle(DanteButtonStyle())
-                .help(wide ? "Read in a comfortable column" : "Use the whole width of the window")
                 Menu {
                     Button("Export as PDF…") { session.exportDoc() }
                     Button("Print…") { session.exportDoc(printing: true) }
@@ -172,13 +274,24 @@ struct DocsView: View {
                     Label("Check against the code", systemImage: "sparkle")
                 }
                 .buttonStyle(DanteButtonStyle())
-                Button {
-                    session.open(file: workspace.url.appending(path: doc.path))
-                    session.area = .code
-                } label: {
-                    Label("Edit markdown", systemImage: "pencil")
+                if let open = openDocument(for: doc), open.isDirty {
+                    Button {
+                        session.save(open)
+                    } label: {
+                        Label("Save", systemImage: "circle.fill").labelStyle(DirtyLabelStyle())
+                    }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+                    .help("Save \(doc.path) (⌘S)")
                 }
-                .buttonStyle(DanteButtonStyle())
+                Picker("Mode", selection: $mode) {
+                    ForEach(Mode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.symbol).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Read the doc, edit its markdown, or edit with a live preview beside it")
             } else {
                 let url = workspace.url.appending(path: doc.path)
                 Button {
@@ -211,8 +324,15 @@ struct DocsView: View {
 
     private func load() {
         guard let selected, selected.kind == .markdown else { markdown = nil; loadError = nil; return }
+        let url = workspace.url.appending(path: selected.path)
+        // Unsaved edits, here or in the Code area, are what the preview shows.
+        if let open = openDocument(for: selected), open.isDirty {
+            markdown = MarkdownDocument(open.text)
+            loadError = nil
+            return
+        }
         do {
-            let text = try String(contentsOf: workspace.url.appending(path: selected.path), encoding: .utf8)
+            let text = try String(contentsOf: url, encoding: .utf8)
             markdown = MarkdownDocument(text)
             loadError = nil
         } catch {
@@ -238,6 +358,16 @@ struct DocsView: View {
             session.area = .code
         }
         return .handled
+    }
+}
+
+/// A Save button's dot: the same "unsaved" mark the editor tabs use.
+private struct DirtyLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon.font(.system(size: 6))
+            configuration.title
+        }
     }
 }
 

@@ -128,3 +128,32 @@ import Testing
         #expect(PageLayout.slices(heights: [600, 40, 400], usable: 700, gap: 10).map(\.page) == [0, 0, 1])
     }
 }
+
+@Suite struct MarkdownAnchorAtLineTests {
+    let text = """
+    ---
+    title: x
+    ---
+    # Intro
+    Some text.
+    ```
+    # not a heading
+    ```
+    ## Setup
+    More.
+    ## Setup
+    """
+
+    @Test func followsTheLastHeadingAboveTheLine() {
+        #expect(MarkdownDocument.anchor(atLine: 2, in: text) == nil)
+        #expect(MarkdownDocument.anchor(atLine: 4, in: text) == "intro")
+        #expect(MarkdownDocument.anchor(atLine: 8, in: text) == "intro")
+        #expect(MarkdownDocument.anchor(atLine: 10, in: text) == "setup")
+        #expect(MarkdownDocument.anchor(atLine: 11, in: text) == "setup-1")
+    }
+
+    @Test func matchesTheParsedAnchors() {
+        let anchors = MarkdownDocument(text).outline.map(\.anchor)
+        #expect(anchors == ["intro", "setup", "setup-1"])
+    }
+}
