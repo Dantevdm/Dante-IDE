@@ -106,7 +106,7 @@ tasks:
 - id: DI-26
   title: Print and PDF export of docs in the Paper theme
   phase: build
-  state: review
+  state: done
 - id: DI-27
   title: Operate alarms (CloudWatch and friends) linked to tasks
   phase: build
