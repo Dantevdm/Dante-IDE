@@ -33,6 +33,8 @@ final class DataModel {
         var running = false
         /// Which result of a multi-statement run is showing.
         var shown: Int?
+        /// The text whose plan `run` holds, when it was an Explain.
+        var explained: String?
     }
 
     struct TableBrowse {
@@ -271,6 +273,7 @@ final class DataModel {
         draft = queries[id] ?? draft
         draft.running = false
         draft.run = run
+        draft.explained = explain ? draft.text : nil
         draft.shown = run.results.lastIndex(where: \.hasRows) ?? run.results.indices.last
         queries[id] = draft
         if !explain, run.error == nil {

@@ -127,6 +127,19 @@ struct DataOverview: View {
                             ForEach(profile.migrations, id: \.path) { migration in
                                 Text("\(migration.path)/ · \(migration.count) file\(migration.count == 1 ? "" : "s")")
                                     .font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
+                                ForEach(latestMigrations(in: migration.path), id: \.self) { file in
+                                    HStack(spacing: 6) {
+                                        Text(file.lastPathComponent == "migration.sql" ? file.deletingLastPathComponent().lastPathComponent : file.lastPathComponent)
+                                            .font(.system(size: 11.5, design: .monospaced))
+                                            .foregroundStyle(theme.text2.color)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                        Spacer(minLength: 8)
+                                        LinkButton("Preview") { preview(file) }
+                                            .help("See what this migration changes, without running it")
+                                    }
+                                    .padding(.leading, 12)
+                                }
                             }
                         }
                     }
@@ -153,6 +166,19 @@ struct DataOverview: View {
                 }
             }
         }
+    }
+
+    /// The newest few SQL migrations in a folder, newest last.
+    private func latestMigrations(in folder: String) -> [URL] {
+        guard let root = model.root else { return [] }
+        return Array(MigrationPreview.files(in: root.appending(path: folder)).filter { !MigrationPreview.isDownMigration($0) }.suffix(4))
+    }
+
+    /// Opens the migration in a query tab, which previews its changes until it's run.
+    private func preview(_ file: URL) {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return }
+        let name = file.lastPathComponent == "migration.sql" ? file.deletingLastPathComponent().lastPathComponent : file.deletingPathExtension().lastPathComponent
+        model.newQuery(text, title: name)
     }
 
     private var recentCard: some View {

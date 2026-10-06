@@ -13,6 +13,7 @@ struct QueryView: View {
     let id: UUID
     @State private var confirming: [SQLStatement] = []
     @State private var request = ""
+    @State private var showsPreview = false
     private var model: DataModel { session.data }
     private var draft: DataModel.QueryDraft? { model.queries[id] }
 
@@ -60,6 +61,11 @@ struct QueryView: View {
                 .buttonStyle(DanteButtonStyle())
                 .disabled(draft?.running == true || text.wrappedValue.isEmpty)
                 .help("Show the query plan")
+            if !changes.isEmpty, draft?.run != nil {
+                Button { showsPreview.toggle() } label: { Label("Changes", systemImage: "wand.and.rays") }
+                    .buttonStyle(DanteButtonStyle(primary: false))
+                    .help(showsPreview ? "Show the results" : "Show what the script changes in the schema")
+            }
             history
             Rectangle().fill(theme.line.color).frame(width: 1, height: 18)
             Image(systemName: "sparkles").font(.system(size: 11)).foregroundStyle(theme.accent.color)
@@ -97,7 +103,13 @@ struct QueryView: View {
         .help("Recent queries")
     }
 
+    /// The schema changes the script would make, checked against the tables there now.
+    private var changes: [SchemaChange] {
+        MigrationPreview.changes(text.wrappedValue, schema: model.schema ?? DatabaseSchema(), engine: connection.engine)
+    }
+
     private func run() {
+        showsPreview = false
         let statements = SQLScript.statements(text.wrappedValue)
         let dangerous = statements.filter { $0.danger != nil }
         if !connection.readOnly, !dangerous.isEmpty {
@@ -105,6 +117,12 @@ struct QueryView: View {
         } else {
             Task { await model.run(id) }
         }
+    }
+
+    private func reviewMigration(_ changes: [SchemaChange]) {
+        let list = changes.map { "- \($0.summary)\($0.warning.map { " (\($0))" } ?? "")" }.joined(separator: "\n")
+        session.askClaude("Review this \(connection.engine.name) migration before I run it on \(connection.name). Will it fail, lose data, or lock big tables? Is anything missing (indexes on new foreign keys, a way back)?\n\n```sql\n\(text.wrappedValue)\n```\n\nDante's reading of it:\n\(list)",
+                          instructions: DataContext.describe(connection, schema: model.schema) + "\nDon't run anything.")
     }
 
     private func askForQuery() {
@@ -133,11 +151,23 @@ struct QueryView: View {
 
     @ViewBuilder
     private var results: some View {
-        if let draft, let run = draft.run {
+        let changes = changes
+        if !changes.isEmpty, showsPreview || draft?.run == nil, draft?.running != true {
+            MigrationPreviewPanel(changes: changes, connectionName: connection.name, schemaKnown: model.schema?.tables.isEmpty == false) {
+                reviewMigration(changes)
+            }
+        } else if let draft, let run = draft.run {
             VStack(spacing: 0) {
                 if let error = run.error {
                     ErrorStrip(error: error) {
                         session.askClaude("This \(connection.engine.name) query failed:\n\n```sql\n\(draft.text)\n```\n\nError:\n\n\(error)\n\nWhat's wrong, and what's the fixed query?",
+                                          instructions: DataContext.describe(connection, schema: model.schema))
+                    }
+                } else if let explained = draft.explained {
+                    let plan = QueryPlan.text(from: run.results)
+                    PlanStrip(findings: QueryPlan.findings(plan: plan, query: explained, engine: connection.engine, schema: model.schema ?? DatabaseSchema()),
+                              addIndex: { model.newQuery($0, title: "Add index") }) {
+                        session.askClaude(QueryPlan.explainPrompt(query: explained, plan: plan, engine: connection.engine),
                                           instructions: DataContext.describe(connection, schema: model.schema))
                     }
                 }

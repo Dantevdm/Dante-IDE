@@ -190,7 +190,7 @@ tasks:
 - id: DI-47
   title: "Data: explain a query, suggest indexes, preview what a migration touches"
   phase: build
-  state: ready
+  state: in_progress
 - id: DI-48
   title: "Timeline: commits, Claude sessions, test runs and releases in one place"
   phase: operate
