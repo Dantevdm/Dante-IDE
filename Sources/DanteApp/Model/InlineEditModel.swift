@@ -88,8 +88,9 @@ final class InlineEditModel {
             phase = .failed("The code changed while Claude was working, so the proposal no longer fits. Ask again.")
             return false
         }
-        document.text = text.replacingCharacters(in: range, with: proposal)
-        document.revealRange = NSRange(location: range.location, length: (proposal as NSString).length)
+        let code = range.length == 0 ? InlineEdit.insertion(proposal, at: range.location, in: text) : proposal
+        document.text = text.replacingCharacters(in: range, with: code)
+        document.revealRange = NSRange(location: range.location, length: (code as NSString).length)
         return true
     }
 }

@@ -27,4 +27,12 @@ import Testing
         #expect(InlineEdit.clean("Here's the code:\n    return x", replacing: "    return y") == "    return x")
         #expect(InlineEdit.clean("\n\nfoo()\n\n", replacing: "") == "foo()")
     }
+
+    @Test func insertionsGetTheirOwnLine() {
+        let text = "a = 1;\n\nb = 2;" as NSString
+        #expect(InlineEdit.insertion("c = 3;", at: 6, in: text) == "\nc = 3;")
+        #expect(InlineEdit.insertion("c = 3;\n", at: 7, in: text) == "c = 3;")
+        #expect(InlineEdit.insertion("c = 3;", at: 8, in: text) == "c = 3;\n")
+        #expect(InlineEdit.insertion("x", at: 2, in: text) == "\nx\n")
+    }
 }

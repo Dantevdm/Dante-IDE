@@ -43,6 +43,20 @@ public enum InlineEdit {
         return parts.joined(separator: "\n\n")
     }
 
+    /// New code for an insertion, given lines of its own when the caret sits next to other
+    /// code on its line, so it never runs into what's already there.
+    public static func insertion(_ code: String, at location: Int, in text: NSString) -> String {
+        guard !code.isEmpty else { return code }
+        let line = text.lineRange(for: NSRange(location: min(location, text.length), length: 0))
+        let before = text.substring(with: NSRange(location: line.location, length: location - line.location))
+        let lineEnd = NSMaxRange(line) - (NSMaxRange(line) > line.location && text.character(at: NSMaxRange(line) - 1) == 0x0A ? 1 : 0)
+        let after = text.substring(with: NSRange(location: location, length: max(lineEnd - location, 0)))
+        var result = code.hasSuffix("\n") ? String(code.dropLast()) : code
+        if !before.trimmingCharacters(in: .whitespaces).isEmpty { result = "\n" + result }
+        if !after.trimmingCharacters(in: .whitespaces).isEmpty { result += "\n" }
+        return result
+    }
+
     /// Strips a code fence or lead-in, and keeps the selection's trailing newline.
     public static func clean(_ answer: String, replacing original: String) -> String {
         var lines = answer.components(separatedBy: "\n")

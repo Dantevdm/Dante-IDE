@@ -21,16 +21,20 @@ struct InlineEditBar: View {
 
             if let proposal = model.proposal {
                 let lines = LineDiff.lines(old: model.original, new: proposal, context: 2)
-                ScrollView([.vertical, .horizontal]) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                            DiffLineRow(line: line)
+                GeometryReader { proxy in
+                    ScrollView([.vertical, .horizontal]) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                                DiffLineRow(line: line)
+                            }
                         }
+                        .padding(.vertical, 4)
+                        // Short lines sit at the left, not centred in the box.
+                        .frame(minWidth: proxy.size.width, alignment: .leading)
                     }
-                    .padding(.vertical, 4)
                 }
-                .frame(maxHeight: 240)
-                .fixedSize(horizontal: false, vertical: true)
+                // Tall enough for the lines (and a horizontal scroller), up to a dozen.
+                .frame(height: CGFloat(min(lines.count, 12)) * 19 + 22)
                 .background(theme.codeBackground.color, in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line.color))
             }
