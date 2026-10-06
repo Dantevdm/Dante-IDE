@@ -27,6 +27,11 @@ struct FinishTaskSheet: View {
                 }
             } else if model.finished {
                 finishedView
+            } else if model.step != nil {
+                // The repository changes under the form as the steps run, so it isn't shown.
+                Text("Finishing on \(model.branchName)\(model.opensPullRequest ? ", then a pull request into \(model.defaultBranch)" : "").")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.text2.color)
             } else {
                 branchSection
                 commitSection

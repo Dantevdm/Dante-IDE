@@ -178,7 +178,7 @@ tasks:
 - id: DI-44
   title: Finish a task with a commit and PR drafted by Claude, task moves to review
   phase: release
-  state: in_progress
+  state: review
 - id: DI-45
   title: Claude inline in the editor (select, ask, review the change as an inline diff)
   phase: build
