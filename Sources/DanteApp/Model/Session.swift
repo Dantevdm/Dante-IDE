@@ -113,9 +113,13 @@ final class Session {
     /// Bumped when HEAD moves (a commit, checkout or reset), so views comparing against it reload.
     var gitRevision = 0
 
-    enum Sidebar { case files, search }
+    enum Sidebar { case files, search, changes }
     var sidebar: Sidebar = .files
     let search = SearchState()
+    /// Source control: status, staging, commits, branches.
+    let git = GitModel()
+    /// The branch switcher in the title bar is open.
+    var showsBranches = false
     /// The Data area's connections, schema and tabs.
     let data = DataModel()
     var searchFocusRequest = 0
@@ -125,6 +129,12 @@ final class Session {
         area = .code
         sidebar = .search
         searchFocusRequest += 1
+    }
+
+    /// View › Source Control (⌃⇧G).
+    func showChanges() {
+        area = .code
+        sidebar = .changes
     }
 
     /// Opens a search result with the match selected.
@@ -545,6 +555,7 @@ final class Session {
         guard let workspace else { return }
         do {
             try workspace.open(url)
+            git.diff = nil
             area = .code
         } catch {
             errorMessage = error.localizedDescription

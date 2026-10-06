@@ -60,6 +60,8 @@ struct WorkspaceView: View {
         .background(theme.ground.color)
         .background(MouseNavigation(back: session.goBack, forward: session.goForward))
         .onChange(of: session.place) { previous, _ in session.placeChanged(from: previous) }
+        // Git status feeds the Changes tab, the branch button and its sync arrows.
+        .task(id: "\(workspace.revision)#\(session.gitRevision)") { await session.git.load(workspace.url) }
         .overlay {
             if let scope = session.palette {
                 ZStack(alignment: .top) {

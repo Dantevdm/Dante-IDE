@@ -73,6 +73,23 @@ struct DanteCommands: Commands {
                 .disabled(session?.workspace?.activeDocument == nil)
         }
 
+        CommandMenu("Git") {
+            Button("Source Control") { session?.showChanges() }
+                .keyboardShortcut("g", modifiers: [.control, .shift])
+                .disabled(session?.workspace == nil)
+            Divider()
+            Button("Push") { if let git = session?.git { Task { await git.push() } } }
+                .disabled(session?.git.isRepository != true)
+            Button("Pull") { if let git = session?.git { Task { await git.pull() } } }
+                .disabled(session?.git.isRepository != true)
+            Button("Fetch") { if let git = session?.git { Task { await git.fetch() } } }
+                .disabled(session?.git.isRepository != true)
+            Divider()
+            Button("Switch Branch…") { session?.showsBranches = true }
+                .keyboardShortcut("b", modifiers: [.control, .shift])
+                .disabled(session?.git.isRepository != true)
+        }
+
         CommandGroup(before: .toolbar) {
             Button(session?.showsTerminal == true ? "Hide Terminal" : "Show Terminal") {
                 session?.showsTerminal.toggle()

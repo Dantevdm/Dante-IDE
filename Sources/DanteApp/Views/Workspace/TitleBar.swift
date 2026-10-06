@@ -28,6 +28,9 @@ struct TitleBar: View {
                         .opacity(session.history.canGoForward ? 1 : 0.35)
                 }
                 ProjectMenu(session: session, workspace: workspace)
+                if let branch = session.git.status?.branch ?? session.branch {
+                    BranchButton(session: session, branch: branch)
+                }
                 Spacer(minLength: 12)
                 ThemeMenu()
                 ClaudeToggle(session: session)
@@ -85,22 +88,13 @@ private struct ProjectMenu: View {
                 Text(workspace.name)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(theme.text.color)
-                if let branch = session.branch {
-                    Text("/").foregroundStyle(theme.text3.color.opacity(0.6))
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(theme.text3.color)
-                    Text(branch)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(theme.text2.color)
-                }
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8.5, weight: .bold))
                     .foregroundStyle(theme.text3.color)
             }
             .lineLimit(1)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(session.branch.map { "\(workspace.name), branch \($0)" } ?? workspace.name)
+            .accessibilityLabel(workspace.name)
             .padding(.horizontal, 7)
             .frame(height: 28)
             .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? theme.raised.color : .clear))

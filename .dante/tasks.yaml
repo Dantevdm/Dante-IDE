@@ -151,3 +151,47 @@ tasks:
   title: "Docs: preview, edit and side-by-side modes for markdown"
   phase: build
   state: review
+- id: DI-38
+  title: "Source control: Changes panel, diffs, commit (message by Claude), push, pull, branch switcher"
+  phase: build
+  state: review
+- id: DI-39
+  title: "Explorer: new file and folder, rename, duplicate, move to Trash, drag to move"
+  phase: build
+  state: ready
+- id: DI-40
+  title: "Language servers: completion, find references, rename symbol, format document"
+  phase: build
+  state: ready
+- id: DI-41
+  title: "Settings window (⌘,): editor, formatting, auto-save, theme, Claude"
+  phase: build
+  state: ready
+- id: DI-42
+  title: Replace across the project from Search
+  phase: build
+  state: ready
+- id: DI-43
+  title: Split editor (two files side by side)
+  phase: build
+  state: ready
+- id: DI-44
+  title: Finish a task with a commit and PR drafted by Claude, task moves to review
+  phase: release
+  state: ready
+- id: DI-45
+  title: Claude inline in the editor (select, ask, review the change as an inline diff)
+  phase: build
+  state: ready
+- id: DI-46
+  title: "Home: what changed since you were last here"
+  phase: build
+  state: ready
+- id: DI-47
+  title: "Data: explain a query, suggest indexes, preview what a migration touches"
+  phase: build
+  state: ready
+- id: DI-48
+  title: "Timeline: commits, Claude sessions, test runs and releases in one place"
+  phase: operate
+  state: ready

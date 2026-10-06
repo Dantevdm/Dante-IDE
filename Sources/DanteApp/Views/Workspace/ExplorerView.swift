@@ -10,21 +10,24 @@ struct ExplorerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: 2) {
                 tab("Explorer", .files)
                 tab("Search", .search)
+                tab("Changes", .changes, count: session.git.changeCount)
                 Spacer()
                 if session.sidebar == .files {
                     IconButton(symbol: "arrow.clockwise", label: "Refresh", size: 11) { refresh(workspace.root) }
                     IconButton(symbol: "rectangle.compress.vertical", label: "Collapse all", size: 11) { collapse(workspace.root) }
                 }
             }
-            .padding(.leading, 14)
+            .padding(.leading, 8)
             .padding(.trailing, 8)
             .frame(height: 38)
 
             if session.sidebar == .search {
                 SearchPanel(session: session, workspace: workspace)
+            } else if session.sidebar == .changes {
+                ChangesPanel(session: session, workspace: workspace)
             } else {
                 tree
             }
@@ -32,16 +35,41 @@ struct ExplorerView: View {
         .background(theme.panel.color)
     }
 
-    private func tab(_ title: String, _ sidebar: Session.Sidebar) -> some View {
-        Button { session.sidebar = sidebar } label: {
-            Text(title.uppercased())
-                .font(.system(size: 10.5, weight: .medium))
-                .tracking(0.9)
-                .foregroundStyle(session.sidebar == sidebar ? theme.text.color : theme.text3.color)
-                .contentShape(Rectangle())
+    private func tab(_ title: String, _ sidebar: Session.Sidebar, count: Int = 0) -> some View {
+        let selected = session.sidebar == sidebar
+        let symbol = switch sidebar {
+        case .files: "folder"
+        case .search: "magnifyingglass"
+        case .changes: "arrow.triangle.branch"
+        }
+        return Button { session.sidebar = sidebar } label: {
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11.5, weight: .medium))
+                if selected {
+                    Text(title.uppercased())
+                        .font(.system(size: 10.5, weight: .medium))
+                        .tracking(0.9)
+                        .fixedSize()
+                }
+                if count > 0 {
+                    Text(count > 99 ? "99+" : "\(count)")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(theme.onAccent.color)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 15, minHeight: 14)
+                        .background(Capsule().fill(theme.accent.color))
+                }
+            }
+            .foregroundStyle(selected ? theme.text.color : theme.text3.color)
+            .padding(.horizontal, 6)
+            .frame(height: 24)
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(selected ? theme.raised.color : .clear))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(sidebar == .search ? "Find in Project (⇧⌘F)" : "Files")
+        .help(sidebar == .search ? "Find in Project (⇧⌘F)" : sidebar == .changes ? "Source Control (⌃⇧G)" : "Files")
+        .accessibilityLabel(count > 0 ? "\(title), \(count) changes" : title)
         .accessibilityAddTraits(session.sidebar == sidebar ? .isSelected : [])
     }
 

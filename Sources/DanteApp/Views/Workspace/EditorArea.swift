@@ -14,7 +14,9 @@ struct EditorArea: View {
             if !workspace.documents.isEmpty {
                 TabBar(session: session, workspace: workspace)
             }
-            if let document = workspace.activeDocument {
+            if let target = session.git.diff {
+                DiffView(session: session, workspace: workspace, target: target)
+            } else if let document = workspace.activeDocument {
                 PathBar(document: document, root: workspace.url)
                 if session.conflicts.contains(document.url) {
                     ConflictBar(session: session, document: document)
@@ -114,7 +116,7 @@ private struct TabBar: View {
                     TabItem(
                         document: document,
                         isActive: document.id == workspace.activeDocumentID,
-                        select: { workspace.activeDocumentID = document.id },
+                        select: { workspace.activeDocumentID = document.id; session.git.diff = nil },
                         close: { session.close(document) }
                     )
                 }
