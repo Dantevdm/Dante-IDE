@@ -74,6 +74,17 @@ public final class LanguageServices {
         }
     }
 
+    /// Every running server's diagnostics, by standardized file path.
+    public var allDiagnostics: [String: [LSPDiagnostic]] {
+        var result: [String: [LSPDiagnostic]] = [:]
+        var asked = Set<ObjectIdentifier>()
+        for language in Language.allCases {
+            guard let client = existingClient(for: language), asked.insert(ObjectIdentifier(client)).inserted else { continue }
+            result.merge(client.diagnostics) { $0 + $1 }
+        }
+        return result
+    }
+
     public func diagnostics(for document: EditorDocument) -> [LSPDiagnostic] {
         existingClient(for: document.language)?.diagnostics(for: document.url) ?? []
     }

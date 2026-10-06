@@ -86,6 +86,10 @@ struct DanteCommands: Commands {
             Button("Format Document") { session?.formatActiveDocument() }
                 .keyboardShortcut("i", modifiers: [.control, .shift])
                 .disabled(session?.workspace?.activeDocument == nil)
+            Divider()
+            Button("Problems") { session?.showProblems() }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .disabled(session?.workspace == nil)
         }
 
         CommandMenu("Git") {

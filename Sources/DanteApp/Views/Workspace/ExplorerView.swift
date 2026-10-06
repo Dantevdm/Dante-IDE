@@ -39,6 +39,7 @@ struct ExplorerView: View {
                 tab("Explorer", .files)
                 tab("Search", .search)
                 tab("Changes", .changes, count: session.git.changeCount)
+                tab("Problems", .problems, count: problemCount.total, alert: problemCount.errors > 0)
                 Spacer()
                 if session.sidebar == .files {
                     IconButton(symbol: "doc.badge.plus", label: "New file", size: 11) { startNew(folder: false) }
@@ -53,6 +54,8 @@ struct ExplorerView: View {
                 SearchPanel(session: session, workspace: workspace)
             } else if session.sidebar == .changes {
                 ChangesPanel(session: session, workspace: workspace)
+            } else if session.sidebar == .problems {
+                ProblemsPanel(session: session, workspace: workspace)
             } else {
                 tree
             }
@@ -60,12 +63,19 @@ struct ExplorerView: View {
         .background(theme.panel.color)
     }
 
-    private func tab(_ title: String, _ sidebar: Session.Sidebar, count: Int = 0) -> some View {
+    /// Errors and warnings across the project, for the Problems tab's badge.
+    private var problemCount: (total: Int, errors: Int) {
+        let files = Problems.files(session.languages?.allDiagnostics ?? [:], root: workspace.url)
+        return (files.reduce(0) { $0 + $1.errors + $1.warnings }, files.reduce(0) { $0 + $1.errors })
+    }
+
+    private func tab(_ title: String, _ sidebar: Session.Sidebar, count: Int = 0, alert: Bool = false) -> some View {
         let selected = session.sidebar == sidebar
         let symbol = switch sidebar {
         case .files: "folder"
         case .search: "magnifyingglass"
         case .changes: "arrow.triangle.branch"
+        case .problems: "exclamationmark.triangle"
         }
         return Button { session.sidebar = sidebar } label: {
             HStack(spacing: 5) {
@@ -83,7 +93,7 @@ struct ExplorerView: View {
                         .foregroundStyle(theme.onAccent.color)
                         .padding(.horizontal, 4)
                         .frame(minWidth: 15, minHeight: 14)
-                        .background(Capsule().fill(theme.accent.color))
+                        .background(Capsule().fill(alert ? theme.red.color : theme.accent.color))
                 }
             }
             .foregroundStyle(selected ? theme.text.color : theme.text3.color)
@@ -93,8 +103,8 @@ struct ExplorerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(sidebar == .search ? "Find in Project (⇧⌘F)" : sidebar == .changes ? "Source Control (⌃⇧G)" : "Files")
-        .accessibilityLabel(count > 0 ? "\(title), \(count) changes" : title)
+        .help(sidebar == .search ? "Find in Project (⇧⌘F)" : sidebar == .changes ? "Source Control (⌃⇧G)" : sidebar == .problems ? "Problems (⇧⌘M)" : "Files")
+        .accessibilityLabel(count > 0 ? "\(title), \(count) \(sidebar == .problems ? "problems" : "changes")" : title)
         .accessibilityAddTraits(session.sidebar == sidebar ? .isSelected : [])
     }
 

@@ -118,7 +118,7 @@ final class Session {
     /// Bumped when HEAD moves (a commit, checkout or reset), so views comparing against it reload.
     var gitRevision = 0
 
-    enum Sidebar { case files, search, changes }
+    enum Sidebar { case files, search, changes, problems }
     var sidebar: Sidebar = .files
     let search = SearchState()
     /// Source control: status, staging, commits, branches.
@@ -146,6 +146,12 @@ final class Session {
     func showChanges() {
         area = .code
         sidebar = .changes
+    }
+
+    /// View › Problems (⇧⌘M).
+    func showProblems() {
+        area = .code
+        sidebar = .problems
     }
 
     /// Opens a search result with the match selected.

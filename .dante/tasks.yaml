@@ -199,7 +199,7 @@ tasks:
 - id: DI-49
   title: "Problems panel: every diagnostic across open files, click to jump"
   phase: build
-  state: ready
+  state: review
 - id: DI-50
   title: "Go to symbol in the file and across the project"
   phase: build

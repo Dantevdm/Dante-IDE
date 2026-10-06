@@ -16,6 +16,19 @@ extension Session {
         }
     }
 
+    /// Opens a file from the Problems panel at a diagnostic.
+    func reveal(_ diagnostic: LSPDiagnostic, in url: URL) {
+        open(file: url)
+        guard let target = workspace?.activeDocument, target.url.standardizedFileURL == url.standardizedFileURL else { return }
+        target.revealRange = LineIndex(target.text as NSString).range(of: diagnostic.range)
+    }
+
+    /// Hands a file's problems to Claude, from the Problems panel.
+    func fixWithClaude(_ problems: ProblemFile) {
+        let list = problems.diagnostics.prefix(30).map { "- line \($0.range.start.line + 1): \($0.message)" }.joined(separator: "\n")
+        askClaude("Fix these problems the language server reports in \(problems.path):\n\(list)")
+    }
+
     /// Hands one problem from the language server to Claude.
     func fixWithClaude(_ diagnostic: LSPDiagnostic, in document: EditorDocument) {
         guard let workspace else { return }
