@@ -282,7 +282,12 @@ private struct PhaseTasksCard: View {
         Card(phase.map { "\($0) tasks" } ?? "Tasks") {
             LinkButton("Board") { session.area = .plan }
         } content: {
-            if tasks.isEmpty {
+            if let error = workspace.tasks.loadError {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.red.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if tasks.isEmpty {
                 Text(workspace.tasks.tasks.isEmpty ? "No tasks yet. Add them on the Plan board." : "Nothing open in this phase.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(theme.text3.color)
