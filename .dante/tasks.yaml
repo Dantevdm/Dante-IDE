@@ -186,7 +186,7 @@ tasks:
 - id: DI-46
   title: "Home: what changed since you were last here"
   phase: build
-  state: ready
+  state: in_progress
 - id: DI-47
   title: "Data: explain a query, suggest indexes, preview what a migration touches"
   phase: build

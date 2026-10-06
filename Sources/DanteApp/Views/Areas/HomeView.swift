@@ -28,6 +28,9 @@ struct HomeView: View {
             .buttonStyle(DanteButtonStyle())
         } content: {
             facts
+            if let since = session.sinceLastVisit {
+                SinceLastVisitCard(session: session, since: since)
+            }
             Timeline(session: session, workspace: workspace)
             HStack(alignment: .top, spacing: 16) {
                 CurrentPhaseCard(session: session, workspace: workspace)
@@ -67,6 +70,82 @@ struct HomeView: View {
             containers = await ContainerState.load(projectRoot: workspace.url)
         }
         git = await snapshot
+    }
+}
+
+// MARK: Since last visit
+
+/// Commits, task moves and a branch switch since the project was last closed in Dante.
+private struct SinceLastVisitCard: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let since: SinceLastVisit
+
+    var body: some View {
+        Card("Since you were last here", accent: true) {
+            Text(since.since.relative).font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+            IconButton(symbol: "xmark", label: "Dismiss", size: 9.5) { session.sinceLastVisit = nil }
+        } content: {
+            HStack(spacing: 14) {
+                if !since.commits.isEmpty {
+                    let count = since.commits.count + since.moreCommits
+                    stat("\(count) commit\(count == 1 ? "" : "s")", symbol: "point.3.connected.trianglepath.dotted")
+                }
+                if since.filesChanged > 0 {
+                    HStack(spacing: 5) {
+                        Image(systemName: "doc").font(.system(size: 10.5))
+                        Text("\(since.filesChanged) file\(since.filesChanged == 1 ? "" : "s")")
+                        Text("+\(since.insertions)").foregroundStyle(theme.green.color)
+                        Text("−\(since.deletions)").foregroundStyle(theme.red.color)
+                    }
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.text2.color)
+                }
+                if let change = since.branchChange {
+                    stat("\(change.from) → \(change.to)", symbol: "arrow.triangle.branch")
+                }
+            }
+            if !since.commits.isEmpty {
+                RowList(data: since.commits, padding: 6) { commit in
+                    HStack(spacing: 10) {
+                        Text(String(commit.hash.prefix(7)))
+                            .font(.system(size: 11.5, design: .monospaced))
+                            .foregroundStyle(theme.text3.color)
+                        Text(commit.subject).font(.system(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
+                        Spacer(minLength: 6)
+                        Text(commit.author).font(.system(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        if let date = commit.date {
+                            Text(date.relative).font(.system(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        }
+                    }
+                }
+                if since.moreCommits > 0 {
+                    Text("and \(since.moreCommits) more").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                }
+            }
+            if !since.taskMoves.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(since.taskMoves) { move in
+                        HStack(spacing: 8) {
+                            Text(move.id).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            Text(MarkdownText.attributed(move.title, theme: theme)).font(.system(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
+                            Spacer(minLength: 6)
+                            Text(move.from.map { "\($0.title) → \(move.to.title)" } ?? "New · \(move.to.title)")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(move.to == .done ? theme.green.color : theme.text2.color)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func stat(_ text: String, symbol: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).font(.system(size: 10.5))
+            Text(text).font(.system(size: 12))
+        }
+        .foregroundStyle(theme.text2.color)
     }
 }
 

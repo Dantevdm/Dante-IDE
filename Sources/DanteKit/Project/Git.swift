@@ -4,18 +4,41 @@ public enum Git {
     /// The checked-out branch, read from `.git/HEAD` without running git.
     /// Returns a short commit hash for a detached HEAD, or nil outside a repo.
     public static func currentBranch(in root: URL) -> String? {
-        var gitDir = root.appending(path: ".git")
-        // Worktrees and submodules use a `.git` file that points at the real directory.
+        guard let head = head(in: root) else { return nil }
+        if head.hasPrefix("ref: refs/heads/") {
+            return String(head.dropFirst("ref: refs/heads/".count))
+        }
+        return head.isEmpty ? nil : String(head.prefix(7))
+    }
+
+    /// The full hash HEAD points at, read from `.git` without running git; nil in a repository
+    /// with no commits yet.
+    public static func headCommit(in root: URL) -> String? {
+        guard let head = head(in: root), let gitDir = gitDirectory(in: root) else { return nil }
+        guard head.hasPrefix("ref: ") else { return head.isEmpty ? nil : head }
+        let ref = String(head.dropFirst("ref: ".count))
+        if let loose = try? String(contentsOf: gitDir.appending(path: ref), encoding: .utf8) {
+            return loose.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Packed refs: "<hash> <ref>" lines.
+        let packed = (try? String(contentsOf: gitDir.appending(path: "packed-refs"), encoding: .utf8)) ?? ""
+        return packed.components(separatedBy: "\n").first { $0.hasSuffix(" " + ref) }?.components(separatedBy: " ").first
+    }
+
+    private static func head(in root: URL) -> String? {
+        guard let gitDir = gitDirectory(in: root),
+              let head = try? String(contentsOf: gitDir.appending(path: "HEAD"), encoding: .utf8) else { return nil }
+        return head.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// `.git`, or where a worktree's or submodule's `.git` file points.
+    private static func gitDirectory(in root: URL) -> URL? {
+        let gitDir = root.appending(path: ".git")
         if let pointer = try? String(contentsOf: gitDir, encoding: .utf8), pointer.hasPrefix("gitdir:") {
             let path = pointer.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespacesAndNewlines)
-            gitDir = path.hasPrefix("/") ? URL(filePath: path) : root.appending(path: path)
+            return path.hasPrefix("/") ? URL(filePath: path) : root.appending(path: path)
         }
-        guard let head = try? String(contentsOf: gitDir.appending(path: "HEAD"), encoding: .utf8) else { return nil }
-        let trimmed = head.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("ref: refs/heads/") {
-            return String(trimmed.dropFirst("ref: refs/heads/".count))
-        }
-        return trimmed.isEmpty ? nil : String(trimmed.prefix(7))
+        return FileManager.default.fileExists(atPath: gitDir.path) ? gitDir : nil
     }
 
     /// The folder name `git clone` would create for a repository URL.

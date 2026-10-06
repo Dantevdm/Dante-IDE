@@ -124,6 +124,8 @@ final class Session {
     var finishing: FinishTaskModel?
     /// Claude rewriting code in the editor (⌘I), while its bar is open.
     var inlineEdit: InlineEditModel?
+    /// What changed since this project was last closed, for Home; nil when nothing did.
+    var sinceLastVisit: SinceLastVisit?
     /// The Data area's connections, schema and tabs.
     let data = DataModel()
     var searchFocusRequest = 0
@@ -230,10 +232,12 @@ final class Session {
             return
         }
         guard confirmDiscardingChanges(in: workspace?.documents ?? []) else { return }
+        recordVisit()
         claude?.stop()
         languages?.stop()
         let workspace = Workspace(url: url)
         self.workspace = workspace
+        loadSinceLastVisit(for: workspace)
         claude = makeClaude(for: workspace)
         languages = LanguageServices(root: url)
         conflicts = []
@@ -300,6 +304,7 @@ final class Session {
 
     func closeProject() {
         guard confirmDiscardingChanges(in: workspace?.documents ?? []) else { return }
+        recordVisit()
         claude?.stop()
         claude = nil
         languages?.stop()
@@ -314,11 +319,28 @@ final class Session {
     /// The window closed: stop every process and watcher it started. Unsaved changes were
     /// already handled by the close or quit prompt.
     func shutdown() {
+        recordVisit()
         claude?.stop()
         languages?.stop()
         watcher?.stop()
         logWatch?.stop()
         health.stop()
+    }
+
+    /// Notes how the project looks now, for the next "since you were last here".
+    func recordVisit() {
+        guard let workspace else { return }
+        ProjectVisit.now(root: workspace.url, tasks: workspace.tasks.file.tasks).save(for: workspace.url)
+    }
+
+    private func loadSinceLastVisit(for workspace: Workspace) {
+        sinceLastVisit = nil
+        guard let visit = ProjectVisit.load(for: workspace.url) else { return }
+        Task {
+            let since = await SinceLastVisit.load(since: visit, root: workspace.url, tasks: workspace.tasks.file.tasks)
+            guard self.workspace === workspace else { return }
+            sinceLastVisit = since.isEmpty ? nil : since
+        }
     }
 
     private func filesChanged(_ changed: [URL]) {

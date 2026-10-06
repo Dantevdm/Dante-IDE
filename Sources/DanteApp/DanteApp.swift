@@ -57,7 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        for session in Sessions.all { session.claude?.stop() }
+        for session in Sessions.all {
+            session.recordVisit()
+            session.claude?.stop()
+        }
     }
 }
 
