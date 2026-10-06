@@ -104,18 +104,52 @@ private enum Ink {
         context.fill(head, with: .color(color))
     }
 
-    static func label(_ text: String, at point: CGPoint, theme: Theme, in context: inout GraphicsContext) {
+    /// Draws an edge's label on its curve, sliding it along (and then off) the curve until it
+    /// covers no box and no label already drawn.
+    static func label(_ text: String, on curve: (CGPoint, CGPoint, CGPoint, CGPoint), placer: inout LabelPlacer,
+                      theme: Theme, in context: inout GraphicsContext) {
         let resolved = context.resolve(Text(text).font(.system(size: 11)).foregroundColor(theme.text2.color))
         let size = resolved.measure(in: CGSize(width: 180, height: 60))
-        let box = CGRect(x: point.x - size.width / 2 - 5, y: point.y - size.height / 2 - 2, width: size.width + 10, height: size.height + 4)
+        let box = placer.place(CGSize(width: size.width + 10, height: size.height + 4), on: curve)
         context.fill(Path(roundedRect: box, cornerRadius: 4), with: .color(theme.panel.color))
         context.draw(resolved, in: box.insetBy(dx: 5, dy: 2))
     }
 
-    /// The point halfway along a cubic curve.
-    static func midpoint(_ a: CGPoint, _ c1: CGPoint, _ c2: CGPoint, _ b: CGPoint) -> CGPoint {
-        CGPoint(x: 0.125 * a.x + 0.375 * c1.x + 0.375 * c2.x + 0.125 * b.x,
-                y: 0.125 * a.y + 0.375 * c1.y + 0.375 * c2.y + 0.125 * b.y)
+    /// A point on a cubic curve, t from 0 to 1.
+    static func point(_ t: CGFloat, _ a: CGPoint, _ c1: CGPoint, _ c2: CGPoint, _ b: CGPoint) -> CGPoint {
+        let u = 1 - t
+        let (w0, w1, w2, w3) = (u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t)
+        return CGPoint(x: w0 * a.x + w1 * c1.x + w2 * c2.x + w3 * b.x, y: w0 * a.y + w1 * c1.y + w2 * c2.y + w3 * b.y)
+    }
+}
+
+/// Keeps edge labels off boxes and off each other.
+struct LabelPlacer {
+    /// Node boxes, then each label as it's placed.
+    var taken: [CGRect]
+
+    init(avoiding boxes: [CGRect]) {
+        taken = boxes
+    }
+
+    mutating func place(_ size: CGSize, on curve: (CGPoint, CGPoint, CGPoint, CGPoint)) -> CGRect {
+        func box(at point: CGPoint) -> CGRect {
+            CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height)
+        }
+        func free(_ rect: CGRect) -> Bool { !taken.contains { $0.insetBy(dx: -2, dy: -2).intersects(rect) } }
+        var candidates: [CGRect] = []
+        for t in [0.5, 0.38, 0.62, 0.28, 0.72, 0.2, 0.8] as [CGFloat] {
+            candidates.append(box(at: Ink.point(t, curve.0, curve.1, curve.2, curve.3)))
+        }
+        let middle = Ink.point(0.5, curve.0, curve.1, curve.2, curve.3)
+        for step in 1...4 {
+            let offset = CGFloat(step) * (size.height + 4)
+            candidates.append(box(at: CGPoint(x: middle.x, y: middle.y + offset)))
+            candidates.append(box(at: CGPoint(x: middle.x, y: middle.y - offset)))
+        }
+        let chosen = candidates.first(where: free) ?? candidates[0]
+        taken.append(chosen)
+        return chosen
     }
 }
 
@@ -135,7 +169,8 @@ private struct FlowchartView: View {
                         Canvas { context, _ in
                             let frames = anchors.mapValues { proxy[$0] }
                             drawGroups(frames, in: &context)
-                            for edge in chart.edges { draw(edge, frames, in: &context) }
+                            var placer = LabelPlacer(avoiding: Array(frames.values))
+                            for edge in chart.edges { draw(edge, frames, placer: &placer, in: &context) }
                         }
                     }
                 }
@@ -198,7 +233,7 @@ private struct FlowchartView: View {
         }
     }
 
-    private func draw(_ edge: Flowchart.Edge, _ frames: [String: CGRect], in context: inout GraphicsContext) {
+    private func draw(_ edge: Flowchart.Edge, _ frames: [String: CGRect], placer: inout LabelPlacer, in context: inout GraphicsContext) {
         guard let from = frames[edge.from], let to = frames[edge.to] else { return }
         let down = chart.direction == .down
         let start: CGPoint, end: CGPoint, c1: CGPoint, c2: CGPoint
@@ -230,7 +265,7 @@ private struct FlowchartView: View {
         let style = StrokeStyle(lineWidth: edge.style == .thick ? 2.4 : 1.3, lineCap: .round, dash: edge.style == .dotted ? [3, 4] : [])
         context.stroke(path, with: .color(color), style: style)
         if edge.arrow { Ink.arrowhead(at: end, from: c2, color: color, in: &context) }
-        if let label = edge.label { Ink.label(label, at: Ink.midpoint(start, c1, c2, end), theme: theme, in: &context) }
+        if let label = edge.label { Ink.label(label, on: (start, c1, c2, end), placer: &placer, theme: theme, in: &context) }
     }
 }
 
@@ -399,7 +434,8 @@ struct ERDiagramView: View {
                 GeometryReader { proxy in
                     Canvas { context, _ in
                         let frames = anchors.mapValues { proxy[$0] }
-                        for relationship in diagram.relationships { draw(relationship, frames, in: &context) }
+                        var placer = LabelPlacer(avoiding: Array(frames.values))
+                        for relationship in diagram.relationships { draw(relationship, frames, placer: &placer, in: &context) }
                     }
                 }
             }
@@ -438,7 +474,7 @@ struct ERDiagramView: View {
         .anchorPreference(key: DiagramBoundsKey.self, value: .bounds) { [entity.name: $0] }
     }
 
-    private func draw(_ relationship: ERDiagram.Relationship, _ frames: [String: CGRect], in context: inout GraphicsContext) {
+    private func draw(_ relationship: ERDiagram.Relationship, _ frames: [String: CGRect], placer: inout LabelPlacer, in context: inout GraphicsContext) {
         guard let from = frames[relationship.from], let to = frames[relationship.to] else { return }
         let start: CGPoint, end: CGPoint, c1: CGPoint, c2: CGPoint
         let fromLabel: CGPoint, toLabel: CGPoint
@@ -470,7 +506,7 @@ struct ERDiagramView: View {
         cardinality(relationship.fromCardinality, at: fromLabel, in: &context)
         cardinality(relationship.toCardinality, at: toLabel, in: &context)
         if !relationship.label.isEmpty {
-            Ink.label(relationship.label, at: Ink.midpoint(start, c1, c2, end), theme: theme, in: &context)
+            Ink.label(relationship.label, on: (start, c1, c2, end), placer: &placer, theme: theme, in: &context)
         }
     }
 

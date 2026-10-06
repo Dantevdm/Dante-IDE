@@ -108,6 +108,7 @@ struct ResultGrid: View {
             ForEach(result.columns.indices, id: \.self) { column in
                 let value = column < values.count ? values[column] : nil
                 let isSelected = selected == Cell(row: row, column: column)
+                Button { selected = Cell(row: row, column: column) } label: {
                 Group {
                     if let value {
                         Text(value.replacingOccurrences(of: "\n", with: "⏎ "))
@@ -126,7 +127,8 @@ struct ResultGrid: View {
                     if isSelected { Rectangle().strokeBorder(theme.accent.color, lineWidth: 1) }
                 }
                 .contentShape(Rectangle())
-                .onTapGesture { selected = Cell(row: row, column: column) }
+                }
+                .buttonStyle(.plain)
                 .contextMenu { menu(row: row, column: column) }
             }
         }
