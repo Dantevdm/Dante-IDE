@@ -207,7 +207,7 @@ tasks:
 - id: DI-51
   title: "Git blame for the current line, with the commit a click away"
   phase: build
-  state: ready
+  state: review
 - id: DI-52
   title: "Tests: re-run failed tests and run a single test"
   phase: build

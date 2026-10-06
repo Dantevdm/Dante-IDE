@@ -21,6 +21,7 @@ struct StatusBar: View {
             Spacer()
             if let document = workspace.activeDocument {
                 LanguageStatus(session: session, document: document)
+                BlameStatus(session: session, workspace: workspace, document: document)
                 Text("Ln \(session.cursor.line), Col \(session.cursor.column)")
                 Text(document.language.displayName)
                 Text("UTF-8")
@@ -34,6 +35,92 @@ struct StatusBar: View {
         .frame(height: 26)
         .background(theme.panel.color)
         .overlay(alignment: .top) { Rectangle().fill(theme.line.color).frame(height: 1) }
+    }
+}
+
+/// Who last changed the caret's line, and the commit a click away.
+private struct BlameStatus: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+    let document: EditorDocument
+    @State private var blame: GitBlame?
+    @State private var showsCommit = false
+
+    var body: some View {
+        // An HStack rather than a Group: with nothing in it, a Group has no view to run the task.
+        HStack(spacing: 0) {
+            if session.git.isRepository, let commit = blame?.commit(atLine: session.cursor.line) {
+                Button { showsCommit.toggle() } label: {
+                    Label(commit.isUncommitted ? "Not committed yet" : "\(commit.author), \(commit.date.relative)", systemImage: "person.crop.circle")
+                        .lineLimit(1)
+                        .frame(maxWidth: 240, alignment: .trailing)
+                }
+                .buttonStyle(.plain)
+                .help(commit.isUncommitted ? "This line has changes not yet committed" : "\(commit.shortHash) \(commit.summary)")
+                .popover(isPresented: $showsCommit, arrowEdge: .top) {
+                    BlameCard(commit: commit, line: session.cursor.line, path: ProposedChange.relativePath(of: document.url, in: workspace.url)) { command in
+                        showsCommit = false
+                        session.runInTerminal(command)
+                    }
+                }
+            }
+        }
+        // Blame again once typing settles, so lines below an edit keep their commits.
+        .task(id: "\(document.url.path)|\(document.text.hashValue)|\(workspace.revision)|\(session.git.isRepository)") {
+            if blame != nil { try? await Task.sleep(for: .milliseconds(700)) }
+            guard !Task.isCancelled, session.git.isRepository else { return }
+            blame = await GitBlame.load(file: document.url, text: document.text, root: workspace.url)
+        }
+    }
+}
+
+private struct BlameCard: View {
+    @Environment(\.theme) private var theme
+    let commit: GitBlame.Commit
+    let line: Int
+    let path: String
+    let run: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if commit.isUncommitted {
+                Text("Line \(line) has changes that aren’t committed yet.")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(theme.text.color)
+            } else {
+                Text(commit.summary)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(theme.text.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) {
+                    Text(commit.shortHash).font(.system(size: 11.5, design: .monospaced))
+                    Text("·")
+                    Text(commit.author)
+                    Text("·")
+                    Text(commit.date.formatted(date: .abbreviated, time: .shortened))
+                }
+                .font(.system(size: 11.5))
+                .foregroundStyle(theme.text3.color)
+            }
+            HStack(spacing: 8) {
+                if !commit.isUncommitted {
+                    Button("Show Commit") { run("git show \(commit.hash)") }
+                        .buttonStyle(DanteButtonStyle(primary: true))
+                    Button("Copy Hash") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(commit.hash, forType: .string)
+                    }
+                    .buttonStyle(DanteButtonStyle())
+                }
+                Button("Line History") { run("git log -L \(line),\(line):\(Shell.quote(path))") }
+                    .buttonStyle(DanteButtonStyle())
+                    .help("Every commit that changed this line, in the terminal")
+            }
+        }
+        .padding(14)
+        .frame(width: 340, alignment: .leading)
+        .background(theme.panel.color)
     }
 }
 

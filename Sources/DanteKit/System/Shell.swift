@@ -14,6 +14,12 @@ public enum Shell {
         public var message: String { stderr.isEmpty ? stdout : stderr }
     }
 
+    /// One argument for a command line typed into a shell: single-quoted unless it's plainly safe.
+    public static func quote(_ argument: String) -> String {
+        if !argument.isEmpty, argument.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || "/._-+=:,@%".contains($0)) }) { return argument }
+        return "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     /// Runs to completion. Both pipes are drained while the process runs, so large output
     /// can't fill a pipe and stall it. A missing tool comes back as status 127.
     /// `trimming: false` keeps stdout exactly as written, for file contents. `extra` adds

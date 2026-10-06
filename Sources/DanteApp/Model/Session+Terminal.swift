@@ -40,7 +40,7 @@ extension Session {
     func signInToClaude() {
         guard let claude, let executable = claude.executable else { return }
         claude.reset()
-        runInTerminal("'\(executable.replacingOccurrences(of: "'", with: "'\\''"))' auth login")
+        runInTerminal("\(Shell.quote(executable)) auth login")
     }
 
     func focusClaude() {
