@@ -217,6 +217,9 @@ private struct TabItem: View {
         .help(document.url.path)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
+        // The tap gesture isn't an action VoiceOver can press.
+        .accessibilityAction { select() }
+        .accessibilityAction(named: "Close") { close() }
     }
 }
 
