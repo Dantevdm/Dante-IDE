@@ -282,12 +282,23 @@ public struct ERDiagram: Equatable, Sendable {
         public var type: String
         public var name: String
         public var keys: [String]
+
+        public init(type: String, name: String, keys: [String] = []) {
+            self.type = type
+            self.name = name
+            self.keys = keys
+        }
     }
 
     public struct Entity: Equatable, Sendable, Identifiable {
         public var name: String
         public var attributes: [Attribute]
         public var id: String { name }
+
+        public init(name: String, attributes: [Attribute]) {
+            self.name = name
+            self.attributes = attributes
+        }
     }
 
     public struct Relationship: Equatable, Sendable {
@@ -297,10 +308,23 @@ public struct ERDiagram: Equatable, Sendable {
         public var fromCardinality: String
         public var toCardinality: String
         public var label: String
+
+        public init(from: String, to: String, fromCardinality: String, toCardinality: String, label: String) {
+            self.from = from
+            self.to = to
+            self.fromCardinality = fromCardinality
+            self.toCardinality = toCardinality
+            self.label = label
+        }
     }
 
     public var entities: [Entity]
     public var relationships: [Relationship]
+
+    public init(entities: [Entity], relationships: [Relationship]) {
+        self.entities = entities
+        self.relationships = relationships
+    }
 
     /// Entities in layers, like a left-to-right flowchart of the relationships.
     public var layers: [[Entity]] {

@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, plan, map, code, tests, environments, ship, run, docs, spec
+    case home, plan, map, code, tests, environments, data, ship, run, docs, spec
 
     var id: String { rawValue }
 
@@ -19,6 +19,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .code: "Code"
         case .tests: "Tests"
         case .environments: "Env"
+        case .data: "Data"
         case .ship: "Ship"
         case .run: "Run"
         case .docs: "Docs"
@@ -34,6 +35,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .code: "chevron.left.forwardslash.chevron.right"
         case .tests: "testtube.2"
         case .environments: "shippingbox"
+        case .data: "cylinder.split.1x2"
         case .ship: "paperplane"
         case .run: "waveform.path.ecg"
         case .docs: "doc.text"
@@ -50,6 +52,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .code: "The editor, file explorer and terminal."
         case .tests: "Tests traced to specs and code paths, coverage by component, and tests Claude can draft."
         case .environments: "Docker Compose services with logs, shells and restarts, and Docker files Claude can write."
+        case .data: "The project's databases: create one, browse tables, run queries and see the schema as a diagram."
         case .ship: "A release checklist, a changelog drafted from tasks and commits, and the CI pipeline."
         case .run: "Production metrics, errors and alarms, each linked back to a task."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
@@ -57,7 +60,7 @@ enum Area: String, CaseIterable, Identifiable {
         }
     }
 
-    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .ship, .run]
+    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .data, .ship, .run]
     static let footer: [Area] = [.docs, .spec]
 }
 
@@ -113,6 +116,8 @@ final class Session {
     enum Sidebar { case files, search }
     var sidebar: Sidebar = .files
     let search = SearchState()
+    /// The Data area's connections, schema and tabs.
+    let data = DataModel()
     var searchFocusRequest = 0
 
     /// Edit › Find in Project (⇧⌘F).

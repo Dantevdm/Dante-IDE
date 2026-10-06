@@ -16,7 +16,7 @@ struct MermaidBlock: View {
                 switch diagram {
                 case .flowchart(let chart) where !showsSource: FlowchartView(chart: chart)
                 case .sequence(let sequence) where !showsSource: SequenceView(diagram: sequence)
-                case .entityRelationship(let er) where !showsSource: ERView(diagram: er)
+                case .entityRelationship(let er) where !showsSource: ERDiagramView(diagram: er)
                 default: CodeBlock(text: source, language: "mermaid").padding(12)
                 }
             }
@@ -381,7 +381,7 @@ private struct SequenceView: View {
 
 // MARK: Entity relationship
 
-private struct ERView: View {
+struct ERDiagramView: View {
     @Environment(\.theme) private var theme
     let diagram: ERDiagram
 

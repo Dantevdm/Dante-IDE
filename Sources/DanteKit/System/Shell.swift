@@ -16,15 +16,16 @@ public enum Shell {
 
     /// Runs to completion. Both pipes are drained while the process runs, so large output
     /// can't fill a pipe and stall it. A missing tool comes back as status 127.
-    /// `trimming: false` keeps stdout exactly as written, for file contents.
-    public static func run(_ arguments: [String], in directory: URL, trimming: Bool = true) async -> Output {
+    /// `trimming: false` keeps stdout exactly as written, for file contents. `extra` adds
+    /// environment variables, for secrets that mustn't appear in the arguments.
+    public static func run(_ arguments: [String], in directory: URL, trimming: Bool = true, extra: [String: String] = [:]) async -> Output {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
                 process.executableURL = URL(filePath: "/usr/bin/env")
                 process.arguments = arguments
                 process.currentDirectoryURL = directory
-                process.environment = environment()
+                process.environment = environment().merging(extra) { $1 }
                 let out = Pipe(), err = Pipe()
                 process.standardOutput = out
                 process.standardError = err

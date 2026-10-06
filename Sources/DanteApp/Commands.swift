@@ -19,6 +19,18 @@ struct DanteCommands: Commands {
                 .keyboardShortcut("c", modifiers: [.command, .shift])
             Button("Set Up Project for Dante…") { session?.offerSetup(force: true) }
                 .disabled(session?.workspace == nil)
+            Divider()
+            Button("New Database…") {
+                session?.area = .data
+                session?.data.showsNewDatabase = true
+            }
+            .disabled(session?.workspace == nil)
+            Button("Connect to Database…") {
+                session?.area = .data
+                session?.data.showsConnect = true
+            }
+            .disabled(session?.workspace == nil)
+            Divider()
             Button("Close Project") { session?.closeProject() }
                 .disabled(session?.workspace == nil)
         }

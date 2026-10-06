@@ -11,10 +11,13 @@ public struct ComposeFile: Equatable, Sendable {
         public var ports: [String]
         public var dependsOn: [String]
         public var profiles: [String]
+        /// `environment:`, from either the map or the KEY=VALUE list form.
+        public var environment: [String: String]
         public var id: String { name }
 
-        public init(name: String, image: String? = nil, build: String? = nil, ports: [String] = [], dependsOn: [String] = [], profiles: [String] = []) {
+        public init(name: String, image: String? = nil, build: String? = nil, ports: [String] = [], dependsOn: [String] = [], profiles: [String] = [], environment: [String: String] = [:]) {
             self.name = name
+            self.environment = environment
             self.image = image
             self.build = build
             self.ports = ports
@@ -73,13 +76,23 @@ public struct ComposeFile: Equatable, Sendable {
             } else if let map = spec["depends_on"] as? [String: Any] {
                 dependsOn = map.keys.sorted()
             }
+            var environment: [String: String] = [:]
+            if let map = spec["environment"] as? [String: Any] {
+                for (key, value) in map { environment[key] = (value is NSNull) ? "" : "\(value)" }
+            } else if let list = spec["environment"] as? [Any] {
+                for entry in list.map({ "\($0)" }) {
+                    let parts = entry.split(separator: "=", maxSplits: 1).map(String.init)
+                    if let key = parts.first { environment[key] = parts.count > 1 ? parts[1] : "" }
+                }
+            }
             return Service(
                 name: name,
                 image: spec["image"] as? String,
                 build: build,
                 ports: ports,
                 dependsOn: dependsOn,
-                profiles: (spec["profiles"] as? [Any] ?? []).map { "\($0)" }
+                profiles: (spec["profiles"] as? [Any] ?? []).map { "\($0)" },
+                environment: environment
             )
         }
     }

@@ -143,3 +143,11 @@ tasks:
   title: Layouts follow wide and ultra-wide windows
   phase: build
   state: review
+- id: DI-36
+  title: "Data area: detect databases, browse tables, run queries, ER diagram, new-database wizard"
+  phase: build
+  state: review
+- id: DI-37
+  title: "Docs: preview, edit and side-by-side modes for markdown"
+  phase: build
+  state: in_progress
