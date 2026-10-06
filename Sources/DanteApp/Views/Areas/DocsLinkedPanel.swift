@@ -27,7 +27,7 @@ struct LinkedPanel: View {
                         ForEach(outline, id: \.anchor) { entry in
                             Button { session.docAnchor = entry.anchor } label: {
                                 Text(MarkdownText.attributed(entry.text, theme: theme, codeSize: 11.5))
-                                    .font(.system(size: 12.5))
+                                    .font(.dante(size: 12.5))
                                     .foregroundStyle(entry.level == 2 ? theme.text2.color : theme.text3.color)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.leading)
@@ -45,7 +45,7 @@ struct LinkedPanel: View {
                 Eyebrow("Linked to this doc")
                 if tasks.isEmpty, files.isEmpty {
                     Text("No tasks use this doc as their spec, and it doesn’t mention any project files.")
-                        .font(.system(size: 12))
+                        .font(.dante(size: 12))
                         .foregroundStyle(theme.text3.color)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -96,10 +96,10 @@ struct LinkedPanel: View {
     private func note(symbol: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(theme.text3.color).frame(width: 14)
+                Image(systemName: symbol).font(.dante(size: 12)).foregroundStyle(theme.text3.color).frame(width: 14)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
-                    Text(subtitle).font(.system(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(2)
+                    Text(title).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
+                    Text(subtitle).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(2)
                 }
                 Spacer(minLength: 0)
             }

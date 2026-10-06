@@ -14,11 +14,11 @@ struct HoverView: View {
                     switch segment {
                     case .code(let code, let language):
                         Text(highlighted(code, language))
-                            .font(.system(size: fontSize - 0.5, design: .monospaced))
+                            .font(.dante(size: fontSize - 0.5, design: .monospaced))
                             .textSelection(.enabled)
                     case .prose(let text):
                         Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text))
-                            .font(.system(size: 12))
+                            .font(.dante(size: 12))
                             .foregroundStyle(theme.text2.color)
                             .textSelection(.enabled)
                     }

@@ -39,23 +39,23 @@ struct PhaseRibbon: View {
         let current = lifecycle.currentIndex
         if let current, index < current {
             HStack(spacing: 4) {
-                Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(theme.green.color)
+                Image(systemName: "checkmark").font(.dante(size: 9, weight: .bold)).foregroundStyle(theme.green.color)
                 Text(phase)
             }
-            .font(.system(size: 12))
+            .font(.dante(size: 12))
             .foregroundStyle(theme.text2.color)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
         } else if index == current {
             Text(phase)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.dante(size: 12, weight: .semibold))
                 .foregroundStyle(theme.onAccent.color)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 3)
                 .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.accent.color))
         } else {
             Text(phase)
-                .font(.system(size: 12))
+                .font(.dante(size: 12))
                 .foregroundStyle(theme.text3.color)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 3)

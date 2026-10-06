@@ -13,7 +13,7 @@ struct DiffView: View {
     @State private var diff: UnifiedDiff?
 
     private var git: GitModel { session.git }
-    private var font: Font { .system(size: themeStore.editorFontSize, design: .monospaced) }
+    private var font: Font { .dante(size: themeStore.editorFontSize, design: .monospaced) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,7 +30,7 @@ struct DiffView: View {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(diff.hunks) { hunk in
                                 Text(hunk.header)
-                                    .font(.system(size: themeStore.editorFontSize - 1, design: .monospaced))
+                                    .font(.dante(size: themeStore.editorFontSize - 1, design: .monospaced))
                                     .foregroundStyle(theme.accent.color)
                                     .padding(.leading, 96)
                                     .padding(.vertical, 5)
@@ -60,21 +60,21 @@ struct DiffView: View {
         HStack(spacing: 10) {
             Image(systemName: "plusminus").foregroundStyle(theme.text3.color)
             Text(target.change.path)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.dante(size: 12.5, weight: .medium))
                 .foregroundStyle(theme.text.color)
                 .lineLimit(1)
                 .truncationMode(.head)
             if let old = target.change.oldPath {
-                Text("from \(old)").font(.system(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                Text("from \(old)").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
             }
             Text(target.staged ? "Staged" : "Working tree")
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.dante(size: 10.5, weight: .semibold))
                 .foregroundStyle(theme.text2.color)
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(Capsule().fill(theme.raised.color))
             if let diff, !diff.isBinary {
-                Text("+\(diff.added)").font(.system(size: 11.5, weight: .semibold, design: .monospaced)).foregroundStyle(theme.green.color)
-                Text("−\(diff.removed)").font(.system(size: 11.5, weight: .semibold, design: .monospaced)).foregroundStyle(theme.red.color)
+                Text("+\(diff.added)").font(.dante(size: 11.5, weight: .semibold, design: .monospaced)).foregroundStyle(theme.green.color)
+                Text("−\(diff.removed)").font(.dante(size: 11.5, weight: .semibold, design: .monospaced)).foregroundStyle(theme.red.color)
             }
             Spacer()
             if !target.change.isConflicted {
@@ -117,7 +117,7 @@ struct DiffView: View {
 
     private func number(_ value: Int?) -> some View {
         Text(value.map(String.init) ?? "")
-            .font(.system(size: themeStore.editorFontSize - 2, design: .monospaced))
+            .font(.dante(size: themeStore.editorFontSize - 2, design: .monospaced))
             .foregroundStyle(theme.lineNumber.color)
             .frame(width: 44, alignment: .trailing)
             .padding(.trailing, 4)
@@ -133,7 +133,7 @@ struct DiffView: View {
 
     private func message(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 13))
+            .font(.dante(size: 13))
             .foregroundStyle(theme.text3.color)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

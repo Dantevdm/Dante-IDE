@@ -70,21 +70,21 @@ struct NewDatabaseSheet: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            Image(systemName: "cylinder.split.1x2.fill").font(.system(size: 18)).foregroundStyle(theme.accent.color)
+            Image(systemName: "cylinder.split.1x2.fill").font(.dante(size: 18)).foregroundStyle(theme.accent.color)
             VStack(alignment: .leading, spacing: 2) {
-                Text("New database").font(.system(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text("For \(workspace.name), on this Mac").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                Text("New database").font(.dante(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("For \(workspace.name), on this Mac").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
             }
             Spacer()
             HStack(spacing: 6) {
                 ForEach(steps.indices, id: \.self) { index in
                     HStack(spacing: 5) {
                         Text("\(index + 1)")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.dante(size: 10, weight: .bold))
                             .foregroundStyle(index <= step ? theme.onAccent.color : theme.text3.color)
                             .frame(width: 17, height: 17)
                             .background(Circle().fill(index <= step ? theme.accent.color : theme.raised.color))
-                        Text(steps[index]).font(.system(size: 11.5, weight: index == step ? .semibold : .regular))
+                        Text(steps[index]).font(.dante(size: 11.5, weight: index == step ? .semibold : .regular))
                             .foregroundStyle(index == step ? theme.text.color : theme.text3.color)
                     }
                     if index < steps.count - 1 { Rectangle().fill(theme.line2.color).frame(width: 14, height: 1) }
@@ -100,7 +100,7 @@ struct NewDatabaseSheet: View {
     private var engineStep: some View {
         let profile = session.data.profile
         return VStack(alignment: .leading, spacing: 12) {
-            Text("Which database?").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+            Text("Which database?").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
             ForEach(DatabaseEngine.allCases) { engine in
                 let reasons = profile.signals.filter { $0.engine == engine }.map(\.label)
                 let selected = plan.engine == engine
@@ -111,19 +111,19 @@ struct NewDatabaseSheet: View {
                         EngineBadge(engine: engine, size: 34)
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(spacing: 6) {
-                                Text(engine.name).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(theme.text.color)
+                                Text(engine.name).font(.dante(size: 13.5, weight: .semibold)).foregroundStyle(theme.text.color)
                                 if engine == profile.suggestedEngine { Chip(text: "The code uses this", color: theme.accent.color) }
                             }
-                            Text(description(engine)).font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                            Text(description(engine)).font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                                 .fixedSize(horizontal: false, vertical: true)
                             if !reasons.isEmpty {
                                 Text("Found: " + reasons.prefix(3).joined(separator: ", "))
-                                    .font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                                    .font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                             }
                         }
                         Spacer()
                         Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 16))
+                            .font(.dante(size: 16))
                             .foregroundStyle(selected ? theme.accent.color : theme.line2.color)
                     }
                     .padding(14)
@@ -149,10 +149,10 @@ struct NewDatabaseSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             if plan.engine == .sqlite {
                 dataField("File", detail: "Relative to the project. Commit it with seed data, or add it to .gitignore.") {
-                    TextField("data/app.sqlite", text: $plan.file).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced))
+                    TextField("data/app.sqlite", text: $plan.file).textFieldStyle(.roundedBorder).font(.dante(size: 12.5, design: .monospaced))
                 }
                 dataField("Env variable", detail: "Where the app reads the location from.") {
-                    TextField("DATABASE_URL", text: $plan.envKey).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced))
+                    TextField("DATABASE_URL", text: $plan.envKey).textFieldStyle(.roundedBorder).font(.dante(size: 12.5, design: .monospaced))
                 }
             } else {
                 if !hasDocker {
@@ -160,14 +160,14 @@ struct NewDatabaseSheet: View {
                              text: "Docker isn’t installed, so Dante can write the compose service but not start it. Install Docker Desktop or OrbStack first.")
                 }
                 HStack(spacing: 14) {
-                    dataField("Database") { TextField("app", text: $plan.name).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced)) }
-                    dataField("User") { TextField("app", text: $plan.user).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced)) }
+                    dataField("Database") { TextField("app", text: $plan.name).textFieldStyle(.roundedBorder).font(.dante(size: 12.5, design: .monospaced)) }
+                    dataField("User") { TextField("app", text: $plan.user).textFieldStyle(.roundedBorder).font(.dante(size: 12.5, design: .monospaced)) }
                 }
                 HStack(alignment: .top, spacing: 14) {
                     dataField("Port on this Mac", detail: PortProbe.isFree(plan.port) ? "Free" : "In use: the service won’t start on it") {
-                        TextField("5432", value: $plan.port, format: .number.grouping(.never)).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced))
+                        TextField("5432", value: $plan.port, format: .number.grouping(.never)).textFieldStyle(.roundedBorder).font(.dante(size: 12.5, design: .monospaced))
                     }
-                    dataField("Compose service") { TextField("db", text: $plan.service).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced)) }
+                    dataField("Compose service") { TextField("db", text: $plan.service).textFieldStyle(.roundedBorder).font(.dante(size: 12.5, design: .monospaced)) }
                 }
                 dataField("Image") {
                     Picker("", selection: $plan.image) {
@@ -186,13 +186,13 @@ struct NewDatabaseSheet: View {
                             }
                         }
                         .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12.5, design: .monospaced))
+                        .font(.dante(size: 12.5, design: .monospaced))
                         IconButton(symbol: showsPassword ? "eye.slash" : "eye", label: showsPassword ? "Hide" : "Show") { showsPassword.toggle() }
                         IconButton(symbol: "arrow.triangle.2.circlepath", label: "Generate another") { plan.password = NewDatabasePlan.makePassword() }
                     }
                 }
                 dataField("Env variable") {
-                    TextField("DATABASE_URL", text: $plan.envKey).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced))
+                    TextField("DATABASE_URL", text: $plan.envKey).textFieldStyle(.roundedBorder).font(.dante(size: 12.5, design: .monospaced))
                 }
             }
         }
@@ -208,7 +208,7 @@ struct NewDatabaseSheet: View {
 
     private var reviewStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Dante will change these files").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+            Text("Dante will change these files").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
             if plan.engine != .sqlite {
                 FileChange(path: compose?.url.lastPathComponent ?? "compose.yaml", action: compose == nil ? "new file" : "adds the \(plan.service) service and its volume",
                            lines: plan.composeService)
@@ -230,7 +230,7 @@ struct NewDatabaseSheet: View {
                 Toggle("Ask Claude to connect the app: client library, migrations and a first schema", isOn: $askClaude)
             }
             .toggleStyle(.checkbox)
-            .font(.system(size: 12.5))
+            .font(.dante(size: 12.5))
             .foregroundStyle(theme.text.color)
             if let error {
                 DataNote(symbol: "xmark.octagon.fill", color: theme.red.color, text: error)
@@ -325,13 +325,13 @@ private struct FileChange: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "doc.text").font(.system(size: 11)).foregroundStyle(theme.text3.color)
-                Text(path).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundStyle(theme.text.color)
-                Text(action).font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                Image(systemName: "doc.text").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                Text(path).font(.dante(size: 12, weight: .semibold, design: .monospaced)).foregroundStyle(theme.text.color)
+                Text(action).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                 Spacer()
                 if !replaces.isEmpty {
                     Label("replaces \(replaces.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
+                        .font(.dante(size: 11))
                         .foregroundStyle(theme.amber.color)
                 }
             }
@@ -345,7 +345,7 @@ private struct FileChange: View {
                             Text("+").foregroundStyle(theme.green.color)
                             Text(line).foregroundStyle(theme.text.color)
                         }
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(.dante(size: 11.5, design: .monospaced))
                     }
                 }
                 .padding(.horizontal, 12)
@@ -369,7 +369,7 @@ struct DataNote: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: symbol).foregroundStyle(color)
-            Text(text).font(.system(size: 12)).foregroundStyle(theme.text.color).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(.dante(size: 12)).foregroundStyle(theme.text.color).fixedSize(horizontal: false, vertical: true)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -391,10 +391,10 @@ private struct DataField<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.system(size: 12)).foregroundStyle(theme.text2.color)
+            Text(label).font(.dante(size: 12)).foregroundStyle(theme.text2.color)
             content
             if let detail {
-                Text(detail).font(.system(size: 11)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                Text(detail).font(.dante(size: 11)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

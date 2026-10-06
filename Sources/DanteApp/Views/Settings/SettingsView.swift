@@ -34,6 +34,7 @@ struct SettingsView: View {
 
 private struct AppearanceSettings: View {
     @Bindable var themeStore: ThemeStore
+    @Bindable private var preferences = Preferences.shared
 
     var body: some View {
         Form {
@@ -46,6 +47,8 @@ private struct AppearanceSettings: View {
                     Text("\(Int(themeStore.editorFontSize)) pt").monospacedDigit()
                 }
             }
+            Toggle("Geist and Geist Mono", isOn: $preferences.usesGeist)
+                .help("The design’s fonts, bundled with Dante. Off uses the system fonts (SF Pro and SF Mono).")
         }
     }
 }

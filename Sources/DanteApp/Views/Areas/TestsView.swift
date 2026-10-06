@@ -119,8 +119,8 @@ private struct RunSummary: View {
             HStack(spacing: 18) {
                 statusIcon
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(headline).font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.text.color)
-                    Text(detail).font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                    Text(headline).font(.dante(size: 15, weight: .semibold)).foregroundStyle(theme.text.color)
+                    Text(detail).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
                 Spacer()
                 count(run.passed, "passed", theme.green.color)
@@ -129,8 +129,8 @@ private struct RunSummary: View {
                 if let checklist {
                     Rectangle().fill(theme.line.color).frame(width: 1, height: 34)
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(checklist.done)/\(checklist.total)").font(.system(size: 18, weight: .medium, design: .monospaced)).foregroundStyle(theme.text.color)
-                        Text("Test checklist").font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                        Text("\(checklist.done)/\(checklist.total)").font(.dante(size: 18, weight: .medium, design: .monospaced)).foregroundStyle(theme.text.color)
+                        Text("Test checklist").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                     }
                 }
             }
@@ -147,7 +147,7 @@ private struct RunSummary: View {
             ProgressView().controlSize(.small).frame(width: 28, height: 28)
         default:
             Image(systemName: succeeded ? "checkmark.circle.fill" : (run.state == .stopped ? "stop.circle.fill" : "xmark.circle.fill"))
-                .font(.system(size: 24))
+                .font(.dante(size: 24))
                 .foregroundStyle(succeeded ? theme.green.color : (run.state == .stopped ? theme.text3.color : theme.red.color))
         }
     }
@@ -180,8 +180,8 @@ private struct RunSummary: View {
 
     private func count(_ value: Int, _ label: String, _ color: Color) -> some View {
         VStack(alignment: .trailing, spacing: 2) {
-            Text("\(value)").font(.system(size: 18, weight: .medium, design: .monospaced)).foregroundStyle(value > 0 ? color : theme.text3.color)
-            Text(label).font(.system(size: 11)).foregroundStyle(theme.text3.color)
+            Text("\(value)").font(.dante(size: 18, weight: .medium, design: .monospaced)).foregroundStyle(value > 0 ? color : theme.text3.color)
+            Text(label).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
         }
     }
 }
@@ -215,12 +215,12 @@ private struct FailuresCard: View {
                     HStack(spacing: 8) {
                         StatusDot(color: theme.red.color)
                         if !result.suite.isEmpty {
-                            Text(result.suite).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            Text(result.suite).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text3.color)
                         }
-                        Text(result.name).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
+                        Text(result.name).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
                         Spacer()
                         if let duration = result.duration {
-                            Text(String(format: "%.2fs", duration)).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            Text(String(format: "%.2fs", duration)).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
                         }
                         if let runOnly, !run.isRunning {
                             IconButton(symbol: "play.fill", label: "Run \(result.name)", size: 10) { runOnly([result]) }
@@ -229,7 +229,7 @@ private struct FailuresCard: View {
                     ForEach(Array(result.issues.enumerated()), id: \.offset) { _, issue in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(issue.message)
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(.dante(size: 12, design: .monospaced))
                                 .foregroundStyle(theme.text.color)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -238,7 +238,7 @@ private struct FailuresCard: View {
                                 if let url = resolve(file) {
                                     LinkButton(location) { session.open(file: url) }
                                 } else {
-                                    Text(location).font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                                    Text(location).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                                 }
                             }
                         }
@@ -298,11 +298,11 @@ private struct SuitesCard: View {
             .map { Suite(name: $0.key, results: $0.value) }
             .sorted { $0.failed != $1.failed ? $0.failed > $1.failed : $0.name < $1.name }
         Card("Results by suite") {
-            Text("\(run.results.count) tests · \(suites.count) suites").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+            Text("\(run.results.count) tests · \(suites.count) suites").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
         } content: {
             if suites.isEmpty {
                 Text(run.isRunning ? "Waiting for the first result…" : "No test results in the output.")
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
             }
             RowList(data: suites, padding: 0) { suite in
@@ -312,14 +312,14 @@ private struct SuitesCard: View {
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: expanded.contains(suite.id) ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.dante(size: 9, weight: .semibold))
                                 .foregroundStyle(theme.text3.color)
                                 .frame(width: 10)
                             StatusDot(color: suite.failed > 0 ? theme.red.color : theme.green.color, size: 6)
-                            Text(suite.name).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
+                            Text(suite.name).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
                             Spacer()
                             Text(suite.failed > 0 ? "\(suite.failed) of \(suite.results.count) failing" : "\(suite.results.count) passed")
-                                .font(.system(size: 12))
+                                .font(.dante(size: 12))
                                 .foregroundStyle(suite.failed > 0 ? theme.red.color : theme.text3.color)
                         }
                         .padding(.vertical, 8)
@@ -330,13 +330,13 @@ private struct SuitesCard: View {
                         ForEach(suite.results) { result in
                             HStack(spacing: 8) {
                                 Image(systemName: symbol(for: result.status))
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.dante(size: 10, weight: .semibold))
                                     .foregroundStyle(color(for: result.status))
                                     .frame(width: 12)
-                                Text(result.name).font(.system(size: 12)).foregroundStyle(theme.text2.color).lineLimit(1)
+                                Text(result.name).font(.dante(size: 12)).foregroundStyle(theme.text2.color).lineLimit(1)
                                 Spacer()
                                 if let duration = result.duration {
-                                    Text(String(format: "%.3fs", duration)).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                                    Text(String(format: "%.3fs", duration)).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
                                 }
                                 if let runOnly, !run.isRunning {
                                     IconButton(symbol: "play.fill", label: "Run \(result.name)", size: 9.5) { runOnly([result]) }
@@ -394,7 +394,7 @@ private struct OutputCard: View {
                         LazyVStack(alignment: .leading, spacing: 1) {
                             ForEach(Array(run.output.suffix(600).enumerated()), id: \.offset) { index, line in
                                 Text(line.isEmpty ? " " : line)
-                                    .font(.system(size: 11, design: .monospaced))
+                                    .font(.dante(size: 11, design: .monospaced))
                                     .foregroundStyle(lineColor(line))
                                     .fixedSize()
                                     .id(index)
@@ -409,7 +409,7 @@ private struct OutputCard: View {
                     .onChange(of: run.output.count) { _, count in proxy.scrollTo(min(count, 600) - 1, anchor: .bottom) }
                 }
             } else {
-                Text("\(run.output.count) lines from \(run.command.label)").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                Text("\(run.output.count) lines from \(run.command.label)").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
             }
         }
     }
@@ -428,7 +428,7 @@ private struct DraftTestsCard: View {
     var body: some View {
         Card("Tests Claude can draft") {
             Text("Claude looks for code and spec rules that no test covers, then proposes tests one file at a time.")
-                .font(.system(size: 12))
+                .font(.dante(size: 12))
                 .foregroundStyle(theme.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {

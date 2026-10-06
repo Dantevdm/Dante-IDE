@@ -74,10 +74,10 @@ struct CommandPalette: View {
 
     private func searchField(rows: [PaletteRow]) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(theme.text3.color)
+            Image(systemName: "magnifyingglass").font(.dante(size: 14)).foregroundStyle(theme.text3.color)
             TextField(scope == .files ? "Open a file…" : scope == .symbols ? "Go to a symbol…" : "Search or ask Claude…", text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 16))
+                .font(.dante(size: 16))
                 .foregroundStyle(theme.text.color)
                 .focused($fieldFocused)
                 .onSubmit { run(rows[safe: selection]) }
@@ -87,7 +87,7 @@ struct CommandPalette: View {
                     askClaude()
                     return .handled
                 }
-            Text("esc").font(.system(size: 11)).foregroundStyle(theme.text3.color)
+            Text("esc").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
@@ -98,7 +98,7 @@ struct CommandPalette: View {
             ForEach(PaletteScope.allCases) { option in
                 Button(option.rawValue) { scope = option }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11.5, weight: scope == option ? .semibold : .regular))
+                    .font(.dante(size: 11.5, weight: scope == option ? .semibold : .regular))
                     .foregroundStyle(scope == option ? theme.accent.color : theme.text2.color)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
@@ -117,14 +117,14 @@ struct CommandPalette: View {
                     if rows.isEmpty {
                         Text(scope == .symbols ? (query.isEmpty ? "No symbols in this file" : "No matching symbols")
                              : workspace.files.isEmpty && scope != .actions ? "Indexing files…" : "No matches")
-                            .font(.system(size: 12.5))
+                            .font(.dante(size: 12.5))
                             .foregroundStyle(theme.text3.color)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 28)
                     }
                     ForEach(sections) { section in
                         Text(section.title.uppercased())
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.dante(size: 10, weight: .medium))
                             .tracking(0.8)
                             .foregroundStyle(theme.text3.color)
                             .padding(.horizontal, 10)
@@ -162,13 +162,13 @@ struct CommandPalette: View {
     private func hint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 5) {
             Text(key)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.dante(size: 10.5, weight: .medium))
                 .foregroundStyle(theme.text2.color)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .background(RoundedRectangle(cornerRadius: 4).fill(theme.raised.color))
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.line.color))
-            Text(label).font(.system(size: 11)).foregroundStyle(theme.text3.color)
+            Text(label).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
         }
     }
 
@@ -308,7 +308,7 @@ struct CommandPalette: View {
             var piece = AttributedString(String(characters[offset]))
             if matched.contains(offset) {
                 piece.foregroundColor = theme.accent.color
-                piece.font = .system(size: 13, weight: .semibold)
+                piece.font = .dante(size: 13, weight: .semibold)
             }
             result += piece
         }
@@ -364,23 +364,23 @@ private struct PaletteRowView: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: row.symbol)
-                .font(.system(size: 12.5))
+                .font(.dante(size: 12.5))
                 .foregroundStyle(isSelected ? theme.accent.color : theme.text3.color)
                 .frame(width: 18)
             Text(row.title)
-                .font(.system(size: 13))
+                .font(.dante(size: 13))
                 .foregroundStyle(theme.text.color)
                 .lineLimit(1)
             if let detail = row.detail {
                 Text(detail)
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text3.color)
                     .lineLimit(1)
                     .truncationMode(.head)
             }
             Spacer(minLength: 8)
             if let trailing = row.trailing {
-                Text(trailing).font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                Text(trailing).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
             }
         }
         .padding(.horizontal, 10)

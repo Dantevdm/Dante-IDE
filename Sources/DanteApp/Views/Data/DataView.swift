@@ -83,7 +83,7 @@ private struct DataSidebar: View {
 
             if !model.profile.otherStores.isEmpty {
                 HStack(spacing: 6) {
-                    Text("Also uses").font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                    Text("Also uses").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                     ForEach(model.profile.otherStores, id: \.self) { Chip(text: $0) }
                 }
                 .padding(12)
@@ -118,10 +118,10 @@ private struct DataSidebar: View {
         let order = ["Tables"] + groups.keys.filter { $0 != "Tables" && $0 != "Views" }.sorted() + ["Views"]
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: "line.3.horizontal.decrease").font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                Image(systemName: "line.3.horizontal.decrease").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                 TextField("Filter \(schema.tables.count) tables", text: $filter)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -133,7 +133,7 @@ private struct DataSidebar: View {
                 LazyVStack(alignment: .leading, spacing: 1, pinnedViews: []) {
                     ForEach(order.filter { groups[$0] != nil }, id: \.self) { group in
                         Text(group == "Tables" || group == "Views" ? group : "schema \(group)")
-                            .font(.system(size: 10.5, weight: .medium))
+                            .font(.dante(size: 10.5, weight: .medium))
                             .foregroundStyle(theme.text3.color)
                             .padding(.horizontal, 14)
                             .padding(.top, 8)
@@ -158,7 +158,7 @@ private struct DataSidebar: View {
                     }
                     if shown.isEmpty {
                         Text(schema.tables.isEmpty ? "No tables yet. Run your migrations, or ask Claude to design the schema." : "No tables match.")
-                            .font(.system(size: 12))
+                            .font(.dante(size: 12))
                             .foregroundStyle(theme.text3.color)
                             .padding(14)
                     }
@@ -188,13 +188,13 @@ private struct ConnectionRow: View {
             EngineBadge(engine: connection.engine)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
-                    Text(connection.name).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
+                    Text(connection.name).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
                     if connection.readOnly {
-                        Image(systemName: "lock.fill").font(.system(size: 8.5)).foregroundStyle(theme.text3.color).help("Read-only")
+                        Image(systemName: "lock.fill").font(.dante(size: 8.5)).foregroundStyle(theme.text3.color).help("Read-only")
                     }
                 }
                 Text(connection.note ?? connection.displayURL)
-                    .font(.system(size: 11))
+                    .font(.dante(size: 11))
                     .foregroundStyle(theme.text3.color)
                     .lineLimit(1)
             }
@@ -219,17 +219,17 @@ private struct TableRow: View {
     var body: some View {
         HStack(spacing: 7) {
             Image(systemName: table.isView ? "eye" : "tablecells")
-                .font(.system(size: 10.5))
+                .font(.dante(size: 10.5))
                 .foregroundStyle(isSelected ? theme.accent.color : theme.text3.color)
                 .frame(width: 14)
             Text(table.name)
-                .font(.system(size: 12, design: .monospaced))
+                .font(.dante(size: 12, design: .monospaced))
                 .foregroundStyle(theme.text.color)
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let rows = table.rows {
                 Text(DataFormat.count(rows))
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(.dante(size: 10.5, design: .monospaced))
                     .foregroundStyle(theme.text3.color)
             }
         }
@@ -255,7 +255,7 @@ struct EngineBadge: View {
         case .sqlite: ("SQ", theme.green.color)
         }
         Text(letters)
-            .font(.system(size: size * 0.4, weight: .bold, design: .rounded))
+            .font(.dante(size: size * 0.4, weight: .bold, design: .rounded))
             .foregroundStyle(tint)
             .frame(width: size, height: size)
             .background(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous).fill(tint.opacity(0.14)))
@@ -348,18 +348,18 @@ private struct DataMain: View {
             EngineBadge(engine: connection.engine, size: 32)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Text(connection.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
+                    Text(connection.name).font(.dante(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
                     if let version = model.schema?.version { Chip(text: version) }
                     if connection.readOnly { Chip(text: "read-only", symbol: "lock.fill") }
                 }
                 HStack(spacing: 6) {
                     StatusDot(color: status.color(theme), size: 6)
                     Text(status == .online ? connection.displayURL : status.label)
-                        .font(.system(size: 11.5, design: status == .online ? .monospaced : .default))
+                        .font(.dante(size: 11.5, design: status == .online ? .monospaced : .default))
                         .foregroundStyle(theme.text3.color)
                         .textSelection(.enabled)
                     if let bytes = model.schema?.bytes {
-                        Text("· \(DataFormat.bytes(bytes))").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                        Text("· \(DataFormat.bytes(bytes))").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                     }
                 }
             }
@@ -424,7 +424,7 @@ private struct DataMain: View {
         case .connecting:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Connecting and reading the schema…").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                Text("Connecting and reading the schema…").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                 Spacer()
             }
             .padding(.horizontal, 18)
@@ -511,11 +511,11 @@ struct DataBanner<Actions: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 15)).foregroundStyle(color)
+            Image(systemName: symbol).font(.dante(size: 15)).foregroundStyle(color)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text(title).font(.dante(size: 12.5, weight: .semibold)).foregroundStyle(theme.text.color)
                 Text(detail)
-                    .font(.system(size: 11.5, design: .monospaced))
+                    .font(.dante(size: 11.5, design: .monospaced))
                     .foregroundStyle(theme.text2.color)
                     .lineLimit(3)
                     .textSelection(.enabled)
@@ -552,12 +552,12 @@ private struct DataTabButton: View {
             if isRunning {
                 ProgressView().controlSize(.mini)
             } else {
-                Image(systemName: symbol).font(.system(size: 10.5))
+                Image(systemName: symbol).font(.dante(size: 10.5))
             }
-            Text(title).font(.system(size: 12, weight: isSelected ? .semibold : .regular)).lineLimit(1)
+            Text(title).font(.dante(size: 12, weight: isSelected ? .semibold : .regular)).lineLimit(1)
             if let close {
                 Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                    Image(systemName: "xmark").font(.dante(size: 8, weight: .bold))
                         .frame(width: 14, height: 14)
                         .opacity(hovering || isSelected ? 1 : 0)
                 }

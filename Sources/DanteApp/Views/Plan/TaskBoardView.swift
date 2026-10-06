@@ -12,19 +12,19 @@ struct TaskBoardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Text("Tasks").font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text("Phase: \(phase)").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                Text("Tasks").font(.dante(size: 15, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("Phase: \(phase)").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 Spacer()
                 Button(".dante/tasks.yaml") { session.open(file: workspace.tasks.url) }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11.5, design: .monospaced))
+                    .font(.dante(size: 11.5, design: .monospaced))
                     .foregroundStyle(theme.accent.color)
                     .disabled(!FileManager.default.fileExists(atPath: workspace.tasks.url.path))
             }
 
             if let error = workspace.tasks.loadError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.red.color)
             }
 
@@ -50,8 +50,8 @@ private struct TaskColumn: View {
         let tasks = workspace.tasks.tasks(in: phase, state: state)
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text(state.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.text2.color)
-                Text("\(tasks.count)").font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                Text(state.title).font(.dante(size: 12, weight: .semibold)).foregroundStyle(theme.text2.color)
+                Text("\(tasks.count)").font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
                 Spacer()
             }
             .padding(.horizontal, 4)
@@ -65,7 +65,7 @@ private struct TaskColumn: View {
                 if state == .ready, workspace.tasks.loadError == nil {
                     Button(action: addTask) {
                         Label("New task", systemImage: "plus")
-                            .font(.system(size: 12))
+                            .font(.dante(size: 12))
                             .foregroundStyle(theme.text3.color)
                             .frame(maxWidth: .infinity, minHeight: 56)
                             .background(
@@ -113,17 +113,17 @@ private struct TaskCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(task.id).font(.system(size: 10.5, weight: .medium, design: .monospaced)).foregroundStyle(theme.text3.color)
+                Text(task.id).font(.dante(size: 10.5, weight: .medium, design: .monospaced)).foregroundStyle(theme.text3.color)
                 if task.claude == true {
                     Label("with Claude", systemImage: "sparkle")
                         .labelStyle(.titleAndIcon)
-                        .font(.system(size: 10))
+                        .font(.dante(size: 10))
                         .foregroundStyle(theme.accent.color)
                 }
                 Spacer(minLength: 0)
                 if task.state == .inProgress {
                     Button { session.finish(task) } label: {
-                        Label("Finish", systemImage: "checkmark.circle").font(.system(size: 10.5, weight: .medium))
+                        Label("Finish", systemImage: "checkmark.circle").font(.dante(size: 10.5, weight: .medium))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(theme.accent.color)
@@ -132,18 +132,18 @@ private struct TaskCard: View {
                 }
             }
             Text(MarkdownText.attributed(task.title, theme: theme))
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.dante(size: 12.5, weight: .medium))
                 .foregroundStyle(task.state == .done ? theme.text2.color : theme.text.color)
                 .fixedSize(horizontal: false, vertical: true)
             if let spec = task.spec {
                 Label(spec, systemImage: "doc.text")
                     .labelStyle(.titleAndIcon)
-                    .font(.system(size: 10.5))
+                    .font(.dante(size: 10.5))
                     .foregroundStyle(theme.text3.color)
                     .lineLimit(1)
             }
             if let note = task.note {
-                Text(note).font(.system(size: 11)).foregroundStyle(theme.text3.color).lineLimit(2)
+                Text(note).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(2)
             }
         }
         .padding(10)
@@ -212,7 +212,7 @@ struct NewTaskSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("New task").font(.system(size: 17, weight: .semibold)).foregroundStyle(theme.text.color)
+            Text("New task").font(.dante(size: 17, weight: .semibold)).foregroundStyle(theme.text.color)
             Form {
                 TextField("Title", text: $title, prompt: Text("What needs doing?"))
                 Picker("Phase", selection: $phase) {
@@ -225,7 +225,7 @@ struct NewTaskSheet: View {
             }
             .formStyle(.columns)
             Text("Saved to .dante/tasks.yaml as \(workspace.tasks.nextID).")
-                .font(.system(size: 11.5))
+                .font(.dante(size: 11.5))
                 .foregroundStyle(theme.text3.color)
             HStack {
                 Spacer()

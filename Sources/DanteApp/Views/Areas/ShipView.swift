@@ -103,7 +103,7 @@ private struct CICard: View {
             case .failure(.noWorkflows):
                 HStack {
                     Text("No workflows in .github/workflows yet, so nothing checks a release before it ships.")
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text3.color)
                     Spacer()
                     Button("Ask Claude to add CI") {
@@ -113,19 +113,19 @@ private struct CICard: View {
                 }
             case .failure(.noGitHubCLI):
                 Text("Install the GitHub CLI (brew install gh) and sign in with gh auth login to see runs here.")
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
             case .failure(.failed(let message)):
-                Text(message).font(.system(size: 12)).foregroundStyle(theme.text3.color).lineLimit(3)
+                Text(message).font(.dante(size: 12)).foregroundStyle(theme.text3.color).lineLimit(3)
             case .success(let runs):
                 if runs.isEmpty {
-                    Text("No runs yet.").font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
+                    Text("No runs yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
                 }
                 if let latest = runs.first, latest.conclusion == "failure" {
                     HStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(theme.amber.color)
                         Text("The latest run on \(latest.branch) failed: \(latest.title)")
-                            .font(.system(size: 12.5))
+                            .font(.dante(size: 12.5))
                             .foregroundStyle(theme.text2.color)
                         Spacer()
                         Button("Ask Claude why") {
@@ -141,13 +141,13 @@ private struct CICard: View {
                     Button { run.url.map { _ = NSWorkspace.shared.open($0) } } label: {
                         HStack(spacing: 10) {
                             StatusDot(color: color(for: run))
-                            Text(run.title).font(.system(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
-                            Text(run.branch).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            Text(run.title).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
+                            Text(run.branch).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
                             Spacer()
                             Text(run.isRunning ? run.status.replacingOccurrences(of: "_", with: " ") : run.conclusion)
-                                .font(.system(size: 12))
+                                .font(.dante(size: 12))
                                 .foregroundStyle(color(for: run))
-                            Text(run.created?.relative ?? "").font(.system(size: 11.5)).foregroundStyle(theme.text3.color).frame(width: 90, alignment: .trailing)
+                            Text(run.created?.relative ?? "").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).frame(width: 90, alignment: .trailing)
                         }
                         .contentShape(Rectangle())
                     }
@@ -186,10 +186,10 @@ private struct ChangelogCard: View {
         } content: {
             if let draft, let git {
                 Text("Drafted from \(git.sinceTag.count) commits since \(draft.previous ?? "the first commit")\(draft.skipped > 0 ? ", leaving out \(draft.skipped) chores and merges" : "").")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text3.color)
                 if draft.isEmpty {
-                    Text("Nothing new since \(draft.previous ?? "the start").").font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
+                    Text("Nothing new since \(draft.previous ?? "the start").").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
                 }
                 ForEach(draft.sections) { section in
                     VStack(alignment: .leading, spacing: 6) {
@@ -198,12 +198,12 @@ private struct ChangelogCard: View {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text("–").foregroundStyle(theme.text3.color)
                                 Text(MarkdownText.attributed(entry.text, theme: theme))
-                                    .font(.system(size: 12.5))
+                                    .font(.dante(size: 12.5))
                                     .foregroundStyle(theme.text.color)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Spacer(minLength: 8)
                                 Text(String(entry.hash.prefix(7)))
-                                    .font(.system(size: 11, design: .monospaced))
+                                    .font(.dante(size: 11, design: .monospaced))
                                     .foregroundStyle(theme.text3.color)
                             }
                         }
@@ -214,8 +214,8 @@ private struct ChangelogCard: View {
                         Eyebrow("Tasks done")
                         ForEach(doneTasks) { task in
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(task.id).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
-                                Text(MarkdownText.attributed(task.title, theme: theme)).font(.system(size: 12.5)).foregroundStyle(theme.text2.color)
+                                Text(task.id).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                                Text(MarkdownText.attributed(task.title, theme: theme)).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
                             }
                         }
                     }
@@ -244,21 +244,21 @@ private struct ReleaseChecklist: View {
     var body: some View {
         let checks = automatic + fromPhaseDoc
         Card("Release checklist") {
-            Text("\(checks.count(where: \.done))/\(checks.count)").font(.system(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+            Text("\(checks.count(where: \.done))/\(checks.count)").font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
         } content: {
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(checks) { check in
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Image(systemName: check.done ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 12))
+                            .font(.dante(size: 12))
                             .foregroundStyle(check.done ? theme.green.color : theme.text3.color)
                         Text(MarkdownText.attributed(check.text, theme: theme))
-                            .font(.system(size: 12.5))
+                            .font(.dante(size: 12.5))
                             .foregroundStyle(check.done ? theme.text2.color : theme.text.color)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 6)
                         if let note = check.note {
-                            Text(note).font(.system(size: 11.5)).foregroundStyle(theme.amber.color)
+                            Text(note).font(.dante(size: 11.5)).foregroundStyle(theme.amber.color)
                         }
                     }
                 }
@@ -266,7 +266,7 @@ private struct ReleaseChecklist: View {
             Rectangle().fill(theme.line.color).frame(height: 1)
             HStack {
                 Text("A guide, not a gate. You can tag whenever you choose.")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text3.color)
                 Spacer()
                 if workspace.phaseDocs["release"] == nil {

@@ -105,7 +105,7 @@ struct DocsView: View {
                     .background(theme.accentTint.opacity(0.4).color)
                     .overlay {
                         Label("Drop to add to docs/", systemImage: "tray.and.arrow.down")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.dante(size: 14, weight: .semibold))
                             .foregroundStyle(theme.accent.color)
                     }
                     .padding(8)
@@ -245,7 +245,7 @@ struct DocsView: View {
             let parts = doc.path.split(separator: "/").map(String.init)
             Text("Docs").foregroundStyle(theme.text3.color)
             ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
+                Image(systemName: "chevron.right").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
                 Text(part).foregroundStyle(index == parts.count - 1 ? theme.text.color : theme.text3.color)
             }
             Spacer()
@@ -316,7 +316,7 @@ struct DocsView: View {
                 .buttonStyle(DanteButtonStyle())
             }
         }
-        .font(.system(size: 12.5))
+        .font(.dante(size: 12.5))
         .padding(.horizontal, 20)
         .frame(height: 46)
         .background(theme.panel.color)
@@ -365,7 +365,7 @@ struct DocsView: View {
 private struct DirtyLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 6) {
-            configuration.icon.font(.system(size: 6))
+            configuration.icon.font(.dante(size: 6))
             configuration.title
         }
     }

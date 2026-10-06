@@ -1,4 +1,5 @@
 import AppKit
+import DanteEditor
 import DanteKit
 import SwiftUI
 
@@ -38,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `launchPaths` handles the folder argument. Left to AppKit, it becomes an open-file
         // event, and SwiftUI then skips the window it would make at launch.
         UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])
+        DanteFonts.register()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

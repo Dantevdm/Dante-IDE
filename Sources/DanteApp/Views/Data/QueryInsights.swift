@@ -16,7 +16,7 @@ struct PlanStrip: View {
                 Image(systemName: findings.isEmpty ? "checkmark.circle" : "tortoise")
                     .foregroundStyle(findings.isEmpty ? theme.green.color : theme.amber.color)
                 Text(findings.isEmpty ? "No full scans of filtered tables in this plan." : "Reads \(findings.count == 1 ? "a table" : "\(findings.count) tables") row by row to filter")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.dante(size: 12, weight: .medium))
                     .foregroundStyle(theme.text.color)
                 Spacer()
                 Button(action: explain) { Label("Explain with Claude", systemImage: "sparkles") }
@@ -26,15 +26,15 @@ struct PlanStrip: View {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(finding.table) by \(finding.columns.joined(separator: ", "))")
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(.dante(size: 12, design: .monospaced))
                             .foregroundStyle(theme.text.color)
-                        Text(note(finding)).font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                        Text(note(finding)).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                     }
                     Spacer()
                     if let suggestion = finding.suggestion {
                         Button("Copy") { copy(suggestion + ";") }
                             .buttonStyle(.plain)
-                            .font(.system(size: 11.5))
+                            .font(.dante(size: 11.5))
                             .foregroundStyle(theme.text2.color)
                             .help(suggestion)
                         Button("Add Index…") { addIndex(suggestion + ";") }
@@ -76,10 +76,10 @@ struct MigrationPreviewPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "wand.and.rays").foregroundStyle(theme.accent.color)
-                Text("What this changes in \(connectionName)").font(.system(size: 12, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("What this changes in \(connectionName)").font(.dante(size: 12, weight: .semibold)).foregroundStyle(theme.text.color)
                 let warnings = changes.filter { $0.warning != nil }.count
                 if warnings > 0 {
-                    Text("\(warnings) to check").font(.system(size: 11)).foregroundStyle(theme.amber.color)
+                    Text("\(warnings) to check").font(.dante(size: 11)).foregroundStyle(theme.amber.color)
                 }
                 Spacer()
                 Button(action: review) { Label("Review with Claude", systemImage: "sparkles") }
@@ -89,7 +89,7 @@ struct MigrationPreviewPanel: View {
             .padding(.vertical, 8)
             if !schemaKnown {
                 Text("Connect to check these against the tables that exist now.")
-                    .font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                    .font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                     .padding(.horizontal, 12).padding(.bottom, 6)
             }
             Rectangle().fill(theme.line.color).frame(height: 1)
@@ -98,14 +98,14 @@ struct MigrationPreviewPanel: View {
                     ForEach(changes) { change in
                         HStack(alignment: .top, spacing: 9) {
                             Image(systemName: symbol(change.kind))
-                                .font(.system(size: 11))
+                                .font(.dante(size: 11))
                                 .foregroundStyle(change.isDestructive ? theme.red.color : theme.text3.color)
                                 .frame(width: 16)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(change.summary).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
+                                Text(change.summary).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
                                 if let warning = change.warning {
                                     Label(warning, systemImage: "exclamationmark.triangle.fill")
-                                        .font(.system(size: 11))
+                                        .font(.dante(size: 11))
                                         .foregroundStyle(change.isDestructive ? theme.red.color : theme.amber.color)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }

@@ -83,7 +83,7 @@ private struct SinceLastVisitCard: View {
 
     var body: some View {
         Card("Since you were last here", accent: true) {
-            Text(since.since.relative).font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+            Text(since.since.relative).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             IconButton(symbol: "xmark", label: "Dismiss", size: 9.5) { session.sinceLastVisit = nil }
         } content: {
             HStack(spacing: 14) {
@@ -93,12 +93,12 @@ private struct SinceLastVisitCard: View {
                 }
                 if since.filesChanged > 0 {
                     HStack(spacing: 5) {
-                        Image(systemName: "doc").font(.system(size: 10.5))
+                        Image(systemName: "doc").font(.dante(size: 10.5))
                         Text("\(since.filesChanged) file\(since.filesChanged == 1 ? "" : "s")")
                         Text("+\(since.insertions)").foregroundStyle(theme.green.color)
                         Text("−\(since.deletions)").foregroundStyle(theme.red.color)
                     }
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
                 }
                 if let change = since.branchChange {
@@ -109,29 +109,29 @@ private struct SinceLastVisitCard: View {
                 RowList(data: since.commits, padding: 6) { commit in
                     HStack(spacing: 10) {
                         Text(String(commit.hash.prefix(7)))
-                            .font(.system(size: 11.5, design: .monospaced))
+                            .font(.dante(size: 11.5, design: .monospaced))
                             .foregroundStyle(theme.text3.color)
-                        Text(commit.subject).font(.system(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
+                        Text(commit.subject).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
                         Spacer(minLength: 6)
-                        Text(commit.author).font(.system(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        Text(commit.author).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
                         if let date = commit.date {
-                            Text(date.relative).font(.system(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                            Text(date.relative).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
                         }
                     }
                 }
                 if since.moreCommits > 0 {
-                    Text("and \(since.moreCommits) more").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                    Text("and \(since.moreCommits) more").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                 }
             }
             if !since.taskMoves.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(since.taskMoves) { move in
                         HStack(spacing: 8) {
-                            Text(move.id).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(theme.text3.color)
-                            Text(MarkdownText.attributed(move.title, theme: theme)).font(.system(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
+                            Text(move.id).font(.dante(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            Text(MarkdownText.attributed(move.title, theme: theme)).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
                             Spacer(minLength: 6)
                             Text(move.from.map { "\($0.title) → \(move.to.title)" } ?? "New · \(move.to.title)")
-                                .font(.system(size: 11.5))
+                                .font(.dante(size: 11.5))
                                 .foregroundStyle(move.to == .done ? theme.green.color : theme.text2.color)
                         }
                     }
@@ -142,8 +142,8 @@ private struct SinceLastVisitCard: View {
 
     private func stat(_ text: String, symbol: String) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: symbol).font(.system(size: 10.5))
-            Text(text).font(.system(size: 12))
+            Image(systemName: symbol).font(.dante(size: 10.5))
+            Text(text).font(.dante(size: 12))
         }
         .foregroundStyle(theme.text2.color)
     }
@@ -197,13 +197,13 @@ private struct Timeline: View {
             .frame(height: 4)
             HStack(spacing: 5) {
                 if isDone {
-                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(theme.green.color)
+                    Image(systemName: "checkmark").font(.dante(size: 9, weight: .bold)).foregroundStyle(theme.green.color)
                 }
                 Text(phase)
-                    .font(.system(size: 12.5, weight: state.weight))
+                    .font(.dante(size: 12.5, weight: state.weight))
                     .foregroundStyle(index == current ? theme.text.color : (isDone ? theme.text2.color : theme.text3.color))
             }
-            Text(state.label).font(.system(size: 11.5)).foregroundStyle(state.color)
+            Text(state.label).font(.dante(size: 11.5)).foregroundStyle(state.color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -224,32 +224,32 @@ private struct CurrentPhaseCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Eyebrow("Current phase")
-                    Text(phase ?? "None set").font(.system(size: 20, weight: .semibold)).foregroundStyle(theme.text.color)
+                    Text(phase ?? "None set").font(.dante(size: 20, weight: .semibold)).foregroundStyle(theme.text.color)
                     if let summary = doc?.summary.nonEmpty ?? phase.map({ PhaseDoc.parse(workspace.lifecycle.phaseDocTemplate($0)).summary }) {
-                        Text(summary).font(.system(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                        Text(summary).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer()
                 if !items.isEmpty {
                     VStack(alignment: .trailing, spacing: 2) {
                         (Text("\(items.count(where: \.done))") + Text("/\(items.count)").foregroundStyle(theme.text3.color))
-                            .font(.system(size: 22, weight: .medium, design: .monospaced))
+                            .font(.dante(size: 22, weight: .medium, design: .monospaced))
                             .foregroundStyle(theme.text.color)
-                        Text("done when").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                        Text("done when").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                     }
                 }
             }
             if items.isEmpty, let phase {
-                Text("No “done when” checklist for \(phase) yet.").font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
+                Text("No “done when” checklist for \(phase) yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
             }
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(items) { item in
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 12))
+                            .font(.dante(size: 12))
                             .foregroundStyle(item.done ? theme.green.color : theme.text3.color)
                         Text(MarkdownText.attributed(item.text, theme: theme))
-                            .font(.system(size: 12.5))
+                            .font(.dante(size: 12.5))
                             .foregroundStyle(item.done ? theme.text2.color : theme.text.color)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -258,7 +258,7 @@ private struct CurrentPhaseCard: View {
             HStack {
                 if let index = lifecycle.currentIndex, index + 1 < lifecycle.phases.count {
                     (Text("Up next: ") + Text(lifecycle.phases[index + 1]).foregroundStyle(theme.text2.color) + Text(". Move on whenever you’re ready."))
-                        .font(.system(size: 12))
+                        .font(.dante(size: 12))
                         .foregroundStyle(theme.text3.color)
                 }
                 Spacer()
@@ -284,37 +284,37 @@ private struct PhaseTasksCard: View {
         } content: {
             if let error = workspace.tasks.loadError {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.red.color)
                     .fixedSize(horizontal: false, vertical: true)
             } else if tasks.isEmpty {
                 Text(workspace.tasks.tasks.isEmpty ? "No tasks yet. Add them on the Plan board." : "Nothing open in this phase.")
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
             } else {
                 RowList(data: Array(tasks.prefix(7))) { task in
                     HStack(spacing: 10) {
                         Text(task.id)
-                            .font(.system(size: 11.5, design: .monospaced))
+                            .font(.dante(size: 11.5, design: .monospaced))
                             .foregroundStyle(theme.text3.color)
                             .frame(width: 48, alignment: .leading)
                         Text(MarkdownText.attributed(task.title, theme: theme))
-                            .font(.system(size: 12.5))
+                            .font(.dante(size: 12.5))
                             .foregroundStyle(theme.text.color)
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         if task.claude == true {
-                            Text("with Claude").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                            Text("with Claude").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                         }
                         HStack(spacing: 5) {
                             StatusDot(color: color(for: task.state), size: 6)
-                            Text(task.state.title).font(.system(size: 12)).foregroundStyle(color(for: task.state))
+                            Text(task.state.title).font(.dante(size: 12)).foregroundStyle(color(for: task.state))
                         }
                         .frame(width: 92, alignment: .trailing)
                     }
                 }
                 if tasks.count > 7 {
-                    Text("\(tasks.count - 7) more on the board").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                    Text("\(tasks.count - 7) more on the board").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                 }
             }
         }
@@ -343,7 +343,7 @@ private struct GitCard: View {
         } content: {
             if let git {
                 if !git.isRepository {
-                    Text("Not a git repository.").font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
+                    Text("Not a git repository.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
                 } else {
                     HStack(spacing: 14) {
                         stat(git.changedFiles == 0 ? "Clean" : "\(git.changedFiles) changed", color: git.changedFiles == 0 ? theme.green.color : theme.amber.color)
@@ -353,11 +353,11 @@ private struct GitCard: View {
                     RowList(data: Array(git.recent.prefix(5)), padding: 7) { commit in
                         HStack(spacing: 10) {
                             Text(String(commit.hash.prefix(7)))
-                                .font(.system(size: 11.5, design: .monospaced))
+                                .font(.dante(size: 11.5, design: .monospaced))
                                 .foregroundStyle(theme.text3.color)
-                            Text(commit.subject).font(.system(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
+                            Text(commit.subject).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
                             Spacer(minLength: 6)
-                            Text(commit.date.relative).font(.system(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                            Text(commit.date.relative).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
                         }
                     }
                 }
@@ -369,8 +369,8 @@ private struct GitCard: View {
 
     private func stat(_ text: String, color: Color, symbol: String? = nil) -> some View {
         HStack(spacing: 5) {
-            if let symbol { Image(systemName: symbol).font(.system(size: 10.5)) } else { StatusDot(color: color, size: 6) }
-            Text(text).font(.system(size: 12))
+            if let symbol { Image(systemName: symbol).font(.dante(size: 10.5)) } else { StatusDot(color: color, size: 6) }
+            Text(text).font(.dante(size: 12))
         }
         .foregroundStyle(color)
     }
@@ -388,30 +388,30 @@ private struct EnvironmentCard: View {
         } content: {
             if let compose {
                 if let error = compose.parseError {
-                    Text(error).font(.system(size: 12.5)).foregroundStyle(theme.red.color)
+                    Text(error).font(.dante(size: 12.5)).foregroundStyle(theme.red.color)
                 } else {
                     RowList(data: compose.services, padding: 7) { service in
                         let state = running.first { $0.service == service.name }
                         HStack(spacing: 8) {
                             StatusDot(color: color(for: state), size: 7)
-                            Text(service.name).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
+                            Text(service.name).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
                             Spacer()
                             Text(state?.ports.first ?? service.ports.first.map { ":" + ($0.split(separator: ":").first.map(String.init) ?? $0) } ?? "")
-                                .font(.system(size: 12))
+                                .font(.dante(size: 12))
                                 .foregroundStyle(theme.text3.color)
                             Text(state?.label ?? "stopped")
-                                .font(.system(size: 12))
+                                .font(.dante(size: 12))
                                 .foregroundStyle(color(for: state))
                                 .frame(width: 76, alignment: .trailing)
                         }
                     }
                     if case .failure(let reason) = containers {
-                        Text(reason.message).font(.system(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                        Text(reason.message).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             } else {
                 Text("No docker-compose.yml. Env can run this project’s services once it has one, and Claude can write it.")
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -458,15 +458,15 @@ private struct ClaudeKnowsCard: View {
             LinkButton("Spec") { session.area = .spec }
         } content: {
             Text("Every conversation starts from the project spec, so nothing has to be re-explained.")
-                .font(.system(size: 12.5))
+                .font(.dante(size: 12.5))
                 .foregroundStyle(theme.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
             RowList(data: facts, padding: 7) { fact in
                 HStack {
-                    Text(fact.label).font(.system(size: 12.5)).foregroundStyle(theme.text2.color)
+                    Text(fact.label).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
                     Spacer()
                     Text(fact.value)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.dante(size: 12, design: .monospaced))
                         .foregroundStyle(fact.present ? theme.text.color : theme.text3.color)
                 }
             }
@@ -486,15 +486,15 @@ private struct DocsCard: View {
             LinkButton("Read") { session.area = .docs }
         } content: {
             if docs.isEmpty {
-                Text("No markdown docs yet.").font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
+                Text("No markdown docs yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
             } else {
                 RowList(data: Array(docs.prefix(6)), padding: 7) { doc in
                     Button { session.showDoc(doc.path) } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: "doc.text").font(.system(size: 11)).foregroundStyle(theme.text3.color)
-                            Text(doc.title).font(.system(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
+                            Image(systemName: "doc.text").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                            Text(doc.title).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
                             Spacer()
-                            Text(doc.path).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.head)
+                            Text(doc.path).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.head)
                         }
                         .contentShape(Rectangle())
                     }

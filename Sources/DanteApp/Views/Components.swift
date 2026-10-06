@@ -10,7 +10,7 @@ struct Eyebrow: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 10.5, weight: .medium))
+            .font(.dante(size: 10.5, weight: .medium))
             .tracking(0.9)
             .foregroundStyle(theme.text3.color)
     }
@@ -33,7 +33,7 @@ struct DanteButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .medium))
+            .font(.dante(size: 12.5, weight: .medium))
             .padding(.horizontal, 12)
             .frame(minHeight: 28)
             .foregroundStyle(primary ? theme.onAccent.color : theme.text.color)
@@ -62,7 +62,7 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: size, weight: .medium))
+                .font(.dante(size: size, weight: .medium))
                 .frame(width: 26, height: 26)
                 .foregroundStyle(hovering ? theme.text.color : theme.text3.color)
                 .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? theme.raised.color : .clear))

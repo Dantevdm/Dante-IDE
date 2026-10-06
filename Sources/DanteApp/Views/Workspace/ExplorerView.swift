@@ -80,16 +80,17 @@ struct ExplorerView: View {
         return Button { session.sidebar = sidebar } label: {
             HStack(spacing: 5) {
                 Image(systemName: symbol)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.dante(size: 11.5, weight: .medium))
                 if selected {
                     Text(title.uppercased())
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(.dante(size: 10.5, weight: .medium))
                         .tracking(0.9)
                         .fixedSize()
                 }
                 if count > 0 {
                     Text(count > 99 ? "99+" : "\(count)")
-                        .font(.system(size: 9.5, weight: .bold))
+                        .font(.dante(size: 9.5, weight: .bold))
+                        .fixedSize()
                         .foregroundStyle(theme.onAccent.color)
                         .padding(.horizontal, 4)
                         .frame(minWidth: 15, minHeight: 14)
@@ -305,12 +306,12 @@ private struct NameField: View {
             HStack(spacing: 5) {
                 Color.clear.frame(width: 10)
                 Image(systemName: isFolder ? "folder" : FileIcon.symbol(for: URL(filePath: name.isEmpty ? "x" : name), isDirectory: false))
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(isFolder ? theme.accent.color.opacity(0.8) : theme.text3.color)
                     .frame(width: 16)
                 TextField(placeholder, text: $name)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .focused($focused)
                     .onSubmit(submit)
                     .onExitCommand { finish(nil) }
@@ -329,7 +330,7 @@ private struct NameField: View {
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(problem == nil ? theme.accent.color : theme.red.color))
             if let problem {
                 Text(problem)
-                    .font(.system(size: 11))
+                    .font(.dante(size: 11))
                     .foregroundStyle(theme.red.color)
                     .padding(.leading, CGFloat(30 + depth * 14))
             }
@@ -400,7 +401,7 @@ private struct FileRow: View {
                 Group {
                     if node.isDirectory {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.dante(size: 9, weight: .semibold))
                             .rotationEffect(.degrees(node.isExpanded ? 90 : 0))
                             .animation(.easeOut(duration: 0.12), value: node.isExpanded)
                     }
@@ -409,11 +410,11 @@ private struct FileRow: View {
                 .foregroundStyle(theme.text3.color)
 
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(node.isDirectory ? theme.accent.color.opacity(0.8) : theme.text3.color)
                     .frame(width: 16)
                 Text(node.name)
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(nameColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -423,7 +424,7 @@ private struct FileRow: View {
                         Circle().fill(markColor(mark).opacity(0.7)).frame(width: 5, height: 5)
                     } else {
                         Text(mark.letter)
-                            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                            .font(.dante(size: 10.5, weight: .semibold, design: .monospaced))
                             .foregroundStyle(markColor(mark))
                     }
                 }

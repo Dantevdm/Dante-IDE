@@ -56,7 +56,7 @@ struct PhaseRing: View {
             }
 
             Text("D")
-                .font(.system(size: 60, weight: .semibold))
+                .font(.dante(size: 60, weight: .semibold))
                 .foregroundStyle(theme.text.color)
                 .opacity(drawn ? 1 : 0)
                 .offset(y: drawn ? 0 : 10)

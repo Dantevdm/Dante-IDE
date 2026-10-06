@@ -302,10 +302,10 @@ struct CompletionList: View {
                 Rectangle().fill(theme.line.color).frame(height: 1)
                 VStack(alignment: .leading, spacing: 2) {
                     if let detail = item.detail {
-                        Text(detail).font(.system(size: model.fontSize - 1.5, design: .monospaced)).foregroundStyle(theme.text2.color).lineLimit(1)
+                        Text(detail).font(.dante(size: model.fontSize - 1.5, design: .monospaced)).foregroundStyle(theme.text2.color).lineLimit(1)
                     }
                     if let documentation = item.documentation {
-                        Text(documentation.replacingOccurrences(of: "\n", with: " ")).font(.system(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        Text(documentation.replacingOccurrences(of: "\n", with: " ")).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
                     }
                 }
                 .padding(.horizontal, 10)
@@ -321,18 +321,18 @@ struct CompletionList: View {
         let theme = model.theme
         return HStack(spacing: 8) {
             Text(badge(item.kind))
-                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                .font(.dante(size: 9.5, weight: .bold, design: .monospaced))
                 .foregroundStyle(tint(item.kind))
                 .frame(width: 18, height: 16)
                 .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(tint(item.kind).opacity(0.14)))
             Text(highlighted(item.label))
-                .font(.system(size: model.fontSize - 0.5, design: .monospaced))
+                .font(.dante(size: model.fontSize - 0.5, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 8)
             if let detail = item.detail {
                 Text(detail)
-                    .font(.system(size: model.fontSize - 2, design: .monospaced))
+                    .font(.dante(size: model.fontSize - 2, design: .monospaced))
                     .foregroundStyle(theme.text3.color)
                     .lineLimit(1)
                     .truncationMode(.head)
@@ -353,7 +353,7 @@ struct CompletionList: View {
             let lower = text.index(text.startIndex, offsetByCharacters: index)
             let upper = text.index(lower, offsetByCharacters: 1)
             text[lower..<upper].foregroundColor = model.theme.accent.color
-            text[lower..<upper].font = .system(size: model.fontSize - 0.5, weight: .bold, design: .monospaced)
+            text[lower..<upper].font = .dante(size: model.fontSize - 0.5, weight: .bold, design: .monospaced)
         }
         return text
     }

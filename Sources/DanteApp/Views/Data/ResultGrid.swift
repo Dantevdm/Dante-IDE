@@ -22,7 +22,7 @@ struct ResultGrid: View {
         var column: Int
     }
 
-    private static let font = Font.system(size: 12, design: .monospaced)
+    private static let font = Font.dante(size: 12, design: .monospaced)
     private static let charWidth: CGFloat = 7.3
     private var numberWidth: CGFloat { CGFloat(String(firstRow + result.rows.count).count) * Self.charWidth + 22 }
 
@@ -76,7 +76,7 @@ struct ResultGrid: View {
                         if numeric.contains(index) { Spacer(minLength: 0) }
                         Text(name).lineLimit(1)
                         if sortColumn == name {
-                            Image(systemName: descending ? "chevron.down" : "chevron.up").font(.system(size: 8, weight: .bold))
+                            Image(systemName: descending ? "chevron.down" : "chevron.up").font(.dante(size: 8, weight: .bold))
                         }
                         if !numeric.contains(index) { Spacer(minLength: 0) }
                     }
@@ -91,7 +91,7 @@ struct ResultGrid: View {
                 .help(onSort == nil ? name : "Sort by \(name)")
             }
         }
-        .font(.system(size: 11.5, weight: .semibold))
+        .font(.dante(size: 11.5, weight: .semibold))
         .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
         .background(theme.panel.color)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.line2.color).frame(height: 1) }
@@ -101,7 +101,7 @@ struct ResultGrid: View {
         let values = result.rows[row]
         return HStack(spacing: 0) {
             Text("\(firstRow + row + 1)")
-                .font(.system(size: 10.5, design: .monospaced))
+                .font(.dante(size: 10.5, design: .monospaced))
                 .foregroundStyle(theme.text3.color)
                 .frame(width: numberWidth, alignment: .trailing)
                 .padding(.trailing, 4)
@@ -156,7 +156,7 @@ struct ResultGrid: View {
             let value = result.rows[selected.row].indices.contains(selected.column) ? result.rows[selected.row][selected.column] : nil
             HStack(alignment: .top, spacing: 10) {
                 Text(result.columns[selected.column])
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.dante(size: 11, weight: .semibold))
                     .foregroundStyle(theme.text2.color)
                 ScrollView {
                     Text(value ?? "NULL")

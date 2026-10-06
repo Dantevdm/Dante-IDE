@@ -33,11 +33,11 @@ struct SetupSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
-                Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(theme.accent.color)
+                Image(systemName: "sparkles").font(.dante(size: 18)).foregroundStyle(theme.accent.color)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Set up \(workspace.name) for Dante").font(.system(size: 17, weight: .semibold)).foregroundStyle(theme.text.color)
+                    Text("Set up \(workspace.name) for Dante").font(.dante(size: 17, weight: .semibold)).foregroundStyle(theme.text.color)
                     Text("This project has no .dante folder yet. Here’s what Dante found; Claude can fill in the rest.")
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text2.color)
                 }
             }
@@ -46,7 +46,7 @@ struct SetupSheet: View {
 
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Lifecycle").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                    Text("Lifecycle").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                     Picker("Lifecycle", selection: $templateID) {
                         ForEach(LifecycleTemplate.all) { option in
                             Text(option.id == profile.template.id ? "\(option.name) (suggested)" : option.name).tag(option.id)
@@ -55,19 +55,19 @@ struct SetupSheet: View {
                     .labelsHidden()
                     .fixedSize()
                     Text(template.phaseNames.joined(separator: " → "))
-                        .font(.system(size: 11.5))
+                        .font(.dante(size: 11.5))
                         .foregroundStyle(theme.text3.color)
                 }
                 Spacer()
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Current phase").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                    Text("Current phase").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                     Picker("Current phase", selection: $phase) {
                         ForEach(template.phaseNames, id: \.self) { name in Text(name).tag(name) }
                     }
                     .labelsHidden()
                     .fixedSize()
                     Text(profile.stageReason)
-                        .font(.system(size: 11.5))
+                        .font(.dante(size: 11.5))
                         .foregroundStyle(theme.text3.color)
                 }
                 .frame(width: 210, alignment: .leading)
@@ -77,7 +77,7 @@ struct SetupSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Have Claude fill in").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                Text("Have Claude fill in").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(ProjectSetupRequest.Part.allCases) { part in
                         Toggle(isOn: Binding(
@@ -85,8 +85,8 @@ struct SetupSheet: View {
                             set: { on in if on { parts.insert(part) } else { parts.remove(part) } }
                         )) {
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(part.title).font(.system(size: 12.5)).foregroundStyle(theme.text.color)
-                                Text(detail(for: part)).font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                                Text(part.title).font(.dante(size: 12.5)).foregroundStyle(theme.text.color)
+                                Text(detail(for: part)).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
@@ -104,7 +104,7 @@ struct SetupSheet: View {
                 .disabled(!claudeReady)
                 if !claudeReady {
                     Text("Claude Code isn’t available, so Dante can only create the files from the template.")
-                        .font(.system(size: 11.5))
+                        .font(.dante(size: 11.5))
                         .foregroundStyle(theme.amber.color)
                 }
             }
@@ -145,7 +145,7 @@ struct SetupSheet: View {
             }
             if let summary = profile.summary {
                 Text("“\(summary)”")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .italic()
                     .foregroundStyle(theme.text2.color)
                     .lineLimit(3)
@@ -159,7 +159,7 @@ struct SetupSheet: View {
 
     private func chip(_ text: String, symbol: String, warning: Bool = false) -> some View {
         Label(text, systemImage: symbol)
-            .font(.system(size: 11.5))
+            .font(.dante(size: 11.5))
             .foregroundStyle(warning ? theme.amber.color : theme.text2.color)
             .lineLimit(1)
             .padding(.horizontal, 8)

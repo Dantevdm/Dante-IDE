@@ -15,9 +15,9 @@ struct ToolRow: View {
             } label: {
                 HStack(spacing: 7) {
                     statusIcon.frame(width: 14)
-                    Text(tool.verb).font(.system(size: 12, weight: .medium)).foregroundStyle(theme.text2.color)
+                    Text(tool.verb).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text2.color)
                     Text(tool.target(in: claude.root))
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(.dante(size: 11.5, design: .monospaced))
                         .foregroundStyle(theme.text3.color)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -33,7 +33,7 @@ struct ToolRow: View {
 
             if let note = tool.ruleNote {
                 Label(note, systemImage: tool.blockedByRule ? "lock.fill" : "flag.fill")
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(tool.blockedByRule ? theme.red.color : theme.amber.color)
                     .padding(.leading, 21)
                     .fixedSize(horizontal: false, vertical: true)
@@ -55,7 +55,7 @@ struct ToolRow: View {
 
             if case .failed(let message) = tool.status, !message.isEmpty {
                 Text(message.prefix(400))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.dante(size: 11, design: .monospaced))
                     .foregroundStyle(theme.red.color)
                     .lineLimit(4)
                     .textSelection(.enabled)
@@ -74,13 +74,13 @@ struct ToolRow: View {
         case .running:
             ProgressView().controlSize(.mini)
         case .awaitingApproval:
-            Image(systemName: "hand.raised.fill").font(.system(size: 10)).foregroundStyle(theme.amber.color)
+            Image(systemName: "hand.raised.fill").font(.dante(size: 10)).foregroundStyle(theme.amber.color)
         case .done:
-            Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(theme.green.color)
+            Image(systemName: "checkmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.green.color)
         case .declined:
-            Image(systemName: "nosign").font(.system(size: 10, weight: .semibold)).foregroundStyle(theme.text3.color)
+            Image(systemName: "nosign").font(.dante(size: 10, weight: .semibold)).foregroundStyle(theme.text3.color)
         case .failed:
-            Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(theme.red.color)
+            Image(systemName: "xmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.red.color)
         }
     }
 
@@ -101,9 +101,9 @@ private struct ApprovalBar: View {
                 .buttonStyle(DanteButtonStyle())
             Spacer(minLength: 0)
             if tool.change?.applies == false {
-                Text("No longer matches the file").font(.system(size: 11)).foregroundStyle(theme.amber.color)
+                Text("No longer matches the file").font(.dante(size: 11)).foregroundStyle(theme.amber.color)
             } else if isFirst {
-                Text("⌘↩").font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                Text("⌘↩").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
             }
         }
     }
@@ -134,7 +134,7 @@ struct DiffStat: View {
             Text("+\(added)").foregroundStyle(theme.green.color)
             Text("−\(removed)").foregroundStyle(theme.red.color)
         }
-        .font(.system(size: 11, weight: .medium, design: .monospaced))
+        .font(.dante(size: 11, weight: .medium, design: .monospaced))
     }
 }
 
@@ -147,15 +147,15 @@ struct DiffCard: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: change.isNewFile ? "doc.badge.plus" : "doc.text")
-                    .font(.system(size: 10.5))
+                    .font(.dante(size: 10.5))
                     .foregroundStyle(theme.text3.color)
                 Text(change.displayPath)
-                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    .font(.dante(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(theme.text.color)
                     .lineLimit(1)
                     .truncationMode(.head)
                 if change.isNewFile {
-                    Text("new file").font(.system(size: 10.5)).foregroundStyle(theme.green.color)
+                    Text("new file").font(.dante(size: 10.5)).foregroundStyle(theme.green.color)
                 }
                 Spacer(minLength: 0)
             }
@@ -187,7 +187,7 @@ struct DiffLineRow: View {
     var body: some View {
         if line.kind == .gap {
             Text("⋯")
-                .font(.system(size: 11, design: .monospaced))
+                .font(.dante(size: 11, design: .monospaced))
                 .foregroundStyle(theme.text3.color)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 44)
@@ -205,7 +205,7 @@ struct DiffLineRow: View {
                     .fixedSize()
                     .padding(.trailing, 10)
             }
-            .font(.system(size: 11, design: .monospaced))
+            .font(.dante(size: 11, design: .monospaced))
             .padding(.vertical, 1)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(background)
@@ -245,7 +245,7 @@ struct CodeBlock: View {
 
     var body: some View {
         let code = Text(HighlightedCode.attributed(text, language: HighlightedCode.language(forTag: language), theme: theme))
-            .font(.system(size: 11.5, design: .monospaced))
+            .font(.dante(size: 11.5, design: .monospaced))
             .foregroundStyle(theme.syntax.plain.color)
         Group {
             if isExporting {
@@ -262,7 +262,7 @@ struct CodeBlock: View {
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.line.color))
         .overlay(alignment: .topTrailing) {
             if let language {
-                Text(language).font(.system(size: 9.5)).foregroundStyle(theme.text3.color).padding(6)
+                Text(language).font(.dante(size: 9.5)).foregroundStyle(theme.text3.color).padding(6)
             }
         }
     }
@@ -293,18 +293,18 @@ private struct QuestionCard: View {
                     HStack(spacing: 6) {
                         if !question.header.isEmpty {
                             Text(question.header.uppercased())
-                                .font(.system(size: 9.5, weight: .semibold))
+                                .font(.dante(size: 9.5, weight: .semibold))
                                 .foregroundStyle(theme.accent.color)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(Capsule().fill(theme.accentTint.color))
                         }
                         if question.multiSelect {
-                            Text("pick any").font(.system(size: 10.5)).foregroundStyle(theme.text3.color)
+                            Text("pick any").font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
                         }
                     }
                     Text(question.question)
-                        .font(.system(size: 12.5, weight: .medium))
+                        .font(.dante(size: 12.5, weight: .medium))
                         .foregroundStyle(theme.text.color)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(question.options) { option in
@@ -318,7 +318,7 @@ private struct QuestionCard: View {
                         }
                     ))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .padding(.horizontal, 9)
                     .padding(.vertical, 6)
                     .background(RoundedRectangle(cornerRadius: 7).strokeBorder(theme.line2.color))
@@ -357,13 +357,13 @@ private struct QuestionCard: View {
         } label: {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: question.multiSelect ? (selected ? "checkmark.square.fill" : "square") : (selected ? "largecircle.fill.circle" : "circle"))
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(selected ? theme.accent.color : theme.text3.color)
                     .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(option.label).font(.system(size: 12.5)).foregroundStyle(theme.text.color)
+                    Text(option.label).font(.dante(size: 12.5)).foregroundStyle(theme.text.color)
                     if !option.description.isEmpty {
-                        Text(option.description).font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                        Text(option.description).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -394,7 +394,7 @@ private struct AnsweredQuestions: View {
                                 .foregroundStyle(theme.text3.color)
                             Text(answer).foregroundStyle(theme.text.color)
                         }
-                        .font(.system(size: 11.5))
+                        .font(.dante(size: 11.5))
                     }
                 }
             }

@@ -29,7 +29,7 @@ struct StatusBar: View {
             Text(themeStore.id.displayName)
         }
         .labelStyle(.titleAndIcon)
-        .font(.system(size: 11.5))
+        .font(.dante(size: 11.5))
         .foregroundStyle(theme.text3.color)
         .padding(.horizontal, 14)
         .frame(height: 26)
@@ -86,21 +86,21 @@ private struct BlameCard: View {
         VStack(alignment: .leading, spacing: 10) {
             if commit.isUncommitted {
                 Text("Line \(line) has changes that aren’t committed yet.")
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text.color)
             } else {
                 Text(commit.summary)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.dante(size: 13, weight: .semibold))
                     .foregroundStyle(theme.text.color)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
-                    Text(commit.shortHash).font(.system(size: 11.5, design: .monospaced))
+                    Text(commit.shortHash).font(.dante(size: 11.5, design: .monospaced))
                     Text("·")
                     Text(commit.author)
                     Text("·")
                     Text(commit.date.formatted(date: .abbreviated, time: .shortened))
                 }
-                .font(.system(size: 11.5))
+                .font(.dante(size: 11.5))
                 .foregroundStyle(theme.text3.color)
             }
             HStack(spacing: 8) {
@@ -195,7 +195,7 @@ private struct ProblemsList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(diagnostics.isEmpty ? "No problems in \(document.name)" : "\(document.name) · \(server)")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.dante(size: 12, weight: .semibold))
                 .foregroundStyle(theme.text2.color)
                 .padding(12)
             if !diagnostics.isEmpty {
@@ -210,16 +210,16 @@ private struct ProblemsList: View {
                                 } label: {
                                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                                         Image(systemName: diagnostic.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                                            .font(.system(size: 10.5))
+                                            .font(.dante(size: 10.5))
                                             .foregroundStyle(diagnostic.severity == .error ? theme.red.color : theme.amber.color)
                                         Text(diagnostic.message)
-                                            .font(.system(size: 12))
+                                            .font(.dante(size: 12))
                                             .foregroundStyle(theme.text.color)
                                             .multilineTextAlignment(.leading)
                                             .fixedSize(horizontal: false, vertical: true)
                                         Spacer(minLength: 8)
                                         Text("\(diagnostic.range.start.line + 1)")
-                                            .font(.system(size: 11.5, design: .monospaced))
+                                            .font(.dante(size: 11.5, design: .monospaced))
                                             .foregroundStyle(theme.text3.color)
                                     }
                                     .contentShape(Rectangle())
@@ -230,7 +230,7 @@ private struct ProblemsList: View {
                                     fix(diagnostic)
                                     dismiss()
                                 } label: {
-                                    Image(systemName: "sparkle").font(.system(size: 11))
+                                    Image(systemName: "sparkle").font(.dante(size: 11))
                                 }
                                 .buttonStyle(.plain)
                                 .foregroundStyle(theme.accent.color)

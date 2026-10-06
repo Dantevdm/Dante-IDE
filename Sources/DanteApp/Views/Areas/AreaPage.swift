@@ -20,7 +20,7 @@ struct AreaPage<Actions: View, Content: View>: View {
                     Eyebrow(eyebrow)
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(title)
-                            .font(.system(size: 28, weight: .semibold))
+                            .font(.dante(size: 28, weight: .semibold))
                             .foregroundStyle(theme.text.color)
                             .lineLimit(1)
                         Spacer(minLength: 12)
@@ -28,7 +28,7 @@ struct AreaPage<Actions: View, Content: View>: View {
                     }
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 13.5))
+                            .font(.dante(size: 13.5))
                             .foregroundStyle(theme.text2.color)
                             .frame(maxWidth: 680, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -63,7 +63,7 @@ struct Card<Trailing: View, Content: View>: View {
         VStack(alignment: .leading, spacing: spacing) {
             if let title {
                 HStack(spacing: 8) {
-                    Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                    Text(title).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
                     Spacer(minLength: 8)
                     trailing
                 }
@@ -124,7 +124,7 @@ struct LinkButton: View {
     var body: some View {
         Button(title, action: action)
             .buttonStyle(.plain)
-            .font(.system(size: 12))
+            .font(.dante(size: 12))
             .foregroundStyle(theme.accent.color)
     }
 }
@@ -139,8 +139,8 @@ struct Chip: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            if let symbol { Image(systemName: symbol).font(.system(size: 10.5)) }
-            Text(text).font(.system(size: 12, design: mono ? .monospaced : .default))
+            if let symbol { Image(systemName: symbol).font(.dante(size: 10.5)) }
+            Text(text).font(.dante(size: 12, design: mono ? .monospaced : .default))
         }
         .foregroundStyle(color ?? theme.text2.color)
         .padding(.horizontal, 9)
@@ -162,11 +162,11 @@ struct EmptyState<Actions: View>: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 26, weight: .light))
+                .font(.dante(size: 26, weight: .light))
                 .foregroundStyle(theme.text3.color)
-            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.text.color)
+            Text(title).font(.dante(size: 15, weight: .semibold)).foregroundStyle(theme.text.color)
             Text(message)
-                .font(.system(size: 12.5))
+                .font(.dante(size: 12.5))
                 .foregroundStyle(theme.text2.color)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 440)

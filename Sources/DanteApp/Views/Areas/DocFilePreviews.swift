@@ -27,7 +27,7 @@ struct DocImage: View {
                 placeholder("Missing image: \(source)")
             }
             if !alt.isEmpty {
-                Text(alt).font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                Text(alt).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -35,7 +35,7 @@ struct DocImage: View {
 
     private func placeholder(_ text: String) -> some View {
         Label(text, systemImage: "photo")
-            .font(.system(size: 12))
+            .font(.dante(size: 12))
             .foregroundStyle(theme.text3.color)
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,7 +74,7 @@ struct FilePreview: View {
             case .document, .markdown:
                 ScrollView {
                     Text(text ?? "Reading…")
-                        .font(.system(size: 14))
+                        .font(.dante(size: 14))
                         .lineSpacing(4)
                         .foregroundStyle(theme.text.color)
                         .textSelection(.enabled)

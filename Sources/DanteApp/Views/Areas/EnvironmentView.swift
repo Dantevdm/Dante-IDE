@@ -118,7 +118,7 @@ struct EnvironmentView: View {
             Spacer()
             if dockerReady {
                 Text("\(up) of \(compose.services.count) services up")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text3.color)
             }
         }
@@ -150,7 +150,7 @@ private struct Banner: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: symbol).foregroundStyle(color)
-            Text(text).font(.system(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             Spacer()
         }
         .padding(12)
@@ -184,11 +184,11 @@ private struct ServiceCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 StatusDot(color: color, size: 8)
-                Text(service.name).font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
+                Text(service.name).font(.dante(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
                 Spacer()
-                Text(state?.label ?? "not created").font(.system(size: 12)).foregroundStyle(color)
+                Text(state?.label ?? "not created").font(.dante(size: 12)).foregroundStyle(color)
             }
-            Text(service.source).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
+            Text(service.source).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
             HStack(alignment: .top, spacing: 8) {
                 fact("Port", state?.ports.joined(separator: " ").nonEmpty ?? service.ports.first ?? "—")
                 fact("Status", state?.status.nonEmpty ?? "—")
@@ -217,8 +217,8 @@ private struct ServiceCard: View {
 
     private func fact(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
-            Text(value).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
+            Text(label).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+            Text(value).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -238,9 +238,9 @@ private struct LogsCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "text.alignleft").font(.system(size: 12)).foregroundStyle(theme.text3.color)
-                Text(service).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
-                Text(paused ? "paused" : "following").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                Image(systemName: "text.alignleft").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                Text(service).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
+                Text(paused ? "paused" : "following").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 Spacer()
                 Button(paused ? "Resume" : "Pause") { paused.toggle() }.buttonStyle(DanteButtonStyle())
                 Button("Clear") { lines.removeAll() }.buttonStyle(DanteButtonStyle())
@@ -262,7 +262,7 @@ private struct LogsCard: View {
                                 .id(index)
                         }
                     }
-                    .font(.system(size: 11.5, design: .monospaced))
+                    .font(.dante(size: 11.5, design: .monospaced))
                     .textSelection(.enabled)
                     .padding(12)
                 }
@@ -305,11 +305,11 @@ private struct DiagnoseCard: View {
         Card(accent: true) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkle").foregroundStyle(theme.accent.color)
-                Text("\(container.service) is \(container.label)").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("\(container.service) is \(container.label)").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
             }
-            Text(container.status).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text3.color)
+            Text(container.status).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text3.color)
             Text("Claude can read its logs, the compose file and the code it runs, then propose a fix as a diff.")
-                .font(.system(size: 12.5))
+                .font(.dante(size: 12.5))
                 .foregroundStyle(theme.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Find the cause") {
@@ -336,17 +336,17 @@ private struct DockerfilesCard: View {
     var body: some View {
         let rows = self.rows
         Card("Docker files") {
-            Text("Claude writes, you review").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+            Text("Claude writes, you review").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
         } content: {
             RowList(data: rows, padding: 6) { row in
                 HStack(spacing: 8) {
                     Image(systemName: row.missing ? "exclamationmark.triangle.fill" : "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.dante(size: 11, weight: .semibold))
                         .foregroundStyle(row.missing ? theme.amber.color : theme.green.color)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(row.path).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1).truncationMode(.head)
+                        Text(row.path).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1).truncationMode(.head)
                         if !row.note.isEmpty {
-                            Text(row.note).font(.system(size: 11.5)).foregroundStyle(row.missing ? theme.amber.color : theme.text3.color).lineLimit(1)
+                            Text(row.note).font(.dante(size: 11.5)).foregroundStyle(row.missing ? theme.amber.color : theme.text3.color).lineLimit(1)
                         }
                     }
                     Spacer(minLength: 4)

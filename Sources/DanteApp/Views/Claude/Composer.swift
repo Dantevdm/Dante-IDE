@@ -30,7 +30,7 @@ struct Composer: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Button(action: pickFiles) {
-                    Image(systemName: "paperclip").font(.system(size: 12))
+                    Image(systemName: "paperclip").font(.dante(size: 12))
                         .frame(width: 20, height: 24)
                         .foregroundStyle(theme.text3.color)
                 }
@@ -40,7 +40,7 @@ struct Composer: View {
 
                 TextField(placeholder, text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text.color)
                     .lineLimit(1...8)
                     .focused($focused)
@@ -50,7 +50,7 @@ struct Composer: View {
 
                 if claude.state == .working {
                     Button(action: claude.interrupt) {
-                        Image(systemName: "stop.fill").font(.system(size: 9))
+                        Image(systemName: "stop.fill").font(.dante(size: 9))
                             .frame(width: 24, height: 24)
                             .foregroundStyle(theme.text.color)
                             .background(Circle().fill(theme.raised.color))
@@ -61,7 +61,7 @@ struct Composer: View {
                     .help("Stop (⌘.)")
                 } else {
                     Button(action: send) {
-                        Image(systemName: "arrow.up").font(.system(size: 11, weight: .bold))
+                        Image(systemName: "arrow.up").font(.dante(size: 11, weight: .bold))
                             .frame(width: 24, height: 24)
                             .foregroundStyle(canSend ? theme.onAccent.color : theme.text3.color)
                             .background(Circle().fill(canSend ? theme.accent.color : theme.raised.color))
@@ -82,7 +82,7 @@ struct Composer: View {
             )
 
             HStack(spacing: 6) {
-                Image(systemName: "hand.raised").font(.system(size: 9.5))
+                Image(systemName: "hand.raised").font(.dante(size: 9.5))
                 Text("Claude asks before every edit and command.")
                 Spacer(minLength: 0)
                 if claude.totalCostUSD > 0 {
@@ -90,7 +90,7 @@ struct Composer: View {
                         .help("Cost of this conversation")
                 }
             }
-            .font(.system(size: 10.5))
+            .font(.dante(size: 10.5))
             .foregroundStyle(theme.text3.color)
         }
         .padding(12)
@@ -165,17 +165,17 @@ struct AttachmentChip: View {
             if case .image(_, let base64) = attachment.kind, let data = Data(base64Encoded: base64), let image = NSImage(data: data) {
                 Image(nsImage: image).resizable().scaledToFill().frame(width: 18, height: 18).clipShape(RoundedRectangle(cornerRadius: 3))
             } else {
-                Image(systemName: Self.symbol(for: attachment.name)).font(.system(size: 10.5)).foregroundStyle(theme.text3.color)
+                Image(systemName: Self.symbol(for: attachment.name)).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
             }
             Text(attachment.name).lineLimit(1).truncationMode(.middle).frame(maxWidth: 150, alignment: .leading)
             Text(attachment.summary).foregroundStyle(attachment.kind == .reference ? theme.amber.color : theme.text3.color)
             Button(action: remove) {
-                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(theme.text3.color)
+                Image(systemName: "xmark").font(.dante(size: 8, weight: .bold)).foregroundStyle(theme.text3.color)
             }
             .buttonStyle(.plain)
             .help("Remove")
         }
-        .font(.system(size: 11))
+        .font(.dante(size: 11))
         .foregroundStyle(theme.text.color)
         .padding(.leading, 5)
         .padding(.trailing, 7)
@@ -211,7 +211,7 @@ struct AcceptsAttachments: ViewModifier {
                         .background(theme.accentTint.opacity(0.5).color)
                         .overlay {
                             Label("Drop to attach for Claude", systemImage: "paperclip")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.dante(size: 13, weight: .semibold))
                                 .foregroundStyle(theme.accent.color)
                         }
                         .padding(6)

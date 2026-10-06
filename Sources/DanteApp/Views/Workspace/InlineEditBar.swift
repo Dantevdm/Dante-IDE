@@ -11,9 +11,9 @@ struct InlineEditBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "sparkle").font(.system(size: 11, weight: .semibold)).foregroundStyle(theme.accent.color)
+                Image(systemName: "sparkle").font(.dante(size: 11, weight: .semibold)).foregroundStyle(theme.accent.color)
                 Text(model.range.length == 0 ? "Claude writes code at \(model.lineSpan)" : "Claude edits \(model.lineSpan)")
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.dante(size: 11.5, weight: .medium))
                     .foregroundStyle(theme.text2.color)
                 Spacer()
                 IconButton(symbol: "xmark", label: "Close (Esc)", size: 9.5) { close() }
@@ -43,7 +43,7 @@ struct InlineEditBar: View {
                 TextField(model.proposal == nil ? "Describe the change…" : "Ask for changes, or press ⌘↩ to accept",
                           text: $model.instruction, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .lineLimit(1...4)
                     .focused($fieldFocused)
                     .disabled(model.phase == .working)
@@ -55,7 +55,7 @@ struct InlineEditBar: View {
                 switch model.phase {
                 case .working:
                     ProgressView().controlSize(.small)
-                    Text("Claude is writing…").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                    Text("Claude is writing…").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                     Button("Stop") { model.cancel() }.buttonStyle(DanteButtonStyle())
                 case .proposed:
                     Button("Reject") { close() }.buttonStyle(DanteButtonStyle())
@@ -70,7 +70,7 @@ struct InlineEditBar: View {
             }
 
             if case .failed(let message) = model.phase {
-                Text(message).font(.system(size: 11.5)).foregroundStyle(theme.red.color).fixedSize(horizontal: false, vertical: true)
+                Text(message).font(.dante(size: 11.5)).foregroundStyle(theme.red.color).fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(10)

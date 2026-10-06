@@ -17,7 +17,7 @@ struct ProblemsPanel: View {
                 Spacer()
                 Toggle("Hints", isOn: $showsHints)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text2.color)
                     .help("Also show information and hints")
             }
@@ -26,7 +26,7 @@ struct ProblemsPanel: View {
 
             if files.isEmpty {
                 Text("Problems appear here as language servers check the files you open. Servers for Swift, TypeScript and others start with the first file of their language.")
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 12)
@@ -57,7 +57,7 @@ struct ProblemsPanel: View {
         let warnings = files.reduce(0) { $0 + $1.warnings }
         return Text(errors + warnings == 0 ? "No errors or warnings" :
                         "\(errors) error\(errors == 1 ? "" : "s"), \(warnings) warning\(warnings == 1 ? "" : "s") in \(files.count) file\(files.count == 1 ? "" : "s")")
-            .font(.system(size: 11.5))
+            .font(.dante(size: 11.5))
             .foregroundStyle(theme.text3.color)
     }
 }
@@ -74,22 +74,22 @@ private struct ProblemFileHeader: View {
         Button(action: toggle) {
             HStack(spacing: 6) {
                 Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 8.5, weight: .semibold))
+                    .font(.dante(size: 8.5, weight: .semibold))
                     .foregroundStyle(theme.text3.color)
                     .frame(width: 10)
                 Text((file.path as NSString).lastPathComponent)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.dante(size: 12.5, weight: .medium))
                     .foregroundStyle(theme.text.color)
                     .lineLimit(1)
                     .layoutPriority(1)
                 Text((file.path as NSString).deletingLastPathComponent)
-                    .font(.system(size: 11))
+                    .font(.dante(size: 11))
                     .foregroundStyle(theme.text3.color)
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer(minLength: 4)
                 Text("\(file.diagnostics.count)")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.dante(size: 10.5, weight: .medium))
                     .foregroundStyle(file.errors > 0 ? theme.red.color : theme.text2.color)
                     .padding(.horizontal, 5)
                     .background(theme.raised.color, in: Capsule())
@@ -119,17 +119,17 @@ private struct ProblemRow: View {
         Button(action: open) {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
                 Image(systemName: icon)
-                    .font(.system(size: 10))
+                    .font(.dante(size: 10))
                     .foregroundStyle(color)
                     .frame(width: 14)
                 Text(diagnostic.message)
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text.color)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 4)
                 Text("\(diagnostic.range.start.line + 1)")
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(.dante(size: 10.5, design: .monospaced))
                     .foregroundStyle(theme.text3.color)
             }
             .padding(.leading, 18)

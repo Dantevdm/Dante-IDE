@@ -44,9 +44,9 @@ struct DataOverview: View {
                 fact("Found", connection.origin == .saved ? "Saved on this Mac" : connection.note ?? "In the project")
                 Toggle(isOn: Binding(get: { connection.readOnly }, set: { model.setReadOnly($0, for: connection) })) {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Read-only").font(.system(size: 12.5)).foregroundStyle(theme.text.color)
+                        Text("Read-only").font(.dante(size: 12.5)).foregroundStyle(theme.text.color)
                         Text(connection.isLocal ? "Refuse statements that change data" : "Recommended: this database isn’t on this Mac")
-                            .font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                            .font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                     }
                 }
                 .toggleStyle(.switch)
@@ -58,9 +58,9 @@ struct DataOverview: View {
 
     private func fact(_ label: String, _ value: String, mono: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(label).font(.system(size: 12)).foregroundStyle(theme.text3.color).frame(width: 110, alignment: .leading)
+            Text(label).font(.dante(size: 12)).foregroundStyle(theme.text3.color).frame(width: 110, alignment: .leading)
             Text(value)
-                .font(.system(size: 12.5, design: mono ? .monospaced : .default))
+                .font(.dante(size: 12.5, design: mono ? .monospaced : .default))
                 .foregroundStyle(theme.text.color)
                 .textSelection(.enabled)
                 .lineLimit(2)
@@ -76,7 +76,7 @@ struct DataOverview: View {
             Card("Largest tables") {
                 if real.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("No tables yet.").font(.system(size: 12.5)).foregroundStyle(theme.text2.color)
+                        Text("No tables yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
                         Button("Design the schema with Claude") {
                             session.askClaude("This database has no tables yet. Ask me what the app needs to store, then design the schema and write it as a migration in this project's migration tool.",
                                               instructions: DataContext.describe(connection, schema: schema))
@@ -88,7 +88,7 @@ struct DataOverview: View {
                         ForEach(Array(bySize)) { table in
                             Button { model.open(table: table) } label: {
                                 HStack(spacing: 10) {
-                                    Text(table.qualifiedName).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
+                                    Text(table.qualifiedName).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
                                         .frame(width: 140, alignment: .leading).lineLimit(1)
                                     GeometryReader { proxy in
                                         let value = Double(table.bytes ?? table.rows ?? 0)
@@ -98,7 +98,7 @@ struct DataOverview: View {
                                     }
                                     .frame(height: 8)
                                     Text(table.bytes.map(DataFormat.bytes) ?? table.rows.map { "\(DataFormat.count($0)) rows" } ?? "")
-                                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                                        .font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
                                         .frame(width: 70, alignment: .trailing)
                                 }
                                 .contentShape(Rectangle())
@@ -116,7 +116,7 @@ struct DataOverview: View {
         return Card("In the code") {
             VStack(alignment: .leading, spacing: 10) {
                 if profile.signals.isEmpty, profile.orms.isEmpty, profile.migrations.isEmpty {
-                    Text("Dante didn’t find database code in this project yet.").font(.system(size: 12.5)).foregroundStyle(theme.text2.color)
+                    Text("Dante didn’t find database code in this project yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
                 }
                 if !profile.orms.isEmpty {
                     labelled("Libraries") { FlowLayout(spacing: 5) { ForEach(profile.orms, id: \.self) { Chip(text: $0, symbol: "shippingbox") } } }
@@ -126,11 +126,11 @@ struct DataOverview: View {
                         VStack(alignment: .leading, spacing: 3) {
                             ForEach(profile.migrations, id: \.path) { migration in
                                 Text("\(migration.path)/ · \(migration.count) file\(migration.count == 1 ? "" : "s")")
-                                    .font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
+                                    .font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
                                 ForEach(latestMigrations(in: migration.path), id: \.self) { file in
                                     HStack(spacing: 6) {
                                         Text(file.lastPathComponent == "migration.sql" ? file.deletingLastPathComponent().lastPathComponent : file.lastPathComponent)
-                                            .font(.system(size: 11.5, design: .monospaced))
+                                            .font(.dante(size: 11.5, design: .monospaced))
                                             .foregroundStyle(theme.text2.color)
                                             .lineLimit(1)
                                             .truncationMode(.middle)
@@ -151,7 +151,7 @@ struct DataOverview: View {
                             ForEach(Array(signals)) { signal in
                                 HStack(spacing: 6) {
                                     if let engine = signal.engine { EngineBadge(engine: engine, size: 15) }
-                                    Text(signal.label).font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                                    Text(signal.label).font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                                 }
                             }
                         }
@@ -187,7 +187,7 @@ struct DataOverview: View {
                 ForEach(model.history(for: connection).prefix(6), id: \.self) { script in
                     Button { model.newQuery(script) } label: {
                         Text(script.replacingOccurrences(of: "\n", with: " "))
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(.dante(size: 12, design: .monospaced))
                             .foregroundStyle(theme.text.color)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -202,7 +202,7 @@ struct DataOverview: View {
 
     private func labelled(_ label: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.system(size: 11)).foregroundStyle(theme.text3.color)
+            Text(label).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
             content()
         }
     }
@@ -219,7 +219,7 @@ struct SchemaDiagramView: View {
             VStack(spacing: 0) {
                 HStack {
                     Text("\(diagram.entities.count) tables, \(diagram.relationships.count) foreign keys\(schema.tables.filter { !$0.isView }.count > diagram.entities.count ? " (first \(diagram.entities.count) shown)" : "")")
-                        .font(.system(size: 12))
+                        .font(.dante(size: 12))
                         .foregroundStyle(theme.text3.color)
                     Spacer()
                     Button {
@@ -317,7 +317,7 @@ struct DataEmptyState: View {
                         ForEach(profile.signals) { signal in
                             HStack(spacing: 5) {
                                 if let engine = signal.engine { EngineBadge(engine: engine, size: 15) }
-                                Text(signal.label).font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                                Text(signal.label).font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                             }
                             .padding(.horizontal, 8).padding(.vertical, 4)
                             .background(Capsule().fill(theme.raised.color))
@@ -345,15 +345,15 @@ private struct OptionCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Image(systemName: symbol)
-                        .font(.system(size: 17))
+                        .font(.dante(size: 17))
                         .foregroundStyle(recommended ? theme.onAccent.color : theme.accent.color)
                         .frame(width: 36, height: 36)
                         .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(recommended ? theme.accent.color : theme.accentTint.color))
                     Spacer()
                     if recommended { Chip(text: "Suggested", color: theme.accent.color) }
                 }
-                Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text(detail).font(.system(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                Text(title).font(.dante(size: 14, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text(detail).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
             .padding(16)

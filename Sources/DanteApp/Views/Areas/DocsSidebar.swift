@@ -17,7 +17,7 @@ struct DocsSidebar: View {
             VStack(alignment: .leading, spacing: 14) {
                 Button(action: addFiles) {
                     Label("Add files…", systemImage: "plus")
-                        .font(.system(size: 12))
+                        .font(.dante(size: 12))
                         .foregroundStyle(theme.text2.color)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
@@ -55,17 +55,17 @@ struct DocRow: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if doc.kind != .markdown {
-                    Image(systemName: symbol).font(.system(size: 10.5)).foregroundStyle(theme.text3.color).frame(width: 13)
+                    Image(systemName: symbol).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color).frame(width: 13)
                 }
                 Text(doc.title)
-                    .font(.system(size: 12.5, weight: isSelected ? .medium : .regular))
+                    .font(.dante(size: 12.5, weight: isSelected ? .medium : .regular))
                     .foregroundStyle(isSelected ? theme.text.color : theme.text2.color)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .layoutPriority(1)
                 if let folder {
                     Text(folder)
-                        .font(.system(size: 11.5))
+                        .font(.dante(size: 11.5))
                         .foregroundStyle(theme.text3.color)
                         .lineLimit(1)
                         .truncationMode(.head)

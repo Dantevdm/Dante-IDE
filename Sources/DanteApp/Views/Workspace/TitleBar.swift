@@ -81,15 +81,15 @@ private struct ProjectMenu: View {
                     .fill(theme.accentTint.color)
                     .overlay(
                         Text(String(workspace.name.prefix(1)).uppercased())
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.dante(size: 11, weight: .bold))
                             .foregroundStyle(theme.accent.color)
                     )
                     .frame(width: 20, height: 20)
                 Text(workspace.name)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.dante(size: 13, weight: .semibold))
                     .foregroundStyle(theme.text.color)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8.5, weight: .bold))
+                    .font(.dante(size: 8.5, weight: .bold))
                     .foregroundStyle(theme.text3.color)
             }
             .lineLimit(1)
@@ -122,7 +122,7 @@ private struct ThemeMenu: View {
             .pickerStyle(.inline)
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .medium))
+                .font(.dante(size: 13, weight: .medium))
                 .frame(width: 26, height: 26)
                 .foregroundStyle(hovering ? theme.text.color : theme.text3.color)
                 .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? theme.raised.color : .clear))

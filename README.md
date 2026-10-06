@@ -9,13 +9,13 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 ## What works today
 
 - Launch screen with recent projects, plus new project, open folder and clone
-- Dark, Light and Paper themes (⌥⌘T to cycle)
+- Dark, Light and Paper themes (⌥⌘T to cycle), set in Geist and Geist Mono (bundled; a setting switches to the system fonts)
 - File explorer, tabs, and a TextKit 2 code editor with tree-sitter highlighting (Swift, Python, JavaScript, TypeScript, Go, Rust, JSON; regex for the rest), line numbers and auto-indent
 - Language servers for diagnostics, hover info (rest the pointer on a symbol) Jump to Definition (⌘-click or ⌃⌘J) and Go to Symbol (⌘⇧O: the file's symbols, then matches across the project, with Dante's own declaration scan where no server covers a language or its index is empty): SourceKit-LSP, typescript-language-server, Pyright, gopls, rust-analyzer and clangd, whichever are installed. Problems are underlined, marked in the gutter, listed from the status bar and gathered for the whole project in the sidebar's Problems tab (⇧⌘M), and Fix hands one, or all of them, to Claude. Claude always sees the open file's problems
 - Split editor (⌘\): two panes side by side over the same tabs; a tab opens in the focused pane (marked in its path bar), click a pane or press ⌥⌘\ to switch, × closes the split
 - Code completion from the language server as you type (or ⌃Space), fuzzy-filtered, with snippets whose first placeholder is selected; Tab or Return accepts. Find References (⌃⇧⌘F) lists every use in the Search tab; Rename Symbol (⌃⌘E) renames across open and closed files; Format Document (⌃⇧I). Rename and format are undoable
 - Claude in the editor: ⌘I (or Edit with Claude… in the editor's menu) opens a bar above the code. Describe a change to the selected lines, or code to write at the caret; Claude's proposal shows as a diff to accept (⌘↩), refine with another instruction, or reject. Nothing changes until you accept, and accepting is one undo. Ask Claude About Selection attaches the selected lines to the Claude panel
-- Settings (⌘,): theme and font size; indent width, line wrapping and completion while typing; on save, format with the language server, trim trailing whitespace and end with a newline; auto-save after a delay or when Dante loses focus; Claude's model and whether it asks clarifying questions first
+- Settings (⌘,): theme, font size and Geist or system fonts; indent width, line wrapping and completion while typing; on save, format with the language server, trim trailing whitespace and end with a newline; auto-save after a delay or when Dante loses focus; Claude's model and whether it asks clarifying questions first
 - Git changes in the gutter: added, modified and deleted lines since the last commit, updated as you type and when HEAD moves
 - Blame for the caret's line in the status bar (who and when; unsaved edits show as not committed yet). Click it for the commit, Show Commit, Copy Hash or the line's whole history
 - Find in Project (⇧⌘F): search every file (open ones as edited) with match case, whole word and regex, grouped by file; click a result to open it with the match selected. The chevron opens Replace: each result previews its change, hover to replace one match, a file, or leave a match out, and Replace All (⌥⌘↩) asks first. Open files change in the editor, undoable; others are saved
@@ -140,3 +140,5 @@ operate:
 ```
 
 Dante's own `.dante/` folder is a working example.
+
+Geist and Geist Mono are © The Geist Project Authors, from [vercel/geist-font](https://github.com/vercel/geist-font), under the SIL Open Font License 1.1 (`Sources/DanteEditor/Resources/Fonts/OFL.txt`).

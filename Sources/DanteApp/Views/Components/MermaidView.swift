@@ -22,7 +22,7 @@ struct MermaidBlock: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 8) {
-                Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 10.5))
+                Image(systemName: "point.3.connected.trianglepath.dotted").font(.dante(size: 10.5))
                 Text(caption(diagram))
                 Spacer()
                 if case .unsupported = diagram {} else if !isExporting {
@@ -31,7 +31,7 @@ struct MermaidBlock: View {
                         .foregroundStyle(theme.accent.color)
                 }
             }
-            .font(.system(size: 11))
+            .font(.dante(size: 11))
             .foregroundStyle(theme.text3.color)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
@@ -108,7 +108,7 @@ private enum Ink {
     /// covers no box and no label already drawn.
     static func label(_ text: String, on curve: (CGPoint, CGPoint, CGPoint, CGPoint), placer: inout LabelPlacer,
                       theme: Theme, in context: inout GraphicsContext) {
-        let resolved = context.resolve(Text(text).font(.system(size: 11)).foregroundColor(theme.text2.color))
+        let resolved = context.resolve(Text(text).font(.dante(size: 11)).foregroundColor(theme.text2.color))
         let size = resolved.measure(in: CGSize(width: 180, height: 60))
         let box = placer.place(CGSize(width: size.width + 10, height: size.height + 4), on: curve)
         context.fill(Path(roundedRect: box, cornerRadius: 4), with: .color(theme.panel.color))
@@ -197,7 +197,7 @@ private struct FlowchartView: View {
     private func node(_ node: Flowchart.Node) -> some View {
         // Short labels keep their own width; long ones wrap at 170pt. Circles stay round.
         let label = Text(node.label)
-            .font(.system(size: 12.5))
+            .font(.dante(size: 12.5))
             .foregroundStyle(theme.text.color)
             .multilineTextAlignment(.center)
         let wraps = node.label.count > 24
@@ -228,7 +228,7 @@ private struct FlowchartView: View {
             let shape = Path(roundedRect: box, cornerRadius: 10)
             context.fill(shape, with: .color(theme.raised.opacity(0.6).color))
             context.stroke(shape, with: .color(theme.line2.color), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-            let title = context.resolve(Text(group.title).font(.system(size: 10.5, weight: .semibold)).foregroundColor(theme.text3.color))
+            let title = context.resolve(Text(group.title).font(.dante(size: 10.5, weight: .semibold)).foregroundColor(theme.text3.color))
             context.draw(title, at: CGPoint(x: box.minX + 10, y: box.minY + 9), anchor: .leading)
         }
     }
@@ -387,7 +387,7 @@ private struct SequenceView: View {
                 guard let block = blocks.popLast() else { break }
                 let rect = CGRect(x: left + CGFloat(blocks.count) * 6, y: block.top, width: right - left - CGFloat(blocks.count) * 12, height: y - block.top + 6)
                 context.stroke(Path(roundedRect: rect, cornerRadius: 6), with: .color(theme.accentLine.color), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                let tag = context.resolve(Text(block.kind).font(.system(size: 10.5, weight: .semibold)).foregroundColor(theme.accent.color))
+                let tag = context.resolve(Text(block.kind).font(.dante(size: 10.5, weight: .semibold)).foregroundColor(theme.accent.color))
                 let tagSize = tag.measure(in: CGSize(width: 100, height: 20))
                 let tagRect = CGRect(x: rect.minX, y: rect.minY, width: tagSize.width + 12, height: 18)
                 context.fill(Path(roundedRect: tagRect, cornerRadius: 5), with: .color(theme.accentTint.color))
@@ -404,12 +404,12 @@ private struct SequenceView: View {
         let rect = CGRect(x: x(participant.id) - column / 2 + 12, y: y, width: column - 24, height: headerHeight)
         context.fill(Path(roundedRect: rect, cornerRadius: 6), with: .color(theme.card.color))
         context.stroke(Path(roundedRect: rect, cornerRadius: 6), with: .color(participant.isActor ? theme.accentLine.color : theme.line2.color), lineWidth: 1.2)
-        let label = context.resolve(Text((participant.isActor ? "👤 " : "") + participant.label).font(.system(size: 12, weight: .semibold)).foregroundColor(theme.text.color))
+        let label = context.resolve(Text((participant.isActor ? "👤 " : "") + participant.label).font(.dante(size: 12, weight: .semibold)).foregroundColor(theme.text.color))
         context.draw(label, at: CGPoint(x: rect.midX, y: rect.midY))
     }
 
     private func draw(_ text: String, at point: CGPoint, anchor: UnitPoint, in context: inout GraphicsContext) {
-        let resolved = context.resolve(Text(text).font(.system(size: 11.5)).foregroundColor(theme.text.color))
+        let resolved = context.resolve(Text(text).font(.dante(size: 11.5)).foregroundColor(theme.text.color))
         context.draw(resolved, at: point, anchor: anchor)
     }
 }
@@ -445,7 +445,7 @@ struct ERDiagramView: View {
     private func entity(_ entity: ERDiagram.Entity) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(entity.name)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.dante(size: 12, weight: .semibold))
                 .foregroundStyle(theme.text.color)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
@@ -457,10 +457,10 @@ struct ERDiagramView: View {
                     Spacer(minLength: 8)
                     Text(attribute.type).foregroundStyle(theme.text3.color)
                     if !attribute.keys.isEmpty {
-                        Text(attribute.keys.joined(separator: ",")).font(.system(size: 10, weight: .semibold)).foregroundStyle(theme.accent.color)
+                        Text(attribute.keys.joined(separator: ",")).font(.dante(size: 10, weight: .semibold)).foregroundStyle(theme.accent.color)
                     }
                 }
-                .font(.system(size: 11.5, design: .monospaced))
+                .font(.dante(size: 11.5, design: .monospaced))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .overlay(alignment: .top) { Rectangle().fill(theme.line.color).frame(height: 1) }
@@ -511,7 +511,7 @@ struct ERDiagramView: View {
     }
 
     private func cardinality(_ text: String, at point: CGPoint, in context: inout GraphicsContext) {
-        let resolved = context.resolve(Text(text).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(theme.accent.color))
+        let resolved = context.resolve(Text(text).font(.dante(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(theme.accent.color))
         context.draw(resolved, at: point)
     }
 }

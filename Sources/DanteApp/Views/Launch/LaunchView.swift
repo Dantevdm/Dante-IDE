@@ -56,13 +56,13 @@ struct LaunchView: View {
 
             VStack(spacing: 10) {
                 Text("Dante")
-                    .font(.system(size: 44, weight: .semibold))
+                    .font(.dante(size: 44, weight: .semibold))
                     .tracking(drawn || reduceMotion ? -1.3 : 15)
                     .blur(radius: drawn || reduceMotion ? 0 : 6)
                     .opacity(drawn ? 1 : 0)
                     .animation(reduceMotion ? nil : .timingCurve(0.2, 0.7, 0.2, 1, duration: 1).delay(1.05), value: drawn)
                 Text("The whole lifecycle, in one window.")
-                    .font(.system(size: 15))
+                    .font(.dante(size: 15))
                     .foregroundStyle(theme.text2.color)
                     .opacity(drawn ? 1 : 0)
                     .offset(y: drawn || reduceMotion ? 0 : 10)
@@ -72,7 +72,7 @@ struct LaunchView: View {
             HStack(spacing: 14) {
                 ForEach(Array(Lifecycle.defaultPhases.enumerated()), id: \.offset) { index, phase in
                     Text(phase.uppercased())
-                        .font(.system(size: 10.5, design: .monospaced))
+                        .font(.dante(size: 10.5, design: .monospaced))
                         .tracking(0.5)
                         .foregroundStyle(theme.text3.color)
                         .opacity(drawn ? 1 : 0)
@@ -115,7 +115,7 @@ struct LaunchView: View {
                 Eyebrow("Recent")
                 if recents.items.isEmpty {
                     Text("Projects you open appear here.")
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text3.color)
                         .padding(.vertical, 8)
                 } else {
@@ -141,7 +141,7 @@ struct LaunchView: View {
                 statusItem(status.dockerRunning, on: "Docker running", off: "Docker not running")
                 Spacer()
                 Text("v0.1")
-                    .font(.system(size: 11.5, design: .monospaced))
+                    .font(.dante(size: 11.5, design: .monospaced))
                     .foregroundStyle(theme.text3.color)
             }
             .padding(.top, 14)
@@ -156,7 +156,7 @@ struct LaunchView: View {
             StatusDot(color: ok ? theme.green.color : theme.text3.color, size: 6)
             Text(ok ? on : off)
         }
-        .font(.system(size: 12))
+        .font(.dante(size: 12))
         .foregroundStyle(theme.text3.color)
     }
 }
@@ -174,17 +174,17 @@ private struct StartAction: View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.dante(size: 15, weight: .medium))
                     .foregroundStyle(theme.accent.color)
                     .frame(width: 34, height: 34)
                     .background(RoundedRectangle(cornerRadius: 8).fill(theme.raised.color))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line2.color))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
-                    Text(subtitle).font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                    Text(title).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
+                    Text(subtitle).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
                 Spacer()
-                Text(shortcut).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                Text(shortcut).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
@@ -208,9 +208,9 @@ private struct RecentRow: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(project.name).font(.system(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
+                    Text(project.name).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
                     Text(project.displayPath)
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(.dante(size: 11.5, design: .monospaced))
                         .foregroundStyle(theme.text3.color)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -218,7 +218,7 @@ private struct RecentRow: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(lifecycle.currentIndex.map { lifecycle.phases[$0] } ?? (lifecycle.hasSpec ? "" : "No spec yet"))
-                        .font(.system(size: 12))
+                        .font(.dante(size: 12))
                         .foregroundStyle(theme.text2.color)
                     PhaseDots(lifecycle: lifecycle)
                 }

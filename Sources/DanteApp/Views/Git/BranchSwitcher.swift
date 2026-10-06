@@ -18,14 +18,14 @@ struct BranchButton: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .font(.dante(size: 10.5, weight: .semibold))
                         .foregroundStyle(theme.text3.color)
                     Text(branch)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.dante(size: 12, design: .monospaced))
                         .foregroundStyle(theme.text2.color)
                         .lineLimit(1)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.dante(size: 8, weight: .bold))
                         .foregroundStyle(theme.text3.color)
                 }
                 .padding(.horizontal, 7)
@@ -56,7 +56,7 @@ struct BranchButton: View {
                                 if status.ahead > 0 { Text("↑\(status.ahead)") }
                             }
                         }
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .font(.dante(size: 11, weight: .semibold, design: .monospaced))
                         .foregroundStyle(theme.accent.color)
                         .padding(.horizontal, 6)
                         .frame(height: 22)
@@ -110,21 +110,21 @@ private struct BranchPicker: View {
                     .onSubmit(submit)
                 IconButton(symbol: "arrow.down.circle", label: "Fetch from remotes", size: 12) { Task { await git.fetch() } }
             }
-            .font(.system(size: 13))
+            .font(.dante(size: 13))
             .padding(.horizontal, 12)
             .frame(height: 40)
             Rectangle().fill(theme.line.color).frame(height: 1)
 
             if let error = git.error {
                 Text(error.message)
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.red.color)
                     .padding(10)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if (git.status?.changes.isEmpty == false) {
                 Label("You have uncommitted changes. Git carries them to the new branch unless they clash.", systemImage: "info.circle")
-                    .font(.system(size: 11))
+                    .font(.dante(size: 11))
                     .foregroundStyle(theme.text3.color)
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
@@ -160,7 +160,7 @@ private struct BranchPicker: View {
 
     private func heading(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 10, weight: .semibold))
+            .font(.dante(size: 10, weight: .semibold))
             .tracking(0.8)
             .foregroundStyle(theme.text3.color)
             .padding(.horizontal, 8)
@@ -184,16 +184,16 @@ private struct BranchPicker: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: current ? "checkmark" : symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.dante(size: 11, weight: .semibold))
                     .foregroundStyle(current ? theme.accent.color : theme.text3.color)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(.system(size: 12.5, weight: current ? .semibold : .regular, design: .monospaced))
+                        .font(.dante(size: 12.5, weight: current ? .semibold : .regular, design: .monospaced))
                         .foregroundStyle(theme.text.color)
                         .lineLimit(1)
                     if !detail.isEmpty {
-                        Text(detail).font(.system(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        Text(detail).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)

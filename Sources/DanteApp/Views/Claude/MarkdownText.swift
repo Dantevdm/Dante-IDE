@@ -14,13 +14,13 @@ struct MarkdownText: View {
                 case .code(let code, let language):
                     CodeBlock(text: code, language: language)
                 case .heading(let text):
-                    inline(text).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                    inline(text).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
                 case .paragraph(let text):
                     inline(text)
                 }
             }
         }
-        .font(.system(size: 12.5))
+        .font(.dante(size: 12.5))
         .foregroundStyle(theme.text.color)
         .lineSpacing(2)
         .textSelection(.enabled)
@@ -36,7 +36,7 @@ struct MarkdownText: View {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         var attributed = (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
         for run in attributed.runs where run.inlinePresentationIntent?.contains(.code) == true {
-            attributed[run.range].font = .system(size: codeSize, design: .monospaced)
+            attributed[run.range].font = .dante(size: codeSize, design: .monospaced)
             attributed[run.range].foregroundColor = theme.accent.color
         }
         return attributed

@@ -21,7 +21,7 @@ struct DocumentBody: View {
         VStack(alignment: .leading, spacing: 14) {
             if showsPath {
                 Text(path)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.dante(size: 12, design: .monospaced))
                     .foregroundStyle(theme.text3.color)
             }
             ForEach(Array((only ?? document.blocks).enumerated()), id: \.offset) { _, block in
@@ -33,7 +33,7 @@ struct DocumentBody: View {
     }
 
     private func font(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: serif ? .serif : .default)
+        .dante(size: size, weight: weight, design: serif ? .serif : .default)
     }
 
     private func inline(_ text: String, size: CGFloat? = nil) -> Text {
@@ -62,7 +62,7 @@ struct DocumentBody: View {
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         if let checked = item.checked {
                             Image(systemName: checked ? "checkmark.square.fill" : "square")
-                                .font(.system(size: bodySize - 2))
+                                .font(.dante(size: bodySize - 2))
                                 .foregroundStyle(checked ? theme.green.color : theme.text3.color)
                         } else if let number = item.number {
                             Text("\(number).").font(font(bodySize)).foregroundStyle(theme.text3.color).monospacedDigit()
@@ -108,7 +108,7 @@ struct DocTable: View {
             GridRow {
                 ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
                     Text(cell.uppercased())
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(.dante(size: 10.5, weight: .medium))
                         .tracking(0.8)
                         .foregroundStyle(theme.text3.color)
                         .padding(.bottom, 8)
@@ -119,7 +119,7 @@ struct DocTable: View {
                 GridRow {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
                         inline(cell)
-                            .font(.system(size: 13))
+                            .font(.dante(size: 13))
                             .foregroundStyle(theme.text.color)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.vertical, 8)

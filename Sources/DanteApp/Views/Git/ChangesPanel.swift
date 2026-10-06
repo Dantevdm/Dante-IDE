@@ -21,7 +21,7 @@ struct ChangesPanel: View {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         if status.changes.isEmpty {
                             Text("No changes. Edits you make show up here, ready to commit.")
-                                .font(.system(size: 12))
+                                .font(.dante(size: 12))
                                 .foregroundStyle(theme.text3.color)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 14)
@@ -36,7 +36,7 @@ struct ChangesPanel: View {
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("This folder isn’t a git repository.")
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text2.color)
                     Button("Initialise Repository") { session.runInTerminal("git init") }
                         .buttonStyle(DanteButtonStyle())
@@ -65,14 +65,14 @@ struct ChangesPanel: View {
             ZStack(alignment: .topLeading) {
                 if git.message.isEmpty {
                     Text(status.staged.isEmpty ? "Message (commits all changes)" : "Message")
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text3.color)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 8)
                         .allowsHitTesting(false)
                 }
                 TextEditor(text: Bindable(git).message)
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .scrollContentBackground(.hidden)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 7)
@@ -90,7 +90,7 @@ struct ChangesPanel: View {
                         if git.writingMessage {
                             ProgressView().controlSize(.mini)
                         } else {
-                            Image(systemName: "sparkle").font(.system(size: 11, weight: .semibold))
+                            Image(systemName: "sparkle").font(.dante(size: 11, weight: .semibold))
                         }
                     }
                     .frame(width: 22, height: 22)
@@ -128,13 +128,13 @@ struct ChangesPanel: View {
             HStack(spacing: 8) {
                 Toggle("Amend last commit", isOn: Bindable(git).amend)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text2.color)
                     .disabled(status.isNewRepository)
                 Spacer()
                 if let notice = git.notice {
                     Text(notice)
-                        .font(.system(size: 11))
+                        .font(.dante(size: 11))
                         .foregroundStyle(theme.green.color)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -152,7 +152,7 @@ struct ChangesPanel: View {
     private func banner(_ error: GitRepository.Failure) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(error.message)
-                .font(.system(size: 11.5))
+                .font(.dante(size: 11.5))
                 .foregroundStyle(theme.text.color)
                 .textSelection(.enabled)
                 .lineLimit(8)
@@ -186,11 +186,11 @@ struct ChangesPanel: View {
         if !changes.isEmpty {
             HStack(spacing: 6) {
                 Text(title.uppercased())
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.dante(size: 10, weight: .semibold))
                     .tracking(0.8)
                     .foregroundStyle(theme.text3.color)
                 Text("\(changes.count)")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.dante(size: 10, weight: .semibold))
                     .foregroundStyle(theme.text3.color)
                     .padding(.horizontal, 5)
                     .background(Capsule().fill(theme.raised.color))
@@ -246,17 +246,17 @@ private struct ChangeRow: View {
             Button(action: open) {
                 HStack(spacing: 6) {
                     Image(systemName: FileIcon.symbol(for: URL(filePath: change.path), isDirectory: false))
-                        .font(.system(size: 11.5))
+                        .font(.dante(size: 11.5))
                         .foregroundStyle(theme.text3.color)
                         .frame(width: 16)
                     Text(name)
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(kind == .deleted ? theme.text3.color : theme.text.color)
                         .strikethrough(kind == .deleted)
                         .lineLimit(1)
                     if !folder.isEmpty {
                         Text(folder)
-                            .font(.system(size: 11))
+                            .font(.dante(size: 11))
                             .foregroundStyle(theme.text3.color)
                             .lineLimit(1)
                             .truncationMode(.head)
@@ -280,7 +280,7 @@ private struct ChangeRow: View {
                 }
             }
             Text(kind.letter)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(.dante(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(color)
                 .frame(width: 14)
                 .help(kind.label)

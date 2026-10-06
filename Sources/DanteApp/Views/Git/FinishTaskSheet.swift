@@ -13,9 +13,9 @@ struct FinishTaskSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Finish \(model.task.id)").font(.system(size: 17, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("Finish \(model.task.id)").font(.dante(size: 17, weight: .semibold)).foregroundStyle(theme.text.color)
                 Text(MarkdownText.attributed(model.task.title, theme: theme))
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text2.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -23,14 +23,14 @@ struct FinishTaskSheet: View {
             if model.isLoading {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Looking at the repository…").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                    Text("Looking at the repository…").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
             } else if model.finished {
                 finishedView
             } else if model.step != nil {
                 // The repository changes under the form as the steps run, so it isn't shown.
                 Text("Finishing on \(model.branchName)\(model.opensPullRequest ? ", then a pull request into \(model.defaultBranch)" : "").")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
             } else {
                 branchSection
@@ -40,7 +40,7 @@ struct FinishTaskSheet: View {
 
             if let error = model.error {
                 Text(error)
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.red.color)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -49,7 +49,7 @@ struct FinishTaskSheet: View {
             HStack {
                 if let step = model.step {
                     ProgressView().controlSize(.small)
-                    Text(step).font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                    Text(step).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
                 Spacer()
                 if model.finished {
@@ -84,17 +84,17 @@ struct FinishTaskSheet: View {
         section("Branch") {
             if model.createsBranch {
                 HStack(spacing: 8) {
-                    Text("New branch from \(model.defaultBranch)").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                    Text("New branch from \(model.defaultBranch)").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                     TextField("Branch", text: $model.branchName)
                         .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.dante(size: 12, design: .monospaced))
                 }
                 if !GitBranch.isValidName(model.branchName) {
-                    Text("That isn’t a valid branch name.").font(.system(size: 11)).foregroundStyle(theme.red.color)
+                    Text("That isn’t a valid branch name.").font(.dante(size: 11)).foregroundStyle(theme.red.color)
                 }
             } else {
                 Text("On \(model.currentBranch)\(model.hasUpstream ? "" : ", which hasn’t been pushed yet").")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
             }
         }
@@ -107,7 +107,7 @@ struct FinishTaskSheet: View {
             } else {
                 let count = model.branchCommits.count
                 Text("Nothing uncommitted. \(count) commit\(count == 1 ? "" : "s") on this branch \(count == 1 ? "goes" : "go") into the pull request.")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
             }
         }
@@ -117,19 +117,19 @@ struct FinishTaskSheet: View {
         section("Pull request", drafting: model.draftingPull, redraft: model.opensPullRequest ? { Task { await model.draftPullRequest() } } : nil) {
             Toggle("Open a pull request into \(model.defaultBranch)", isOn: $model.opensPullRequest)
                 .toggleStyle(.checkbox)
-                .font(.system(size: 12))
+                .font(.dante(size: 12))
                 .disabled(model.pullRequestUnavailable != nil)
             if let reason = model.pullRequestUnavailable {
-                Text(reason).font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                Text(reason).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
             }
             if model.opensPullRequest {
                 TextField("Title", text: $model.pullTitle)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                 editor($model.pullBody, height: 150, monospaced: false)
                 Toggle("Open as a draft", isOn: $model.isDraft)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
             }
         }
     }
@@ -137,12 +137,12 @@ struct FinishTaskSheet: View {
     private var finishedView: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("\(model.task.id) is in review, and \(model.branchName) is pushed.", systemImage: "checkmark.circle.fill")
-                .font(.system(size: 13, weight: .medium))
+                .font(.dante(size: 13, weight: .medium))
                 .foregroundStyle(theme.green.color)
             if let url = model.pullRequestURL {
                 HStack(spacing: 8) {
                     Text(url.absoluteString)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.dante(size: 12, design: .monospaced))
                         .foregroundStyle(theme.text2.color)
                         .textSelection(.enabled)
                     Button("Open Pull Request") { openURL(url) }
@@ -157,16 +157,16 @@ struct FinishTaskSheet: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
                 Text(title.uppercased())
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.dante(size: 10.5, weight: .semibold))
                     .tracking(0.6)
                     .foregroundStyle(theme.text3.color)
                 Spacer()
                 if drafting {
                     ProgressView().controlSize(.mini)
-                    Text("Claude is drafting…").font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                    Text("Claude is drafting…").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                 } else if let redraft {
                     Button(action: redraft) {
-                        Label("Redraft", systemImage: "sparkle").font(.system(size: 11))
+                        Label("Redraft", systemImage: "sparkle").font(.dante(size: 11))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(theme.accent.color)
@@ -179,7 +179,7 @@ struct FinishTaskSheet: View {
 
     private func editor(_ text: Binding<String>, height: CGFloat, monospaced: Bool) -> some View {
         TextEditor(text: text)
-            .font(.system(size: 12, design: monospaced ? .monospaced : .default))
+            .font(.dante(size: 12, design: monospaced ? .monospaced : .default))
             .scrollContentBackground(.hidden)
             .padding(6)
             .frame(height: height)

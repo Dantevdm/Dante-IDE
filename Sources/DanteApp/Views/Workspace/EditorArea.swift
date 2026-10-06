@@ -183,13 +183,13 @@ private struct TabItem: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(document.name)
-                .font(.system(size: 12.5))
+                .font(.dante(size: 12.5))
                 .foregroundStyle(isActive ? theme.text.color : theme.text3.color)
                 .lineLimit(1)
             ZStack {
                 if hovering || (isActive && !document.isDirty) {
                     Button(action: close) {
-                        Image(systemName: "xmark").font(.system(size: 8.5, weight: .bold))
+                        Image(systemName: "xmark").font(.dante(size: 8.5, weight: .bold))
                             .frame(width: 16, height: 16)
                             .contentShape(Rectangle())
                     }
@@ -236,7 +236,7 @@ private struct PathBar: View {
         HStack(spacing: 5) {
             ForEach(Array(components.enumerated()), id: \.offset) { index, part in
                 if index > 0 {
-                    Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
+                    Image(systemName: "chevron.right").font(.dante(size: 8, weight: .semibold))
                         .foregroundStyle(theme.text3.color)
                 }
                 Text(part)
@@ -250,7 +250,7 @@ private struct PathBar: View {
                     .padding(.trailing, -10)
             }
         }
-        .font(.system(size: 12))
+        .font(.dante(size: 12))
         .padding(.horizontal, 16)
         .frame(height: 28)
         .background(theme.codeBackground.color)
@@ -274,10 +274,10 @@ private struct EmptyEditor: View {
     var body: some View {
         VStack(spacing: 18) {
             Image(systemName: "chevron.left.forwardslash.chevron.right")
-                .font(.system(size: 28, weight: .light))
+                .font(.dante(size: 28, weight: .light))
                 .foregroundStyle(theme.text3.color)
             Text("Open a file from the explorer")
-                .font(.system(size: 14))
+                .font(.dante(size: 14))
                 .foregroundStyle(theme.text2.color)
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
                 shortcut("Open folder", "⌘O")
@@ -292,8 +292,8 @@ private struct EmptyEditor: View {
 
     private func shortcut(_ label: String, _ keys: String) -> some View {
         GridRow {
-            Text(label).font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
-            Text(keys).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
+            Text(label).font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
+            Text(keys).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
         }
     }
 }
@@ -306,9 +306,9 @@ private struct ConflictBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(theme.amber.color)
+            Image(systemName: "exclamationmark.triangle.fill").font(.dante(size: 11)).foregroundStyle(theme.amber.color)
             Text("\(document.name) changed on disk. Your unsaved edits are still here.")
-                .font(.system(size: 12))
+                .font(.dante(size: 12))
                 .foregroundStyle(theme.text.color)
             Spacer()
             Button("Keep mine") { session.resolveConflict(document, reload: false) }

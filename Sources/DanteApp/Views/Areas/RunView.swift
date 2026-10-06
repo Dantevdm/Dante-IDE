@@ -85,31 +85,31 @@ private struct CheckCard: View {
         let uptime = samples.isEmpty ? nil : Double(samples.count(where: \.isUp)) / Double(samples.count)
         Card(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(check.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text(check.name).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
                 Spacer()
                 if let last {
                     HStack(spacing: 5) {
                         StatusDot(color: last.isUp ? theme.green.color : theme.red.color, size: 6)
-                        Text(last.status.map { "\($0)" } ?? "down").font(.system(size: 12)).foregroundStyle(last.isUp ? theme.green.color : theme.red.color)
+                        Text(last.status.map { "\($0)" } ?? "down").font(.dante(size: 12)).foregroundStyle(last.isUp ? theme.green.color : theme.red.color)
                     }
                 } else {
-                    Text("checking…").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                    Text("checking…").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
             }
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(last?.milliseconds.map { "\(Int($0.rounded()))" } ?? "—")
-                    .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                    .font(.dante(size: 28, weight: .semibold, design: .monospaced))
                     .foregroundStyle(theme.text.color)
                 Text("ms").foregroundStyle(theme.text3.color)
                 Spacer()
                 if let uptime {
-                    Text("\(Int((uptime * 100).rounded()))% up").font(.system(size: 12)).foregroundStyle(uptime >= 0.99 ? theme.text3.color : theme.amber.color)
+                    Text("\(Int((uptime * 100).rounded()))% up").font(.dante(size: 12)).foregroundStyle(uptime >= 0.99 ? theme.text3.color : theme.amber.color)
                 }
             }
             Sparkline(values: latencies, color: (last?.isUp ?? true) ? theme.accent.color : theme.red.color)
                 .frame(height: 44)
             Text(last?.error ?? check.url.absoluteString)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.dante(size: 11, design: .monospaced))
                 .foregroundStyle(last?.error == nil ? theme.text3.color : theme.red.color)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -154,10 +154,10 @@ private struct DownCard: View {
         Card(accent: true) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkle").foregroundStyle(theme.accent.color)
-                Text("\(check.name) is failing its health check").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("\(check.name) is failing its health check").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
             }
             Text(sample?.error ?? sample?.status.map { "Last response: HTTP \($0)" } ?? "No response")
-                .font(.system(size: 12, design: .monospaced))
+                .font(.dante(size: 12, design: .monospaced))
                 .foregroundStyle(theme.text3.color)
             Button("Ask Claude what changed") {
                 session.askClaude("The \(check.name) health check (\(check.url.absoluteString)) is failing: \(sample?.error ?? sample?.status.map { "HTTP \($0)" } ?? "no response"). Look at recent commits, the health endpoint's code and any deploy config, and suggest what to check first.")
@@ -177,7 +177,7 @@ private struct ErrorsCard: View {
             Card("Errors · since this window opened") {
                 HStack(spacing: 8) {
                     Text(watch.isRunning ? "following operate.logs" : (watch.exitMessage ?? ""))
-                        .font(.system(size: 12))
+                        .font(.dante(size: 12))
                         .foregroundStyle(theme.text3.color)
                         .lineLimit(1)
                         .help(watch.command)
@@ -191,11 +191,11 @@ private struct ErrorsCard: View {
             } content: {
                 if watch.digest.issues.isEmpty {
                     Text(watch.digest.linesSeen == 0 ? "Waiting for log lines…" : "No errors in \(watch.digest.linesSeen) lines.")
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text3.color)
                     if let message = watch.exitMessage, watch.digest.linesSeen < 5 {
                         Text(watch.recent.suffix(5).joined(separator: "\n").nonEmpty ?? message)
-                            .font(.system(size: 11.5, design: .monospaced))
+                            .font(.dante(size: 11.5, design: .monospaced))
                             .foregroundStyle(theme.text2.color)
                             .textSelection(.enabled)
                     }
@@ -205,14 +205,14 @@ private struct ErrorsCard: View {
                         StatusDot(color: issue.count > 10 ? theme.red.color : theme.amber.color).padding(.top, 5)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(issue.example)
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(.dante(size: 12, design: .monospaced))
                                 .foregroundStyle(theme.text.color)
                                 .lineLimit(2)
                                 .textSelection(.enabled)
-                            Text("last seen \(issue.lastSeen.relative)").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                            Text("last seen \(issue.lastSeen.relative)").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                         }
                         Spacer(minLength: 8)
-                        Text("×\(issue.count)").font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
+                        Text("×\(issue.count)").font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
                         Button("Create task") { createTask(for: issue) }
                             .buttonStyle(DanteButtonStyle())
                         Button("Ask Claude") {
@@ -225,7 +225,7 @@ private struct ErrorsCard: View {
         } else {
             Card("Errors") {
                 Text("Add operate.logs to .dante/project.yaml with a command that streams production logs, and errors are grouped here as they happen.")
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -184,7 +184,7 @@ public struct CodeEditorView: NSViewRepresentable {
         coordinator.parent = self
         guard let textView = coordinator.textView else { return }
         let themeChanged = coordinator.appliedTheme != theme
-        if themeChanged || coordinator.appliedFontSize != fontSize {
+        if themeChanged || coordinator.appliedFontSize != fontSize || coordinator.appliedGeist != DanteFonts.usesGeist {
             coordinator.apply(theme: theme, fontSize: fontSize)
             coordinator.highlightNow()
         }
@@ -262,6 +262,7 @@ public struct CodeEditorView: NSViewRepresentable {
         weak var ruler: LineNumberRuler?
         var appliedTheme: Theme?
         var appliedFontSize: CGFloat = 0
+        var appliedGeist = false
         private let highlighter: any Highlighter
         private var highlightTask: Task<Void, Never>?
         /// The last tokens computed, and the text they were computed for.
@@ -300,7 +301,8 @@ public struct CodeEditorView: NSViewRepresentable {
             completion?.apply(theme: theme, fontSize: fontSize)
             appliedTheme = theme
             appliedFontSize = fontSize
-            let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            let font = DanteFonts.mono(size: fontSize)
+            appliedGeist = DanteFonts.usesGeist
             let paragraph = NSMutableParagraphStyle()
             let lineHeight = (fontSize * 1.65).rounded()
             paragraph.minimumLineHeight = lineHeight
@@ -317,7 +319,7 @@ public struct CodeEditorView: NSViewRepresentable {
             textView.enclosingScrollView?.backgroundColor = theme.codeBackground.nsColor
             textView.enclosingScrollView?.scrollerKnobStyle = theme.isDark ? .light : .dark
 
-            ruler?.font = NSFont.monospacedDigitSystemFont(ofSize: fontSize - 1.5, weight: .regular)
+            ruler?.font = DanteFonts.usesGeist ? DanteFonts.mono(size: fontSize - 1.5) : NSFont.monospacedDigitSystemFont(ofSize: fontSize - 1.5, weight: .regular)
             ruler?.textColor = theme.lineNumber.nsColor
             ruler?.activeTextColor = theme.lineNumberActive.nsColor
             ruler?.backgroundColor = theme.codeBackground.nsColor

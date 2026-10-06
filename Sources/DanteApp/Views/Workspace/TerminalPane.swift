@@ -1,4 +1,5 @@
 import AppKit
+import DanteEditor
 import DanteKit
 @preconcurrency import SwiftTerm
 import SwiftUI
@@ -77,14 +78,14 @@ private struct TerminalTabButton: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "terminal").font(.system(size: 10.5))
+            Image(systemName: "terminal").font(.dante(size: 10.5))
             Text(tab.title).lineLimit(1).frame(maxWidth: 160, alignment: .leading)
             if let code = tab.exitCode {
                 Text(code.map { "exited \($0)" } ?? "exited").foregroundStyle(theme.text3.color)
             }
             if canClose {
                 Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                    Image(systemName: "xmark").font(.dante(size: 8, weight: .bold))
                         .frame(width: 14, height: 14)
                         .foregroundStyle(theme.text3.color)
                         .opacity(hovering || isSelected ? 1 : 0)
@@ -93,7 +94,7 @@ private struct TerminalTabButton: View {
                 .help("Close this shell")
             }
         }
-        .font(.system(size: 12))
+        .font(.dante(size: 12))
         .foregroundStyle(isSelected ? theme.text.color : theme.text2.color)
         .padding(.leading, 9)
         .padding(.trailing, canClose ? 5 : 9)
@@ -143,9 +144,10 @@ private struct TerminalHost: NSViewRepresentable {
 
     func updateNSView(_ view: LocalProcessTerminalView, context: Context) {
         context.coordinator.parent = self
-        if context.coordinator.appliedTheme != theme {
+        if context.coordinator.appliedTheme != theme || context.coordinator.appliedGeist != DanteFonts.usesGeist {
             apply(theme, to: view)
             context.coordinator.appliedTheme = theme
+            context.coordinator.appliedGeist = DanteFonts.usesGeist
         }
         if let input, input.id != context.coordinator.sentInputID {
             context.coordinator.sentInputID = input.id
@@ -165,7 +167,7 @@ private struct TerminalHost: NSViewRepresentable {
     }
 
     private func apply(_ theme: Theme, to view: LocalProcessTerminalView) {
-        view.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+        view.font = DanteFonts.mono(size: 12.5)
         view.nativeBackgroundColor = theme.panel.nsColor
         view.nativeForegroundColor = theme.text.nsColor
         view.caretColor = theme.accent.nsColor
@@ -176,6 +178,7 @@ private struct TerminalHost: NSViewRepresentable {
     final class Coordinator: NSObject {
         var parent: TerminalHost
         var appliedTheme: Theme?
+        var appliedGeist: Bool?
         var sentInputID: UUID?
         var wasSelected = true
 

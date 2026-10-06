@@ -47,7 +47,7 @@ struct PlanView: View {
         VStack(alignment: .leading, spacing: 10) {
             Eyebrow("Phase \(String(format: "%02d", phaseIndex + 1)) of \(lifecycle.phases.count)\(phaseIndex == lifecycle.currentIndex ? " · current" : "")")
             HStack(alignment: .firstTextBaseline, spacing: 14) {
-                Text(phase).font(.system(size: 28, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text(phase).font(.dante(size: 28, weight: .semibold)).foregroundStyle(theme.text.color)
                 Spacer()
                 Button {
                     isAddingTask = true
@@ -59,7 +59,7 @@ struct PlanView: View {
                 phaseButton
             }
             Text(workspace.phaseDocs[phase.lowercased()]?.summary.nonEmpty ?? PhaseDoc.parse(workspace.lifecycle.phaseDocTemplate(phase)).summary)
-                .font(.system(size: 13.5))
+                .font(.dante(size: 13.5))
                 .foregroundStyle(theme.text2.color)
                 .frame(maxWidth: 640, alignment: .leading)
         }
@@ -106,7 +106,7 @@ private struct PhaseList: View {
             }
             Spacer()
             Text("Phases organise work, docs and Claude’s context. They never lock you out: work on anything, any time.")
-                .font(.system(size: 11))
+                .font(.dante(size: 11))
                 .foregroundStyle(theme.text3.color)
                 .padding(10)
         }
@@ -141,10 +141,10 @@ private struct PhaseRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Text(String(format: "%02d", index + 1))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.dante(size: 11, design: .monospaced))
                     .foregroundStyle(theme.text3.color)
                 Text(phase)
-                    .font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
+                    .font(.dante(size: 13, weight: isCurrent ? .semibold : .regular))
                     .foregroundStyle(isCurrent || isSelected ? theme.text.color : theme.text2.color)
                 Spacer()
                 statusLabel
@@ -171,17 +171,17 @@ private struct PhaseRow: View {
         case .done:
             Label("Done", systemImage: "checkmark")
                 .labelStyle(.titleAndIcon)
-                .font(.system(size: 10.5))
+                .font(.dante(size: 10.5))
                 .foregroundStyle(theme.green.color)
         case .current(let done, let total):
             Text(total == 0 ? "Now" : "\(done)/\(total)")
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.dante(size: 10.5, weight: .semibold))
                 .foregroundStyle(theme.onAccent.color)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(theme.accent.color))
         case .planned:
-            Text("Planned").font(.system(size: 10.5)).foregroundStyle(theme.text3.color)
+            Text("Planned").font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
         }
     }
 }
@@ -198,9 +198,9 @@ private struct NoSpecBanner: View {
         HStack(spacing: 12) {
             Image(systemName: "sparkles").foregroundStyle(theme.accent.color)
             VStack(alignment: .leading, spacing: 3) {
-                Text("This project has no .dante spec yet").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("This project has no .dante spec yet").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
                 Text("Dante can work out the stack, lifecycle and phase, and Claude can fill in the summary, checklists and tasks for you to review.")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
             }
             Spacer()
@@ -225,11 +225,11 @@ private struct Checklists: View {
         if let doc = workspace.phaseDocs[phase.lowercased()] {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Checklists · guidance, never gates").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                    Text("Checklists · guidance, never gates").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                     Spacer()
                     Button(".dante/phases/\(phase.lowercased()).md") { session.open(file: workspace.phaseDocURL(phase)) }
                         .buttonStyle(.plain)
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(.dante(size: 11.5, design: .monospaced))
                         .foregroundStyle(theme.accent.color)
                 }
                 HStack(alignment: .top, spacing: 14) {
@@ -241,7 +241,7 @@ private struct Checklists: View {
             HStack(spacing: 12) {
                 Image(systemName: "checklist").foregroundStyle(theme.text3.color)
                 Text("No checklist for \(phase) yet. A phase doc says what “ready” and “done” mean here, as plain markdown in .dante/phases/.")
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text2.color)
                 Spacer()
                 Button("Add a starter checklist") {
@@ -283,14 +283,14 @@ private struct ChecklistCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text(title).font(.dante(size: 12.5, weight: .semibold)).foregroundStyle(theme.text.color)
                 Spacer()
                 Text("\(doneCount)/\(totalCount)")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(.dante(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(doneCount == totalCount && totalCount > 0 ? theme.green.color : theme.text3.color)
             }
             if totalCount == 0 {
-                Text("Nothing listed").font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                Text("Nothing listed").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
             }
             ForEach(items) { item in
                 Button { toggle(item) } label: {
@@ -315,16 +315,16 @@ private struct ChecklistCard: View {
     private func row(_ text: String, done: Bool, detail: String?) -> some View {
         HStack(spacing: 9) {
             Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 13))
+                .font(.dante(size: 13))
                 .foregroundStyle(done ? theme.green.color : theme.text3.color)
             Text(MarkdownText.attributed(text, theme: theme))
-                .font(.system(size: 12.5))
+                .font(.dante(size: 12.5))
                 .foregroundStyle(done ? theme.text2.color : theme.text.color)
                 .strikethrough(done, color: theme.text3.color)
                 .multilineTextAlignment(.leading)
             Spacer(minLength: 0)
             if let detail {
-                Text(detail).font(.system(size: 11)).foregroundStyle(theme.amber.color)
+                Text(detail).font(.dante(size: 11)).foregroundStyle(theme.amber.color)
             }
         }
         .contentShape(Rectangle())
@@ -345,18 +345,18 @@ private struct ClaudeRulesCard: View {
             HStack {
                 Label("What Claude may propose", systemImage: "sparkle")
                     .labelStyle(.titleAndIcon)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.dante(size: 12.5, weight: .semibold))
                     .foregroundStyle(theme.text.color)
                 Spacer()
                 Button(".dante/project.yaml") { session.open(file: workspace.danteFolder.appending(path: "project.yaml")) }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11.5, design: .monospaced))
+                    .font(.dante(size: 11.5, design: .monospaced))
                     .foregroundStyle(theme.accent.color)
                     .disabled(!workspace.lifecycle.hasSpec)
             }
             if rules.isEmpty {
                 Text("No rules yet. Add a `claude:` block to project.yaml with `propose`, `flag` and `never` lists of folders and globs. Claude is still asked before every change.")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
             } else {
                 HStack(alignment: .top, spacing: 18) {
@@ -365,7 +365,7 @@ private struct ClaudeRulesCard: View {
                     column("Never", rules.never, color: theme.red.color)
                 }
                 Text("You apply every change. Flagged paths are called out in the diff; never-paths are refused before you see them, reads included.")
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text3.color)
             }
         }
@@ -379,10 +379,10 @@ private struct ClaudeRulesCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Circle().fill(color).frame(width: 6, height: 6)
-                Text(title).font(.system(size: 11.5, weight: .medium)).foregroundStyle(theme.text2.color)
+                Text(title).font(.dante(size: 11.5, weight: .medium)).foregroundStyle(theme.text2.color)
             }
             if patterns.isEmpty {
-                Text("—").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                Text("—").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             }
             FlowChips(items: patterns)
         }
@@ -399,7 +399,7 @@ private struct FlowChips: View {
         FlowLayout(spacing: 5) {
             ForEach(items, id: \.self) { item in
                 Text(item)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.dante(size: 11, design: .monospaced))
                     .foregroundStyle(theme.text.color)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)

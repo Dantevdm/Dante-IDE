@@ -20,21 +20,21 @@ struct CloneSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Clone a repository")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.dante(size: 17, weight: .semibold))
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Repository URL").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                Text("Repository URL").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                 TextField("https://github.com/owner/repo.git", text: $repository)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.dante(size: 13, design: .monospaced))
                     .onSubmit(clone)
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Clone into").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                Text("Clone into").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                 HStack {
                     Text(destinationDescription)
-                        .font(.system(size: 12.5, design: .monospaced))
+                        .font(.dante(size: 12.5, design: .monospaced))
                         .foregroundStyle(theme.text.color)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -61,25 +61,25 @@ struct CloneSheet: View {
                             Text("\(Int(fraction * 100))%").monospacedDigit().foregroundStyle(theme.text2.color)
                         }
                     }
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                 }
             }
 
             if needsCredentials {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("\(host) wants you to sign in", systemImage: "key")
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.dante(size: 12.5, weight: .semibold))
                         .foregroundStyle(theme.amber.color)
                     Text(waitingOnTerminal
                          ? "Finish the clone in Terminal: git will ask for your password or app password there. Dante opens the project as soon as it’s done."
                          : "git needs a password, app password or SSH key it can’t ask for from here. Clone in Terminal, where it can ask you, and Dante opens the project when it’s done. Saving the password in your keychain or using an SSH URL avoids this next time.")
-                        .font(.system(size: 12))
+                        .font(.dante(size: 12))
                         .foregroundStyle(theme.text2.color)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack {
                         if waitingOnTerminal {
                             ProgressView().controlSize(.small)
-                            Text("Waiting for Terminal…").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                            Text("Waiting for Terminal…").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                         } else {
                             Button("Clone in Terminal", action: cloneInTerminal).buttonStyle(DanteButtonStyle(primary: true))
                         }
@@ -90,7 +90,7 @@ struct CloneSheet: View {
                 .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(theme.amber.opacity(0.4).color))
             } else if let failure {
                 Text(failure)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.dante(size: 12, design: .monospaced))
                     .foregroundStyle(theme.red.color)
                     .textSelection(.enabled)
                     .lineLimit(6)

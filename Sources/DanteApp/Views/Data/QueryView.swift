@@ -68,17 +68,17 @@ struct QueryView: View {
             }
             history
             Rectangle().fill(theme.line.color).frame(width: 1, height: 18)
-            Image(systemName: "sparkles").font(.system(size: 11)).foregroundStyle(theme.accent.color)
+            Image(systemName: "sparkles").font(.dante(size: 11)).foregroundStyle(theme.accent.color)
             TextField("Describe a query and Claude writes it…", text: $request)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
+                .font(.dante(size: 12.5))
                 .onSubmit(askForQuery)
             if !request.isEmpty {
                 Button("Ask", action: askForQuery).buttonStyle(DanteButtonStyle())
             }
             Spacer(minLength: 0)
             if connection.readOnly {
-                Label("Read-only", systemImage: "lock.fill").font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                Label("Read-only", systemImage: "lock.fill").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
             }
             IconButton(symbol: "square.and.arrow.down", label: "Save as a .sql file…") { saveScript() }
         }
@@ -193,9 +193,9 @@ struct QueryView: View {
             VStack { ProgressView().controlSize(.small) }.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 8) {
-                Image(systemName: "text.cursor").font(.system(size: 22)).foregroundStyle(theme.text3.color)
-                Text("Write SQL above and press ⌘↩").font(.system(size: 13)).foregroundStyle(theme.text2.color)
-                Text("Several statements run in one session, so BEGIN … COMMIT works.").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                Image(systemName: "text.cursor").font(.dante(size: 22)).foregroundStyle(theme.text3.color)
+                Text("Write SQL above and press ⌘↩").font(.dante(size: 13)).foregroundStyle(theme.text2.color)
+                Text("Several statements run in one session, so BEGIN … COMMIT works.").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(theme.ground.color)
@@ -211,9 +211,9 @@ struct QueryView: View {
                         model.queries[id]?.shown = result.id
                     } label: {
                         HStack(spacing: 5) {
-                            Text("\(result.id + 1)").font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                            Text("\(result.id + 1)").font(.dante(size: 10.5, weight: .bold, design: .monospaced))
                             Text(result.hasRows ? "\(result.rows.count) row\(result.rows.count == 1 ? "" : "s")" : result.message ?? "Done")
-                                .font(.system(size: 11.5))
+                                .font(.dante(size: 11.5))
                         }
                         .padding(.horizontal, 8)
                         .frame(height: 22)
@@ -234,9 +234,9 @@ struct QueryView: View {
 
     private func message(_ text: String, elapsed: Duration) -> some View {
         VStack(spacing: 6) {
-            Image(systemName: "checkmark.circle").font(.system(size: 20)).foregroundStyle(theme.green.color)
-            Text(text).font(.system(size: 13, design: .monospaced)).foregroundStyle(theme.text.color)
-            Text(DataFormat.duration(elapsed)).font(.system(size: 11)).foregroundStyle(theme.text3.color)
+            Image(systemName: "checkmark.circle").font(.dante(size: 20)).foregroundStyle(theme.green.color)
+            Text(text).font(.dante(size: 13, design: .monospaced)).foregroundStyle(theme.text.color)
+            Text(DataFormat.duration(elapsed)).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.ground.color)
@@ -245,7 +245,7 @@ struct QueryView: View {
     private func footer(_ result: QueryResult, elapsed: Duration) -> some View {
         HStack(spacing: 10) {
             Text("\(result.rows.count) row\(result.rows.count == 1 ? "" : "s")\(result.truncated ? " shown (more were returned)" : "") · \(DataFormat.duration(elapsed))")
-                .font(.system(size: 11.5))
+                .font(.dante(size: 11.5))
                 .foregroundStyle(result.truncated ? theme.amber.color : theme.text3.color)
             Spacer()
             Menu {
@@ -264,7 +264,7 @@ struct QueryView: View {
                 Label("Ask Claude", systemImage: "sparkles")
             }
             .buttonStyle(.plain)
-            .font(.system(size: 12))
+            .font(.dante(size: 12))
             .foregroundStyle(theme.accent.color)
         }
         .padding(.horizontal, 12)
@@ -296,7 +296,7 @@ private struct ErrorStrip: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "xmark.octagon.fill").foregroundStyle(theme.red.color)
             Text(error)
-                .font(.system(size: 12, design: .monospaced))
+                .font(.dante(size: 12, design: .monospaced))
                 .foregroundStyle(theme.text.color)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -349,15 +349,15 @@ struct TableView: View {
             .fixedSize()
             if state.mode == .rows {
                 HStack(spacing: 6) {
-                    Text("WHERE").font(.system(size: 10.5, weight: .bold, design: .monospaced)).foregroundStyle(theme.accent.color)
+                    Text("WHERE").font(.dante(size: 10.5, weight: .bold, design: .monospaced)).foregroundStyle(theme.accent.color)
                     TextField("email like '%@example.com'", text: $filterText)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.dante(size: 12, design: .monospaced))
                         .onSubmit { update { $0.filter = filterText; $0.page = 0 } }
                     if filterText != state.filter {
                         Button("Apply") { update { $0.filter = filterText; $0.page = 0 } }
                             .buttonStyle(.plain)
-                            .font(.system(size: 11.5, weight: .semibold))
+                            .font(.dante(size: 11.5, weight: .semibold))
                             .foregroundStyle(theme.accent.color)
                             .help("Show only rows that match (↩)")
                     }
@@ -404,8 +404,8 @@ struct TableView: View {
         } else if let result = state.result {
             if result.rows.isEmpty {
                 VStack(spacing: 6) {
-                    Image(systemName: "tray").font(.system(size: 20)).foregroundStyle(theme.text3.color)
-                    Text(state.filter.isEmpty ? "\(table.name) is empty" : "No rows match").font(.system(size: 13)).foregroundStyle(theme.text2.color)
+                    Image(systemName: "tray").font(.dante(size: 20)).foregroundStyle(theme.text3.color)
+                    Text(state.filter.isEmpty ? "\(table.name) is empty" : "No rows match").font(.dante(size: 13)).foregroundStyle(theme.text2.color)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -436,15 +436,15 @@ struct TableView: View {
         let hasMore = result.rows.count == DataModel.pageSize
         return HStack(spacing: 10) {
             Text(result.rows.isEmpty ? "No rows" : "Rows \(first + 1)–\(first + result.rows.count)\(table.rows.map { $0 > 0 ? " of ~\(DataFormat.count($0))" : "" } ?? "")")
-                .font(.system(size: 11.5))
+                .font(.dante(size: 11.5))
                 .foregroundStyle(theme.text3.color)
             if let elapsed = state.elapsed {
-                Text("· \(DataFormat.duration(elapsed))").font(.system(size: 11.5)).foregroundStyle(theme.text3.color)
+                Text("· \(DataFormat.duration(elapsed))").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             }
             Spacer()
             IconButton(symbol: "chevron.left", label: "Previous page", size: 11) { update { $0.page -= 1 } }
                 .disabled(state.page == 0 || state.loading)
-            Text("Page \(state.page + 1)").font(.system(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color)
+            Text("Page \(state.page + 1)").font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color)
             IconButton(symbol: "chevron.right", label: "Next page", size: 11) { update { $0.page += 1 } }
                 .disabled(!hasMore || state.loading)
         }
@@ -463,25 +463,25 @@ struct TableView: View {
                     Text("Null").frame(width: 60, alignment: .leading)
                     Text("Default").frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .font(.system(size: 11, weight: .semibold))
+                .font(.dante(size: 11, weight: .semibold))
                 .foregroundStyle(theme.text3.color)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 ForEach(table.columns) { column in
                     HStack(spacing: 0) {
                         HStack(spacing: 6) {
-                            Text(column.name).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
+                            Text(column.name).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
                             if column.isPrimaryKey { KeyBadge(text: "PK", color: theme.amber.color) }
                             if let target = column.references {
                                 KeyBadge(text: "FK", color: theme.accent.color).help("References \(target.table).\(target.column)")
                             }
                         }
                         .frame(width: 220, alignment: .leading)
-                        Text(column.type).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.syntax.type.color)
+                        Text(column.type).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.syntax.type.color)
                             .frame(width: 200, alignment: .leading)
-                        Text(column.nullable ? "yes" : "no").font(.system(size: 12)).foregroundStyle(column.nullable ? theme.text3.color : theme.text.color)
+                        Text(column.nullable ? "yes" : "no").font(.dante(size: 12)).foregroundStyle(column.nullable ? theme.text3.color : theme.text.color)
                             .frame(width: 60, alignment: .leading)
-                        Text(column.defaultValue ?? "").font(.system(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color)
+                        Text(column.defaultValue ?? "").font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -515,7 +515,7 @@ struct TableView: View {
         VStack(alignment: .leading, spacing: 6) {
             Eyebrow(title)
             if items.isEmpty {
-                Text(empty).font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
+                Text(empty).font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
             }
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 let (column, other, otherColumn) = item
@@ -524,10 +524,10 @@ struct TableView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Text(incoming ? "\(other).\(column)" : "\(table.name).\(column)").foregroundStyle(theme.text.color)
-                        Image(systemName: "arrow.right").font(.system(size: 10)).foregroundStyle(theme.text3.color)
+                        Image(systemName: "arrow.right").font(.dante(size: 10)).foregroundStyle(theme.text3.color)
                         Text(incoming ? "\(table.name).\(otherColumn)" : "\(other).\(otherColumn)").foregroundStyle(theme.accent.color)
                     }
-                    .font(.system(size: 12.5, design: .monospaced))
+                    .font(.dante(size: 12.5, design: .monospaced))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(RoundedRectangle(cornerRadius: 7).fill(theme.card.color))
@@ -546,7 +546,7 @@ struct KeyBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .font(.dante(size: 9, weight: .bold, design: .monospaced))
             .foregroundStyle(color)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)

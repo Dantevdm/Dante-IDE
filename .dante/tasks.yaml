@@ -46,7 +46,7 @@ tasks:
 - id: DI-11
   title: Bundle the Geist fonts from the design
   phase: build
-  state: ready
+  state: review
 - id: DI-12
   title: "Docs area: markdown rendering, outline and linked tasks"
   phase: build

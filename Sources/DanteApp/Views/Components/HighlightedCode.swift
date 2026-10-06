@@ -82,7 +82,7 @@ struct SourceView: View {
                     .frame(minHeight: 20)
                 }
             }
-            .font(.system(size: 12.5, design: .monospaced))
+            .font(.dante(size: 12.5, design: .monospaced))
             .textSelection(.enabled)
             .padding(.vertical, 12)
             .padding(.trailing, 16)

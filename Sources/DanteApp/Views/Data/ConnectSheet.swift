@@ -62,8 +62,8 @@ struct ConnectSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                Image(systemName: "link").font(.system(size: 16)).foregroundStyle(theme.accent.color)
-                Text(editing == nil ? "Connect to a database" : "Edit \(editing!.name)").font(.system(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
+                Image(systemName: "link").font(.dante(size: 16)).foregroundStyle(theme.accent.color)
+                Text(editing == nil ? "Connect to a database" : "Edit \(editing!.name)").font(.dante(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
                 Spacer()
                 Picker("", selection: $engine) {
                     ForEach(DatabaseEngine.allCases) { Text($0.name).tag($0) }
@@ -77,12 +77,12 @@ struct ConnectSheet: View {
                 dataField("Paste a URL", detail: "postgres://user:password@host:5432/db — Dante fills in the fields below and keeps the password in the Keychain.") {
                     TextField("DATABASE_URL", text: $url)
                         .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12.5, design: .monospaced))
+                        .font(.dante(size: 12.5, design: .monospaced))
                         .onChange(of: url) { fill(from: url) }
                 }
                 if !localDatabases.isEmpty, editing == nil {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("PostgreSQL on this Mac").font(.system(size: 12)).foregroundStyle(theme.text2.color)
+                        Text("PostgreSQL on this Mac").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
                         FlowLayout(spacing: 5) {
                             ForEach(localDatabases, id: \.self) { name in
                                 Button {
@@ -94,7 +94,7 @@ struct ConnectSheet: View {
                                     self.name = name
                                 } label: {
                                     Label(name, systemImage: "cylinder")
-                                        .font(.system(size: 12, design: .monospaced))
+                                        .font(.dante(size: 12, design: .monospaced))
                                         .padding(.horizontal, 8).padding(.vertical, 4)
                                         .background(Capsule().fill(database == name ? theme.accentTint.color : theme.raised.color))
                                         .overlay(Capsule().strokeBorder(database == name ? theme.accentLine.color : theme.line.color))
@@ -116,7 +116,7 @@ struct ConnectSheet: View {
             } else {
                 dataField("File", detail: "A path in the project, or anywhere on this Mac.") {
                     HStack {
-                        TextField("data/app.sqlite", text: $file).textFieldStyle(.roundedBorder).font(.system(size: 12.5, design: .monospaced))
+                        TextField("data/app.sqlite", text: $file).textFieldStyle(.roundedBorder).font(.dante(size: 12.5, design: .monospaced))
                         Button("Choose…", action: chooseFile).buttonStyle(DanteButtonStyle())
                     }
                 }
@@ -124,7 +124,7 @@ struct ConnectSheet: View {
             dataField("Name") { TextField(connection.name, text: $name).textFieldStyle(.roundedBorder) }
             Toggle(isOn: Binding(get: { readOnly }, set: { readOnly = $0; readOnlyTouched = true })) {
                 Text(DatabaseConnection.isLocal(host) || engine == .sqlite ? "Read-only" : "Read-only (recommended: this database isn’t on this Mac)")
-                    .font(.system(size: 12.5))
+                    .font(.dante(size: 12.5))
             }
             .toggleStyle(.checkbox)
             .onChange(of: host) { if !readOnlyTouched { readOnly = !DatabaseConnection.isLocal(host) } }

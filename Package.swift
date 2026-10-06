@@ -37,7 +37,9 @@ let package = Package(
                 .product(name: "TreeSitterGo", package: "tree-sitter-go"),
                 .product(name: "TreeSitterRust", package: "tree-sitter-rust"),
                 .product(name: "TreeSitterJSON", package: "tree-sitter-json"),
-            ]
+            ],
+            // Geist and Geist Mono, from github.com/vercel/geist-font (SIL Open Font License, Fonts/OFL.txt).
+            resources: [.copy("Resources/Fonts")]
         ),
         // The SwiftUI app shell.
         .executableTarget(

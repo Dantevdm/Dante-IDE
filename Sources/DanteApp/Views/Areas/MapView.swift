@@ -191,7 +191,7 @@ private struct DiagramCard: View {
                 }
             }
         }
-        .font(.system(size: 11))
+        .font(.dante(size: 11))
         .foregroundStyle(theme.text3.color)
     }
 
@@ -206,10 +206,10 @@ private struct DiagramCard: View {
             Button(action: action) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Image(systemName: symbol).font(.system(size: 11)).foregroundStyle(node.kind == .app ? theme.accent.color : theme.text3.color)
-                        Text(node.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color).lineLimit(1)
+                        Image(systemName: symbol).font(.dante(size: 11)).foregroundStyle(node.kind == .app ? theme.accent.color : theme.text3.color)
+                        Text(node.name).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color).lineLimit(1)
                     }
-                    Text(node.detail).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
+                    Text(node.detail).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
                 }
                 .padding(.horizontal, 12)
                 .frame(width: 184, height: 58, alignment: .leading)
@@ -265,8 +265,8 @@ private struct Inspector: View {
                     IconButton(symbol: "xmark", label: "Close", size: 10, action: close)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(node.name).font(.system(size: 18, weight: .semibold)).foregroundStyle(theme.text.color)
-                    Text(kindLabel).font(.system(size: 12)).foregroundStyle(theme.text3.color)
+                    Text(node.name).font(.dante(size: 18, weight: .semibold)).foregroundStyle(theme.text.color)
+                    Text(kindLabel).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     if let path = node.path { row("Path", value: path, mono: true) }
@@ -280,8 +280,8 @@ private struct Inspector: View {
                         ForEach(tasks) { task in
                             Button { session.showPhase(task.phase.capitalized) } label: {
                                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                    Text(task.id).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
-                                    Text(task.title).font(.system(size: 12)).foregroundStyle(theme.text.color).lineLimit(2)
+                                    Text(task.id).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                                    Text(task.title).font(.dante(size: 12)).foregroundStyle(theme.text.color).lineLimit(2)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -324,9 +324,9 @@ private struct Inspector: View {
     private func row(_ label: String, value: String, mono: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Rectangle().fill(theme.line.color).frame(height: 1)
-            Text(label).font(.system(size: 11.5)).foregroundStyle(theme.text3.color).padding(.top, 6)
+            Text(label).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).padding(.top, 6)
             Text(value)
-                .font(.system(size: 12.5, design: mono ? .monospaced : .default))
+                .font(.dante(size: 12.5, design: mono ? .monospaced : .default))
                 .foregroundStyle(theme.text.color)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 8)
@@ -358,18 +358,18 @@ private struct DriftCard: View {
             let missing = graph.undocumented(in: notes)
             Card("Where the code and .dante/architecture.md disagree") {
                 Text(missing.isEmpty ? "None found" : "\(missing.count) found")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(missing.isEmpty ? theme.green.color : theme.amber.color)
             } content: {
                 if missing.isEmpty {
-                    Text("Every part on the map is mentioned in the architecture notes.").font(.system(size: 12.5)).foregroundStyle(theme.text2.color)
+                    Text("Every part on the map is mentioned in the architecture notes.").font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
                 }
                 RowList(data: missing, padding: 9) { node in
                     HStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 12)).foregroundStyle(theme.amber.color)
+                        Image(systemName: "exclamationmark.triangle.fill").font(.dante(size: 12)).foregroundStyle(theme.amber.color)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(node.name) isn’t documented").font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
-                            Text(node.path ?? node.detail).font(.system(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            Text("\(node.name) isn’t documented").font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
+                            Text(node.path ?? node.detail).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
                         }
                         Spacer()
                         Button("Add to notes") {
@@ -383,7 +383,7 @@ private struct DriftCard: View {
             Card("Architecture notes") {
                 HStack(spacing: 12) {
                     Text("Add .dante/architecture.md to describe what each part owns. Dante then flags parts of the code the notes don’t mention.")
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text2.color)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()

@@ -39,7 +39,7 @@ struct ProjectTimelineView: View {
                 .fixedSize()
                 Toggle("Quick Claude runs", isOn: $showsQuick)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .fixedSize()
                     .help("One-prompt sessions, such as commit messages and inline edits")
                 Spacer()
@@ -47,7 +47,7 @@ struct ProjectTimelineView: View {
             if loading, events.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Reading the history…").font(.system(size: 12.5)).foregroundStyle(theme.text3.color)
+                    Text("Reading the history…").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
                 }
             } else if shown.isEmpty {
                 EmptyState(symbol: "clock.arrow.circlepath", title: "Nothing here yet",
@@ -82,24 +82,24 @@ struct ProjectTimelineView: View {
         Button { open(event) } label: {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(event.date.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.dante(size: 11, design: .monospaced))
                     .foregroundStyle(theme.text3.color)
                     .frame(width: 64, alignment: .leading)
                 Image(systemName: symbol(event))
-                    .font(.system(size: 11))
+                    .font(.dante(size: 11))
                     .foregroundStyle(color(event))
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(event.title)
-                        .font(.system(size: 12.5, weight: event.kind == .release ? .semibold : .regular))
+                        .font(.dante(size: 12.5, weight: event.kind == .release ? .semibold : .regular))
                         .foregroundStyle(theme.text.color)
                         .lineLimit(2)
                     if let detail = event.detail {
-                        Text(detail).font(.system(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        Text(detail).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
-                Text(label(event.kind)).font(.system(size: 10.5)).foregroundStyle(theme.text3.color)
+                Text(label(event.kind)).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
             }
             .contentShape(Rectangle())
         }

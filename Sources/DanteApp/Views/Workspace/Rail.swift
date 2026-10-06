@@ -35,10 +35,10 @@ private struct RailItem: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: area.symbol)
-                    .font(.system(size: 16, weight: .regular))
+                    .font(.dante(size: 16, weight: .regular))
                     .frame(height: 20)
                 Text(area.title)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.dante(size: 10, weight: .medium))
             }
             .foregroundStyle(isSelected ? theme.accent.color : (hovering ? theme.text2.color : theme.text3.color))
             .frame(width: 54, height: 48)

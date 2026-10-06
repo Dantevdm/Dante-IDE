@@ -49,6 +49,8 @@ public final class Preferences {
     public var autoSave: AutoSave { didSet { defaults.set(autoSave.rawValue, forKey: Keys.autoSave) } }
     public var claudeAsksFirst: Bool { didSet { defaults.set(claudeAsksFirst, forKey: Keys.claudeAsksFirst) } }
     public var claudeModel: ClaudeModel { didSet { defaults.set(claudeModel.rawValue, forKey: Keys.claudeModel) } }
+    /// Geist and Geist Mono, as in the design; off uses the system fonts.
+    public var usesGeist: Bool { didSet { defaults.set(usesGeist, forKey: Keys.usesGeist) } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -62,6 +64,7 @@ public final class Preferences {
         autoSave = defaults.string(forKey: Keys.autoSave).flatMap(AutoSave.init(rawValue:)) ?? .off
         claudeAsksFirst = bool(Keys.claudeAsksFirst, true)
         claudeModel = defaults.string(forKey: Keys.claudeModel).flatMap(ClaudeModel.init(rawValue:)) ?? .default
+        usesGeist = bool(Keys.usesGeist, true)
     }
 
     /// The indent width for a file: the chosen one, or the language's usual one.
@@ -92,6 +95,7 @@ public final class Preferences {
         static let autoSave = "autoSave"
         static let claudeAsksFirst = "claudeAsksFirst"
         static let claudeModel = "claudeModel"
+        static let usesGeist = "usesGeist"
     }
 }
 

@@ -27,15 +27,15 @@ struct ClaudePanel: View {
         HStack(spacing: 8) {
             ClaudeMark(isWorking: claude.state == .working)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Claude").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text(subtitle).font(.system(size: 11)).foregroundStyle(theme.text3.color)
+                Text("Claude").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text(subtitle).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
             }
             Spacer()
             Button {
                 Preferences.shared.claudeAsksFirst.toggle()
             } label: {
                 Label("Ask first", systemImage: Preferences.shared.claudeAsksFirst ? "questionmark.bubble.fill" : "questionmark.bubble")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.dante(size: 11, weight: .medium))
                     .foregroundStyle(Preferences.shared.claudeAsksFirst ? theme.accent.color : theme.text3.color)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 4)
@@ -78,7 +78,7 @@ private struct ClaudeMark: View {
             .fill(theme.accentTint.color)
             .overlay(
                 Image(systemName: "sparkle")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.dante(size: 12, weight: .semibold))
                     .foregroundStyle(theme.accent.color)
                     .scaleEffect(isWorking && pulse && !reduceMotion ? 1.18 : 1)
                     .rotationEffect(.degrees(isWorking && pulse && !reduceMotion ? 20 : 0))
@@ -120,7 +120,7 @@ private struct ContextChips: View {
     private func chip(_ text: String, symbol: String) -> some View {
         Label(text, systemImage: symbol)
             .labelStyle(.titleAndIcon)
-            .font(.system(size: 11))
+            .font(.dante(size: 11))
             .foregroundStyle(theme.text2.color)
             .lineLimit(1)
             .padding(.horizontal, 7)
@@ -165,11 +165,11 @@ private struct EmptyConversation: View {
     var body: some View {
         VStack(spacing: 14) {
             if case .unavailable(let reason) = claude.state {
-                Image(systemName: "exclamationmark.triangle").font(.system(size: 20)).foregroundStyle(theme.amber.color)
-                Text(reason).font(.system(size: 12)).foregroundStyle(theme.text2.color).multilineTextAlignment(.center)
+                Image(systemName: "exclamationmark.triangle").font(.dante(size: 20)).foregroundStyle(theme.amber.color)
+                Text(reason).font(.dante(size: 12)).foregroundStyle(theme.text2.color).multilineTextAlignment(.center)
             } else {
                 Text("Ask about the code, or hand Claude a task. You review every change before it lands.")
-                    .font(.system(size: 12))
+                    .font(.dante(size: 12))
                     .foregroundStyle(theme.text3.color)
                     .multilineTextAlignment(.center)
                 VStack(spacing: 6) {
@@ -205,7 +205,7 @@ private struct SuggestionButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12))
+            .font(.dante(size: 12))
             .foregroundStyle(theme.text.color)
             .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -252,7 +252,7 @@ private struct TranscriptRow: View {
                     FlowLayout(spacing: 5) {
                         ForEach(attachments, id: \.self) { name in
                             Label(name, systemImage: AttachmentChip.symbol(for: name))
-                                .font(.system(size: 11))
+                                .font(.dante(size: 11))
                                 .foregroundStyle(theme.text2.color)
                                 .lineLimit(1)
                                 .padding(.horizontal, 7)
@@ -264,7 +264,7 @@ private struct TranscriptRow: View {
                 }
                 if !text.isEmpty {
                     Text(text)
-                        .font(.system(size: 12.5))
+                        .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text.color)
                         .textSelection(.enabled)
                 }
@@ -280,7 +280,7 @@ private struct TranscriptRow: View {
             ToolRow(tool: tool, claude: claude)
         case .notice(let text, let isError):
             Label(text, systemImage: isError ? "exclamationmark.circle" : "info.circle")
-                .font(.system(size: 11.5))
+                .font(.dante(size: 11.5))
                 .foregroundStyle(isError ? theme.red.color : theme.text3.color)
                 .textSelection(.enabled)
         }
@@ -295,14 +295,14 @@ private struct SignInBanner: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "person.crop.circle.badge.exclamationmark")
-                .font(.system(size: 15))
+                .font(.dante(size: 15))
                 .foregroundStyle(theme.amber.color)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Claude Code isn’t signed in")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.dante(size: 12.5, weight: .semibold))
                     .foregroundStyle(theme.text.color)
                 Text("Sign in once in the terminal below, then ask again.")
-                    .font(.system(size: 11.5))
+                    .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text2.color)
                 Button("Sign in") { session.signInToClaude() }
                     .buttonStyle(DanteButtonStyle(primary: true))
