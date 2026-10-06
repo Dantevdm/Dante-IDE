@@ -93,6 +93,8 @@ final class CompletionController {
     private var anchor = 0
     private var fetchTask: Task<Void, Never>?
     var source: CompletionSource?
+    /// Off: typing doesn't open the list (⌃Space still does), though it still filters an open one.
+    var autoTriggers = true
 
     var isShowing: Bool { panel?.superview != nil && panel?.isHidden == false }
 
@@ -120,7 +122,7 @@ final class CompletionController {
                 return
             }
         }
-        guard let typed else { return }
+        guard let typed, autoTriggers else { return }
         if source.triggers.contains(typed) {
             anchor = caret
             scheduleFetch(trigger: typed, delay: 0)

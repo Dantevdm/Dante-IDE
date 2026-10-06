@@ -120,16 +120,24 @@ extension Session {
     }
 
     func formatDocument(_ document: EditorDocument) {
-        guard let languages else { return }
         Task {
-            guard let edits = await languages.formatting(of: document, tabSize: Self.indentWidth(for: document.language)) else {
+            if await !format(document) {
                 errorMessage = "The language server for \(document.name) doesn’t format documents."
-                return
             }
-            guard !edits.isEmpty else { return }
+        }
+    }
+
+    /// Applies the language server's formatting; false when no server formats this file.
+    @discardableResult
+    func format(_ document: EditorDocument) async -> Bool {
+        guard let languages,
+              let edits = await languages.formatting(of: document, tabSize: Preferences.shared.indentWidth(for: document.language))
+        else { return false }
+        if !edits.isEmpty {
             document.text = LSPTextEdit.apply(edits, to: document.text)
             languages.changed(document)
         }
+        return true
     }
 
     /// Applies a rename across files: open documents change in the editor (unsaved, so they
@@ -169,13 +177,6 @@ extension Session {
         while isWord(start - 1) { start -= 1 }
         while isWord(end) { end += 1 }
         return ns.substring(with: NSRange(location: start, length: end - start))
-    }
-
-    static func indentWidth(for language: Language) -> Int {
-        switch language {
-        case .python, .swift, .java, .kotlin, .csharp, .rust, .php: 4
-        default: 2
-        }
     }
 
     private static func kind(_ kind: LSPCompletionItem.Kind?) -> EditorCompletion.Kind {

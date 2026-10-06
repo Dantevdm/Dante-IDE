@@ -32,19 +32,18 @@ struct ClaudePanel: View {
             }
             Spacer()
             Button {
-                claude.asksFirst.toggle()
-                UserDefaults.standard.set(claude.asksFirst, forKey: Session.asksFirstKey)
+                Preferences.shared.claudeAsksFirst.toggle()
             } label: {
-                Label("Ask first", systemImage: claude.asksFirst ? "questionmark.bubble.fill" : "questionmark.bubble")
+                Label("Ask first", systemImage: Preferences.shared.claudeAsksFirst ? "questionmark.bubble.fill" : "questionmark.bubble")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(claude.asksFirst ? theme.accent.color : theme.text3.color)
+                    .foregroundStyle(Preferences.shared.claudeAsksFirst ? theme.accent.color : theme.text3.color)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 4)
-                    .background(Capsule().fill(claude.asksFirst ? theme.accentTint.color : .clear))
-                    .overlay(Capsule().strokeBorder(claude.asksFirst ? theme.accentLine.color : theme.line2.color))
+                    .background(Capsule().fill(Preferences.shared.claudeAsksFirst ? theme.accentTint.color : .clear))
+                    .overlay(Capsule().strokeBorder(Preferences.shared.claudeAsksFirst ? theme.accentLine.color : theme.line2.color))
             }
             .buttonStyle(.plain)
-            .help(claude.asksFirst
+            .help(Preferences.shared.claudeAsksFirst
                   ? "On: Claude asks clarifying questions before starting anything ambiguous. Click to let it go straight ahead."
                   : "Off: Claude goes straight ahead. Click to have it ask clarifying questions first.")
             IconButton(symbol: "square.and.pencil", label: "New conversation") { claude.reset() }

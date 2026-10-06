@@ -49,6 +49,11 @@ public struct CodeEditorView: NSViewRepresentable {
     var completion: CompletionSource?
     /// Language-server actions for the editor's context menu.
     var actions: EditorActions?
+    /// Spaces per indent level; nil uses the language's usual width.
+    var indentWidth: Int?
+    var wrapsLines: Bool
+    /// Off: the completion list opens only with ⌃Space.
+    var completesWhileTyping: Bool
 
     public init(
         text: Binding<String>,
@@ -62,7 +67,10 @@ public struct CodeEditorView: NSViewRepresentable {
         onDefinition: ((Int) -> Void)? = nil,
         hover: ((Int) async -> String?)? = nil,
         completion: CompletionSource? = nil,
-        actions: EditorActions? = nil
+        actions: EditorActions? = nil,
+        indentWidth: Int? = nil,
+        wrapsLines: Bool = false,
+        completesWhileTyping: Bool = true
     ) {
         _text = text
         self.language = language
@@ -76,6 +84,9 @@ public struct CodeEditorView: NSViewRepresentable {
         self.hover = hover
         self.completion = completion
         self.actions = actions
+        self.indentWidth = indentWidth
+        self.wrapsLines = wrapsLines
+        self.completesWhileTyping = completesWhileTyping
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -98,14 +109,10 @@ public struct CodeEditorView: NSViewRepresentable {
         textView.smartInsertDeleteEnabled = false
         textView.textContainerInset = NSSize(width: 8, height: 12)
 
-        // Code doesn't wrap: the text container grows sideways and the view scrolls.
-        textView.isHorizontallyResizable = true
         textView.isVerticallyResizable = true
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.autoresizingMask = [.width, .height]
-        textView.textContainer?.widthTracksTextView = false
-        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.lineFragmentPadding = 6
 
         let scrollView = NSScrollView()
@@ -133,6 +140,7 @@ public struct CodeEditorView: NSViewRepresentable {
         textView.onResign = { [weak completion] in completion?.close() }
         textView.actions = actions
         coordinator.apply(theme: theme, fontSize: fontSize)
+        coordinator.apply(wrapsLines: wrapsLines)
         textView.string = text
         coordinator.textDidChangeExternally()
 
@@ -141,6 +149,13 @@ public struct CodeEditorView: NSViewRepresentable {
             coordinator,
             selector: #selector(Coordinator.viewDidScroll),
             name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+        scrollView.contentView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            coordinator,
+            selector: #selector(Coordinator.clipViewResized),
+            name: NSView.frameDidChangeNotification,
             object: scrollView.contentView
         )
 
@@ -159,6 +174,8 @@ public struct CodeEditorView: NSViewRepresentable {
             coordinator.apply(theme: theme, fontSize: fontSize)
             coordinator.highlightNow()
         }
+        if coordinator.appliedWrap != wrapsLines { coordinator.apply(wrapsLines: wrapsLines) }
+        coordinator.completion?.autoTriggers = completesWhileTyping
         // Only replace text that changed outside the editor (a reload from disk, a rename or a format).
         if textView.string != text {
             coordinator.replaceExternally(with: text)
@@ -281,6 +298,38 @@ public struct CodeEditorView: NSViewRepresentable {
             textDidChangeExternally()
         }
 
+        private(set) var appliedWrap: Bool?
+
+        /// Unwrapped, the text container grows sideways and the view scrolls; wrapped, it is
+        /// as wide as the visible area.
+        func apply(wrapsLines: Bool) {
+            guard let textView, let container = textView.textContainer else { return }
+            appliedWrap = wrapsLines
+            let huge = CGFloat.greatestFiniteMagnitude
+            textView.isHorizontallyResizable = !wrapsLines
+            textView.enclosingScrollView?.hasHorizontalScroller = !wrapsLines
+            container.widthTracksTextView = wrapsLines
+            if wrapsLines {
+                fitWidthToClipView()
+            } else {
+                container.containerSize = NSSize(width: huge, height: huge)
+            }
+            ruler?.needsDisplay = true
+        }
+
+        @objc func clipViewResized() {
+            if appliedWrap == true { fitWidthToClipView() }
+        }
+
+        private func fitWidthToClipView() {
+            guard let textView, let clip = textView.enclosingScrollView?.contentView else { return }
+            // The line-number gutter sits inside the clip view (its bounds start at minus the
+            // gutter's width), so the text gets what lies right of zero.
+            let width = clip.bounds.maxX
+            guard width > 0, abs(textView.frame.width - width) > 0.5 else { return }
+            textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
+        }
+
         func textDidChangeExternally() {
             guard let textView else { return }
             ruler?.textDidChange(textView.string as NSString)
@@ -341,13 +390,16 @@ public struct CodeEditorView: NSViewRepresentable {
 
         @objc func viewDidScroll() {
             ruler?.needsDisplay = true
+            // The gutter widens when line numbers gain a digit.
+            if appliedWrap == true { fitWidthToClipView() }
             if completion?.isShowing == true { completion?.close() }
         }
 
         private var indentWidth: Int {
+            if let width = parent.indentWidth, width > 0 { return width }
             switch parent.language {
-            case .python, .swift, .java, .kotlin, .csharp, .rust, .php: 4
-            default: 2
+            case .python, .swift, .java, .kotlin, .csharp, .rust, .php: return 4
+            default: return 2
             }
         }
 

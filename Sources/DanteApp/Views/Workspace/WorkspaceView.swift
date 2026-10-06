@@ -62,6 +62,12 @@ struct WorkspaceView: View {
         .onChange(of: session.place) { previous, _ in session.placeChanged(from: previous) }
         // Git status feeds the Changes tab, the branch button and its sync arrows.
         .task(id: "\(workspace.revision)#\(session.gitRevision)") { await session.git.load(workspace.url) }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            session.autoSaveOnFocusChange()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            session.autoSaveOnFocusChange()
+        }
         .overlay {
             if let scope = session.palette {
                 ZStack(alignment: .top) {

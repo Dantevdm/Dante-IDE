@@ -111,6 +111,9 @@ public final class ClaudeSession {
     /// Ask clarifying questions before starting ambiguous work. Takes effect on the next message.
     public var asksFirst = true
     private var startedAsksFirst = true
+    /// The `--model` to start with; nil leaves it to Claude Code. Takes effect on the next message.
+    public var requestedModel: String?
+    private var startedModel: String?
     private var sessionID: String?
 
     private var process: Process?
@@ -147,7 +150,7 @@ public final class ClaudeSession {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty, state != .working else { return }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
-        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst {
+        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel {
             stop()
         }
         if process == nil {
@@ -220,9 +223,10 @@ public final class ClaudeSession {
         process.currentDirectoryURL = root
         let rules = rules()
         let prompt = asksFirst ? systemPrompt() + "\n\n" + ClaudeBrief.clarifyingQuestions : systemPrompt()
-        process.arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID)
+        process.arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel)
         startedRules = rules
         startedAsksFirst = asksFirst
+        startedModel = requestedModel
         process.environment = Self.environment()
 
         let input = Pipe(), output = Pipe(), errors = Pipe()
@@ -289,7 +293,7 @@ public final class ClaudeSession {
         }
     }
 
-    nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?) -> [String] {
+    nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?, model: String? = nil) -> [String] {
         var arguments = [
             "--output-format", "stream-json",
             "--input-format", "stream-json",
@@ -301,6 +305,7 @@ public final class ClaudeSession {
         ]
         if let settings = rules.settingsJSON { arguments += ["--settings", settings] }
         if let sessionID { arguments += ["--resume", sessionID] }
+        if let model { arguments += ["--model", model] }
         return arguments
     }
 

@@ -217,6 +217,9 @@ struct ClaudeRulesTests {
         #expect(arguments.contains("--settings"))
         #expect(Array(arguments.suffix(2)) == ["--resume", "s1"])
         #expect(!ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil).contains("--settings"))
+        let withModel = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, model: "sonnet")
+        #expect(withModel.suffix(2) == ["--model", "sonnet"])
+        #expect(!ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil).contains("--model"))
     }
 }
 

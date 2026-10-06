@@ -19,6 +19,11 @@ struct DanteApp: App {
         .commands {
             DanteCommands(themeStore: themeStore)
         }
+
+        Settings {
+            SettingsView()
+                .environment(themeStore)
+        }
     }
 }
 

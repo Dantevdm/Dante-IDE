@@ -33,11 +33,18 @@ struct EditorArea: View {
                     onDefinition: { session.jumpToDefinition(in: document, at: $0) },
                     hover: { await session.languages?.hover(in: document, at: $0) },
                     completion: session.completionSource(for: document),
-                    actions: session.editorActions(for: document)
+                    actions: session.editorActions(for: document),
+                    preferences: Preferences.shared
                 )
                 .id(document.id)
                 .task(id: document.id) { session.languages?.opened(document) }
                 .onChange(of: document.text) { session.languages?.changed(document) }
+                .task(id: document.text) {
+                    guard Preferences.shared.autoSave == .afterDelay, document.isDirty else { return }
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled, document.isDirty else { return }
+                    session.save(document, tidy: false)
+                }
             } else {
                 EmptyEditor(hasTabs: !workspace.documents.isEmpty)
             }
@@ -59,6 +66,7 @@ private struct DocumentEditor: View {
     let hover: (Int) async -> String?
     let completion: CompletionSource?
     let actions: EditorActions
+    let preferences: Preferences
     /// The file as of HEAD; nil when it isn't tracked.
     @State private var base: String?
     @State private var lineChanges: [Int: LineChange] = [:]
@@ -76,7 +84,10 @@ private struct DocumentEditor: View {
             onDefinition: canJump ? onDefinition : nil,
             hover: canJump ? hover : nil,
             completion: completion,
-            actions: actions
+            actions: actions,
+            indentWidth: preferences.indentWidth(for: document.language),
+            wrapsLines: preferences.wrapsLines,
+            completesWhileTyping: preferences.completesWhileTyping
         )
         .task(id: gitRevision) {
             base = await GitGutter.headText(of: document.url, in: root)

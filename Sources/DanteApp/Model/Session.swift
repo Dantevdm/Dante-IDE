@@ -342,9 +342,6 @@ final class Session {
 
     // MARK: Claude
 
-    /// Whether Claude asks clarifying questions before ambiguous work; on unless turned off.
-    static let asksFirstKey = "claudeAsksFirst"
-
     private func makeClaude(for workspace: Workspace) -> ClaudeSession {
         let claude = ClaudeSession(
             root: workspace.url,
@@ -353,8 +350,15 @@ final class Session {
             rules: { [weak workspace] in workspace?.claudeRules ?? ClaudeRules() }
         )
         claude.onFileChanged = { [weak workspace] url in workspace?.fileChanged(at: url) }
-        claude.asksFirst = UserDefaults.standard.object(forKey: Self.asksFirstKey) as? Bool ?? true
+        applyClaudePreferences(to: claude)
         return claude
+    }
+
+    /// Settings Claude starts with; a change applies from the next message.
+    func applyClaudePreferences(to claude: ClaudeSession? = nil) {
+        guard let claude = claude ?? self.claude else { return }
+        claude.asksFirst = Preferences.shared.claudeAsksFirst
+        claude.requestedModel = Preferences.shared.claudeModel.argument
     }
 
     // MARK: Export
@@ -505,6 +509,7 @@ final class Session {
         showsClaude = true
         let diagnostics = workspace.activeDocument.flatMap { languages?.diagnostics(for: $0) } ?? []
         let brief = ClaudeBrief.context(workspace: workspace, line: cursor.line, diagnostics: diagnostics)
+        applyClaudePreferences(to: claude)
         claude.send(text, context: [instructions, brief].compactMap { $0 }.joined(separator: "\n\n"),
                     attachments: claudeAttachments + extra)
         claudeAttachments = []
@@ -601,14 +606,37 @@ final class Session {
 
     func saveActive() {
         guard let document = workspace?.activeDocument else { return }
-        save(document)
+        saveFormatting(document)
     }
 
     func saveAll() {
-        workspace?.documents.filter(\.isDirty).forEach(save)
+        workspace?.documents.filter(\.isDirty).forEach(saveFormatting)
     }
 
-    func save(_ document: EditorDocument) {
+    /// Settings › Files › Auto-save "When Dante loses focus": every changed file, as typed.
+    func autoSaveOnFocusChange() {
+        guard Preferences.shared.autoSave == .onFocusChange else { return }
+        workspace?.documents.filter(\.isDirty).forEach { save($0, tidy: false) }
+    }
+
+    /// ⌘S: formats first when Settings asks for it and a language server can.
+    func saveFormatting(_ document: EditorDocument) {
+        guard Preferences.shared.formatsOnSave, languages?.existingClient(for: document.language)?.formats == true else {
+            return save(document)
+        }
+        Task {
+            await format(document)
+            save(document)
+        }
+    }
+
+    /// Writes the file now, after the whitespace tidying chosen in Settings. Auto-save skips
+    /// the tidying, so it never removes a space just typed.
+    func save(_ document: EditorDocument, tidy: Bool = true) {
+        if tidy {
+            let tidied = Preferences.shared.tidied(document.text, language: document.language)
+            if tidied != document.text { document.text = tidied }
+        }
         do {
             try document.save()
             languages?.saved(document)
@@ -642,7 +670,7 @@ final class Session {
 
     /// Asks before throwing away unsaved edits. Returns false if the user cancels.
     private func confirmDiscardingChanges(in documents: [EditorDocument]) -> Bool {
-        Self.confirmDiscardingChanges(in: documents, save: save)
+        Self.confirmDiscardingChanges(in: documents) { save($0) }
     }
 
     /// Asks before throwing away unsaved edits. Returns false if the user cancels or a save fails.
