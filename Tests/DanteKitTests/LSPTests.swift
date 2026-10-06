@@ -139,3 +139,76 @@ struct ClaudeContextDiagnosticsTests {
         #expect(ClaudeBrief.context(workspace: workspace, line: 1)?.contains("language server") == false)
     }
 }
+
+@Suite struct LSPEditTests {
+    @Test func readsCompletionLists() {
+        let json: JSONValue = [
+            "isIncomplete": true,
+            "items": [
+                ["label": "count", "kind": 10, "detail": "Int", "sortText": "b"],
+                ["label": "append(_:)", "kind": 2, "insertTextFormat": 2,
+                 "textEdit": ["range": ["start": ["line": 0, "character": 4], "end": ["line": 0, "character": 6]], "newText": "append(${1:element})"]],
+            ],
+        ]
+        let list = LSPCompletionItem.list(json)
+        #expect(list.isIncomplete && list.items.count == 2)
+        #expect(list.items[0].kind == .property && list.items[0].detail == "Int" && list.items[0].insertText == "count")
+        #expect(list.items[1].isSnippet && list.items[1].replaceRange?.start.character == 4)
+    }
+
+    @Test func expandsSnippets() {
+        let call = Snippet.expand("append(${1:element}, at: ${2:index})$0")
+        #expect(call.text == "append(element, at: index)")
+        #expect(call.selection == NSRange(location: 7, length: 7))
+        #expect(Snippet.expand("if ${1:cond} {\n\t$0\n}").text == "if cond {\n\t\n}")
+        #expect(Snippet.expand("${1|let,var|} x").text == "let x")
+        #expect(Snippet.expand("cost: \\$5").text == "cost: $5")
+        #expect(Snippet.expand("plain").selection == nil)
+    }
+
+    @Test func appliesEditsFromTheEnd() {
+        let text = "let a = 1\nlet b = a + a\n"
+        func edit(_ line: Int, _ from: Int, _ to: Int, _ new: String) -> LSPTextEdit {
+            LSPTextEdit(range: LSPRange(start: LSPPosition(line: line, character: from), end: LSPPosition(line: line, character: to)), newText: new)
+        }
+        let renamed = LSPTextEdit.apply([edit(0, 4, 5, "total"), edit(1, 8, 9, "total"), edit(1, 12, 13, "total")], to: text)
+        #expect(renamed == "let total = 1\nlet b = total + total\n")
+        let inserted = LSPTextEdit.apply([edit(0, 0, 0, "// x\n")], to: text)
+        #expect(inserted.hasPrefix("// x\nlet a"))
+        // A repeated edit is made once, not twice ("totaltal").
+        let repeated = LSPTextEdit.apply([edit(0, 4, 5, "total"), edit(0, 4, 5, "total")], to: text)
+        #expect(repeated.hasPrefix("let total = 1\n"))
+    }
+
+    @Test func addsReferencesTheRenameLeftOut() {
+        func location(_ path: String, _ line: Int, _ from: Int, _ to: Int) -> LSPLocation {
+            LSPLocation(url: URL(filePath: path), range: LSPRange(start: LSPPosition(line: line, character: from), end: LSPPosition(line: line, character: to)))
+        }
+        let main = URL(filePath: "/p/main.swift"), cart = URL(filePath: "/p/Cart.swift")
+        var edit = LSPWorkspaceEdit(changes: [main: [LSPTextEdit(range: location("/p/main.swift", 1, 9, 13).range, newText: "Product")]])
+        let files = [cart: "struct Item {}\nvar items: [Item] = []\nlet other = 1\n"]
+        // Index references come back as empty ranges; one points at text that isn't the name.
+        edit.include([location("/p/main.swift", 1, 9, 13), location("/p/Cart.swift", 0, 7, 7), location("/p/Cart.swift", 1, 12, 12),
+                      location("/p/Cart.swift", 2, 4, 4), location("/p/Other.swift", 0, 0, 4)],
+                     renaming: "Item", to: "Product") { files[$0] }
+        #expect(edit.changes[main]?.count == 1)
+        #expect(LSPTextEdit.apply(edit.changes[cart] ?? [], to: files[cart]!) == "struct Product {}\nvar items: [Product] = []\nlet other = 1\n")
+        #expect(edit.changes[URL(filePath: "/p/Other.swift")] == nil)
+    }
+
+    @Test func readsWorkspaceEditsInBothForms() {
+        let range: JSONValue = ["start": ["line": 0, "character": 0], "end": ["line": 0, "character": 1]]
+        let changes = LSPWorkspaceEdit(["changes": ["file:///p/a.swift": [["range": range, "newText": "x"]]]])
+        #expect(changes.changes[URL(filePath: "/p/a.swift")]?.first?.newText == "x")
+        let documents = LSPWorkspaceEdit(["documentChanges": [
+            ["textDocument": ["uri": "file:///p/b.swift", "version": 3], "edits": [["range": range, "newText": "y"], ["range": range, "newText": "z"]]],
+            ["kind": "create", "uri": "file:///p/new.swift"],
+        ]])
+        #expect(documents.editCount == 2 && documents.changes.keys.map(\.lastPathComponent) == ["b.swift"])
+    }
+
+    @Test func capabilitiesCanBeTrueOrOptions() {
+        #expect(LSPClient.supports(.bool(true)) && LSPClient.supports(["prepareProvider": true]))
+        #expect(!LSPClient.supports(.bool(false)) && !LSPClient.supports(nil) && !LSPClient.supports(.null))
+    }
+}

@@ -31,7 +31,9 @@ struct EditorArea: View {
                     gitRevision: session.gitRevision,
                     onCursorChange: { session.cursor = $0 },
                     onDefinition: { session.jumpToDefinition(in: document, at: $0) },
-                    hover: { await session.languages?.hover(in: document, at: $0) }
+                    hover: { await session.languages?.hover(in: document, at: $0) },
+                    completion: session.completionSource(for: document),
+                    actions: session.editorActions(for: document)
                 )
                 .id(document.id)
                 .task(id: document.id) { session.languages?.opened(document) }
@@ -55,6 +57,8 @@ private struct DocumentEditor: View {
     let onCursorChange: (CursorPosition) -> Void
     let onDefinition: (Int) -> Void
     let hover: (Int) async -> String?
+    let completion: CompletionSource?
+    let actions: EditorActions
     /// The file as of HEAD; nil when it isn't tracked.
     @State private var base: String?
     @State private var lineChanges: [Int: LineChange] = [:]
@@ -70,7 +74,9 @@ private struct DocumentEditor: View {
             reveal: $document.revealRange,
             onCursorChange: onCursorChange,
             onDefinition: canJump ? onDefinition : nil,
-            hover: canJump ? hover : nil
+            hover: canJump ? hover : nil,
+            completion: completion,
+            actions: actions
         )
         .task(id: gitRevision) {
             base = await GitGutter.headText(of: document.url, in: root)

@@ -12,7 +12,25 @@ struct SearchPanel: View {
 
     var body: some View {
         @Bindable var search = search
+        let shown = search.references?.result ?? search.result
         VStack(alignment: .leading, spacing: 0) {
+            if let references = search.references {
+                HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("References to \(references.symbol)")
+                            .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(theme.text.color)
+                            .lineLimit(1)
+                        Text("\(references.result.matchCount) in \(references.result.files.count) file\(references.result.files.count == 1 ? "" : "s")")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(theme.text3.color)
+                    }
+                    Spacer()
+                    IconButton(symbol: "xmark", label: "Back to search", size: 10) { search.references = nil }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            } else {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 4) {
                     Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(theme.text3.color)
@@ -33,10 +51,11 @@ struct SearchPanel: View {
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 8)
+            }
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(search.result.files) { file in
+                    ForEach(shown.files) { file in
                         FileHeader(file: file, isCollapsed: search.collapsed.contains(file.path)) {
                             if search.collapsed.contains(file.path) { search.collapsed.remove(file.path) } else { search.collapsed.insert(file.path) }
                         }

@@ -16,6 +16,23 @@ public final class LSPClient {
     public private(set) var state: State = .starting
     /// Latest diagnostics per file, keyed by standardized path.
     public private(set) var diagnostics: [String: [LSPDiagnostic]] = [:]
+    /// What the server said it can do, from `initialize`.
+    public private(set) var capabilities: JSONValue = .null
+
+    /// Characters after which the server wants to be asked for completions, such as `.`.
+    public var completionTriggers: Set<Character> {
+        Set((capabilities["completionProvider"]?["triggerCharacters"]?.array ?? []).compactMap { $0.string?.first })
+    }
+    public var completes: Bool { !(capabilities["completionProvider"]?.isNull ?? true) }
+    public var findsReferences: Bool { Self.supports(capabilities["referencesProvider"]) }
+    public var renames: Bool { Self.supports(capabilities["renameProvider"]) }
+    public var formats: Bool { Self.supports(capabilities["documentFormattingProvider"]) }
+
+    /// A capability is `true` or an options object; absent or `false` means no.
+    nonisolated static func supports(_ value: JSONValue?) -> Bool {
+        guard let value, !value.isNull else { return false }
+        return value.bool ?? true
+    }
 
     private let process = Process()
     private let input: FileHandle
@@ -96,6 +113,18 @@ public final class LSPClient {
         notify("textDocument/didSave", ["textDocument": ["uri": .string(Self.uri(url))]])
     }
 
+    /// Files in the server's languages that changed on disk without being open here
+    /// (a checkout, a rename written to closed files, another editor), so its index stays current.
+    public func filesChanged(_ urls: [URL]) async {
+        let changes: [JSONValue] = urls.compactMap { url in
+            guard server.languageIDs[Language(url: url)] != nil, versions[url.standardizedFileURL.path] == nil else { return nil }
+            let exists = FileManager.default.fileExists(atPath: url.path)
+            return ["uri": .string(Self.uri(url)), "type": .number(exists ? 2 : 3)]
+        }
+        guard !changes.isEmpty, await isReady else { return }
+        notify("workspace/didChangeWatchedFiles", ["changes": .array(changes)])
+    }
+
     public func close(_ url: URL) async {
         let key = url.standardizedFileURL.path
         guard await isReady, versions.removeValue(forKey: key) != nil else { return }
@@ -109,6 +138,45 @@ public final class LSPClient {
             "textDocument": ["uri": .string(Self.uri(url))], "position": position.json,
         ])
         return LSPLocation.list(result)
+    }
+
+    public func completion(at position: LSPPosition, in url: URL, trigger: Character?) async -> (items: [LSPCompletionItem], isIncomplete: Bool) {
+        guard await isReady, completes else { return ([], false) }
+        var context: JSONValue = ["triggerKind": 1]
+        if let trigger, completionTriggers.contains(trigger) {
+            context = ["triggerKind": 2, "triggerCharacter": .string(String(trigger))]
+        }
+        let result = await request("textDocument/completion", [
+            "textDocument": ["uri": .string(Self.uri(url))], "position": position.json, "context": context,
+        ])
+        return LSPCompletionItem.list(result)
+    }
+
+    public func references(at position: LSPPosition, in url: URL) async -> [LSPLocation] {
+        guard await isReady, findsReferences else { return [] }
+        let result = await request("textDocument/references", [
+            "textDocument": ["uri": .string(Self.uri(url))], "position": position.json,
+            "context": ["includeDeclaration": true],
+        ])
+        return LSPLocation.list(result)
+    }
+
+    /// The edits that rename the symbol at `position`; nil when the server can't.
+    public func rename(at position: LSPPosition, in url: URL, to name: String) async -> LSPWorkspaceEdit? {
+        guard await isReady, renames else { return nil }
+        let result = await request("textDocument/rename", [
+            "textDocument": ["uri": .string(Self.uri(url))], "position": position.json, "newName": .string(name),
+        ])
+        return result.isNull ? nil : LSPWorkspaceEdit(result)
+    }
+
+    public func formatting(of url: URL, tabSize: Int, insertSpaces: Bool) async -> [LSPTextEdit]? {
+        guard await isReady, formats else { return nil }
+        let result = await request("textDocument/formatting", [
+            "textDocument": ["uri": .string(Self.uri(url))],
+            "options": ["tabSize": .number(Double(tabSize)), "insertSpaces": .bool(insertSpaces)],
+        ])
+        return result.isNull ? nil : LSPTextEdit.list(result)
     }
 
     /// What the server says about the symbol at `position`, as markdown.
@@ -162,14 +230,26 @@ public final class LSPClient {
                     "publishDiagnostics": ["relatedInformation": false],
                     "definition": ["linkSupport": true],
                     "hover": ["contentFormat": ["markdown", "plaintext"]],
+                    "completion": [
+                        "completionItem": [
+                            "snippetSupport": true,
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "labelDetailsSupport": true,
+                        ],
+                        "contextSupport": true,
+                    ],
+                    "references": [:],
+                    "rename": ["prepareSupport": false],
+                    "formatting": [:],
                 ],
-                "workspace": ["workspaceFolders": true, "configuration": true],
+                "workspace": ["workspaceFolders": true, "configuration": true, "didChangeWatchedFiles": ["dynamicRegistration": false]],
             ],
         ])
         guard result["capabilities"] != nil else {
             if case .starting = state { state = .stopped("\(server.name) didn’t start.") }
             return false
         }
+        capabilities = result["capabilities"] ?? .null
         notify("initialized", [:])
         state = .ready
         return true

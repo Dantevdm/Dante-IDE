@@ -162,7 +162,7 @@ tasks:
 - id: DI-40
   title: "Language servers: completion, find references, rename symbol, format document"
   phase: build
-  state: ready
+  state: review
 - id: DI-41
   title: "Settings window (⌘,): editor, formatting, auto-save, theme, Claude"
   phase: build

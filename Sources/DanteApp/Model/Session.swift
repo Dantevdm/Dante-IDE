@@ -320,6 +320,7 @@ final class Session {
     private func filesChanged(_ changed: [URL]) {
         guard let workspace else { return }
         let result = workspace.applyExternalChanges(changed)
+        languages?.filesChanged(changed)
         if result.gitHeadChanged {
             refreshBranch()
             gitRevision += 1

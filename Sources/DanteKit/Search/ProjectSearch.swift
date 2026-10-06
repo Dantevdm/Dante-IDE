@@ -108,6 +108,28 @@ public enum ProjectSearch {
         return matches
     }
 
+    /// Results for known places in files, such as a language server's references. Each
+    /// location is a zero-based line and UTF-16 column and length; paths are relative.
+    public static func result(for locations: [(path: String, line: Int, column: Int, length: Int)], root: URL) -> Result {
+        var result = Result()
+        let grouped = Dictionary(grouping: locations, by: \.path)
+        for path in grouped.keys.sorted(by: { $0.localizedStandardCompare($1) == .orderedAscending }) {
+            guard let text = readText(root.appending(path: path)) else { continue }
+            let lines = text.components(separatedBy: "\n")
+            let matches = grouped[path]!.sorted { ($0.line, $0.column) < ($1.line, $1.column) }.compactMap { location -> Match? in
+                guard lines.indices.contains(location.line) else { return nil }
+                let line = lines[location.line] as NSString
+                let column = min(location.column, line.length)
+                let (preview, range) = Self.preview(line, column: column, length: min(location.length, line.length - column))
+                return Match(line: location.line, column: column, length: location.length, preview: preview, previewRange: range)
+            }
+            guard !matches.isEmpty else { continue }
+            result.files.append(FileMatches(path: path, matches: matches))
+            result.matchCount += matches.count
+        }
+        return result
+    }
+
     /// Leading indentation dropped, and long lines cut to show the match.
     static func preview(_ line: NSString, column: Int, length: Int) -> (String, NSRange) {
         var start = 0

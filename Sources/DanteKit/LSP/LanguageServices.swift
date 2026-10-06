@@ -66,6 +66,14 @@ public final class LanguageServices {
         Task { await client.close(url) }
     }
 
+    /// Passes on changes to files on disk to every running server.
+    public func filesChanged(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        for client in clients.values {
+            Task { await client.filesChanged(urls) }
+        }
+    }
+
     public func diagnostics(for document: EditorDocument) -> [LSPDiagnostic] {
         existingClient(for: document.language)?.diagnostics(for: document.url) ?? []
     }
@@ -82,6 +90,34 @@ public final class LanguageServices {
         guard let client = existingClient(for: document.language) else { return nil }
         await flush(document, to: client)
         return await client.hover(at: LSPPosition(offset: offset, in: document.text as NSString), in: document.url)
+    }
+
+    public func completion(in document: EditorDocument, at offset: Int, trigger: Character?) async -> [LSPCompletionItem] {
+        guard let client = existingClient(for: document.language) else { return [] }
+        await flush(document, to: client)
+        return await client.completion(at: LSPPosition(offset: offset, in: document.text as NSString), in: document.url, trigger: trigger).items
+    }
+
+    public func completionTriggers(for language: Language) -> Set<Character> {
+        existingClient(for: language)?.completionTriggers ?? []
+    }
+
+    public func references(in document: EditorDocument, at offset: Int) async -> [LSPLocation] {
+        guard let client = existingClient(for: document.language) else { return [] }
+        await flush(document, to: client)
+        return await client.references(at: LSPPosition(offset: offset, in: document.text as NSString), in: document.url)
+    }
+
+    public func rename(in document: EditorDocument, at offset: Int, to name: String) async -> LSPWorkspaceEdit? {
+        guard let client = existingClient(for: document.language) else { return nil }
+        await flush(document, to: client)
+        return await client.rename(at: LSPPosition(offset: offset, in: document.text as NSString), in: document.url, to: name)
+    }
+
+    public func formatting(of document: EditorDocument, tabSize: Int) async -> [LSPTextEdit]? {
+        guard let client = existingClient(for: document.language) else { return nil }
+        await flush(document, to: client)
+        return await client.formatting(of: document.url, tabSize: tabSize, insertSpaces: true)
     }
 
     private func flush(_ document: EditorDocument, to client: LSPClient) async {

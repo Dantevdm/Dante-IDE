@@ -71,6 +71,15 @@ struct DanteCommands: Commands {
             Button("Jump to Definition") { session?.jumpToDefinitionAtCursor() }
                 .keyboardShortcut("j", modifiers: [.control, .command])
                 .disabled(session?.workspace?.activeDocument == nil)
+            Button("Find References") { session?.findReferencesAtCursor() }
+                .keyboardShortcut("f", modifiers: [.control, .shift, .command])
+                .disabled(session?.workspace?.activeDocument == nil)
+            Button("Rename Symbol…") { session?.renameSymbolAtCursor() }
+                .keyboardShortcut("e", modifiers: [.control, .command])
+                .disabled(session?.workspace?.activeDocument == nil)
+            Button("Format Document") { session?.formatActiveDocument() }
+                .keyboardShortcut("i", modifiers: [.control, .shift])
+                .disabled(session?.workspace?.activeDocument == nil)
         }
 
         CommandMenu("Git") {

@@ -11,6 +11,8 @@ final class SearchState {
     private(set) var isSearching = false
     /// Files whose matches are folded away.
     var collapsed: Set<String> = []
+    /// A language server's references, shown in place of search results until closed.
+    var references: (symbol: String, result: ProjectSearch.Result)?
     private var task: Task<Void, Never>?
 
     var isInvalid: Bool { !query.text.isEmpty && query.expression == nil }

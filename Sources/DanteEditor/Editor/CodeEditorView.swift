@@ -45,6 +45,10 @@ public struct CodeEditorView: NSViewRepresentable {
     var onDefinition: ((Int) -> Void)?
     /// Markdown about the symbol at a UTF-16 offset, shown when the pointer rests on it.
     var hover: ((Int) async -> String?)?
+    /// Suggestions while typing, from a language server.
+    var completion: CompletionSource?
+    /// Language-server actions for the editor's context menu.
+    var actions: EditorActions?
 
     public init(
         text: Binding<String>,
@@ -56,7 +60,9 @@ public struct CodeEditorView: NSViewRepresentable {
         reveal: Binding<NSRange?> = .constant(nil),
         onCursorChange: @escaping (CursorPosition) -> Void = { _ in },
         onDefinition: ((Int) -> Void)? = nil,
-        hover: ((Int) async -> String?)? = nil
+        hover: ((Int) async -> String?)? = nil,
+        completion: CompletionSource? = nil,
+        actions: EditorActions? = nil
     ) {
         _text = text
         self.language = language
@@ -68,6 +74,8 @@ public struct CodeEditorView: NSViewRepresentable {
         self.onCursorChange = onCursorChange
         self.onDefinition = onDefinition
         self.hover = hover
+        self.completion = completion
+        self.actions = actions
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -118,6 +126,12 @@ public struct CodeEditorView: NSViewRepresentable {
         coordinator.ruler = ruler
         textView.onDefinition = { [weak coordinator] offset in coordinator?.parent.onDefinition?(offset) }
         textView.onHover = { [weak coordinator] index in coordinator?.hover(at: index) }
+        let completion = CompletionController(textView: textView)
+        completion.source = self.completion
+        coordinator.completion = completion
+        textView.onCompleteRequest = { [weak completion] in completion?.requestNow() }
+        textView.onResign = { [weak completion] in completion?.close() }
+        textView.actions = actions
         coordinator.apply(theme: theme, fontSize: fontSize)
         textView.string = text
         coordinator.textDidChangeExternally()
@@ -145,13 +159,15 @@ public struct CodeEditorView: NSViewRepresentable {
             coordinator.apply(theme: theme, fontSize: fontSize)
             coordinator.highlightNow()
         }
-        // Only replace text that changed outside the editor (e.g. a reload from disk).
+        // Only replace text that changed outside the editor (a reload from disk, a rename or a format).
         if textView.string != text {
-            textView.string = text
-            coordinator.textDidChangeExternally()
+            coordinator.replaceExternally(with: text)
         }
         textView.canJumpToDefinition = onDefinition != nil
         textView.canHover = hover != nil
+        textView.actions = actions
+        coordinator.completion?.source = completion
+        if themeChanged { coordinator.completion?.apply(theme: theme, fontSize: fontSize) }
         if coordinator.lineChanges != lineChanges || themeChanged {
             coordinator.lineChanges = lineChanges
             coordinator.applyLineChanges()
@@ -184,6 +200,11 @@ public struct CodeEditorView: NSViewRepresentable {
         private var tokens: (text: String, tokens: [Token])?
         var diagnostics: [EditorDiagnostic] = []
         var lineChanges: [Int: LineChange] = [:]
+        var completion: CompletionController?
+        /// The character typed in the edit under way, for opening completions.
+        private var typed: Character?
+        private var isReplacingExternally = false
+        private var isEditing = false
 
         func applyLineChanges() {
             guard let theme = appliedTheme else { return }
@@ -208,6 +229,7 @@ public struct CodeEditorView: NSViewRepresentable {
 
         func apply(theme: Theme, fontSize: CGFloat) {
             guard let textView else { return }
+            completion?.apply(theme: theme, fontSize: fontSize)
             appliedTheme = theme
             appliedFontSize = fontSize
             let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
@@ -234,6 +256,31 @@ public struct CodeEditorView: NSViewRepresentable {
             textView.needsDisplay = true
         }
 
+        /// Swaps in text that changed elsewhere as one undoable edit covering only the part
+        /// that differs, so the caret and scroll position stay put.
+        func replaceExternally(with text: String) {
+            guard let textView else { return }
+            let old = textView.string as NSString, new = text as NSString
+            var prefix = 0
+            let shorter = min(old.length, new.length)
+            while prefix < shorter, old.character(at: prefix) == new.character(at: prefix) { prefix += 1 }
+            var suffix = 0
+            while suffix < shorter - prefix, old.character(at: old.length - 1 - suffix) == new.character(at: new.length - 1 - suffix) { suffix += 1 }
+            let range = NSRange(location: prefix, length: old.length - prefix - suffix)
+            let replacement = new.substring(with: NSRange(location: prefix, length: new.length - prefix - suffix))
+            isReplacingExternally = true
+            if textView.shouldChangeText(in: range, replacementString: replacement) {
+                textView.textStorage?.replaceCharacters(in: range, with: replacement)
+                textView.didChangeText()
+            } else {
+                textView.string = text
+            }
+            isReplacingExternally = false
+            isEditing = false
+            typed = nil
+            textDidChangeExternally()
+        }
+
         func textDidChangeExternally() {
             guard let textView else { return }
             ruler?.textDidChange(textView.string as NSString)
@@ -249,20 +296,27 @@ public struct CodeEditorView: NSViewRepresentable {
 
         public func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
             linesNeedRefresh = true
+            isEditing = true
+            typed = replacementString?.count == 1 ? replacementString?.first : nil
             return true
         }
 
         public func textDidChange(_ notification: Notification) {
-            guard let textView else { return }
+            guard let textView, !isReplacingExternally else { return }
             closeHover()
             parent.text = textView.string
             refreshLinesIfNeeded(textView)
             scheduleHighlight()
+            isEditing = false
+            completion?.textChanged(typed: typed)
+            typed = nil
         }
 
         public func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView else { return }
             refreshLinesIfNeeded(textView)
+            // Clicking or arrowing elsewhere closes the list; typing keeps it.
+            if !isEditing, completion?.isShowing == true { completion?.close() }
             let location = textView.selectedRange().location
             ruler?.selectionDidChange(to: location)
             textView.needsDisplay = true
@@ -273,6 +327,7 @@ public struct CodeEditorView: NSViewRepresentable {
         }
 
         public func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            if completion?.handle(selector) == true { return true }
             if selector == #selector(NSResponder.insertNewline(_:)) {
                 insertNewlineKeepingIndent(textView)
                 return true
@@ -286,6 +341,7 @@ public struct CodeEditorView: NSViewRepresentable {
 
         @objc func viewDidScroll() {
             ruler?.needsDisplay = true
+            if completion?.isShowing == true { completion?.close() }
         }
 
         private var indentWidth: Int {
@@ -456,6 +512,21 @@ public struct CodeEditorView: NSViewRepresentable {
     }
 }
 
+/// What the editor's context menu offers besides editing, each given the UTF-16 offset clicked.
+public struct EditorActions {
+    public var references: ((Int) -> Void)?
+    public var rename: ((Int) -> Void)?
+    public var format: (() -> Void)?
+    public var askClaude: ((NSRange) -> Void)?
+
+    public init(references: ((Int) -> Void)? = nil, rename: ((Int) -> Void)? = nil, format: (() -> Void)? = nil, askClaude: ((NSRange) -> Void)? = nil) {
+        self.references = references
+        self.rename = rename
+        self.format = format
+        self.askClaude = askClaude
+    }
+}
+
 /// Draws a soft band behind the line with the caret.
 public final class CodeTextView: NSTextView {
     var currentLineColor: NSColor = .clear
@@ -464,6 +535,28 @@ public final class CodeTextView: NSTextView {
     var canHover = false
     /// Where the pointer rests, after a pause; nil when it moves off the text.
     var onHover: ((Int?) -> Void)?
+    var onCompleteRequest: (() -> Void)?
+    var onResign: (() -> Void)?
+    var actions: EditorActions?
+
+    /// ⌥Escape and F5 come here: show completions.
+    public override func complete(_ sender: Any?) {
+        if let onCompleteRequest { onCompleteRequest() } else { super.complete(sender) }
+    }
+
+    public override func keyDown(with event: NSEvent) {
+        // ⌃Space also asks for completions.
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control, event.charactersIgnoringModifiers == " " {
+            onCompleteRequest?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    public override func resignFirstResponder() -> Bool {
+        onResign?()
+        return super.resignFirstResponder()
+    }
     private var hoverTimer: Timer?
     private var hoverTracking: NSTrackingArea?
 
@@ -522,14 +615,42 @@ public final class CodeTextView: NSTextView {
 
     public override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
-        guard canJumpToDefinition else { return menu }
         let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
-        let item = NSMenuItem(title: "Jump to Definition", action: #selector(jumpToDefinition(_:)), keyEquivalent: "")
-        item.target = self
-        item.representedObject = index
-        menu.insertItem(item, at: 0)
-        menu.insertItem(.separator(), at: 1)
+        var items: [NSMenuItem] = []
+        func add(_ title: String, _ action: Selector) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = index
+            items.append(item)
+        }
+        if canJumpToDefinition { add("Jump to Definition", #selector(jumpToDefinition(_:))) }
+        if actions?.references != nil { add("Find References", #selector(findReferences(_:))) }
+        if actions?.rename != nil { add("Rename Symbol…", #selector(renameSymbol(_:))) }
+        if actions?.format != nil { add("Format Document", #selector(formatDocument(_:))) }
+        if actions?.askClaude != nil, selectedRange().length > 0 { add("Ask Claude About Selection…", #selector(askClaude(_:))) }
+        guard !items.isEmpty else { return menu }
+        for (offset, item) in items.enumerated() { menu.insertItem(item, at: offset) }
+        menu.insertItem(.separator(), at: items.count)
         return menu
+    }
+
+    @objc private func findReferences(_ sender: NSMenuItem) {
+        guard let index = sender.representedObject as? Int else { return }
+        actions?.references?(index)
+    }
+
+    @objc private func renameSymbol(_ sender: NSMenuItem) {
+        guard let index = sender.representedObject as? Int else { return }
+        setSelectedRange(NSRange(location: index, length: 0))
+        actions?.rename?(index)
+    }
+
+    @objc private func formatDocument(_ sender: NSMenuItem) {
+        actions?.format?()
+    }
+
+    @objc private func askClaude(_ sender: NSMenuItem) {
+        actions?.askClaude?(selectedRange())
     }
 
     @objc private func jumpToDefinition(_ sender: NSMenuItem) {
