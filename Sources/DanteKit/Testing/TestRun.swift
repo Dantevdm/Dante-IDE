@@ -54,6 +54,8 @@ public final class TestRun {
     public private(set) var output: [String] = []
     public let started = Date()
     public private(set) var finished: Date?
+    /// Called once when the runner exits on its own (not when stopped).
+    public var onFinish: (@MainActor (TestRun) -> Void)?
 
     private var parser = TestOutputParser()
     private var process: Shell.Running?
@@ -75,6 +77,12 @@ public final class TestRun {
     }
 
     public var isRunning: Bool { state == .running }
+
+    /// The run as a history entry.
+    public var record: TestRecord {
+        TestRecord(date: finished ?? .now, label: command.label, passed: passed, failed: failed, skipped: skipped,
+                   duration: duration, brokeOutsideTests: failedOutsideTests)
+    }
     public var passed: Int { results.count { $0.status == .passed } }
     public var failed: Int { results.count { $0.status == .failed } }
     public var skipped: Int { results.count { $0.status == .skipped } }
@@ -112,7 +120,9 @@ public final class TestRun {
             }
         }
         results = parser.results
-        if state == .running { state = .finished(exitStatus: running.status) }
+        let ranToEnd = state == .running
+        if ranToEnd { state = .finished(exitStatus: running.status) }
         finished = .now
+        if ranToEnd { onFinish?(self) }
     }
 }

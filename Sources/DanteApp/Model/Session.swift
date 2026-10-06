@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, plan, map, code, tests, environments, data, ship, run, docs, spec
+    case home, plan, map, code, tests, environments, data, ship, run, timeline, docs, spec
 
     var id: String { rawValue }
 
@@ -22,6 +22,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .data: "Data"
         case .ship: "Ship"
         case .run: "Run"
+        case .timeline: "Timeline"
         case .docs: "Docs"
         case .spec: "Spec"
         }
@@ -38,6 +39,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .data: "cylinder.split.1x2"
         case .ship: "paperplane"
         case .run: "waveform.path.ecg"
+        case .timeline: "clock.arrow.circlepath"
         case .docs: "doc.text"
         case .spec: "book.closed"
         }
@@ -55,12 +57,13 @@ enum Area: String, CaseIterable, Identifiable {
         case .data: "The project's databases: create one, browse tables, run queries and see the schema as a diagram."
         case .ship: "A release checklist, a changelog drafted from tasks and commits, and the CI pipeline."
         case .run: "Production metrics, errors and alarms, each linked back to a task."
+        case .timeline: "Commits, releases, Claude sessions, test runs and CI in one stream, newest first."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
         case .spec: "The .dante folder: lifecycle, phase checklists and what Claude may propose."
         }
     }
 
-    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .data, .ship, .run]
+    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .data, .ship, .run, .timeline]
     static let footer: [Area] = [.docs, .spec]
 }
 

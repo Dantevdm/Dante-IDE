@@ -194,4 +194,4 @@ tasks:
 - id: DI-48
   title: "Timeline: commits, Claude sessions, test runs and releases in one place"
   phase: operate
-  state: ready
+  state: in_progress

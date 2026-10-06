@@ -88,7 +88,10 @@ struct TestsView: View {
     private func run() {
         guard let command else { return }
         session.testRun?.stop()
-        session.testRun = TestRun(command: command, projectRoot: workspace.url)
+        let run = TestRun(command: command, projectRoot: workspace.url)
+        let root = workspace.url
+        run.onFinish = { $0.record.append(for: root) }
+        session.testRun = run
     }
 }
 

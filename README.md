@@ -42,6 +42,7 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Map: the architecture from `Package.swift`, Docker Compose or source folders, with an inspector and drift against `.dante/architecture.md`
 - Ship: CI runs from `gh`, a changelog drafted from conventional commits since the last tag, a release checklist, and local tagging
 - Run: health checks and a production log stream from `operate:` in `.dante/project.yaml`, with errors grouped so each can become a task
+- Timeline: commits and tags, Claude Code sessions run in the project folder, test runs and GitHub Actions runs in one stream grouped by day. Click a commit to show it, a Claude session to resume it in the terminal, a CI run to open it
 - Claude rules in `.dante/project.yaml` (`claude: propose / flag / never`): flagged paths are called out on the diff, and never-paths are refused, reads included
 - Quitting with unsaved files asks once for every window: save, discard or cancel
 

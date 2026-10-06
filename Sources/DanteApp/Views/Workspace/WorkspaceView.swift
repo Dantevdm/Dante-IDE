@@ -33,6 +33,7 @@ struct WorkspaceView: View {
                         case .data: DataView(session: session, workspace: workspace)
                         case .map: MapView(session: session, workspace: workspace)
                         case .run: RunView(session: session, workspace: workspace)
+                        case .timeline: ProjectTimelineView(session: session, workspace: workspace)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
