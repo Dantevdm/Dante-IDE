@@ -121,6 +121,15 @@ private struct TaskCard: View {
                         .foregroundStyle(theme.accent.color)
                 }
                 Spacer(minLength: 0)
+                if task.state == .inProgress {
+                    Button { session.finish(task) } label: {
+                        Label("Finish", systemImage: "checkmark.circle").font(.system(size: 10.5, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(theme.accent.color)
+                    .help("Commit, push and open a pull request, then move this task to review")
+                    .opacity(hovering ? 1 : 0)
+                }
             }
             Text(MarkdownText.attributed(task.title, theme: theme))
                 .font(.system(size: 12.5, weight: .medium))
@@ -150,8 +159,11 @@ private struct TaskCard: View {
     private var menu: some View {
         if session.claude != nil {
             Button("Work on This with Claude") { workOnWithClaude() }
-            Divider()
         }
+        if task.state == .inProgress || task.state == .ready {
+            Button("Finish with Commit and Pull Request…") { session.finish(task) }
+        }
+        Divider()
         Menu("Move To") {
             ForEach(TaskState.allCases.filter { $0 != task.state }) { state in
                 Button(state.title) { attempt { try workspace.tasks.move(task.id, to: state) } }

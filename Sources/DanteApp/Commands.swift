@@ -83,6 +83,9 @@ struct DanteCommands: Commands {
         }
 
         CommandMenu("Git") {
+            Button("Finish Task…") { session?.finishCurrentTask() }
+                .disabled(session?.workspace == nil)
+            Divider()
             Button("Source Control") { session?.showChanges() }
                 .keyboardShortcut("g", modifiers: [.control, .shift])
                 .disabled(session?.workspace == nil)

@@ -288,6 +288,17 @@ public enum GitRepository {
         return stat.stdout + "\n\n" + body
     }
 
+    /// Everything not yet committed, staged or not, with new files listed by name.
+    public static func workingDiff(in root: URL, limit: Int = 60_000) async -> String {
+        let stat = await Shell.run(["git", "diff", "HEAD", "--stat", "--no-color"], in: root)
+        let patch = await Shell.run(["git", "diff", "HEAD", "--no-color", "--no-ext-diff", "-U2"], in: root, trimming: false)
+        let untracked = await Shell.run(["git", "ls-files", "--others", "--exclude-standard"], in: root)
+        var text = stat.stdout
+        if !untracked.stdout.isEmpty { text += "\nNew files:\n" + untracked.stdout }
+        let body = patch.stdout.count > limit ? String(patch.stdout.prefix(limit)) + "\n… (diff truncated)" : patch.stdout
+        return text + "\n\n" + body
+    }
+
     public static func recentSubjects(in root: URL, count: Int = 12) async -> [String] {
         let output = await Shell.run(["git", "log", "-\(count)", "--format=%s"], in: root)
         return output.succeeded ? output.stdout.components(separatedBy: "\n").filter { !$0.isEmpty } : []

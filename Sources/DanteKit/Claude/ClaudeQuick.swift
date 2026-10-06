@@ -26,8 +26,10 @@ public enum ClaudeQuick {
 public enum CommitMessage {
     public static let system = "You write git commit messages. Reply with the commit message only: no preamble, no code fences, no quotes."
 
-    public static func prompt(diff: String, recentSubjects: [String], tasks: [String]) -> String {
+    /// `finishing` names a task the commit completes, so the message can say so.
+    public static func prompt(diff: String, recentSubjects: [String], tasks: [String], finishing: String? = nil) -> String {
         var parts = ["Write a commit message for the staged changes below."]
+        if let finishing { parts.append("This commit completes the task “\(finishing)”; the subject should describe that work.") }
         parts.append("Use a short imperative subject line (under 72 characters), then a blank line and a brief body only if the change needs explaining. Say why, not just what.")
         if !recentSubjects.isEmpty {
             parts.append("Match the style of this repository's recent subjects:\n" + recentSubjects.prefix(10).map { "- \($0)" }.joined(separator: "\n"))

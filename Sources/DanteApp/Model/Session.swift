@@ -120,6 +120,8 @@ final class Session {
     let git = GitModel()
     /// The branch switcher in the title bar is open.
     var showsBranches = false
+    /// The Finish Task sheet, while open.
+    var finishing: FinishTaskModel?
     /// The Data area's connections, schema and tabs.
     let data = DataModel()
     var searchFocusRequest = 0
@@ -659,6 +661,22 @@ final class Session {
         } else {
             NSApp.keyWindow?.performClose(nil)
         }
+    }
+
+    /// Git › Finish Task: the task being worked on with Claude, else the first in progress.
+    func finishCurrentTask() {
+        guard let workspace else { return }
+        let open = workspace.tasks.file.tasks.filter { $0.state == .inProgress }
+        guard let task = open.first(where: { $0.claude == true }) ?? open.first else {
+            errorMessage = "No task is in progress. Move one to In progress on the Plan board, or use Finish… on its card."
+            return
+        }
+        finish(task)
+    }
+
+    func finish(_ task: PlanTask) {
+        guard let workspace else { return }
+        finishing = FinishTaskModel(root: workspace.url, task: task)
     }
 
     func toggleSplit() {
