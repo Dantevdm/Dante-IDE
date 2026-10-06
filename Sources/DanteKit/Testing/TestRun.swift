@@ -34,6 +34,44 @@ public struct TestCommand: Equatable, Sendable {
         }
         return nil
     }
+
+    /// The same runner limited to `tests`: for re-running failures or one test. Nil for a
+    /// custom `test.command`, which Dante can't narrow.
+    public func only(_ tests: [TestResult]) -> TestCommand? {
+        guard !tests.isEmpty, let tool = arguments.first else { return nil }
+        let count = tests.count == 1 ? tests[0].name : "\(tests.count) tests"
+        func narrowed(_ extra: [String]) -> TestCommand {
+            TestCommand(label: "\(label) · \(count)", arguments: arguments + extra, readsXUnit: readsXUnit)
+        }
+        switch tool {
+        case "swift":
+            // Matched against "Module.Suite/test()" identifiers.
+            let ids = tests.map { test in
+                let name = NSRegularExpression.escapedPattern(for: test.name)
+                return test.suite.isEmpty ? name : NSRegularExpression.escapedPattern(for: test.suite) + "/" + name
+            }
+            return narrowed(["--filter", ids.joined(separator: "|")])
+        case "cargo":
+            // libtest takes several name filters after the separator.
+            return narrowed(["--"] + tests.map { $0.suite == "tests" ? $0.name : "\($0.suite)::\($0.name)" })
+        case "go":
+            // -run splits on slashes for subtests, so each part is anchored on its own.
+            let names = Set(tests.map { $0.name.components(separatedBy: "/")[0] }).sorted()
+            let pattern = "^(" + names.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|") + ")$"
+            var narrowedArguments = arguments
+            narrowedArguments.insert(contentsOf: ["-run", pattern], at: narrowedArguments.count - 1)
+            return TestCommand(label: "\(label) · \(count)", arguments: narrowedArguments, readsXUnit: readsXUnit)
+        case "python3":
+            return narrowed(tests.map { "\($0.suite)::\($0.name)" })
+        case "npm", "pnpm", "yarn", "bun":
+            // Jest and Vitest both take test files and a -t name pattern.
+            let names = tests.map { NSRegularExpression.escapedPattern(for: $0.name) }.joined(separator: "|")
+            let files = Set(tests.map(\.suite).filter { !$0.isEmpty }).sorted()
+            return narrowed((tool == "npm" ? ["--"] : []) + files + ["-t", names])
+        default:
+            return nil
+        }
+    }
 }
 
 /// One run of the project's tests, streamed: results arrive as the runner prints them.

@@ -25,7 +25,13 @@ struct TestsView: View {
                 Button { session.testRun?.stop() } label: { Label("Stop", systemImage: "stop.fill") }
                     .buttonStyle(DanteButtonStyle())
             } else {
-                Button { run() } label: { Label(session.testRun == nil ? "Run tests" : "Run again", systemImage: "play.fill") }
+                if let run = session.testRun, run.failed > 0, let failedOnly = command?.only(run.results.filter { $0.status == .failed }) {
+                    Button { self.run(failedOnly) } label: { Label("Re-run failed", systemImage: "arrow.counterclockwise") }
+                        .buttonStyle(DanteButtonStyle())
+                        .keyboardShortcut("u", modifiers: [.command, .shift])
+                        .help(failedOnly.arguments.joined(separator: " "))
+                }
+                Button { run() } label: { Label(session.testRun == nil ? "Run tests" : "Run all again", systemImage: "play.fill") }
                     .buttonStyle(DanteButtonStyle(primary: true))
                     .disabled(command == nil)
                     .keyboardShortcut("u", modifiers: .command)
@@ -48,10 +54,10 @@ struct TestsView: View {
                     OutputCard(run: run, title: "The run stopped before any test failed", expanded: true)
                 }
                 if run.failed > 0 {
-                    FailuresCard(session: session, workspace: workspace, run: run)
+                    FailuresCard(session: session, workspace: workspace, run: run, runOnly: runOnly)
                 }
                 HStack(alignment: .top, spacing: 16) {
-                    SuitesCard(run: run)
+                    SuitesCard(run: run, runOnly: runOnly)
                     VStack(spacing: 16) {
                         DraftTestsCard(session: session)
                         if !run.failedOutsideTests {
@@ -85,8 +91,14 @@ struct TestsView: View {
         if case .couldNotStart = run.state { true } else { false }
     }
 
-    private func run() {
-        guard let command else { return }
+    /// Runs some of the tests with the project's runner, when it can be narrowed.
+    private var runOnly: (([TestResult]) -> Void)? {
+        guard let command, command.only([TestResult(suite: "", name: "x", status: .passed)]) != nil else { return nil }
+        return { tests in if let narrowed = command.only(tests) { run(narrowed) } }
+    }
+
+    private func run(_ chosen: TestCommand? = nil) {
+        guard let command = chosen ?? command else { return }
         session.testRun?.stop()
         let run = TestRun(command: command, projectRoot: workspace.url)
         let root = workspace.url
@@ -153,7 +165,7 @@ private struct RunSummary: View {
         case .stopped: return "Stopped"
         case .couldNotStart: return "Couldn’t start"
         case .finished(let status):
-            if status == 0 { return run.results.isEmpty ? "Finished" : "All \(run.passed) passed" }
+            if status == 0 { return run.results.isEmpty ? "Finished" : run.passed == 1 ? "Passed" : "All \(run.passed) passed" }
             if run.failed > 0 { return "\(run.failed) failing" }
             return "Failed before the tests ran"
         }
@@ -181,10 +193,16 @@ private struct FailuresCard: View {
     let session: Session
     let workspace: Workspace
     let run: TestRun
+    let runOnly: (([TestResult]) -> Void)?
 
     var body: some View {
         let failures = run.results.filter { $0.status == .failed }
         Card("Failures", accent: false) {
+            if let runOnly, !run.isRunning {
+                Button { runOnly(failures) } label: { Label("Re-run", systemImage: "arrow.counterclockwise") }
+                    .buttonStyle(DanteButtonStyle())
+                    .help(failures.count == 1 ? "Run this test again" : "Run these \(failures.count) tests again")
+            }
             Button {
                 session.askClaude(prompt(for: failures))
             } label: {
@@ -203,6 +221,9 @@ private struct FailuresCard: View {
                         Spacer()
                         if let duration = result.duration {
                             Text(String(format: "%.2fs", duration)).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                        }
+                        if let runOnly, !run.isRunning {
+                            IconButton(symbol: "play.fill", label: "Run \(result.name)", size: 10) { runOnly([result]) }
                         }
                     }
                     ForEach(Array(result.issues.enumerated()), id: \.offset) { _, issue in
@@ -261,7 +282,9 @@ private struct FailuresCard: View {
 private struct SuitesCard: View {
     @Environment(\.theme) private var theme
     let run: TestRun
+    let runOnly: (([TestResult]) -> Void)?
     @State private var expanded: Set<String> = []
+    @State private var hovered: String?
 
     private struct Suite: Identifiable {
         let name: String
@@ -315,9 +338,15 @@ private struct SuitesCard: View {
                                 if let duration = result.duration {
                                     Text(String(format: "%.3fs", duration)).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
                                 }
+                                if let runOnly, !run.isRunning {
+                                    IconButton(symbol: "play.fill", label: "Run \(result.name)", size: 9.5) { runOnly([result]) }
+                                        .opacity(hovered == result.id ? 1 : 0)
+                                }
                             }
                             .padding(.leading, 32)
                             .padding(.vertical, 3)
+                            .contentShape(Rectangle())
+                            .onHover { hovered = $0 ? result.id : (hovered == result.id ? nil : hovered) }
                         }
                         Spacer().frame(height: 6)
                     }
