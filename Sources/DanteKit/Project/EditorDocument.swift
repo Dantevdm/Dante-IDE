@@ -20,8 +20,8 @@ public final class EditorDocument: Identifiable {
     public static let maxBytes = 20 * 1_048_576
 
     public let id = UUID()
-    public let url: URL
-    public let language: Language
+    public private(set) var url: URL
+    public private(set) var language: Language
     public private(set) var isDirty = false
 
     /// The current text. Set on every edit; marks the document dirty.
@@ -53,6 +53,12 @@ public final class EditorDocument: Identifiable {
         let current = try Self.read(url)
         if current != text { text = current }
         isDirty = false
+    }
+
+    /// The file was renamed or moved: keep the tab and its edits, at the new path.
+    public func relocate(to url: URL) {
+        self.url = url
+        language = Language(url: url)
     }
 
     public func save() throws {

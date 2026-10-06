@@ -234,6 +234,33 @@ public final class Workspace {
         return document
     }
 
+    /// Open documents at or under `url`, such as the files inside a folder about to be trashed.
+    public func documents(under url: URL) -> [EditorDocument] {
+        documents.filter { FileOperations.relocated($0.url, from: url, to: url) != nil }
+    }
+
+    /// Something in the project was renamed or moved: re-point open tabs, refresh both
+    /// folders in the explorer and the file index. Returns the documents that moved.
+    @discardableResult
+    public func itemMoved(from old: URL, to new: URL) -> [EditorDocument] {
+        let moved = documents.filter { document in
+            guard let target = FileOperations.relocated(document.url, from: old, to: new) else { return false }
+            document.relocate(to: target)
+            return true
+        }
+        itemsChanged(in: [old.deletingLastPathComponent(), new.deletingLastPathComponent()])
+        return moved
+    }
+
+    /// Re-lists folders after files appear or disappear in them, and updates the index.
+    public func itemsChanged(in folders: [URL]) {
+        for folder in Set(folders.map(\.standardizedFileURL)) {
+            root.node(for: folder)?.loadChildren()
+        }
+        refreshFileIndex()
+        revision += 1
+    }
+
     /// Closes a tab and activates its neighbour. Callers confirm unsaved changes first.
     public func close(_ document: EditorDocument) {
         guard let index = documents.firstIndex(where: { $0.id == document.id }) else { return }

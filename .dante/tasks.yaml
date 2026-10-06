@@ -158,7 +158,7 @@ tasks:
 - id: DI-39
   title: "Explorer: new file and folder, rename, duplicate, move to Trash, drag to move"
   phase: build
-  state: ready
+  state: review
 - id: DI-40
   title: "Language servers: completion, find references, rename symbol, format document"
   phase: build
