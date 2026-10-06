@@ -16,40 +16,59 @@ struct EditorArea: View {
             }
             if let target = session.git.diff {
                 DiffView(session: session, workspace: workspace, target: target)
+            } else if let panes = workspace.panes, let split = workspace.split {
+                HSplitView {
+                    pane(panes.left, focused: !split.focusIsRight, side: .left)
+                    pane(panes.right, focused: split.focusIsRight, side: .right)
+                }
             } else if let document = workspace.activeDocument {
-                PathBar(document: document, root: workspace.url)
-                if session.conflicts.contains(document.url) {
-                    ConflictBar(session: session, document: document)
-                }
-                DocumentEditor(
-                    document: document,
-                    theme: theme,
-                    fontSize: themeStore.editorFontSize,
-                    diagnostics: session.languages?.diagnostics(for: document) ?? [],
-                    canJump: session.languages?.existingClient(for: document.language) != nil,
-                    root: workspace.url,
-                    gitRevision: session.gitRevision,
-                    onCursorChange: { session.cursor = $0 },
-                    onDefinition: { session.jumpToDefinition(in: document, at: $0) },
-                    hover: { await session.languages?.hover(in: document, at: $0) },
-                    completion: session.completionSource(for: document),
-                    actions: session.editorActions(for: document),
-                    preferences: Preferences.shared
-                )
-                .id(document.id)
-                .task(id: document.id) { session.languages?.opened(document) }
-                .onChange(of: document.text) { session.languages?.changed(document) }
-                .task(id: document.text) {
-                    guard Preferences.shared.autoSave == .afterDelay, document.isDirty else { return }
-                    try? await Task.sleep(for: .seconds(1))
-                    guard !Task.isCancelled, document.isDirty else { return }
-                    session.save(document, tidy: false)
-                }
+                pane(document, focused: true, side: nil)
             } else {
                 EmptyEditor(hasTabs: !workspace.documents.isEmpty)
             }
         }
         .background(theme.codeBackground.color)
+    }
+
+    enum Side { case left, right }
+
+    /// One editor: its path bar and the text. In a split, only the focused pane follows
+    /// reveals and reports the cursor; clicking into the other one moves focus there.
+    private func pane(_ document: EditorDocument, focused: Bool, side: Side?) -> some View {
+        VStack(spacing: 0) {
+            PathBar(document: document, root: workspace.url, isFocusedPane: side != nil && focused,
+                    closeSplit: side == nil ? nil : { workspace.closeSplit() })
+            if session.conflicts.contains(document.url) {
+                ConflictBar(session: session, document: document)
+            }
+            DocumentEditor(
+                document: document,
+                theme: theme,
+                fontSize: themeStore.editorFontSize,
+                diagnostics: session.languages?.diagnostics(for: document) ?? [],
+                canJump: session.languages?.existingClient(for: document.language) != nil,
+                root: workspace.url,
+                gitRevision: session.gitRevision,
+                isFocused: focused,
+                onCursorChange: { if focused { session.cursor = $0 } },
+                onDefinition: { session.jumpToDefinition(in: document, at: $0) },
+                hover: { await session.languages?.hover(in: document, at: $0) },
+                completion: session.completionSource(for: document),
+                actions: session.editorActions(for: document),
+                preferences: Preferences.shared,
+                onFocus: { if let side { workspace.focusPane(right: side == .right) } }
+            )
+            .id(document.id)
+            .task(id: document.id) { session.languages?.opened(document) }
+            .onChange(of: document.text) { if focused { session.languages?.changed(document) } }
+            .task(id: document.text) {
+                guard focused, Preferences.shared.autoSave == .afterDelay, document.isDirty else { return }
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, document.isDirty else { return }
+                session.save(document, tidy: false)
+            }
+        }
+        .frame(minWidth: side == nil ? nil : 240)
     }
 }
 
@@ -61,12 +80,14 @@ private struct DocumentEditor: View {
     let canJump: Bool
     let root: URL
     let gitRevision: Int
+    let isFocused: Bool
     let onCursorChange: (CursorPosition) -> Void
     let onDefinition: (Int) -> Void
     let hover: (Int) async -> String?
     let completion: CompletionSource?
     let actions: EditorActions
     let preferences: Preferences
+    let onFocus: () -> Void
     /// The file as of HEAD; nil when it isn't tracked.
     @State private var base: String?
     @State private var lineChanges: [Int: LineChange] = [:]
@@ -79,7 +100,7 @@ private struct DocumentEditor: View {
             fontSize: fontSize,
             diagnostics: editorDiagnostics,
             lineChanges: lineChanges,
-            reveal: $document.revealRange,
+            reveal: isFocused ? $document.revealRange : .constant(nil),
             onCursorChange: onCursorChange,
             onDefinition: canJump ? onDefinition : nil,
             hover: canJump ? hover : nil,
@@ -87,7 +108,9 @@ private struct DocumentEditor: View {
             actions: actions,
             indentWidth: preferences.indentWidth(for: document.language),
             wrapsLines: preferences.wrapsLines,
-            completesWhileTyping: preferences.completesWhileTyping
+            completesWhileTyping: preferences.completesWhileTyping,
+            onFocus: onFocus,
+            takesFocus: isFocused
         )
         .task(id: gitRevision) {
             base = await GitGutter.headText(of: document.url, in: root)
@@ -198,6 +221,10 @@ private struct PathBar: View {
     @Environment(\.theme) private var theme
     let document: EditorDocument
     let root: URL
+    /// In a split, the pane that has focus is marked.
+    var isFocusedPane = false
+    /// In a split, closes it.
+    var closeSplit: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 5) {
@@ -212,12 +239,18 @@ private struct PathBar: View {
             Spacer()
             Text(document.language.displayName)
                 .foregroundStyle(theme.text3.color)
+            if let closeSplit {
+                IconButton(symbol: "xmark", label: "Close Split (⌘\\)", size: 9, action: closeSplit)
+                    .padding(.trailing, -10)
+            }
         }
         .font(.system(size: 12))
         .padding(.horizontal, 16)
         .frame(height: 28)
         .background(theme.codeBackground.color)
-        .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(isFocusedPane ? theme.accent.color : theme.line.color).frame(height: isFocusedPane ? 2 : 1)
+        }
     }
 
     private var components: [String] {

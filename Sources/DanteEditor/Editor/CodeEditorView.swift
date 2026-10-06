@@ -54,6 +54,10 @@ public struct CodeEditorView: NSViewRepresentable {
     var wrapsLines: Bool
     /// Off: the completion list opens only with ⌃Space.
     var completesWhileTyping: Bool
+    /// Called when the editor takes keyboard focus, so a split knows which pane is in use.
+    var onFocus: (() -> Void)?
+    /// Turning this on moves keyboard focus here, as when a split's focus changes from the menu.
+    var takesFocus: Bool
 
     public init(
         text: Binding<String>,
@@ -70,7 +74,9 @@ public struct CodeEditorView: NSViewRepresentable {
         actions: EditorActions? = nil,
         indentWidth: Int? = nil,
         wrapsLines: Bool = false,
-        completesWhileTyping: Bool = true
+        completesWhileTyping: Bool = true,
+        onFocus: (() -> Void)? = nil,
+        takesFocus: Bool = true
     ) {
         _text = text
         self.language = language
@@ -87,6 +93,8 @@ public struct CodeEditorView: NSViewRepresentable {
         self.indentWidth = indentWidth
         self.wrapsLines = wrapsLines
         self.completesWhileTyping = completesWhileTyping
+        self.onFocus = onFocus
+        self.takesFocus = takesFocus
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -138,6 +146,7 @@ public struct CodeEditorView: NSViewRepresentable {
         coordinator.completion = completion
         textView.onCompleteRequest = { [weak completion] in completion?.requestNow() }
         textView.onResign = { [weak completion] in completion?.close() }
+        textView.onFocus = { [weak coordinator] in coordinator?.parent.onFocus?() }
         textView.actions = actions
         coordinator.apply(theme: theme, fontSize: fontSize)
         coordinator.apply(wrapsLines: wrapsLines)
@@ -159,8 +168,10 @@ public struct CodeEditorView: NSViewRepresentable {
             object: scrollView.contentView
         )
 
-        DispatchQueue.main.async {
-            textView.window?.makeFirstResponder(textView)
+        if takesFocus {
+            DispatchQueue.main.async {
+                textView.window?.makeFirstResponder(textView)
+            }
         }
         return scrollView
     }
@@ -175,6 +186,10 @@ public struct CodeEditorView: NSViewRepresentable {
             coordinator.highlightNow()
         }
         if coordinator.appliedWrap != wrapsLines { coordinator.apply(wrapsLines: wrapsLines) }
+        if takesFocus, coordinator.tookFocus == false, textView.window?.firstResponder !== textView {
+            textView.window?.makeFirstResponder(textView)
+        }
+        coordinator.tookFocus = takesFocus
         coordinator.completion?.autoTriggers = completesWhileTyping
         // Only replace text that changed outside the editor (a reload from disk, a rename or a format).
         if textView.string != text {
@@ -299,6 +314,7 @@ public struct CodeEditorView: NSViewRepresentable {
         }
 
         private(set) var appliedWrap: Bool?
+        var tookFocus: Bool?
 
         /// Unwrapped, the text container grows sideways and the view scrolls; wrapped, it is
         /// as wide as the visible area.
@@ -589,6 +605,7 @@ public final class CodeTextView: NSTextView {
     var onHover: ((Int?) -> Void)?
     var onCompleteRequest: (() -> Void)?
     var onResign: (() -> Void)?
+    var onFocus: (() -> Void)?
     var actions: EditorActions?
 
     /// ⌥Escape and F5 come here: show completions.
@@ -609,6 +626,13 @@ public final class CodeTextView: NSTextView {
         onResign?()
         return super.resignFirstResponder()
     }
+
+    public override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocus?() }
+        return became
+    }
+
     private var hoverTimer: Timer?
     private var hoverTracking: NSTrackingArea?
 

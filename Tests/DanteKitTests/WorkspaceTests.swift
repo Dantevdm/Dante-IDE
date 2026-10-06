@@ -171,3 +171,35 @@ struct ExternalChangeTests {
         #expect(changes == .init())
     }
 }
+
+@MainActor @Suite struct SplitEditorTests {
+    @Test func panesSwapFocusAndFollowClosingTabs() throws {
+        let folder = try TemporaryFolder()
+        try folder.write("a.swift", "a")
+        try folder.write("b.swift", "b")
+        try folder.write("c.swift", "c")
+        let workspace = Workspace(url: folder.url)
+        let a = try workspace.open(folder.url.appending(path: "a.swift"))
+        workspace.splitEditor()
+        #expect(workspace.panes?.left === a && workspace.panes?.right === a)
+
+        // A tab opens in the focused (right) pane.
+        let b = try workspace.open(folder.url.appending(path: "b.swift"))
+        #expect(workspace.panes?.left === a && workspace.panes?.right === b && workspace.activeDocument === b)
+
+        workspace.focusPane(right: false)
+        #expect(workspace.activeDocument === a && workspace.panes?.right === b)
+        let c = try workspace.open(folder.url.appending(path: "c.swift"))
+        #expect(workspace.panes?.left === c && workspace.panes?.right === b)
+
+        // Closing the other pane's file leaves one pane.
+        workspace.close(b)
+        #expect(workspace.split == nil && workspace.activeDocument === c)
+
+        // Closing the focused pane's file hands focus to the other.
+        workspace.splitEditor()
+        _ = try workspace.open(folder.url.appending(path: "a.swift"))
+        workspace.close(a)
+        #expect(workspace.split == nil && workspace.activeDocument === c)
+    }
+}

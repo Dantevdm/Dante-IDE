@@ -35,6 +35,43 @@ public final class Workspace {
         documents.first { $0.id == activeDocumentID }
     }
 
+    /// The editor split in two. The active document is always the focused pane's; tabs
+    /// open files there.
+    public struct Split: Equatable, Sendable {
+        /// What the pane without focus shows.
+        public var otherDocumentID: EditorDocument.ID
+        public var focusIsRight: Bool
+    }
+
+    public private(set) var split: Split?
+
+    /// The documents in the left and right panes, when split.
+    public var panes: (left: EditorDocument, right: EditorDocument)? {
+        guard let split, let active = activeDocument,
+              let other = documents.first(where: { $0.id == split.otherDocumentID }) else { return nil }
+        return split.focusIsRight ? (other, active) : (active, other)
+    }
+
+    /// Splits the editor, showing the active document on both sides with the right one focused.
+    public func splitEditor() {
+        guard split == nil, let active = activeDocumentID else { return }
+        split = Split(otherDocumentID: active, focusIsRight: true)
+    }
+
+    /// Back to one pane, keeping the focused one.
+    public func closeSplit() {
+        split = nil
+    }
+
+    /// Clicking into a pane makes its document the active one.
+    public func focusPane(right: Bool) {
+        guard var split, split.focusIsRight != right, let active = activeDocumentID else { return }
+        activeDocumentID = split.otherDocumentID
+        split.otherDocumentID = active
+        split.focusIsRight = right
+        self.split = split
+    }
+
     public init(url: URL) {
         root = FileNode(url: url, isDirectory: true)
         root.loadChildren()
@@ -265,6 +302,27 @@ public final class Workspace {
     public func close(_ document: EditorDocument) {
         guard let index = documents.firstIndex(where: { $0.id == document.id }) else { return }
         documents.remove(at: index)
+        if var split {
+            if activeDocumentID == document.id, split.otherDocumentID != document.id {
+                // The focused pane closed: the other pane takes over.
+                activeDocumentID = split.otherDocumentID
+                self.split = nil
+                return
+            }
+            if split.otherDocumentID == document.id {
+                if activeDocumentID == document.id {
+                    // Shown in both: both panes move to the neighbouring tab.
+                    guard !documents.isEmpty else { self.split = nil; activeDocumentID = nil; return }
+                    let neighbour = documents[min(index, documents.count - 1)].id
+                    activeDocumentID = neighbour
+                    split.otherDocumentID = neighbour
+                    self.split = split
+                } else {
+                    self.split = nil
+                }
+                return
+            }
+        }
         if activeDocumentID == document.id {
             activeDocumentID = documents.isEmpty ? nil : documents[min(index, documents.count - 1)].id
         }

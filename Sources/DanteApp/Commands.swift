@@ -129,6 +129,12 @@ struct DanteCommands: Commands {
                 .keyboardShortcut("]", modifiers: [.command, .shift])
             Button("Previous Tab") { session?.selectTab(offset: -1) }
                 .keyboardShortcut("[", modifiers: [.command, .shift])
+            Button(session?.workspace?.split == nil ? "Split Editor" : "Close Split") { session?.toggleSplit() }
+                .keyboardShortcut("\\", modifiers: .command)
+                .disabled(session?.workspace?.activeDocument == nil)
+            Button("Focus Other Pane") { session?.focusOtherPane() }
+                .keyboardShortcut("\\", modifiers: [.command, .option])
+                .disabled(session?.workspace?.split == nil)
             Divider()
 
             Picker("Theme", selection: Binding(get: { themeStore.id }, set: { themeStore.id = $0 })) {

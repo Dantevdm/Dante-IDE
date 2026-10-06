@@ -661,6 +661,16 @@ final class Session {
         }
     }
 
+    func toggleSplit() {
+        guard let workspace else { return }
+        if workspace.split == nil { workspace.splitEditor() } else { workspace.closeSplit() }
+    }
+
+    func focusOtherPane() {
+        guard let workspace, let split = workspace.split else { return }
+        workspace.focusPane(right: !split.focusIsRight)
+    }
+
     func selectTab(offset: Int) {
         guard let workspace, !workspace.documents.isEmpty else { return }
         let index = workspace.documents.firstIndex { $0.id == workspace.activeDocumentID } ?? 0

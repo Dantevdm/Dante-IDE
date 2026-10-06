@@ -174,7 +174,7 @@ tasks:
 - id: DI-43
   title: Split editor (two files side by side)
   phase: build
-  state: ready
+  state: in_progress
 - id: DI-44
   title: Finish a task with a commit and PR drafted by Claude, task moves to review
   phase: release
