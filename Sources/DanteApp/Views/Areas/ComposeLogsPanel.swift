@@ -16,10 +16,13 @@ struct ComposeLogsPanel: View {
     @State private var lines: [LogLine] = []
     @State private var filter = LogFilter()
     @State private var follows = true
+    /// How many lines back `docker compose logs` starts.
+    @State private var tail = 500
     @State private var process: Shell.Running?
     @FocusState private var searchFocused: Bool
 
-    private static let limit = 5000
+    /// Lines kept; trimmed a thousand at a time so the text view rarely redraws everything.
+    private static let limit = 20_000
 
     var body: some View {
         let shown = filter.apply(lines)
@@ -31,7 +34,7 @@ struct ComposeLogsPanel: View {
         .background(theme.codeBackground.color)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
-        .task(id: service) { await follow() }
+        .task(id: "\(service ?? "*"):\(tail)") { await follow() }
         .onDisappear { process?.terminate() }
     }
 
@@ -50,11 +53,27 @@ struct ComposeLogsPanel: View {
                 .padding(2)
                 .background(theme.raised.color, in: RoundedRectangle(cornerRadius: 7))
                 Spacer(minLength: 8)
-                Button { follows.toggle() } label: {
-                    Label(follows ? "Following" : "Paused", systemImage: follows ? "arrow.down.to.line" : "pause.fill")
+                Menu {
+                    ForEach([500, 2000, 10_000], id: \.self) { count in
+                        Button("Last \(count.formatted()) lines") { tail = count }
+                    }
+                    Button("Everything") { tail = 0 }
+                } label: {
+                    Text(tail == 0 ? "All history" : "Last \(tail.formatted())")
                 }
-                .buttonStyle(DanteButtonStyle(primary: follows))
-                .help(follows ? "Stop scrolling to new lines" : "Scroll to new lines as they arrive")
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("How far back to read the logs")
+                if follows {
+                    Label("Following", systemImage: "arrow.down.to.line")
+                        .font(.dante(size: 12))
+                        .foregroundStyle(theme.text3.color)
+                        .help("New lines appear at the bottom. Scroll up to stop.")
+                } else {
+                    Button { follows = true } label: { Label("Jump to latest", systemImage: "arrow.down") }
+                        .buttonStyle(DanteButtonStyle(primary: true))
+                        .help("Go back to the newest line and keep following")
+                }
                 IconButton(symbol: "doc.on.doc", label: "Copy the lines shown", size: 11) { copy(shown) }
                 IconButton(symbol: "trash", label: "Clear", size: 11) { lines.removeAll() }
             }
@@ -130,30 +149,12 @@ struct ComposeLogsPanel: View {
 
     // MARK: Lines
 
-    @ViewBuilder
     private func content(_ shown: [LogLine]) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if shown.isEmpty {
-                        placeholder
-                    }
-                    ForEach(shown) { line in
-                        LogRow(line: line, query: filter.query, showsService: service == nil, serviceColor: color(forService: line.service))
-                            .id(line.id)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(.vertical, 6)
-            }
+        LogTextView(lines: shown, query: filter.query, showsService: service == nil, services: services, theme: theme, follows: $follows)
             .frame(height: 440)
-            .onChange(of: lines.last?.id) { _, last in
-                if follows, let last = shown.last?.id ?? last { proxy.scrollTo(last, anchor: .bottom) }
+            .overlay(alignment: .topLeading) {
+                if shown.isEmpty { placeholder }
             }
-            .onChange(of: follows) { _, follows in
-                if follows, let last = shown.last?.id { proxy.scrollTo(last, anchor: .bottom) }
-            }
-        }
     }
 
     private var placeholder: some View {
@@ -177,17 +178,39 @@ struct ComposeLogsPanel: View {
     private func follow() async {
         process?.terminate()
         lines.removeAll()
-        var arguments = ["docker", "compose", "logs", "-f", "--no-color", "--tail", "500"]
+        follows = true
+        var arguments = ["docker", "compose", "logs", "-f", "--no-color", "--tail", tail == 0 ? "all" : "\(tail)"]
         if let service { arguments.append(service) }
         guard let running = try? Shell.stream(arguments, in: root) else { return }
         process = running
         var next = 0
         let fallback = service ?? ""
-        for await raw in running.lines {
-            lines.append(LogLine.parse(raw, id: next, service: fallback))
-            next += 1
-            if lines.count > Self.limit { lines.removeFirst(lines.count - Self.limit) }
+        // History arrives in a burst: hand it over in batches rather than line by line.
+        var pending: [LogLine] = []
+        var lastFlush = ContinuousClock.now
+        let flusher = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(150))
+                flush(&pending)
+            }
         }
+        defer { flusher.cancel() }
+        for await raw in running.lines {
+            pending.append(LogLine.parse(raw, id: next, service: fallback))
+            next += 1
+            if pending.count >= 2000 || ContinuousClock.now - lastFlush > .milliseconds(150) {
+                flush(&pending)
+                lastFlush = .now
+            }
+        }
+        flush(&pending)
+    }
+
+    private func flush(_ pending: inout [LogLine]) {
+        guard !pending.isEmpty else { return }
+        lines.append(contentsOf: pending)
+        pending.removeAll(keepingCapacity: true)
+        if lines.count > Self.limit { lines.removeFirst(lines.count - Self.limit + 1000) }
     }
 
     private func copy(_ shown: [LogLine]) {
