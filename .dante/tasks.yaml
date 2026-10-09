@@ -228,3 +228,15 @@ tasks:
   title: "Env: logs panel with search, level filter and all services; tidier layout"
   phase: build
   state: review
+- id: DI-57
+  title: "Tests: written tests by category, run history with flaky tests, untested code"
+  phase: build
+  state: review
+- id: DI-58
+  title: "File index skipped the rest of any folder holding .DS_Store"
+  phase: build
+  state: review
+- id: DI-59
+  title: "Claude: queue messages sent mid-turn instead of dropping them"
+  phase: build
+  state: review

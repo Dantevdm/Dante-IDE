@@ -17,6 +17,14 @@ extension Session {
     }
 
     /// Opens a file from the Problems panel at a diagnostic.
+    /// Opens a file with a 1-based line in view, for tests and search results.
+    func open(file url: URL, line: Int) {
+        open(file: url)
+        guard let target = workspace?.activeDocument, target.url.standardizedFileURL == url.standardizedFileURL else { return }
+        let position = LSPPosition(line: max(line - 1, 0), character: 0)
+        target.revealRange = LineIndex(target.text as NSString).range(of: LSPRange(start: position, end: position))
+    }
+
     func reveal(_ diagnostic: LSPDiagnostic, in url: URL) {
         open(file: url)
         guard let target = workspace?.activeDocument, target.url.standardizedFileURL == url.standardizedFileURL else { return }

@@ -10,12 +10,17 @@ struct TestsView: View {
 
     @State private var command: TestCommand?
     @State private var showsOutput = false
+    @AppStorage("testsTab") private var tab: TestsTab = .run
+    /// Tests found by reading the code, and code no test names. Loaded off the main thread.
+    @State private var inventory: TestInventory?
+    @State private var gaps: TestGaps?
+    @State private var history: [TestRecord] = []
 
     var body: some View {
         AreaPage(
             eyebrow: "Quality",
             title: "Tests",
-            subtitle: "Run the suite here and every failure links to its line. Claude can fix a failure or draft the tests a change is missing; you review each file first."
+            subtitle: "Run the suite and every failure links to its line. See every test written, by category, how runs have gone over time, and the code no test reaches yet."
         ) {
             if let command {
                 Chip(text: command.label, symbol: "terminal", mono: true)
@@ -37,6 +42,43 @@ struct TestsView: View {
                     .keyboardShortcut("u", modifiers: .command)
             }
         } content: {
+            TestsTabBar(tab: $tab, counts: tabCounts)
+            switch tab {
+            case .run: runTab
+            case .written:
+                WrittenTestsView(session: session, workspace: workspace, inventory: inventory, results: session.testRun?.results ?? []) { tab = .untested }
+            case .history: TestHistoryView(records: history)
+            case .untested: UntestedView(session: session, workspace: workspace, gaps: gaps, hasTests: !(inventory?.tests.isEmpty ?? true))
+            }
+        }
+        // The file index fills in after the window opens, without a new revision.
+        .task(id: "\(workspace.revision):\(workspace.files.count)") {
+            command = TestCommand.detect(projectRoot: workspace.url)
+            history = TestRecord.load(for: workspace.url)
+            let root = workspace.url
+            let files = workspace.files
+            let (found, untested) = await Task.detached(priority: .utility) {
+                let inventory = TestInventory.load(root: root, files: files)
+                return (inventory, TestGaps.load(root: root, files: files, inventory: inventory))
+            }.value
+            inventory = found
+            gaps = untested
+        }
+        .onChange(of: session.testRun?.isRunning) { _, running in
+            if running == false { history = TestRecord.load(for: workspace.url) }
+        }
+    }
+
+    private var tabCounts: [TestsTab: String] {
+        var counts: [TestsTab: String] = [:]
+        if let inventory { counts[.written] = "\(inventory.tests.count)" }
+        if !history.isEmpty { counts[.history] = "\(history.count)" }
+        if let gaps, gaps.untestedCount > 0 { counts[.untested] = "\(gaps.untestedCount)" }
+        return counts
+    }
+
+    @ViewBuilder
+    private var runTab: some View {
             if command == nil {
                 EmptyState(
                     symbol: "testtube.2",
@@ -57,9 +99,9 @@ struct TestsView: View {
                     FailuresCard(session: session, workspace: workspace, run: run, runOnly: runOnly)
                 }
                 HStack(alignment: .top, spacing: 16) {
-                    SuitesCard(run: run, runOnly: runOnly)
+                    SuitesCard(run: run, runOnly: runOnly, categories: categories)
                     VStack(spacing: 16) {
-                        DraftTestsCard(session: session)
+                        DraftTestsCard(session: session, gaps: gaps) { tab = .untested }
                         if !run.failedOutsideTests {
                             OutputCard(run: run, title: "Output", expanded: false)
                         }
@@ -75,10 +117,15 @@ struct TestsView: View {
                     Button { run() } label: { Label("Run tests", systemImage: "play.fill") }
                         .buttonStyle(DanteButtonStyle(primary: true))
                 }
-                DraftTestsCard(session: session)
+                DraftTestsCard(session: session, gaps: gaps) { tab = .untested }
             }
-        }
-        .task(id: workspace.revision) { command = TestCommand.detect(projectRoot: workspace.url) }
+    }
+
+    /// A test's category from the inventory, by the name the runner printed.
+    private var categories: [String: String] {
+        var map: [String: String] = [:]
+        for test in inventory?.tests ?? [] { map[testKey(test.name)] = test.category }
+        return map
     }
 
     private var testChecklist: (done: Int, total: Int)? {
@@ -165,7 +212,7 @@ private struct RunSummary: View {
         case .stopped: return "Stopped"
         case .couldNotStart: return "Couldn’t start"
         case .finished(let status):
-            if status == 0 { return run.results.isEmpty ? "Finished" : run.passed == 1 ? "Passed" : "All \(run.passed) passed" }
+            if status == 0 { return run.results.isEmpty ? "Finished, but no tests were found" : run.passed == 1 ? "Passed" : "All \(run.passed) passed" }
             if run.failed > 0 { return "\(run.failed) failing" }
             return "Failed before the tests ran"
         }
@@ -283,6 +330,9 @@ private struct SuitesCard: View {
     @Environment(\.theme) private var theme
     let run: TestRun
     let runOnly: (([TestResult]) -> Void)?
+    /// Category by test name, from the tests written in the code.
+    let categories: [String: String]
+    @AppStorage("testsGroupByCategory") private var byCategory = false
     @State private var expanded: Set<String> = []
     @State private var hovered: String?
 
@@ -294,11 +344,22 @@ private struct SuitesCard: View {
     }
 
     var body: some View {
-        let suites = Dictionary(grouping: run.results, by: { $0.suite.isEmpty ? "Tests" : $0.suite })
+        let suites = Dictionary(grouping: run.results, by: { result in
+            byCategory ? categories[testKey(result.name)] ?? "Uncategorised" : (result.suite.isEmpty ? "Tests" : result.suite)
+        })
             .map { Suite(name: $0.key, results: $0.value) }
             .sorted { $0.failed != $1.failed ? $0.failed > $1.failed : $0.name < $1.name }
-        Card("Results by suite") {
-            Text("\(run.results.count) tests · \(suites.count) suites").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+        Card(byCategory ? "Results by category" : "Results by suite") {
+            if !categories.isEmpty {
+                Picker("Group", selection: $byCategory) {
+                    Text("Suite").tag(false)
+                    Text("Category").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+            Text("\(run.results.count) tests · \(suites.count) \(byCategory ? "categories" : "suites")").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
         } content: {
             if suites.isEmpty {
                 Text(run.isRunning ? "Waiting for the first result…" : "No test results in the output.")
@@ -424,16 +485,24 @@ private struct OutputCard: View {
 private struct DraftTestsCard: View {
     @Environment(\.theme) private var theme
     let session: Session
+    let gaps: TestGaps?
+    let showUntested: () -> Void
 
     var body: some View {
         Card("Tests Claude can draft") {
-            Text("Claude looks for code and spec rules that no test covers, then proposes tests one file at a time.")
+            Text(gaps.map { "\($0.untestedCount) of \($0.declarations) functions and types aren’t named in any test. Claude can pick the ones that matter and propose tests one file at a time." }
+                 ?? "Claude looks for code that no test covers, then proposes tests one file at a time.")
                 .font(.dante(size: 12))
                 .foregroundStyle(theme.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Button("Find untested code") {
-                    session.askClaude("Find the most important code paths and spec rules in this project that no test covers. List up to five, with the file and why each matters. Don't write tests yet.")
+                    showUntested()
+                    if let gaps, gaps.untestedCount > 0 {
+                        session.askClaude(gaps.prompt())
+                    } else {
+                        session.askClaude("Find the most important code paths and spec rules in this project that no test covers. List up to five, with the file and why each matters. Don't write tests yet.")
+                    }
                 }
                 .buttonStyle(DanteButtonStyle())
                 if let file = session.workspace?.activeDocument {

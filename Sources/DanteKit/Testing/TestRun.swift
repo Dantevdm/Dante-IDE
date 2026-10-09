@@ -17,7 +17,7 @@ public struct TestCommand: Equatable, Sendable {
         if let yaml = try? String(contentsOf: root.appending(path: ".dante/project.yaml"), encoding: .utf8),
            let project = (try? Yams.load(yaml: yaml)) as? [String: Any],
            let test = project["test"] as? [String: Any], let command = test["command"] as? String, !command.isEmpty {
-            return TestCommand(label: command, arguments: ["sh", "-c", command], readsXUnit: false)
+            return TestCommand(label: command, arguments: ["sh", "-c", verbose(command)], readsXUnit: false)
         }
         if has("Package.swift") { return TestCommand(label: "swift test", arguments: ["swift", "test"], readsXUnit: true) }
         if has("Cargo.toml") { return TestCommand(label: "cargo test", arguments: ["cargo", "test"], readsXUnit: false) }
@@ -33,6 +33,12 @@ public struct TestCommand: Equatable, Sendable {
             return TestCommand(label: "pytest -v", arguments: ["python3", "-m", "pytest", "-v"], readsXUnit: false)
         }
         return nil
+    }
+
+    /// `go test` lists each test only with -v; without it a run shows no results.
+    static func verbose(_ command: String) -> String {
+        guard command.contains("go test"), !command.contains(" -v"), !command.contains("-json") else { return command }
+        return command.replacingOccurrences(of: "go test", with: "go test -v")
     }
 
     /// The same runner limited to `tests`: for re-running failures or one test. Nil for a
@@ -119,7 +125,8 @@ public final class TestRun {
     /// The run as a history entry.
     public var record: TestRecord {
         TestRecord(date: finished ?? .now, label: command.label, passed: passed, failed: failed, skipped: skipped,
-                   duration: duration, brokeOutsideTests: failedOutsideTests)
+                   duration: duration, brokeOutsideTests: failedOutsideTests,
+                   failedTests: results.filter { $0.status == .failed }.map(\.id))
     }
     public var passed: Int { results.count { $0.status == .passed } }
     public var failed: Int { results.count { $0.status == .failed } }

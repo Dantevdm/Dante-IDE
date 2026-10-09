@@ -87,8 +87,11 @@ public struct TestRecord: Codable, Equatable, Sendable {
     public var duration: TimeInterval
     /// Failed without a failing test: the build broke or the runner crashed.
     public var brokeOutsideTests: Bool
+    /// The failing tests' ids (suite/name). Nil in records from before Dante kept them.
+    public var failedTests: [String]?
 
-    public init(date: Date, label: String, passed: Int, failed: Int, skipped: Int, duration: TimeInterval, brokeOutsideTests: Bool = false) {
+    public init(date: Date, label: String, passed: Int, failed: Int, skipped: Int, duration: TimeInterval, brokeOutsideTests: Bool = false, failedTests: [String]? = nil) {
+        self.failedTests = failedTests
         self.date = date
         self.label = label
         self.passed = passed
@@ -99,9 +102,15 @@ public struct TestRecord: Codable, Equatable, Sendable {
     }
 
     public var succeeded: Bool { failed == 0 && !brokeOutsideTests }
+    public var total: Int { passed + failed + skipped }
+    /// Finished without a test to run: no test files yet, or a runner that printed none.
+    public var foundNoTests: Bool { total == 0 && !brokeOutsideTests }
+    /// A run of the whole suite rather than a re-run of some tests.
+    public var isFullRun: Bool { !label.contains(" · ") }
 
     var event: TimelineEvent {
-        let title = brokeOutsideTests ? "Tests didn’t run: the build or runner failed"
+        let title = foundNoTests ? "Tests ran, but none were found"
+            : brokeOutsideTests ? "Tests didn’t run: the build or runner failed"
             : failed > 0 ? "\(failed) test\(failed == 1 ? "" : "s") failed" : "\(passed) test\(passed == 1 ? "" : "s") passed"
         var detail = "\(label) · \(Int(duration.rounded()))s"
         if failed > 0 { detail += " · \(passed) passed" }
@@ -202,5 +211,29 @@ public enum ClaudeTranscripts {
         let rest = line[range.upperBound...]
         guard let end = rest.firstIndex(of: "\"") else { return nil }
         return String(rest[..<end])
+    }
+}
+
+/// What the history of runs says about the suite.
+public enum TestHistory {
+    /// Tests that failed in some full runs and passed in others, most often failing first.
+    /// A test that failed every time it was recorded is broken rather than flaky.
+    public static func flaky(_ records: [TestRecord], window: Int = 20) -> [(test: String, failures: Int, runs: Int)] {
+        let runs = records.filter { $0.isFullRun && $0.failedTests != nil && !$0.brokeOutsideTests }.suffix(window)
+        guard runs.count >= 2 else { return [] }
+        var failures: [String: Int] = [:]
+        for run in runs { for test in run.failedTests ?? [] { failures[test, default: 0] += 1 } }
+        return failures.filter { $0.value < runs.count }
+            .map { (test: $0.key, failures: $0.value, runs: runs.count) }
+            .sorted { $0.failures != $1.failures ? $0.failures > $1.failures : $0.test < $1.test }
+    }
+
+    /// Tests failing in the latest full run and since when, in runs.
+    public static func failingStreaks(_ records: [TestRecord]) -> [(test: String, runs: Int)] {
+        let runs = Array(records.filter { $0.isFullRun && $0.failedTests != nil })
+        guard let latest = runs.last?.failedTests else { return [] }
+        return latest.map { test in
+            (test, runs.reversed().prefix { $0.failedTests?.contains(test) == true }.count)
+        }.sorted { $0.runs > $1.runs }
     }
 }
