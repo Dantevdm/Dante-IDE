@@ -83,6 +83,7 @@ struct EnvironmentView: View {
                         ServiceCard(
                             service: service,
                             state: running.first { $0.service == service.name },
+                            checking: containers == nil,
                             note: notes[service.name],
                             isShowingLogs: logService == service.name,
                             busy: busy != nil,
@@ -241,7 +242,11 @@ struct EnvironmentView: View {
             let profiles = Set(compose.services.flatMap(\.profiles)).sorted()
             if !profiles.isEmpty { Chip(text: "profiles: \(profiles.joined(separator: ", "))") }
             Spacer()
-            if dockerReady {
+            if containers == nil {
+                Text("Asking Docker…")
+                    .font(.dante(size: 12))
+                    .foregroundStyle(theme.text3.color)
+            } else if dockerReady {
                 Text("\(up) of \(compose.services.count) services up")
                     .font(.dante(size: 12))
                     .foregroundStyle(theme.text3.color)
@@ -347,6 +352,8 @@ private struct ServiceCard: View {
     @Environment(\.theme) private var theme
     let service: ComposeFile.Service
     let state: ContainerState?
+    /// Docker hasn't answered yet, so there's no telling whether it's running.
+    let checking: Bool
     let note: String?
     let isShowingLogs: Bool
     let busy: Bool
@@ -371,7 +378,7 @@ private struct ServiceCard: View {
                 StatusDot(color: color, size: 8)
                 Text(service.name).font(.dante(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
                 Spacer()
-                Text(state?.label ?? "not created").font(.dante(size: 12)).foregroundStyle(color)
+                Text(state?.label ?? (checking ? "checking…" : "not created")).font(.dante(size: 12)).foregroundStyle(color)
             }
             Text(service.source).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
             if let note {
@@ -394,7 +401,7 @@ private struct ServiceCard: View {
                     Button(action: restart) { Label("Restart", systemImage: "arrow.clockwise") }
                         .buttonStyle(DanteButtonStyle())
                         .disabled(busy)
-                } else {
+                } else if !checking {
                     Button(action: start) { Label("Start", systemImage: "play.fill") }
                         .buttonStyle(DanteButtonStyle())
                         .disabled(busy)

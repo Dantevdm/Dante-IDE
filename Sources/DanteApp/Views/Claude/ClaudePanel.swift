@@ -195,7 +195,7 @@ private struct EmptyConversation: View {
                 list.append("What should I do next in the \(workspace.lifecycle.phases[current]) phase?")
             }
             if let document = workspace.activeDocument {
-                list.append("Write tests for \(document.name)")
+                list.append(document.kind.opensAsText ? "Write tests for \(document.name)" : "Summarise \(document.name)")
             }
         }
         return list

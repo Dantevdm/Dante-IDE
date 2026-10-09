@@ -287,7 +287,8 @@ struct TestHistoryView: View {
             Text("Oldest on the left").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
         } content: {
             Chart(bars) { bar in
-                BarMark(x: .value("Run", bar.run), y: .value("Tests", bar.count))
+                // One slot per run, so a short history doesn't sit squashed against an edge.
+                BarMark(x: .value("Run", "\(bar.run)"), y: .value("Tests", bar.count), width: .fixed(18))
                     .foregroundStyle(by: .value("Result", bar.kind))
             }
             .chartForegroundStyleScale(["Passed": theme.green.color, "Failed": theme.red.color, "Didn’t run": theme.amber.color])

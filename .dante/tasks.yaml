@@ -252,3 +252,11 @@ tasks:
   title: "Screen review: Home since-last-visit, Run health spellings, Data folder notes, Docs toolbar"
   phase: build
   state: review
+- id: DI-63
+  title: "Open PDFs, images, Word, media, slides and other non-text files in viewer tabs"
+  phase: build
+  state: review
+- id: DI-64
+  title: "Env logs: hide health check requests; cards say checking until Docker answers"
+  phase: build
+  state: review

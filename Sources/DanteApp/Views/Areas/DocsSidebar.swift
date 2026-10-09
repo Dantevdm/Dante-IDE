@@ -89,6 +89,7 @@ struct DocRow: View {
         switch doc.kind {
         case .pdf: "doc.richtext"
         case .image: "photo"
+        case .slides: "rectangle.on.rectangle"
         default: "doc.text"
         }
     }

@@ -43,7 +43,7 @@ struct DocImage: View {
     }
 }
 
-/// A PDF, image or Word file in Docs, shown as itself.
+/// A PDF, image, Word file, slides or spreadsheet in Docs, shown as itself.
 struct FilePreview: View {
     @Environment(\.theme) private var theme
     let url: URL
@@ -71,6 +71,8 @@ struct FilePreview: View {
                     }
                         .padding(28)
                 }
+            case .slides:
+                QuickLookPreview(url: url)
             case .document, .markdown:
                 ScrollView {
                     Text(text ?? "Reading…")

@@ -13,6 +13,8 @@ public struct DocLibrary: Equatable, Sendable {
             case markdown, pdf, image
             /// Word, RTF, OpenDocument: previewed as text.
             case document
+            /// Slides and spreadsheets, shown by Quick Look.
+            case slides
         }
 
         public init(path: String) { self.path = path }
@@ -22,6 +24,7 @@ public struct DocLibrary: Equatable, Sendable {
             if DocLibrary.markdownExtensions.contains(ext) { return .markdown }
             if ext == "pdf" { return .pdf }
             if DocLibrary.imageExtensions.contains(ext) { return .image }
+            if DocLibrary.slideExtensions.contains(ext) { return .slides }
             return .document
         }
 
@@ -64,7 +67,9 @@ public struct DocLibrary: Equatable, Sendable {
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdx"]
     static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "tiff"]
     static let documentExtensions: Set<String> = ["pdf", "doc", "docx", "rtf", "odt"]
+    static let slideExtensions: Set<String> = ["key", "pptx", "ppt", "odp", "pages", "numbers", "xlsx", "xls", "ods"]
     /// Where PDFs, images and Word files count as docs. Elsewhere they're app assets.
+    /// Documents and slides (not images) at the project root count too.
     static let documentFolders: Set<String> = ["docs", "documentation", ".dante"]
     /// Where files added in Docs go.
     public static let importFolder = "docs"
@@ -72,8 +77,9 @@ public struct DocLibrary: Equatable, Sendable {
     public static func isDoc(_ path: String) -> Bool {
         let ext = (path as NSString).pathExtension.lowercased()
         if markdownExtensions.contains(ext) { return true }
-        guard imageExtensions.contains(ext) || documentExtensions.contains(ext),
-              let top = path.split(separator: "/").first, path.contains("/") else { return false }
+        let document = documentExtensions.contains(ext) || slideExtensions.contains(ext)
+        guard imageExtensions.contains(ext) || document else { return false }
+        guard path.contains("/"), let top = path.split(separator: "/").first else { return document }
         return documentFolders.contains(top.lowercased())
     }
 

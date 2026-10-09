@@ -109,6 +109,12 @@ import UniformTypeIdentifiers
         #expect(!DocLibrary.isDoc("Sources/App/Assets/icon.png"))
         #expect(!DocLibrary.isDoc("logo.png"))
         #expect(DocLibrary.isDoc("NOTES.md"))
+        // Documents at the root are docs; documents deep in the code are assets.
+        #expect(DocLibrary.isDoc("Architecture Overview.pdf"))
+        #expect(DocLibrary.isDoc("docs/roadmap.key"))
+        #expect(DocLibrary.Doc(path: "docs/roadmap.key").kind == .slides)
+        #expect(DocLibrary.Doc(path: "budget.xlsx").kind == .slides)
+        #expect(!DocLibrary.isDoc("frontend/public/terms.pdf"))
     }
 
     @Test func kindsAndOrder() {

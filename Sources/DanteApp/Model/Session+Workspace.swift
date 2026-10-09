@@ -92,7 +92,7 @@ extension Session {
     }
 
     func saveActive() {
-        guard let document = workspace?.activeDocument else { return }
+        guard let document = workspace?.activeDocument, document.kind.opensAsText else { return }
         saveFormatting(document)
     }
 

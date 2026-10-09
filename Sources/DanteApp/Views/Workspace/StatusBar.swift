@@ -19,7 +19,7 @@ struct StatusBar: View {
                 }
             }
             Spacer()
-            if let document = workspace.activeDocument {
+            if let document = workspace.activeDocument, document.kind.opensAsText {
                 LanguageStatus(session: session, document: document)
                 BlameStatus(session: session, workspace: workspace, document: document)
                 Text("Ln \(session.cursor.line), Col \(session.cursor.column)")

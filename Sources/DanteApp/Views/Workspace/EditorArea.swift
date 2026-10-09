@@ -44,34 +44,43 @@ struct EditorArea: View {
             if focused, let inline = session.inlineEdit, inline.document === document {
                 InlineEditBar(session: session, model: inline)
             }
-            DocumentEditor(
-                document: document,
-                theme: theme,
-                fontSize: themeStore.editorFontSize,
-                diagnostics: session.languages?.diagnostics(for: document) ?? [],
-                canJump: session.languages?.existingClient(for: document.language) != nil,
-                root: workspace.url,
-                gitRevision: session.gitRevision,
-                isFocused: focused,
-                onCursorChange: { if focused { session.cursor = $0 } },
-                onDefinition: { session.jumpToDefinition(in: document, at: $0) },
-                hover: { await session.languages?.hover(in: document, at: $0) },
-                completion: session.completionSource(for: document),
-                actions: session.editorActions(for: document),
-                preferences: Preferences.shared,
-                onFocus: { if let side { workspace.focusPane(right: side == .right) } }
-            )
-            .id(document.id)
-            .task(id: document.id) { session.languages?.opened(document) }
-            .onChange(of: document.text) { if focused { session.languages?.changed(document) } }
-            .task(id: document.text) {
-                guard focused, Preferences.shared.autoSave == .afterDelay, document.isDirty else { return }
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled, document.isDirty else { return }
-                session.save(document, tidy: false)
+            if !document.kind.opensAsText {
+                FileViewer(session: session, document: document)
+                    .id(document.id)
+            } else {
+                textEditor(document, focused: focused, side: side)
             }
         }
         .frame(minWidth: side == nil ? nil : 240)
+    }
+
+    private func textEditor(_ document: EditorDocument, focused: Bool, side: Side?) -> some View {
+        DocumentEditor(
+            document: document,
+            theme: theme,
+            fontSize: themeStore.editorFontSize,
+            diagnostics: session.languages?.diagnostics(for: document) ?? [],
+            canJump: session.languages?.existingClient(for: document.language) != nil,
+            root: workspace.url,
+            gitRevision: session.gitRevision,
+            isFocused: focused,
+            onCursorChange: { if focused { session.cursor = $0 } },
+            onDefinition: { session.jumpToDefinition(in: document, at: $0) },
+            hover: { await session.languages?.hover(in: document, at: $0) },
+            completion: session.completionSource(for: document),
+            actions: session.editorActions(for: document),
+            preferences: Preferences.shared,
+            onFocus: { if let side { workspace.focusPane(right: side == .right) } }
+        )
+        .id(document.id)
+        .task(id: document.id) { session.languages?.opened(document) }
+        .onChange(of: document.text) { if focused { session.languages?.changed(document) } }
+        .task(id: document.text) {
+            guard focused, Preferences.shared.autoSave == .afterDelay, document.isDirty else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, document.isDirty else { return }
+            session.save(document, tidy: false)
+        }
     }
 }
 
@@ -243,7 +252,7 @@ private struct PathBar: View {
                     .foregroundStyle(index == components.count - 1 ? theme.text2.color : theme.text3.color)
             }
             Spacer()
-            Text(document.language.displayName)
+            Text(document.kind.opensAsText ? document.language.displayName : document.kind.title)
                 .foregroundStyle(theme.text3.color)
             if let closeSplit {
                 IconButton(symbol: "xmark", label: "Close Split (⌘\\)", size: 9, action: closeSplit)

@@ -80,11 +80,13 @@ struct WorkspaceTests {
         #expect(document.isDirty)
     }
 
-    @Test func refusesBinaryFiles() throws {
+    @Test func opensBinaryFilesInAViewerRatherThanAsText() throws {
         let folder = try TemporaryFolder()
         let file = folder.url.appending(path: "image.bin")
         try Data([0xFF, 0xFE, 0x00, 0xC3, 0x28]).write(to: file)
-        #expect(throws: DocumentError.self) { try EditorDocument(url: file) }
+        let document = try EditorDocument(url: file)
+        #expect(document.kind == .binary)
+        #expect(document.text.isEmpty)
     }
 
     @Test func detectsLanguages() {

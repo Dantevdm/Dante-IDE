@@ -35,6 +35,11 @@ struct ComposeLogsPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
         .task(id: "\(service ?? "*"):\(tail)") { await follow() }
+        .task(id: root) {
+            if let file = ComposeFile.find(in: root), let text = try? String(contentsOf: file, encoding: .utf8) {
+                filter.healthPaths = LogFilter.healthPaths(composeText: text)
+            }
+        }
         .onDisappear { process?.terminate() }
     }
 
@@ -84,6 +89,7 @@ struct ComposeLogsPanel: View {
                     .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
                     .disabled(!filter.isSearching)
+                healthToggle
                 Picker("Level", selection: $filter.minimum) {
                     Text("All levels").tag(LogLine.Level.debug)
                     Text("Info and up").tag(LogLine.Level.info)
@@ -115,6 +121,16 @@ struct ComposeLogsPanel: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Hides health check requests, and says how many there are.
+    private var healthToggle: some View {
+        let count = filter.healthCheckCount(in: lines)
+        return Toggle(count > 0 ? "Hide health checks (\(count.formatted()))" : "Hide health checks", isOn: $filter.hidesHealthChecks)
+            .toggleStyle(.checkbox)
+            .font(.dante(size: 12))
+            .foregroundStyle(theme.text2.color)
+            .help("Successful requests from inside a container or to a health check path, such as the ones docker compose makes every few seconds")
     }
 
     private var searchField: some View {

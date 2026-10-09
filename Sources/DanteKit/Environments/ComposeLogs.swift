@@ -15,6 +15,14 @@ public struct LogLine: Equatable, Sendable, Identifiable {
     /// The rest of the line.
     public var message: String
     public var level: Level
+    /// A successful HTTP request the line logs, found once when it's parsed.
+    public var request: Request?
+
+    public struct Request: Equatable, Sendable {
+        public var path: String
+        /// Made from inside the container, where health checks run.
+        public var fromInside: Bool
+    }
 
     public init(id: Int, service: String, timestamp: String? = nil, message: String, level: Level = .info) {
         self.id = id
@@ -22,6 +30,17 @@ public struct LogLine: Equatable, Sendable, Identifiable {
         self.timestamp = timestamp
         self.message = message
         self.level = level
+        request = Self.request(in: message)
+    }
+
+    /// Gin, nginx, Apache and most access logs carry the method, the path and the status
+    /// on one line. Nil unless the request succeeded.
+    static func request(in message: String) -> Request? {
+        guard message.contains("GET") || message.contains("HEAD") || message.contains("POST") || message.contains("OPTIONS"),
+              let match = message.firstMatch(of: /\b(?:GET|HEAD|OPTIONS|POST)\s+"?(\/[^\s"?]*)/),
+              message.contains(/(?:^|[\s|"])[23]\d\d(?:[\s|]|$)/) else { return nil }
+        let fromInside = message.contains(/(?:^|[\s|])(?:127\.0\.0\.1|::1|localhost)(?:[\s|:]|$)/)
+        return Request(path: String(match.1), fromInside: fromInside)
     }
 
     /// Compose prefixes each line with "service  | " (or "service-1  | " in some
@@ -68,11 +87,18 @@ public struct LogFilter: Equatable, Sendable {
     public var minimum: LogLine.Level
     /// Show only lines that match, or all lines with matches highlighted.
     public var onlyMatches: Bool
+    /// Leave out successful requests made by health checks, which arrive every few seconds.
+    public var hidesHealthChecks: Bool
+    /// Paths the project's health checks call, beside the usual /health, /ready and so on.
+    public var healthPaths: Set<String>
 
-    public init(query: String = "", minimum: LogLine.Level = .debug, onlyMatches: Bool = true) {
+    public init(query: String = "", minimum: LogLine.Level = .debug, onlyMatches: Bool = true,
+                hidesHealthChecks: Bool = true, healthPaths: Set<String> = []) {
         self.query = query
         self.minimum = minimum
         self.onlyMatches = onlyMatches
+        self.hidesHealthChecks = hidesHealthChecks
+        self.healthPaths = healthPaths
     }
 
     public var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -84,7 +110,25 @@ public struct LogFilter: Equatable, Sendable {
     public func apply(_ lines: [LogLine]) -> [LogLine] {
         lines.filter { line in
             line.level >= minimum && (!isSearching || !onlyMatches || matches(line))
+                && !(hidesHealthChecks && line.isHealthCheck(paths: healthPaths))
         }
+    }
+
+    /// How many of `lines` are health check requests.
+    public func healthCheckCount(in lines: [LogLine]) -> Int {
+        lines.count { $0.isHealthCheck(paths: healthPaths) }
+    }
+
+    static let commonHealthPaths: Set<String> = ["/health", "/healthz", "/healthcheck", "/ready", "/readyz", "/live", "/livez", "/ping", "/status", "/api/health"]
+
+    /// Paths of the local URLs in a compose file, which are its health checks' targets:
+    /// `curl -sf http://localhost:3000/api/stats` gives "/api/stats".
+    public static func healthPaths(composeText text: String) -> Set<String> {
+        var paths: Set<String> = []
+        for match in text.matches(of: /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(\/[^\s"',\]?#]*)?/) {
+            paths.insert(match.1.map(String.init) ?? "/")
+        }
+        return paths
     }
 
     /// Case-insensitive ranges of the query in some text, for highlighting.
@@ -102,6 +146,13 @@ public struct LogFilter: Equatable, Sendable {
 }
 
 extension LogLine {
+    /// A successful HTTP request from inside the container (a health check runs there) or
+    /// to a health check path.
+    public func isHealthCheck(paths: Set<String> = []) -> Bool {
+        guard let request else { return false }
+        return request.fromInside || paths.contains(request.path) || LogFilter.commonHealthPaths.contains(request.path)
+    }
+
     /// What a search looks in.
     public var searchText: String { [timestamp, message].compactMap { $0 }.joined(separator: " ") }
 }

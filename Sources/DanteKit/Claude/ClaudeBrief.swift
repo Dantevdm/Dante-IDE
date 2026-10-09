@@ -68,6 +68,9 @@ public enum ClaudeBrief {
     public static func context(workspace: Workspace, line: Int?, diagnostics: [LSPDiagnostic] = []) -> String? {
         guard let document = workspace.activeDocument else { return nil }
         let path = ProposedChange.relativePath(of: document.url, in: workspace.url)
+        guard document.kind.opensAsText else {
+            return "The user is looking at \(path) (\(document.kind.title.lowercased())) in a viewer tab."
+        }
         let position = line.map { ", cursor on line \($0)" } ?? ""
         let unsaved = document.isDirty ? " It has unsaved edits, so the file on disk may differ from what the user sees." : ""
         var text = "The user has \(path) open in the editor\(position).\(unsaved)"
