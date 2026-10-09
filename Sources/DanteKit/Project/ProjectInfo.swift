@@ -35,17 +35,23 @@ public struct ProjectInfo: Equatable, Sendable {
         guard let root = (try? Yams.load(yaml: yaml)) as? [String: Any] else { return ProjectInfo() }
         var checks: [HealthCheck] = []
         let operate = root["operate"] as? [String: Any]
-        if let list = operate?["checks"] as? [Any] {
-            for case let entry as [String: Any] in list {
-                guard let address = entry["url"] as? String, let url = URL(string: address), url.scheme?.hasPrefix("http") == true else { continue }
-                checks.append(HealthCheck(name: (entry["name"] as? String) ?? url.host() ?? address, url: url))
-            }
+        // `checks`, or `health` as people (and Claude) often write it; a bare URL works too.
+        let list = operate?["checks"] as? [Any] ?? operate?["health"] as? [Any] ?? operate?["healthchecks"] as? [Any] ?? []
+        for item in list {
+            let entry = item as? [String: Any] ?? [:]
+            guard let address = (entry["url"] as? String) ?? (item as? String), let url = URL(string: address),
+                  url.scheme?.hasPrefix("http") == true else { continue }
+            let name = (entry["name"] as? String) ?? [url.host(), url.port.map { ":\($0)" }, url.path.isEmpty ? nil : url.path].compactMap { $0 }.joined()
+            checks.append(HealthCheck(name: checks.contains { $0.name == name } ? address : name, url: url))
         }
+        // `logs: "fly logs"`, or `logs: { command: … }`.
+        let logs = operate?["logs"]
+        let logsCommand = (logs as? String) ?? ((logs as? [String: Any]).flatMap { ($0["command"] ?? $0["run"]) as? String })
         return ProjectInfo(
             name: (root["name"] as? String)?.nonEmptyTrimmed,
             summary: (root["summary"] as? String)?.nonEmptyTrimmed,
             checks: checks,
-            logsCommand: (operate?["logs"] as? String)?.nonEmptyTrimmed,
+            logsCommand: logsCommand?.nonEmptyTrimmed,
             alarms: (operate?["alarms"] as? [Any] ?? []).compactMap(AlarmSource.parse)
         )
     }

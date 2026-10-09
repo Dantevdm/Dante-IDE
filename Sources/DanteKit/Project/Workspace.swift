@@ -199,8 +199,11 @@ public final class Workspace {
         indexTask = Task { [weak self] in
             let paths = await Task.detached(priority: .utility) { FileIndex.scan(root) }.value
             guard !Task.isCancelled, let self else { return }
+            guard paths != self.files else { return }
             self.files = paths
             self.fileSet = Set(paths)
+            // Views that read the index reload on a new revision.
+            self.revision += 1
         }
     }
 

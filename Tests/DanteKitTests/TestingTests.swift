@@ -250,3 +250,31 @@ import Testing
         #expect(info.logsCommand == "fly logs -a ledger")
     }
 }
+
+struct GoArchitectureTests {
+    @Test func readsPackagesAndImports() throws {
+        let files: [String: String] = [
+            "backend/go.mod": "module example.com/notify\n\ngo 1.22\n",
+            "backend/main.go": "package main\n\nimport (\n\t\"log\"\n\t\"example.com/notify/internal/api\"\n\t\"example.com/notify/internal/db\"\n)\n\nfunc main() {}\n",
+            "backend/internal/api/handlers.go": "package api\n\nimport (\n\t\"net/http\"\n\t\"example.com/notify/internal/db\"\n\t\"github.com/go-chi/chi/v5/middleware\"\n)\n",
+            "backend/internal/api/handlers_test.go": "package api\n\nimport \"example.com/notify/internal/zzz\"\n",
+            "backend/internal/db/db.go": "package db\n\nimport _ \"modernc.org/sqlite\"\n",
+            "frontend/app.js": "",
+        ]
+        let graph = try #require(ArchitectureGraph.goModules(files: Array(files.keys)) { files[$0] })
+        #expect(graph.title == "notify")
+        #expect(graph.nodes.map(\.name) == ["backend", "api", "db", "chi", "sqlite"])
+        #expect(graph.node("example.com/notify")?.kind == .app && graph.node("example.com/notify/internal/api")?.path == "backend/internal/api")
+        #expect(Set(graph.edges.map { "\($0.from)>\($0.to)" }) == [
+            "example.com/notify>example.com/notify/internal/api", "example.com/notify>example.com/notify/internal/db",
+            "example.com/notify/internal/api>example.com/notify/internal/db", "example.com/notify/internal/api>ext:github.com/go-chi/chi",
+            "example.com/notify/internal/db>ext:modernc.org/sqlite",
+        ])
+    }
+
+    @Test func foldersWithoutASourceRoot() {
+        let graph = ArchitectureGraph.folders(["backend/main.go", "backend/internal/api/a.go", "frontend/app.js", "frontend/views/x.js", "docs/a.md", "data/x.db", "README.md"])
+        #expect(graph?.nodes.map(\.name) == ["backend", "frontend"])
+        #expect(ArchitectureGraph.folders(["Sources/App/a.swift", "Sources/Kit/b.swift", "scripts/x.py"])?.nodes.map(\.name) == ["App", "Kit"])
+    }
+}

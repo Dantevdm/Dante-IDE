@@ -83,7 +83,11 @@ struct MapView: View {
             let output = await Shell.run(["swift", "package", "describe", "--type", "json"], in: root)
             modules = output.succeeded ? ArchitectureGraph.swiftPackage(describeJSON: output.stdout) : nil
         } else {
-            modules = ArchitectureGraph.folders(workspace.files)
+            let files = workspace.files
+            modules = await Task.detached(priority: .utility) {
+                ArchitectureGraph.goModules(files: files) { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
+                    ?? ArchitectureGraph.folders(files)
+            }.value
         }
         services = ComposeFile.load(projectRoot: root).map(ArchitectureGraph.compose)
         if modules == nil, services != nil { source = .services }

@@ -118,3 +118,31 @@ struct WorkspacePlanTests {
         #expect(workspace.phaseDocs["design"]?.doneWhen.first?.done == true)
     }
 }
+
+struct LenientTaskFileTests {
+    @Test func readsOtherSpellingsAndKeepsUnknownFields() throws {
+        let file = try TaskFile.decode("""
+        tasks:
+          - id: TN-1
+            title: "Fix lifecycle"
+            phase: Build
+            status: in-progress
+            notes: "Pending, sent, delivered"
+            source: "GitHub Issue #3"
+          - id: TN-2
+            title: Ship it
+            status: closed
+          - id: TN-3
+            title: Look into it
+            status: open
+        """)
+        #expect(file.prefix == "TN")
+        #expect(file.tasks.map(\.state) == [.inProgress, .done, .ready])
+        #expect(file.tasks[0].phase == "build" && file.tasks[0].note == "Pending, sent, delivered")
+        #expect(file.tasks[1].phase == "build")
+        #expect(file.tasks[0].extra == ["source": "GitHub Issue #3"])
+        let saved = try file.encode()
+        #expect(saved.contains("state: in_progress") && saved.contains("source: ") && saved.contains("GitHub Issue #3") && !saved.contains("status:"))
+        #expect(try TaskFile.decode(saved) == file)
+    }
+}

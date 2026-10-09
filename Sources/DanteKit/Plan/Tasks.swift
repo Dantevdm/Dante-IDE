@@ -10,6 +10,24 @@ public enum TaskState: String, Codable, CaseIterable, Sendable, Identifiable {
 
     public var id: String { rawValue }
 
+    /// Reads the spellings other tools and people use: open, todo, doing, wip, closed…
+    /// Anything unknown is ready.
+    public init(from decoder: Decoder) throws {
+        let text = try decoder.singleValueContainer().decode(String.self)
+        self = TaskState(loosely: text)
+    }
+
+    public init(loosely text: String) {
+        let key = text.lowercased().trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "-", with: "_").replacingOccurrences(of: " ", with: "_")
+        switch key {
+        case "in_progress", "inprogress", "doing", "active", "started", "wip", "working", "ongoing": self = .inProgress
+        case "review", "in_review", "reviewing", "testing", "qa", "verify": self = .review
+        case "done", "closed", "complete", "completed", "resolved", "fixed", "finished", "shipped": self = .done
+        default: self = .ready
+        }
+    }
+
     public var title: String {
         switch self {
         case .ready: "Ready"
@@ -34,6 +52,58 @@ public struct PlanTask: Codable, Equatable, Identifiable, Sendable {
     public var claude: Bool?
     /// The monitoring alarm the task came from (`Alarm.id`), so Operate can show its state.
     public var alarm: String?
+    /// Fields Dante doesn't use (`source:`, `owner:`…), kept so saving the board doesn't drop them.
+    public var extra: [String: String] = [:]
+
+    private struct Key: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(_ string: String) { stringValue = string }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    private static let known: Set<String> = ["id", "title", "phase", "state", "status", "spec", "note", "notes", "claude", "alarm"]
+
+    /// Takes `status` for `state` and `notes` for `note`, as hand-written and generated files use them.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Key.self)
+        func text(_ names: String...) throws -> String? {
+            for name in names {
+                if let value = try? container.decodeIfPresent(String.self, forKey: Key(name)) { return value }
+                if let value = try? container.decodeIfPresent(Int.self, forKey: Key(name)) { return String(value) }
+            }
+            return nil
+        }
+        guard let id = try text("id") else {
+            throw DecodingError.keyNotFound(Key("id"), .init(codingPath: container.codingPath, debugDescription: "A task has no id."))
+        }
+        self.id = id
+        title = try text("title", "name") ?? id
+        phase = (try text("phase") ?? "build").lowercased()
+        state = TaskState(loosely: try text("state", "status") ?? "ready")
+        spec = try text("spec")
+        note = try text("note", "notes", "description")
+        claude = try? container.decodeIfPresent(Bool.self, forKey: Key("claude"))
+        alarm = try text("alarm")
+        for key in container.allKeys where !Self.known.contains(key.stringValue) {
+            if let value = try text(key.stringValue) { extra[key.stringValue] = value }
+            else if let value = try? container.decode(Bool.self, forKey: key) { extra[key.stringValue] = String(value) }
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: Key.self)
+        try container.encode(id, forKey: Key("id"))
+        try container.encode(title, forKey: Key("title"))
+        try container.encode(phase, forKey: Key("phase"))
+        try container.encode(state, forKey: Key("state"))
+        try container.encodeIfPresent(spec, forKey: Key("spec"))
+        try container.encodeIfPresent(note, forKey: Key("note"))
+        try container.encodeIfPresent(claude, forKey: Key("claude"))
+        try container.encodeIfPresent(alarm, forKey: Key("alarm"))
+        for key in extra.keys.sorted() { try container.encode(extra[key], forKey: Key(key)) }
+    }
 
     public init(id: String, title: String, phase: String, state: TaskState = .ready, spec: String? = nil, note: String? = nil, claude: Bool? = nil, alarm: String? = nil) {
         self.id = id
@@ -55,6 +125,36 @@ public struct TaskFile: Codable, Equatable, Sendable {
     public init(prefix: String, tasks: [PlanTask] = []) {
         self.prefix = prefix
         self.tasks = tasks
+    }
+
+    private enum CodingKeys: String, CodingKey { case prefix, tasks }
+
+    /// A missing prefix is taken from the existing ids (`TN-3` → `TN`).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tasks = try container.decodeIfPresent([PlanTask].self, forKey: .tasks) ?? []
+        prefix = try container.decodeIfPresent(String.self, forKey: .prefix)
+            ?? tasks.first.flatMap { $0.id.split(separator: "-").first.map(String.init) } ?? "TASK"
+    }
+
+    /// A decoding error in words: which task and which field, rather than Foundation's
+    /// "the data couldn't be read because it is missing".
+    public static func explain(_ error: Error) -> String {
+        func place(_ path: [CodingKey]) -> String {
+            let index = path.first { $0.intValue != nil }?.intValue
+            return index.map { "task \($0 + 1)" } ?? "the file"
+        }
+        switch error {
+        case DecodingError.keyNotFound(let key, let context):
+            return "\(place(context.codingPath)) has no `\(key.stringValue)`."
+        case DecodingError.typeMismatch(_, let context), DecodingError.valueNotFound(_, let context):
+            let field = context.codingPath.last.map { "`\($0.stringValue)` in " } ?? ""
+            return "\(field)\(place(context.codingPath)) isn’t the expected kind of value."
+        case DecodingError.dataCorrupted(let context):
+            return context.debugDescription
+        default:
+            return "\(error)"
+        }
     }
 
     public static func decode(_ yaml: String) throws -> TaskFile {
@@ -102,7 +202,7 @@ public final class TaskBoard {
             if decoded != file { file = decoded }
             loadError = nil
         } catch {
-            loadError = "tasks.yaml couldn’t be read: \(error.localizedDescription)"
+            loadError = "tasks.yaml couldn’t be read: \(TaskFile.explain(error))"
         }
     }
 

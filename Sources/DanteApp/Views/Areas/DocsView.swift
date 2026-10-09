@@ -252,16 +252,20 @@ struct DocsView: View {
             ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
                 Image(systemName: "chevron.right").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
                 Text(part).foregroundStyle(index == parts.count - 1 ? theme.text.color : theme.text3.color)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
-            Spacer()
+            Spacer(minLength: 8)
             if doc.kind == .markdown {
                 if mode == .preview {
                     Button {
                         wide.toggle()
                     } label: {
                         Label(wide ? "Narrow" : "Wide", systemImage: wide ? "arrow.right.and.line.vertical.and.arrow.left" : "arrow.left.and.line.vertical.and.arrow.right")
+                            .labelStyle(.iconOnly)
                     }
                     .buttonStyle(DanteButtonStyle())
+                    .fixedSize()
                     .help(wide ? "Read in a comfortable column" : "Use the whole width of the window")
                 }
                 Menu {
@@ -276,9 +280,11 @@ struct DocsView: View {
                 Button {
                     session.askClaude("Read \(doc.path) and tell me what's out of date or missing compared with the code. Don't change anything yet.")
                 } label: {
-                    Label("Check against the code", systemImage: "sparkle")
+                    Label("Check", systemImage: "sparkle")
                 }
                 .buttonStyle(DanteButtonStyle())
+                .fixedSize()
+                .help("Ask Claude what this doc gets wrong or leaves out, compared with the code")
                 if let open = openDocument(for: doc), open.isDirty {
                     Button {
                         session.save(open)
@@ -305,6 +311,7 @@ struct DocsView: View {
                     Label("Ask Claude about this", systemImage: "paperclip")
                 }
                 .buttonStyle(DanteButtonStyle())
+                .fixedSize()
                 .help("Attaches the file to your next message to Claude")
                 Button {
                     let target = ((doc.path as NSString).deletingPathExtension) + ".md"

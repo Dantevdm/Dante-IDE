@@ -240,3 +240,15 @@ tasks:
   title: "Claude: queue messages sent mid-turn instead of dropping them"
   phase: build
   state: review
+- id: DI-60
+  title: "Read tasks.yaml written loosely (status, notes, open/closed) and explain a bad file instead of a raw error"
+  phase: build
+  state: review
+- id: DI-61
+  title: "Map: Go projects drawn from go.mod and imports; folders otherwise"
+  phase: build
+  state: review
+- id: DI-62
+  title: "Screen review: Home since-last-visit, Run health spellings, Data folder notes, Docs toolbar"
+  phase: build
+  state: review

@@ -45,6 +45,12 @@ public struct DataProfile: Equatable, Sendable {
 }
 
 public enum DataDetector {
+    /// Where a database file sits, so two of the same name can be told apart.
+    static func folderNote(_ path: String) -> String {
+        let folder = (path as NSString).deletingLastPathComponent
+        return folder.isEmpty ? "file at the project root" : "in \(folder)/"
+    }
+
     static let ignoredFolders = ["node_modules/", ".git/", "build/", "dist/", ".build/", "vendor/", "target/", "Pods/", ".venv/", "venv/"]
 
     public static func detect(paths: [String], compose: ComposeFile? = nil, read: (String) -> String? = { _ in nil }) -> DataProfile {
@@ -129,7 +135,7 @@ public enum DataDetector {
             guard ["sqlite", "sqlite3", "db", "db3"].contains(ext), !path.contains("/.dante/"), !path.hasPrefix(".dante/") else { continue }
             signal(.sqlite, "\((path as NSString).lastPathComponent)", path)
             add(DatabaseConnection(name: (path as NSString).lastPathComponent, engine: .sqlite, database: (path as NSString).lastPathComponent,
-                                   file: path, origin: .detected, note: "file in the repo"))
+                                   file: path, origin: .detected, note: Self.folderNote(path)))
         }
 
         // Libraries and ORMs in the build files.

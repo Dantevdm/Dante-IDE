@@ -51,8 +51,7 @@ struct TestsView: View {
             case .untested: UntestedView(session: session, workspace: workspace, gaps: gaps, hasTests: !(inventory?.tests.isEmpty ?? true))
             }
         }
-        // The file index fills in after the window opens, without a new revision.
-        .task(id: "\(workspace.revision):\(workspace.files.count)") {
+        .task(id: workspace.revision) {
             command = TestCommand.detect(projectRoot: workspace.url)
             history = TestRecord.load(for: workspace.url)
             let root = workspace.url

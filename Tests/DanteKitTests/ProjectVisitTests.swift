@@ -19,6 +19,7 @@ import Testing
             PlanTask(id: "X-2", title: "Moved", phase: "build", state: .done),
             PlanTask(id: "X-3", title: "New", phase: "build", state: .ready),
         ]
+        #expect(SinceLastVisit.taskMoves(from: [:], to: tasks).isEmpty)
         let moves = SinceLastVisit.taskMoves(from: ["X-1": .ready, "X-2": .review, "X-9": .done], to: tasks)
         #expect(moves.map(\.id) == ["X-2", "X-3"])
         #expect(moves[0].from == .review && moves[0].to == .done && moves[1].from == nil)

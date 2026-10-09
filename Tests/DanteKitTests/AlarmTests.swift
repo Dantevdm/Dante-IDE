@@ -93,3 +93,20 @@ import Testing
         #expect(fired == ["a"])
     }
 }
+
+struct OperateSpellingTests {
+    @Test func readsHealthAndNestedLogs() {
+        let info = ProjectInfo.parse(projectYAML: """
+        operate:
+          health:
+            - url: "http://localhost:3000/api/stats"
+              expect: 200
+            - https://example.com/health
+          logs:
+            command: "tail -f backend/data/app.log"
+        """)
+        #expect(info.checks.map(\.name) == ["localhost:3000/api/stats", "example.com/health"])
+        #expect(info.logsCommand == "tail -f backend/data/app.log")
+        #expect(ProjectInfo.parse(projectYAML: "operate:\n  checks:\n    - { name: api, url: https://x.dev/h }\n  logs: fly logs\n").checks.map(\.name) == ["api"])
+    }
+}

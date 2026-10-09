@@ -27,6 +27,9 @@ struct PlanView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     if !lifecycle.hasSpec { NoSpecBanner(session: session, workspace: workspace, phase: phase) }
                     header
+                    if let error = workspace.tasks.loadError {
+                        TasksFileProblem(session: session, workspace: workspace, message: error)
+                    }
                     Checklists(session: session, workspace: workspace, phase: phase)
                     ClaudeRulesCard(session: session, workspace: workspace)
                     TaskBoardView(session: session, workspace: workspace, phase: phase) { isAddingTask = true }
@@ -455,4 +458,34 @@ struct FlowLayout: Layout {
 
 extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
+}
+
+/// tasks.yaml exists but can't be read: what's wrong, and two ways to fix it.
+struct TasksFileProblem: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+    let message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(theme.amber.color)
+                Text(message).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).fixedSize(horizontal: false, vertical: true)
+            }
+            Text("The board is read-only until it’s fixed, so nothing is lost.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+            HStack(spacing: 8) {
+                Button("Open tasks.yaml") { session.open(file: workspace.url.appending(path: ".dante/tasks.yaml")) }
+                    .buttonStyle(DanteButtonStyle())
+                Button("Ask Claude to fix it") {
+                    session.askClaude("Dante can't read .dante/tasks.yaml: \(message) Fix the file so it matches Dante's format (prefix, then tasks with id, title, phase, state: ready, in_progress, review or done, and an optional note). Keep every task and any extra fields.")
+                }
+                .buttonStyle(DanteButtonStyle(primary: true))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.amber.color.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.amber.color.opacity(0.35)))
+    }
 }

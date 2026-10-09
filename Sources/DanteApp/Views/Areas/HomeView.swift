@@ -125,7 +125,7 @@ private struct SinceLastVisitCard: View {
             }
             if !since.taskMoves.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(since.taskMoves) { move in
+                    ForEach(since.taskMoves.prefix(6)) { move in
                         HStack(spacing: 8) {
                             Text(move.id).font(.dante(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(theme.text3.color)
                             Text(MarkdownText.attributed(move.title, theme: theme)).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
@@ -134,6 +134,9 @@ private struct SinceLastVisitCard: View {
                                 .font(.dante(size: 11.5))
                                 .foregroundStyle(move.to == .done ? theme.green.color : theme.text2.color)
                         }
+                    }
+                    if since.taskMoves.count > 6 {
+                        LinkButton("and \(since.taskMoves.count - 6) more on the board") { session.area = .plan }
                     }
                 }
             }
@@ -283,10 +286,7 @@ private struct PhaseTasksCard: View {
             LinkButton("Board") { session.area = .plan }
         } content: {
             if let error = workspace.tasks.loadError {
-                Text(error)
-                    .font(.dante(size: 12))
-                    .foregroundStyle(theme.red.color)
-                    .fixedSize(horizontal: false, vertical: true)
+                TasksFileProblem(session: session, workspace: workspace, message: error)
             } else if tasks.isEmpty {
                 Text(workspace.tasks.tasks.isEmpty ? "No tasks yet. Add them on the Plan board." : "Nothing open in this phase.")
                     .font(.dante(size: 12.5))

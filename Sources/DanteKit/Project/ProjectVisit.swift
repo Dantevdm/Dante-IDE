@@ -81,8 +81,11 @@ public struct SinceLastVisit: Equatable, Sendable {
     }
 
     /// Tasks that are new or in a different state, in board order.
+    /// No tasks recorded last time (none yet, or the file couldn't be read) means there's
+    /// nothing to compare with, rather than every task being new.
     public static func taskMoves(from previous: [String: TaskState], to tasks: [PlanTask]) -> [TaskMove] {
-        tasks.compactMap { task in
+        guard !previous.isEmpty else { return [] }
+        return tasks.compactMap { task in
             let before = previous[task.id]
             guard before != task.state else { return nil }
             return TaskMove(id: task.id, title: task.title, from: before, to: task.state)
