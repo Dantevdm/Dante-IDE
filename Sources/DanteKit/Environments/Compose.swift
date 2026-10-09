@@ -108,10 +108,13 @@ public struct ContainerState: Equatable, Sendable, Identifiable {
     /// Docker's own summary, like "Up 3 hours" or "Exited (1) 2 minutes ago".
     public var status: String
     public var ports: [String]
+    /// The container's name, for `docker inspect`.
+    public var name: String
     public var id: String { service }
 
-    public init(service: String, state: String, health: String = "", status: String = "", ports: [String] = []) {
+    public init(service: String, state: String, health: String = "", status: String = "", ports: [String] = [], name: String = "") {
         self.service = service
+        self.name = name
         self.state = state
         self.health = health
         self.status = status
@@ -147,7 +150,8 @@ public struct ContainerState: Equatable, Sendable, Identifiable {
                 state: object["State"]?.string ?? "unknown",
                 health: object["Health"]?.string ?? "",
                 status: object["Status"]?.string ?? "",
-                ports: ports
+                ports: ports,
+                name: object["Name"]?.string ?? ""
             )
         }
     }

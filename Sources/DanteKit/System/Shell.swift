@@ -79,6 +79,12 @@ public enum Shell {
         public func terminate() {
             if process.isRunning { process.terminate() }
         }
+
+        /// The exit status, once the process has exited (call after `lines` finishes).
+        public func exitStatus() async -> Int32 {
+            while process.isRunning { try? await Task.sleep(for: .milliseconds(50)) }
+            return process.terminationStatus
+        }
     }
 
     public static func stream(_ arguments: [String], in directory: URL) throws -> Running {

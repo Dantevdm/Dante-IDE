@@ -12,6 +12,16 @@ struct EnvironmentView: View {
     @State private var containers: Result<[ContainerState], DockerUnavailable>?
     @State private var busy: String?
     @State private var logService: String?
+    /// Why services aren't up, by service name.
+    @State private var notes: [String: String] = [:]
+    /// The last start, stop or rebuild: its output as it runs, kept when it fails.
+    @State private var command: ComposeRun?
+
+    struct ComposeRun: Equatable {
+        var title: String
+        var lines: [String] = []
+        var status: Int32?
+    }
 
     private var running: [ContainerState] {
         if case .success(let list) = containers { list } else { [] }
@@ -52,11 +62,15 @@ struct EnvironmentView: View {
                 if let error = compose.parseError {
                     Banner(symbol: "xmark.octagon.fill", color: theme.red.color, text: error)
                 }
+                if let command {
+                    CommandOutputCard(run: command) { self.command = nil }
+                }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 12, alignment: .top)], spacing: 12) {
                     ForEach(compose.services) { service in
                         ServiceCard(
                             service: service,
                             state: running.first { $0.service == service.name },
+                            note: notes[service.name],
                             isShowingLogs: logService == service.name,
                             busy: busy != nil,
                             logs: { logService = service.name },
@@ -68,12 +82,14 @@ struct EnvironmentView: View {
                 }
                 HStack(alignment: .top, spacing: 16) {
                     if let service = logService ?? compose.services.first?.name, dockerReady {
-                        LogsCard(session: session, root: workspace.url, service: service)
+                        let state = running.first { $0.service == service }
+                        LogsCard(session: session, root: workspace.url, service: service,
+                                 waiting: state?.state == "running" ? nil : notes[service] ?? (state == nil ? "\(service) hasn’t been created yet. Start it to see its output." : nil))
                             .id(service)
                     }
                     VStack(spacing: 16) {
-                        if let failing = running.first(where: { $0.state == "restarting" || $0.health == "unhealthy" || ($0.state == "exited" && !$0.status.contains("(0)")) }) {
-                            DiagnoseCard(session: session, container: failing)
+                        if let failing = failing {
+                            DiagnoseCard(session: session, service: failing.service, problem: failing.problem, note: notes[failing.service])
                         }
                         DockerfilesCard(session: session, compose: compose, dockerfiles: dockerfiles)
                     }
@@ -105,6 +121,21 @@ struct EnvironmentView: View {
         }
     }
 
+    /// The service most worth explaining: one with a note (a blocked dependency's own
+    /// problem first), else one restarting or exited with an error.
+    private var failing: (service: String, problem: String)? {
+        let order = compose?.services.map(\.name) ?? []
+        let noted = order.filter { notes[$0] != nil }
+        if let root = noted.first(where: { name in running.first { $0.service == name }?.health == "unhealthy" }) ?? noted.first {
+            let state = running.first { $0.service == root }
+            return (root, state.map { "\($0.label) (\($0.status))" } ?? "not created")
+        }
+        if let broken = running.first(where: { $0.state == "restarting" || ($0.state == "exited" && !$0.status.contains("(0)")) }) {
+            return (broken.service, "\(broken.label) (\(broken.status))")
+        }
+        return nil
+    }
+
     private var dockerReady: Bool {
         if case .failure = containers { false } else { true }
     }
@@ -128,15 +159,56 @@ struct EnvironmentView: View {
         guard compose != nil else { containers = nil; return }
         let next = await ContainerState.load(projectRoot: workspace.url)
         if next != containers { containers = next }
+        await diagnose()
     }
 
+    private func diagnose() async {
+        guard let compose, case .success(let list) = containers else {
+            if !notes.isEmpty { notes = [:] }
+            return
+        }
+        let stopped = compose.services.contains { service in list.first { $0.service == service.name }?.state != "running" }
+        let listening = stopped ? await ListeningPort.load() : []
+        var health: [String: String] = [:]
+        for container in list where container.health == "unhealthy" && !container.name.isEmpty {
+            health[container.service] = await ComposeDiagnosis.lastHealthFailure(container: container.name, in: workspace.url)
+        }
+        let next = ComposeDiagnosis.notes(services: compose.services, containers: list, listening: listening, healthOutput: health)
+        if next != notes { notes = next }
+    }
+
+    /// Runs a compose command, showing its output as it goes: `up` waits for health
+    /// checks and can take a minute before it says anything went wrong.
     private func act(_ id: String, _ arguments: [String]) {
         busy = id
+        command = ComposeRun(title: (["docker", "compose"] + arguments).joined(separator: " "))
         Task {
-            let output = await Shell.run(["docker", "compose"] + arguments, in: workspace.url)
-            if !output.succeeded { session.errorMessage = output.message }
-            busy = nil
+            defer { busy = nil }
+            guard let process = try? Shell.stream(["docker", "compose", "--progress", "plain"] + arguments, in: workspace.url) else {
+                command?.lines.append("Couldn’t run docker.")
+                command?.status = 1
+                return
+            }
+            let refreshing = Task {
+                // States change while `up` waits on health checks.
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    await refresh()
+                }
+            }
+            for await line in process.lines {
+                command?.lines.append(line)
+                if (command?.lines.count ?? 0) > 1000 { command?.lines.removeFirst() }
+            }
+            refreshing.cancel()
+            let status = await process.exitStatus()
+            command?.status = status
             await refresh()
+            // Keep the output only when something went wrong.
+            if status == 0 {
+                try? await Task.sleep(for: .seconds(3))
+                if command?.status == 0 { command = nil }
+            }
         }
     }
 }
@@ -163,6 +235,7 @@ private struct ServiceCard: View {
     @Environment(\.theme) private var theme
     let service: ComposeFile.Service
     let state: ContainerState?
+    let note: String?
     let isShowingLogs: Bool
     let busy: Bool
     let logs: () -> Void
@@ -171,11 +244,11 @@ private struct ServiceCard: View {
     let start: () -> Void
 
     private var color: Color {
-        guard let state else { return theme.text3.color }
+        guard let state else { return note == nil ? theme.text3.color : theme.amber.color }
         if state.state == "restarting" || state.health == "unhealthy" || state.health == "starting" { return theme.amber.color }
         if state.state == "running" { return theme.green.color }
         if state.state == "exited", !state.status.contains("(0)") { return theme.red.color }
-        return theme.text3.color
+        return note == nil ? theme.text3.color : theme.amber.color
     }
 
     private var isWarning: Bool { color == theme.amber.color || color == theme.red.color }
@@ -189,6 +262,13 @@ private struct ServiceCard: View {
                 Text(state?.label ?? "not created").font(.dante(size: 12)).foregroundStyle(color)
             }
             Text(service.source).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
+            if let note {
+                Text(note)
+                    .font(.dante(size: 12))
+                    .foregroundStyle(theme.text2.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
             HStack(alignment: .top, spacing: 8) {
                 fact("Port", state?.ports.joined(separator: " ").nonEmpty ?? service.ports.first ?? "—")
                 fact("Status", state?.status.nonEmpty ?? "—")
@@ -230,6 +310,8 @@ private struct LogsCard: View {
     let session: Session
     let root: URL
     let service: String
+    /// Why there's no output: the container isn't running.
+    let waiting: String?
 
     @State private var lines: [String] = []
     @State private var paused = false
@@ -253,7 +335,9 @@ private struct LogsCard: View {
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         if lines.isEmpty {
-                            Text("No output yet.").foregroundStyle(theme.text3.color)
+                            Text(waiting ?? "No output yet.")
+                                .foregroundStyle(waiting == nil ? theme.text3.color : theme.amber.color)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                             Text(line.isEmpty ? " " : line)
@@ -299,21 +383,25 @@ private struct LogsCard: View {
 private struct DiagnoseCard: View {
     @Environment(\.theme) private var theme
     let session: Session
-    let container: ContainerState
+    let service: String
+    let problem: String
+    let note: String?
 
     var body: some View {
         Card(accent: true) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkle").foregroundStyle(theme.accent.color)
-                Text("\(container.service) is \(container.label)").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("\(service) is \(problem)").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
             }
-            Text(container.status).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text3.color)
+            if let note {
+                Text(note).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+            }
             Text("Claude can read its logs, the compose file and the code it runs, then propose a fix as a diff.")
                 .font(.dante(size: 12.5))
                 .foregroundStyle(theme.text2.color)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Find the cause") {
-                session.askClaude("The \(container.service) service is \(container.label) (\(container.status)). Read its logs with `docker compose logs --tail 100 \(container.service)`, check docker-compose.yml and the code it runs, and tell me why. Propose a fix as a diff.")
+                session.askClaude("The \(service) service is \(problem).\(note.map { " \($0)" } ?? "") Read its logs with `docker compose logs --tail 100 \(service)`, check docker-compose.yml and the code it runs, and tell me why. Propose a fix as a diff.")
             }
             .buttonStyle(DanteButtonStyle(primary: true))
         }
@@ -378,5 +466,62 @@ private struct DockerfilesCard: View {
             rows.append(Row(path: file, note: "", missing: false))
         }
         return rows
+    }
+}
+
+/// The output of the last start, stop or rebuild.
+private struct CommandOutputCard: View {
+    @Environment(\.theme) private var theme
+    let run: EnvironmentView.ComposeRun
+    let close: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                if run.status == nil {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: run.status == 0 ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                        .foregroundStyle(run.status == 0 ? theme.green.color : theme.red.color)
+                }
+                Text(run.title).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
+                Text(run.status.map { $0 == 0 ? "done" : "failed with status \($0)" } ?? "running")
+                    .font(.dante(size: 12))
+                    .foregroundStyle(run.status.map { $0 == 0 ? theme.text3.color : theme.red.color } ?? theme.text3.color)
+                Spacer()
+                if run.status != nil {
+                    IconButton(symbol: "xmark", label: "Close", size: 10, action: close)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 40)
+            .background(theme.panel.color)
+            Rectangle().fill(theme.line.color).frame(height: 1)
+            ScrollViewReader { proxy in
+                ScrollView([.vertical, .horizontal]) {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        if run.lines.isEmpty {
+                            Text("Waiting for docker compose…").foregroundStyle(theme.text3.color)
+                        }
+                        ForEach(Array(run.lines.enumerated()), id: \.offset) { index, line in
+                            Text(line.isEmpty ? " " : line)
+                                .foregroundStyle(line.localizedCaseInsensitiveContains("error") || line.contains("unhealthy") ? theme.red.color : theme.text2.color)
+                                .fixedSize()
+                                .id(index)
+                        }
+                    }
+                    .font(.dante(size: 11.5, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(12)
+                }
+                .onChange(of: run.lines.count) { _, count in
+                    if count > 0 { proxy.scrollTo(count - 1, anchor: .bottom) }
+                }
+            }
+            .frame(height: 160)
+        }
+        .background(theme.codeBackground.color)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(run.status.map { $0 == 0 ? theme.line.color : theme.red.color.opacity(0.5) } ?? theme.line.color))
     }
 }

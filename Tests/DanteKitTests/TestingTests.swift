@@ -161,8 +161,8 @@ import Testing
     }
 
     @Test func containerStatesFromBothFormats() {
-        let lines = #"{"Service":"db","State":"running","Health":"healthy","Status":"Up 3 hours","Publishers":[{"PublishedPort":5432}]}"#
-        #expect(ContainerState.parse(lines) == [ContainerState(service: "db", state: "running", health: "healthy", status: "Up 3 hours", ports: [":5432"])])
+        let lines = #"{"Service":"db","Name":"p-db-1","State":"running","Health":"healthy","Status":"Up 3 hours","Publishers":[{"PublishedPort":5432}]}"#
+        #expect(ContainerState.parse(lines) == [ContainerState(service: "db", state: "running", health: "healthy", status: "Up 3 hours", ports: [":5432"], name: "p-db-1")])
         #expect(ContainerState.parse("[\(lines)]").count == 1)
     }
 

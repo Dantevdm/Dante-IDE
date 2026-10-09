@@ -216,3 +216,7 @@ tasks:
   title: "Explorer: select several files; copy, paste and drop from Finder"
   phase: build
   state: review
+- id: DI-54
+  title: "Env: say why a service isn't up (health check, taken port, waiting dependency) and show compose output"
+  phase: build
+  state: review
