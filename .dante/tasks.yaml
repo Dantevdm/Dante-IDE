@@ -220,3 +220,7 @@ tasks:
   title: "Env: say why a service isn't up (health check, taken port, waiting dependency) and show compose output"
   phase: build
   state: review
+- id: DI-55
+  title: "Env: port checker before every start, with stop or move-port fixes, and a Ports card"
+  phase: build
+  state: review

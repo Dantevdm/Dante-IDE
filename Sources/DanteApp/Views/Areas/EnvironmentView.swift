@@ -16,6 +16,16 @@ struct EnvironmentView: View {
     @State private var notes: [String: String] = [:]
     /// The last start, stop or rebuild: its output as it runs, kept when it fails.
     @State private var command: ComposeRun?
+    /// Processes listening on ports, other than Docker's own.
+    @State private var holders: [PortHolder] = []
+    /// A start held back because a port it publishes is taken.
+    @State private var portPrompt: PortPrompt?
+
+    struct PortPrompt: Identifiable {
+        var conflicts: [PortConflict]
+        var id: String
+        var arguments: [String]
+    }
 
     struct ComposeRun: Equatable {
         var title: String
@@ -80,6 +90,7 @@ struct EnvironmentView: View {
                         )
                     }
                 }
+                PortsCard(ports: projectPorts(compose), stop: stop)
                 HStack(alignment: .top, spacing: 16) {
                     if let service = logService ?? compose.services.first?.name, dockerReady {
                         let state = running.first { $0.service == service }
@@ -110,6 +121,29 @@ struct EnvironmentView: View {
                 }
             }
         }
+        .confirmationDialog(portPromptTitle, isPresented: Binding(get: { portPrompt != nil }, set: { if !$0 { portPrompt = nil } }), titleVisibility: .visible, presenting: portPrompt) { prompt in
+            let holders = prompt.conflicts.map(\.holder)
+            Button(holders.count == 1 ? "Stop \(holders[0].listening.command) and Start" : "Stop Them and Start") {
+                Task {
+                    for holder in holders {
+                        if let error = await PortCheck.stop(holder) {
+                            session.errorMessage = error
+                            return
+                        }
+                    }
+                    act(prompt.id, prompt.arguments, checkingPorts: false)
+                }
+            }
+            Button(prompt.conflicts.count == 1 ? "Publish on Port \(freePort(after: prompt.conflicts[0].port)) Instead" : "Publish on Free Ports Instead") {
+                if republish(prompt.conflicts) { act(prompt.id, prompt.arguments, checkingPorts: false) }
+            }
+            Button("Start Anyway") { act(prompt.id, prompt.arguments, checkingPorts: false) }
+            Button("Cancel", role: .cancel) {}
+        } message: { prompt in
+            Text(prompt.conflicts.map { conflict in
+                "\(conflict.service) publishes port \(conflict.port), but \(conflict.holder.summary) is already listening there\(conflict.holder.belongs(to: workspace.url) ? ", started from this project" : "")."
+            }.joined(separator: "\n") + "\n\nDocker can’t start a service on a port that’s taken.")
+        }
         .task(id: workspace.revision) {
             compose = ComposeFile.load(projectRoot: workspace.url)
             await refresh()
@@ -134,6 +168,63 @@ struct EnvironmentView: View {
             return (broken.service, "\(broken.label) (\(broken.status))")
         }
         return nil
+    }
+
+    private var portPromptTitle: String {
+        guard let prompt = portPrompt else { return "" }
+        return prompt.conflicts.count == 1 ? "Port \(prompt.conflicts[0].port) is in use" : "\(prompt.conflicts.count) ports are in use"
+    }
+
+    /// Every port the compose file publishes, and anything else started from this project.
+    private func projectPorts(_ compose: ComposeFile) -> [PortsCard.Row] {
+        var rows: [PortsCard.Row] = []
+        for service in compose.services {
+            for port in service.publishedPorts where !rows.contains(where: { $0.port == port }) {
+                let container = running.first { $0.service == service.name }
+                let holder = holders.first { $0.port == port }
+                rows.append(PortsCard.Row(port: port, service: service.name, holder: holder,
+                                          isContainer: holder == nil && container?.state == "running",
+                                          inProject: holder?.belongs(to: workspace.url) ?? false))
+            }
+        }
+        for holder in holders where holder.belongs(to: workspace.url) && !rows.contains(where: { $0.port == holder.port }) {
+            rows.append(PortsCard.Row(port: holder.port, service: nil, holder: holder, isContainer: false, inProject: true))
+        }
+        return rows.sorted { $0.port < $1.port }
+    }
+
+    private func freePort(after port: Int) -> Int {
+        PortProbe.firstFree(from: port + 1, skipping: Set(holders.map(\.port)))
+    }
+
+    /// Moves each conflicting service to the next free host port in the compose file.
+    private func republish(_ conflicts: [PortConflict]) -> Bool {
+        guard let compose, var text = try? String(contentsOf: compose.url, encoding: .utf8) else { return false }
+        var taken = Set(holders.map(\.port))
+        for conflict in conflicts {
+            let port = PortProbe.firstFree(from: conflict.port + 1, skipping: taken)
+            taken.insert(port)
+            guard let moved = ComposeEditing.republishing(service: conflict.service, port: conflict.port, to: port, in: text) else {
+                session.errorMessage = "Couldn’t find \(conflict.service)’s port \(conflict.port) in \(compose.url.lastPathComponent) to change it."
+                return false
+            }
+            text = moved
+        }
+        do {
+            try text.write(to: compose.url, atomically: true, encoding: .utf8)
+            self.compose = ComposeFile.load(projectRoot: workspace.url)
+            return true
+        } catch {
+            session.errorMessage = "Couldn’t write \(compose.url.lastPathComponent): \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    private func stop(_ holder: PortHolder) {
+        Task {
+            if let error = await PortCheck.stop(holder) { session.errorMessage = error }
+            await refresh()
+        }
     }
 
     private var dockerReady: Bool {
@@ -167,19 +258,37 @@ struct EnvironmentView: View {
             if !notes.isEmpty { notes = [:] }
             return
         }
-        let stopped = compose.services.contains { service in list.first { $0.service == service.name }?.state != "running" }
-        let listening = stopped ? await ListeningPort.load() : []
+        let nextHolders = await PortCheck.holders(await ListeningPort.load())
+        if nextHolders != holders { holders = nextHolders }
         var health: [String: String] = [:]
         for container in list where container.health == "unhealthy" && !container.name.isEmpty {
             health[container.service] = await ComposeDiagnosis.lastHealthFailure(container: container.name, in: workspace.url)
         }
-        let next = ComposeDiagnosis.notes(services: compose.services, containers: list, listening: listening, healthOutput: health)
+        let next = ComposeDiagnosis.notes(services: compose.services, containers: list, holders: holders, healthOutput: health)
         if next != notes { notes = next }
     }
 
     /// Runs a compose command, showing its output as it goes: `up` waits for health
     /// checks and can take a minute before it says anything went wrong.
-    private func act(_ id: String, _ arguments: [String]) {
+    /// Starts (`up`) look for taken ports first and ask what to do about them.
+    private func act(_ id: String, _ arguments: [String], checkingPorts: Bool = true) {
+        if checkingPorts, arguments.first == "up", let compose {
+            busy = id
+            Task {
+                let found = await PortCheck.holders(await ListeningPort.load())
+                holders = found
+                let named = arguments.dropFirst().filter { !$0.hasPrefix("-") }
+                let services = named.isEmpty ? compose.services : compose.services.filter { named.contains($0.name) }
+                let conflicts = PortConflict.find(services: services, containers: running, holders: found)
+                busy = nil
+                if conflicts.isEmpty {
+                    act(id, arguments, checkingPorts: false)
+                } else {
+                    portPrompt = PortPrompt(conflicts: conflicts, id: id, arguments: arguments)
+                }
+            }
+            return
+        }
         busy = id
         command = ComposeRun(title: (["docker", "compose"] + arguments).joined(separator: " "))
         Task {
@@ -523,5 +632,80 @@ private struct CommandOutputCard: View {
         .background(theme.codeBackground.color)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(run.status.map { $0 == 0 ? theme.line.color : theme.red.color.opacity(0.5) } ?? theme.line.color))
+    }
+}
+
+/// The ports the project publishes or listens on, and who has each one.
+private struct PortsCard: View {
+    @Environment(\.theme) private var theme
+    struct Row: Identifiable {
+        var port: Int
+        var service: String?
+        var holder: PortHolder?
+        var isContainer: Bool
+        var inProject: Bool
+        var id: Int { port }
+    }
+
+    let ports: [Row]
+    let stop: (PortHolder) -> Void
+    @State private var confirming: PortHolder?
+
+    var body: some View {
+        if !ports.isEmpty {
+            Card("Ports") {
+                Text("Checked before every start").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+            } content: {
+                RowList(data: ports, padding: 6) { row in
+                    HStack(spacing: 10) {
+                        StatusDot(color: color(row), size: 7)
+                        Text(":\(row.port)")
+                            .font(.dante(size: 12.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(theme.text.color)
+                            .frame(width: 64, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(title(row)).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
+                            if let holder = row.holder {
+                                Text(holder.commandLine)
+                                    .font(.dante(size: 11, design: .monospaced))
+                                    .foregroundStyle(theme.text3.color)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help([holder.commandLine, holder.directory.map { "in \($0)" }].compactMap { $0 }.joined(separator: "\n"))
+                            }
+                        }
+                        Spacer(minLength: 6)
+                        if let url = URL(string: "http://localhost:\(row.port)"), row.holder != nil || row.isContainer {
+                            IconButton(symbol: "safari", label: "Open localhost:\(row.port)", size: 11) { NSWorkspace.shared.open(url) }
+                        }
+                        if let holder = row.holder {
+                            Button("Stop") { row.inProject ? stop(holder) : (confirming = holder) }
+                                .buttonStyle(DanteButtonStyle())
+                                .help("Ask \(holder.listening.command) to quit (pid \(holder.pid))")
+                        }
+                    }
+                }
+            }
+            .alert("Stop \(confirming?.listening.command ?? "")?", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), presenting: confirming) { holder in
+                Button("Stop") { stop(holder) }
+                Button("Cancel", role: .cancel) {}
+            } message: { holder in
+                Text("\(holder.summary) wasn’t started from this project.\(holder.directory.map { " It runs in \($0)." } ?? "") Dante will ask it to quit.")
+            }
+        }
+    }
+
+    private func title(_ row: Row) -> String {
+        if let holder = row.holder {
+            let owner = row.service.map { "Taken: \($0) needs it. " } ?? ""
+            return owner + "\(holder.listening.command), pid \(holder.pid)\(holder.elapsed.map { ", up \($0)" } ?? "")\(row.inProject ? " · from this project" : "")"
+        }
+        if row.isContainer { return "\(row.service ?? "") · Docker" }
+        return "\(row.service ?? "") · free"
+    }
+
+    private func color(_ row: Row) -> Color {
+        if row.holder != nil { return row.service == nil ? theme.accent.color : theme.amber.color }
+        return row.isContainer ? theme.green.color : theme.text3.color
     }
 }

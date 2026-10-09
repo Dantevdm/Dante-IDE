@@ -30,7 +30,7 @@ struct ComposeDiagnosisTests {
             ContainerState(service: "app", state: "created", status: "Created"),
             ContainerState(service: "llm", state: "running", health: "unhealthy"),
         ]
-        let notes = ComposeDiagnosis.notes(services: services, containers: containers, listening: [],
+        let notes = ComposeDiagnosis.notes(services: services, containers: containers, holders: [],
                                            healthOutput: ["llm": "\"curl\": executable file not found in $PATH"])
         #expect(notes["app"] == "Hasn’t started: it waits for llm, which is unhealthy.")
         #expect(notes["llm"] == "Its health check fails: \"curl\": executable file not found in $PATH")
@@ -38,16 +38,17 @@ struct ComposeDiagnosisTests {
 
     @Test func aTakenPortComesFirst() {
         let containers = [ContainerState(service: "app", state: "created"), ContainerState(service: "llm", state: "running", health: "healthy")]
-        let listening = [ListeningPort(port: 3000, pid: 812, command: "notifications"), ListeningPort(port: 11434, pid: 900, command: "com.docker.backend")]
-        let notes = ComposeDiagnosis.notes(services: services, containers: containers, listening: listening)
-        #expect(notes["app"]?.hasPrefix("Port 3000 is already in use by notifications (pid 812).") == true)
+        let holders = [PortHolder(listening: ListeningPort(port: 3000, pid: 812, command: "notifications"), elapsed: "01:16:22"),
+                       PortHolder(listening: ListeningPort(port: 11434, pid: 900, command: "com.docker.backend"))]
+        let notes = ComposeDiagnosis.notes(services: services, containers: containers, holders: holders)
+        #expect(notes["app"]?.hasPrefix("Port 3000 is already in use by notifications (pid 812, up 01:16:22).") == true)
         #expect(notes["llm"] == nil)
     }
 
     @Test func runningServicesNeedNoNote() {
         let containers = [ContainerState(service: "app", state: "running"), ContainerState(service: "llm", state: "running", health: "healthy")]
         // The app's own published port is held by Docker; a running service isn't checked anyway.
-        let notes = ComposeDiagnosis.notes(services: services, containers: containers, listening: [ListeningPort(port: 3000, pid: 1, command: "x")])
+        let notes = ComposeDiagnosis.notes(services: services, containers: containers, holders: [PortHolder(listening: ListeningPort(port: 3000, pid: 1, command: "x"))])
         #expect(notes.isEmpty)
     }
 

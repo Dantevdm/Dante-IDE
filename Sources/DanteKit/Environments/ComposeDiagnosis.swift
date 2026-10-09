@@ -54,7 +54,7 @@ public enum ComposeDiagnosis {
     public static func notes(
         services: [ComposeFile.Service],
         containers: [ContainerState],
-        listening: [ListeningPort],
+        holders: [PortHolder],
         healthOutput: [String: String] = [:]
     ) -> [String: String] {
         var notes: [String: String] = [:]
@@ -67,11 +67,8 @@ public enum ComposeDiagnosis {
                 continue
             }
             guard state?.state != "running" else { continue }
-            let taken = service.publishedPorts.compactMap { port in
-                listening.first { $0.port == port && !$0.isDocker }
-            }
-            if let taken = taken.first {
-                notes[service.name] = "Port \(taken.port) is already in use by \(taken.command) (pid \(taken.pid)). Stop it, or publish the service on another port."
+            if let conflict = PortConflict.find(services: [service], containers: containers, holders: holders).first {
+                notes[service.name] = "Port \(conflict.port) is already in use by \(conflict.holder.summary). Stop it, or publish the service on another port."
                 continue
             }
             if state?.state == "created" {
