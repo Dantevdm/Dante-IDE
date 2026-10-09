@@ -21,11 +21,12 @@ public enum FileIndex {
 
         var paths: [String] = []
         for case let url as URL in enumerator {
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             if skippedNames.contains(url.lastPathComponent) {
-                enumerator.skipDescendants()
+                // Only for folders: on a file (.DS_Store) it skips the rest of the folder it's in.
+                if isDirectory { enumerator.skipDescendants() }
                 continue
             }
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             guard !isDirectory else { continue }
             let path = url.standardizedFileURL.path
             guard path.hasPrefix(rootPath + "/") else { continue }

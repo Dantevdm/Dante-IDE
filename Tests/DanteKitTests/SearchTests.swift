@@ -45,4 +45,13 @@ struct FileIndexTests {
         try folder.write("build/Dante.app/Contents/Info.plist", "")
         #expect(FileIndex.scan(folder.url) == [".dante/project.yaml", "Sources/App.swift"])
     }
+    @Test func aSkippedFileDoesntHideTheRestOfItsFolder() throws {
+        // Finder leaves .DS_Store everywhere; skipping it once hid everything after it.
+        let folder = try TemporaryFolder()
+        try folder.write("backend/.DS_Store", "")
+        try folder.write("backend/a.go", "")
+        try folder.write("backend/internal/api/handlers.go", "")
+        try folder.write("backend/zz.go", "")
+        #expect(FileIndex.scan(folder.url) == ["backend/a.go", "backend/internal/api/handlers.go", "backend/zz.go"])
+    }
 }
