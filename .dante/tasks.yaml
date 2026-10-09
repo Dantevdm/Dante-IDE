@@ -224,3 +224,7 @@ tasks:
   title: "Env: port checker before every start, with stop or move-port fixes, and a Ports card"
   phase: build
   state: review
+- id: DI-56
+  title: "Env: logs panel with search, level filter and all services; tidier layout"
+  phase: build
+  state: review

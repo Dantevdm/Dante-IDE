@@ -75,7 +75,10 @@ struct EnvironmentView: View {
                 if let command {
                     CommandOutputCard(run: command) { self.command = nil }
                 }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 12, alignment: .top)], spacing: 12) {
+                if let failing = failing {
+                    DiagnoseCard(session: session, service: failing.service, problem: failing.problem, note: notes[failing.service])
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 12, alignment: .top)], spacing: 12) {
                     ForEach(compose.services) { service in
                         ServiceCard(
                             service: service,
@@ -83,28 +86,21 @@ struct EnvironmentView: View {
                             note: notes[service.name],
                             isShowingLogs: logService == service.name,
                             busy: busy != nil,
-                            logs: { logService = service.name },
+                            logs: { logService = logService == service.name ? nil : service.name },
                             shell: { session.runInTerminal("docker compose exec \(service.name) sh") },
                             restart: { act("restart:\(service.name)", ["restart", service.name]) },
                             start: { act("start:\(service.name)", ["up", "-d", service.name]) }
                         )
                     }
                 }
-                PortsCard(ports: projectPorts(compose), stop: stop)
-                HStack(alignment: .top, spacing: 16) {
-                    if let service = logService ?? compose.services.first?.name, dockerReady {
-                        let state = running.first { $0.service == service }
-                        LogsCard(session: session, root: workspace.url, service: service,
-                                 waiting: state?.state == "running" ? nil : notes[service] ?? (state == nil ? "\(service) hasn’t been created yet. Start it to see its output." : nil))
-                            .id(service)
-                    }
-                    VStack(spacing: 16) {
-                        if let failing = failing {
-                            DiagnoseCard(session: session, service: failing.service, problem: failing.problem, note: notes[failing.service])
-                        }
-                        DockerfilesCard(session: session, compose: compose, dockerfiles: dockerfiles)
-                    }
-                    .frame(width: 340)
+                if dockerReady {
+                    ComposeLogsPanel(root: workspace.url, services: compose.services.map(\.name), service: $logService, waiting: waiting)
+                }
+                HStack(alignment: .top, spacing: 12) {
+                    PortsCard(ports: projectPorts(compose), stop: stop)
+                        .frame(maxWidth: .infinity)
+                    DockerfilesCard(session: session, compose: compose, dockerfiles: dockerfiles)
+                        .frame(maxWidth: .infinity)
                 }
             } else {
                 EmptyState(
@@ -168,6 +164,13 @@ struct EnvironmentView: View {
             return (broken.service, "\(broken.label) (\(broken.status))")
         }
         return nil
+    }
+
+    /// Why a service has no output: it isn't running.
+    private func waiting(_ service: String) -> String? {
+        let state = running.first { $0.service == service }
+        guard state?.state != "running" else { return nil }
+        return notes[service] ?? (state == nil ? "\(service) hasn’t been created yet. Start it to see its output." : "\(service) is \(state!.label).")
     }
 
     private var portPromptTitle: String {
@@ -380,7 +383,7 @@ private struct ServiceCard: View {
             }
             HStack(alignment: .top, spacing: 8) {
                 fact("Port", state?.ports.joined(separator: " ").nonEmpty ?? service.ports.first ?? "—")
-                fact("Status", state?.status.nonEmpty ?? "—")
+                fact("Status", state.map { $0.status.replacing(/\s*\((healthy|unhealthy|health: starting)\)$/, with: "") }?.nonEmpty ?? "—")
             }
             HStack(spacing: 6) {
                 Button(action: logs) { Label("Logs", systemImage: "text.alignleft") }
@@ -410,82 +413,6 @@ private struct ServiceCard: View {
             Text(value).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// Follows `docker compose logs -f` for one service.
-private struct LogsCard: View {
-    @Environment(\.theme) private var theme
-    let session: Session
-    let root: URL
-    let service: String
-    /// Why there's no output: the container isn't running.
-    let waiting: String?
-
-    @State private var lines: [String] = []
-    @State private var paused = false
-    @State private var process: Shell.Running?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "text.alignleft").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                Text(service).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
-                Text(paused ? "paused" : "following").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                Spacer()
-                Button(paused ? "Resume" : "Pause") { paused.toggle() }.buttonStyle(DanteButtonStyle())
-                Button("Clear") { lines.removeAll() }.buttonStyle(DanteButtonStyle())
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 44)
-            .background(theme.panel.color)
-            Rectangle().fill(theme.line.color).frame(height: 1)
-            ScrollViewReader { proxy in
-                ScrollView([.vertical, .horizontal]) {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        if lines.isEmpty {
-                            Text(waiting ?? "No output yet.")
-                                .foregroundStyle(waiting == nil ? theme.text3.color : theme.amber.color)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                            Text(line.isEmpty ? " " : line)
-                                .foregroundStyle(color(for: line))
-                                .fixedSize()
-                                .id(index)
-                        }
-                    }
-                    .font(.dante(size: 11.5, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(12)
-                }
-                .onChange(of: lines.count) { _, count in
-                    if !paused, count > 0 { proxy.scrollTo(count - 1, anchor: .bottom) }
-                }
-            }
-            .frame(height: 300)
-        }
-        .background(theme.codeBackground.color)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
-        .task {
-            guard let running = try? Shell.stream(["docker", "compose", "logs", "-f", "--no-color", "--tail", "200", service], in: root) else { return }
-            process = running
-            for await line in running.lines where !paused {
-                // Compose prefixes each line with "service  | ".
-                let trimmed = line.range(of: " | ").map { String(line[$0.upperBound...]) } ?? line
-                lines.append(trimmed)
-                if lines.count > 2000 { lines.removeFirst(lines.count - 2000) }
-            }
-        }
-        .onDisappear { process?.terminate() }
-    }
-
-    private func color(for line: String) -> Color {
-        let lower = line.lowercased()
-        if lower.contains("error") || lower.contains("fatal") || lower.contains("panic") { return theme.red.color }
-        if lower.contains("warn") { return theme.amber.color }
-        return theme.text2.color
     }
 }
 
