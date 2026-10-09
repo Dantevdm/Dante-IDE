@@ -148,6 +148,9 @@ private struct Transcript: View {
                     if claude.state == .working, claude.pendingApprovals.isEmpty {
                         ThinkingDots().padding(.leading, 2)
                     }
+                    ForEach(claude.queued) { message in
+                        QueuedRow(message: message) { claude.cancelQueued(message.id) }
+                    }
                 }
                 .padding(14)
             }
@@ -313,5 +316,26 @@ private struct SignInBanner: View {
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card.color))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.line.color))
         .padding(.horizontal, 12)
+    }
+}
+
+/// A message waiting for Claude to finish the current turn.
+private struct QueuedRow: View {
+    @Environment(\.theme) private var theme
+    let message: ClaudeSession.QueuedMessage
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "clock").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Queued · sends when Claude finishes").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                Text(message.text).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).lineLimit(3)
+            }
+            Spacer(minLength: 4)
+            IconButton(symbol: "xmark", label: "Don’t send", size: 9.5, action: cancel)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.line.color, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
     }
 }

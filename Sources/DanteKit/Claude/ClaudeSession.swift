@@ -137,6 +137,23 @@ public final class ClaudeSession {
         }
     }
 
+    /// A message sent while Claude was working, sent when the turn ends.
+    public struct QueuedMessage: Identifiable, Equatable {
+        public let id = UUID()
+        public var text: String
+        public var context: String?
+        public var attachments: [Attachment]
+
+        public static func == (a: QueuedMessage, b: QueuedMessage) -> Bool { a.id == b.id }
+    }
+
+    /// Messages waiting for the current turn to finish, oldest first.
+    public private(set) var queued: [QueuedMessage] = []
+
+    public func cancelQueued(_ id: UUID) {
+        queued.removeAll { $0.id == id }
+    }
+
     public var pendingApprovals: [ToolActivity] {
         items.compactMap { item in
             if case .tool(let tool) = item.content, tool.isAwaitingApproval { tool } else { nil }
@@ -148,7 +165,12 @@ public final class ClaudeSession {
     /// Sends a message. `context` is passed to Claude but not shown in the transcript.
     public func send(_ text: String, context: String? = nil, attachments: [Attachment] = []) {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !attachments.isEmpty, state != .working else { return }
+        guard !trimmed.isEmpty || !attachments.isEmpty else { return }
+        // Mid-turn, a button such as "Find untested code" waits its turn rather than vanishing.
+        if state == .working {
+            queued.append(QueuedMessage(text: text, context: context, attachments: attachments))
+            return
+        }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
         if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel {
             stop()
@@ -446,6 +468,10 @@ public final class ClaudeSession {
             let alreadyShown = items.last.map { $0.content == .assistant(result.text) } ?? false
             if result.isError, !result.text.isEmpty, !alreadyShown {
                 note(result.text, isError: true)
+            }
+            if !queued.isEmpty {
+                let next = queued.removeFirst()
+                send(next.text, context: next.context, attachments: next.attachments)
             }
 
         case .ignored:
