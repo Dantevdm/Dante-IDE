@@ -40,10 +40,38 @@ extension Session {
         }
     }
 
-    func duplicate(_ url: URL) {
+    func duplicate(_ urls: [URL]) {
         perform { workspace in
-            let copy = try FileOperations.duplicate(url)
-            workspace.itemsChanged(in: [copy.deletingLastPathComponent()])
+            for url in urls {
+                let copy = try FileOperations.duplicate(url)
+                workspace.itemsChanged(in: [copy.deletingLastPathComponent()])
+            }
+        }
+    }
+
+    /// Copies files and folders onto the pasteboard, as Finder's Copy does, so they paste
+    /// into Finder or back into the tree.
+    func copyToPasteboard(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects(urls.map { $0 as NSURL })
+    }
+
+    /// Files and folders on the pasteboard, from Finder's Copy or the tree's.
+    static var pasteboardFiles: [URL] {
+        let urls = NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        return urls.map(FileOperations.resolved)
+    }
+
+    /// Paste copies, wherever the files came from, renaming on a clash like Finder.
+    func paste(_ urls: [URL], into folder: URL) {
+        guard !urls.isEmpty else { return }
+        perform { workspace in
+            for url in urls.map(FileOperations.resolved) where url.isFileURL {
+                try FileOperations.copy(url, into: folder)
+            }
+            workspace.itemsChanged(in: [folder])
+            workspace.root.node(for: folder)?.isExpanded = true
         }
     }
 
@@ -52,7 +80,7 @@ extension Session {
         perform { workspace in
             let root = workspace.url.standardizedFileURL.path + "/"
             var touched = [folder]
-            for url in urls where url.isFileURL {
+            for url in urls.map(FileOperations.resolved) where url.isFileURL {
                 if url.standardizedFileURL.path.hasPrefix(root) {
                     let affected = workspace.documents(under: url)
                     affected.forEach { languages?.closed($0) }
@@ -70,12 +98,12 @@ extension Session {
         }
     }
 
-    /// Moves to the Trash after asking; open tabs for it close, unsaved edits included.
-    func trash(_ url: URL) {
-        guard let workspace else { return }
-        let affected = workspace.documents(under: url)
+    /// Moves to the Trash after asking; open tabs for them close, unsaved edits included.
+    func trash(_ urls: [URL]) {
+        guard let workspace, !urls.isEmpty else { return }
+        let affected = urls.flatMap { workspace.documents(under: $0) }
         let alert = NSAlert()
-        alert.messageText = "Move “\(url.lastPathComponent)” to the Trash?"
+        alert.messageText = urls.count == 1 ? "Move “\(urls[0].lastPathComponent)” to the Trash?" : "Move \(urls.count) items to the Trash?"
         var detail = "You can put it back from the Trash in Finder."
         if affected.contains(where: \.isDirty) { detail += " Unsaved changes in its open tabs will be lost." }
         alert.informativeText = detail
@@ -83,12 +111,12 @@ extension Session {
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         perform { workspace in
-            try FileOperations.trash(url)
+            for url in urls { try FileOperations.trash(url) }
             for document in affected {
                 languages?.closed(document)
                 workspace.close(document)
             }
-            workspace.itemsChanged(in: [url.deletingLastPathComponent()])
+            workspace.itemsChanged(in: urls.map { $0.deletingLastPathComponent() })
         }
     }
 

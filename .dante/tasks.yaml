@@ -212,3 +212,7 @@ tasks:
   title: "Tests: re-run failed tests and run a single test"
   phase: build
   state: review
+- id: DI-53
+  title: "Explorer: select several files; copy, paste and drop from Finder"
+  phase: build
+  state: review

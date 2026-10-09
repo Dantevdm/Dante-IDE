@@ -113,6 +113,8 @@ final class Session {
     /// The command palette, when it's open.
     var palette: PaletteScope?
     /// Go to Symbol's scan of the project, for the workspace revision it was made at.
+    /// The explorer's selection while one of its rows is being dragged, so a drop moves them all.
+    @ObservationIgnored var draggedFiles: [URL] = []
     @ObservationIgnored var symbolIndex: (revision: Int, symbols: [CodeSymbol])?
 
     /// Bumped when HEAD moves (a commit, checkout or reset), so views comparing against it reload.

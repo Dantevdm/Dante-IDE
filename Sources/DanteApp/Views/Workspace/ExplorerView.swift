@@ -1,6 +1,7 @@
 import AppKit
 import DanteKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The file tree. Folders load their contents the first time they're opened.
 struct ExplorerView: View {
@@ -8,8 +9,11 @@ struct ExplorerView: View {
     let session: Session
     let workspace: Workspace
 
-    /// The row last clicked, where the header's new file and folder buttons put things.
-    @State private var focus: URL?
+    /// Selected rows (⌘- and ⇧-click for more); the last one clicked is where the header's
+    /// new file and folder buttons put things.
+    @State private var selection = ExplorerSelection()
+    /// The tree has keyboard focus, so ⌘C, ⌘V and ⌘⌫ act on files rather than text.
+    @FocusState private var treeFocused: Bool
     /// A name being typed for a new item or a rename.
     @State private var editing: Edit?
     @State private var rootTargeted = false
@@ -124,18 +128,12 @@ struct ExplorerView: View {
                             node: row.node,
                             depth: row.depth,
                             isActive: row.node.url == workspace.activeDocument?.url,
-                            isFocused: focus == row.node.url,
+                            isFocused: selection.contains(row.node.url),
                             mark: changes[row.node.url.standardizedFileURL.path],
-                            action: {
-                                focus = row.node.url
-                                if row.node.isDirectory {
-                                    row.node.toggle()
-                                } else {
-                                    session.open(file: row.node.url)
-                                }
-                            },
+                            action: { click(row.node) },
                             menu: { menu(for: row.node) },
-                            drop: { urls in session.drop(urls, into: row.node.isDirectory ? row.node.url : row.node.url.deletingLastPathComponent()) }
+                            drag: { dragProvider(for: row.node) },
+                            drop: { urls in drop(urls, into: row.node.isDirectory ? row.node.url : row.node.url.deletingLastPathComponent()) }
                         )
                     }
                     if row.node.isExpanded, let editing, editing.newItemFolder == row.node.url.standardizedFileURL.path {
@@ -150,14 +148,27 @@ struct ExplorerView: View {
         .scrollIndicators(.automatic)
         // Empty space below the tree is the project folder: drop there, or right-click it.
         .contentShape(Rectangle())
-        .dropDestination(for: URL.self) { urls, _ in
-            session.drop(urls, into: workspace.url)
+        .onDrop(of: [.fileURL], isTargeted: $rootTargeted) { providers in
+            Self.loadFileURLs(providers) { drop($0, into: workspace.url) }
             return true
-        } isTargeted: { rootTargeted = $0 }
+        }
         .background(rootTargeted ? theme.accentTint.opacity(0.5).color : .clear)
+        .focusable()
+        .focused($treeFocused)
+        .focusEffectDisabled()
+        .onCopyCommand { selection.topLevel.map { NSItemProvider(object: $0 as NSURL) } }
+        .onPasteCommand(of: [.fileURL]) { providers in
+            Self.loadFileURLs(providers) { session.paste($0, into: pasteFolder) }
+        }
+        .onDeleteCommand { session.trash(selection.topLevel) }
+        .onExitCommand { selection.clear() }
+        .onChange(of: workspace.revision) {
+            selection.update { FileManager.default.fileExists(atPath: $0.path) }
+        }
         .contextMenu {
             Button("New File…") { editing = .newFile(in: workspace.url) }
             Button("New Folder…") { editing = .newFolder(in: workspace.url) }
+            pasteButton(into: workspace.url)
             Divider()
             Button("Refresh") { refresh(workspace.root) }
             Button("Collapse All") { collapse(workspace.root) }
@@ -168,21 +179,95 @@ struct ExplorerView: View {
     @ViewBuilder
     private func menu(for node: FileNode) -> some View {
         let folder = node.isDirectory ? node.url : node.url.deletingLastPathComponent()
+        // Right-clicking inside the selection acts on all of it, as in Finder.
+        let targets = selection.count > 1 && selection.contains(node.url) ? selection.topLevel : [node.url]
+        let several = targets.count > 1
         Button("New File…") { begin(.newFile(in: folder)) }
         Button("New Folder…") { begin(.newFolder(in: folder)) }
         Divider()
-        Button("Rename…") { editing = .rename(node.url) }
-        Button("Duplicate") { session.duplicate(node.url) }
-        Button("Move to Trash") { session.trash(node.url) }
+        if !several {
+            Button("Rename…") { editing = .rename(node.url) }
+        }
+        Button(several ? "Duplicate \(targets.count) Items" : "Duplicate") { session.duplicate(targets) }
+        Button(several ? "Move \(targets.count) Items to Trash" : "Move to Trash") { session.trash(targets) }
         Divider()
-        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([node.url]) }
-        Button("Copy Path") { copy(node.url.path) }
-        Button("Copy Relative Path") { copy(relativePath(node.url)) }
-        if !node.isDirectory {
+        Button(several ? "Copy \(targets.count) Items" : "Copy") { session.copyToPasteboard(targets) }
+        pasteButton(into: folder)
+        Divider()
+        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(targets) }
+        Button(several ? "Copy Paths" : "Copy Path") { copy(targets.map(\.path).joined(separator: "\n")) }
+        Button(several ? "Copy Relative Paths" : "Copy Relative Path") { copy(targets.map(relativePath).joined(separator: "\n")) }
+        let files = targets.filter { !$0.hasDirectoryPath && !(workspace.root.node(for: $0)?.isDirectory ?? false) }
+        if !files.isEmpty {
             Divider()
-            Button("Ask Claude About This File") {
-                session.askClaude("Explain what \(relativePath(node.url)) does and how it fits into the project.", about: node.url)
+            if files.count == 1 {
+                Button("Ask Claude About This File") {
+                    session.askClaude("Explain what \(relativePath(files[0])) does and how it fits into the project.", about: files[0])
+                }
+            } else {
+                Button("Ask Claude About These Files") {
+                    let list = files.map { "- \(relativePath($0))" }.joined(separator: "\n")
+                    session.askClaude("Explain what these files do, how they relate to each other and how they fit into the project:\n\(list)")
+                }
             }
+        }
+    }
+
+    /// Paste, when the pasteboard holds files (Finder's Copy or the tree's).
+    @ViewBuilder
+    private func pasteButton(into folder: URL) -> some View {
+        let files = Session.pasteboardFiles
+        if !files.isEmpty {
+            Button(files.count == 1 ? "Paste “\(files[0].lastPathComponent)”" : "Paste \(files.count) Items") {
+                session.paste(files, into: folder)
+            }
+        }
+    }
+
+    /// A click on a row: plain opens it, ⌘ adds or removes it, ⇧ selects a run.
+    private func click(_ node: FileNode) {
+        treeFocused = true
+        let flags = NSApp.currentEvent?.modifierFlags ?? []
+        let kind: ExplorerSelection.Click = flags.contains(.command) ? .toggle : flags.contains(.shift) ? .range : .plain
+        selection.click(node.url, kind, visible: rows().map(\.node.url))
+        guard kind == .plain else { return }
+        if node.isDirectory {
+            node.toggle()
+        } else {
+            session.open(file: node.url)
+        }
+    }
+
+    /// Where ⌘V puts files: the selected folder, or the folder of the selected file.
+    private var pasteFolder: URL {
+        session.newItemFolder(for: selection.anchor) ?? workspace.url
+    }
+
+    /// Dragging a selected row takes the whole selection with it.
+    private func dragProvider(for node: FileNode) -> NSItemProvider {
+        session.draggedFiles = selection.contains(node.url) ? selection.topLevel : [node.url]
+        return NSItemProvider(object: node.url as NSURL)
+    }
+
+    private func drop(_ urls: [URL], into folder: URL) {
+        var urls = urls.map(FileOperations.resolved)
+        let dragged = session.draggedFiles
+        if urls.count == 1, dragged.contains(where: { $0.standardizedFileURL.path == urls[0].path }) { urls = dragged }
+        session.draggedFiles = []
+        session.drop(urls, into: folder)
+    }
+
+    /// The file URLs in a drop or paste, read on the main actor.
+    static func loadFileURLs(_ providers: [NSItemProvider], then handle: @escaping @MainActor ([URL]) -> Void) {
+        Task { @MainActor in
+            var urls: [URL] = []
+            for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                let url: URL? = await withCheckedContinuation { continuation in
+                    _ = provider.loadObject(ofClass: URL.self) { url, _ in continuation.resume(returning: url) }
+                }
+                if let url { urls.append(FileOperations.resolved(url)) }
+            }
+            if !urls.isEmpty { handle(urls) }
         }
     }
 
@@ -199,7 +284,7 @@ struct ExplorerView: View {
     }
 
     private func startNew(folder: Bool) {
-        guard let target = session.newItemFolder(for: focus) else { return }
+        guard let target = session.newItemFolder(for: selection.anchor) else { return }
         begin(folder ? .newFolder(in: target) : .newFile(in: target))
     }
 
@@ -379,12 +464,13 @@ private struct FileRow: View {
     let mark: GitStatus.Kind?
     let action: () -> Void
     let menu: () -> AnyView
+    let drag: () -> NSItemProvider
     let drop: ([URL]) -> Void
     @State private var hovering = false
     @State private var targeted = false
 
     init(node: FileNode, depth: Int, isActive: Bool, isFocused: Bool, mark: GitStatus.Kind?, action: @escaping () -> Void,
-         @ViewBuilder menu: @escaping () -> some View, drop: @escaping ([URL]) -> Void) {
+         @ViewBuilder menu: @escaping () -> some View, drag: @escaping () -> NSItemProvider, drop: @escaping ([URL]) -> Void) {
         self.node = node
         self.depth = depth
         self.isActive = isActive
@@ -392,6 +478,7 @@ private struct FileRow: View {
         self.mark = mark
         self.action = action
         self.menu = { AnyView(menu()) }
+        self.drag = drag
         self.drop = drop
     }
 
@@ -434,7 +521,9 @@ private struct FileRow: View {
             .frame(height: 24)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isActive || targeted ? theme.accentTint.color : (hovering || isFocused ? theme.raised.color : .clear))
+                    .fill(isActive || targeted ? theme.accentTint.color
+                          : isFocused ? theme.accentTint.opacity(0.55).color
+                          : hovering ? theme.raised.color : .clear)
             )
             .overlay {
                 if targeted { RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.accent.color) }
@@ -443,13 +532,14 @@ private struct FileRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .draggable(node.url)
-        .dropDestination(for: URL.self) { urls, _ in
-            drop(urls)
+        .onDrag(drag)
+        .onDrop(of: [.fileURL], isTargeted: Binding(get: { targeted }, set: { targeted = $0 && node.isDirectory })) { providers in
+            ExplorerView.loadFileURLs(providers, then: drop)
             return true
-        } isTargeted: { targeted = $0 && node.isDirectory }
+        }
         .contextMenu { menu() }
         .accessibilityLabel(node.isDirectory ? "\(node.name), folder" : node.name)
+        .accessibilityAddTraits(isFocused ? .isSelected : [])
     }
 
     private var nameColor: Color {
