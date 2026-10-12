@@ -127,7 +127,7 @@ public struct ProjectProfile: Equatable, Sendable {
 /// What the user asked Claude to fill in when setting a project up.
 public struct ProjectSetupRequest: Equatable, Sendable {
     public enum Part: String, CaseIterable, Sendable, Identifiable {
-        case summary, phases, tasks, tests, rules, architecture, operate
+        case summary, phases, tasks, tests, rules, architecture, skills, operate
         public var id: String { rawValue }
 
         public var title: String {
@@ -138,6 +138,7 @@ public struct ProjectSetupRequest: Equatable, Sendable {
             case .tests: "How to run the tests"
             case .rules: "Keep Claude away from secrets"
             case .architecture: "Architecture notes"
+            case .skills: "Claude skills for repeated work"
             case .operate: "Health checks and production logs"
             }
         }
@@ -150,6 +151,7 @@ public struct ProjectSetupRequest: Equatable, Sendable {
             case .tests: "test.command in project.yaml"
             case .rules: "never rules in project.yaml, so Claude can’t read or edit them"
             case .architecture: ".dante/architecture.md: the parts, how they talk, and the key decisions"
+            case .skills: ".claude/skills for the jobs done here often, so Claude does them the project’s way"
             case .operate: "operate.checks and operate.logs, for the Run area"
             }
         }
@@ -171,6 +173,7 @@ public struct ProjectSetupRequest: Equatable, Sendable {
         if profile.testCommand == nil, profile.testFiles > 0 { parts.insert(.tests) }
         if !profile.sensitivePaths.isEmpty { parts.insert(.rules) }
         if profile.sourceFiles >= 20 { parts.insert(.architecture) }
+        if profile.sourceFiles >= 30 { parts.insert(.skills) }
         if profile.hasDeployConfig, profile.stage >= .releasing { parts.insert(.operate) }
         return parts
     }
@@ -200,6 +203,7 @@ public struct ProjectSetupRequest: Equatable, Sendable {
             case .tests: "Add test.command to .dante/project.yaml with the command that runs this project's tests."
             case .rules: "Add a claude: block to .dante/project.yaml with never: rules for \(profile.sensitivePaths.isEmpty ? "any secrets you find" : profile.sensitivePaths.joined(separator: ", ")), plus anything else that looks like secrets. Don't open those files."
             case .architecture: "Write .dante/architecture.md: the main parts, how they talk to each other (a ```mermaid flowchart), where data lives, and the key decisions you can infer."
+            case .skills: "Pick up to three kinds of work this project does repeatedly (adding an endpoint, a screen, a migration, a test…) and write a Claude Code skill for each in .claude/skills/<name>/SKILL.md: YAML front matter with name and a one-sentence description of when to use it, then the steps as this project actually does them, naming real files and commands. Under 80 lines each."
             case .operate: "Add an operate: block to .dante/project.yaml with health check URLs and a command that streams production logs, from the deploy config. Ask me for anything you can't find."
             }
             lines.append("- \(line)")

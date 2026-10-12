@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, plan, map, code, tests, environments, data, ship, run, timeline, docs, spec
+    case home, plan, map, code, tests, environments, data, ship, run, timeline, claude, docs, spec, settings
 
     var id: String { rawValue }
 
@@ -23,6 +23,8 @@ enum Area: String, CaseIterable, Identifiable {
         case .ship: "Ship"
         case .run: "Run"
         case .timeline: "Timeline"
+        case .claude: "Claude"
+        case .settings: "Settings"
         case .docs: "Docs"
         case .spec: "Spec"
         }
@@ -40,6 +42,8 @@ enum Area: String, CaseIterable, Identifiable {
         case .ship: "paperplane"
         case .run: "waveform.path.ecg"
         case .timeline: "clock.arrow.circlepath"
+        case .claude: "sparkle"
+        case .settings: "gearshape"
         case .docs: "doc.text"
         case .spec: "book.closed"
         }
@@ -58,13 +62,15 @@ enum Area: String, CaseIterable, Identifiable {
         case .ship: "A release checklist, a changelog drafted from tasks and commits, and the CI pipeline."
         case .run: "Production metrics, errors and alarms, each linked back to a task."
         case .timeline: "Commits, releases, Claude sessions, test runs and CI in one stream, newest first."
+        case .claude: "How Claude works on this project: usage, skills, memory, connectors and permissions."
+        case .settings: "Themes, the editor, tools and database drivers, and this project's Dante setup."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
         case .spec: "The .dante folder: lifecycle, phase checklists and what Claude may propose."
         }
     }
 
-    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .data, .ship, .run, .timeline]
-    static let footer: [Area] = [.docs, .spec]
+    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .data, .ship, .run, .timeline, .claude]
+    static let footer: [Area] = [.docs, .spec, .settings]
 }
 
 /// What the command palette searches. ⌘K opens it on everything, ⌘P on files.
@@ -98,6 +104,8 @@ final class Session {
     private(set) var workspace: Workspace?
     private(set) var branch: String?
     private(set) var claude: ClaudeSession?
+    /// The app-wide settings sheet, for ⌘, before a project is open.
+    var showsAppSettings = false
     /// Language servers for the open project's files.
     private(set) var languages: LanguageServices?
     private var watcher: DirectoryWatcher?
@@ -470,6 +478,12 @@ final class Session {
     func runInTerminal(_ command: String) {
         showsTerminal = true
         terminalInput = TerminalInput(text: command + "\n", tab: selectedTerminal)
+    }
+
+    /// Types a command without running it, for ones the person should read first (installs).
+    func typeInTerminal(_ command: String) {
+        showsTerminal = true
+        terminalInput = TerminalInput(text: command, tab: selectedTerminal)
     }
 
 }

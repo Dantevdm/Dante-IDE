@@ -139,6 +139,13 @@ public struct SystemMap: Equatable, Sendable {
             texts[path] = value
             return value
         }
+        var lowered: [String: String] = [:]
+        func lower(_ path: String) -> String {
+            if let known = lowered[path] { return known }
+            let value = text(path).lowercased()
+            lowered[path] = value
+            return value
+        }
 
         // Clients
         let clients = frontends(files: files, read: read)
@@ -243,8 +250,8 @@ public struct SystemMap: Equatable, Sendable {
             parts.append(Part(id: store.id, name: store.name, lane: .data, kind: store.kind, detail: store.detail))
             var linked = false
             for file in backendFiles {
-                let lower = text(file).lowercased()
-                if store.words.contains(where: { lower.contains($0) }), let owner = owner(file) {
+                let body = lower(file)
+                if store.words.contains(where: { body.contains($0) }), let owner = owner(file) {
                     link(owner.id, store.id)
                     linked = true
                 }
@@ -255,16 +262,16 @@ public struct SystemMap: Equatable, Sendable {
         // Outside services, from imports and URLs. Packages that only store settings (db,
         // models, migrations) mention hosts without calling them, so they don't count.
         let storageNames: Set<String> = ["db", "database", "store", "storage", "models", "model", "migrations", "migrate", "seed", "repository", "repo", "schema", "persistence"]
-        let mentionsWhatsApp = backendFiles.contains { text($0).range(of: "whatsapp", options: .caseInsensitive) != nil }
+        let mentionsWhatsApp = backendFiles.contains { lower($0).contains("whatsapp") }
         for service in outsideServices {
             var users: [String: Int] = [:]
             for file in code {
-                let body = text(file)
+                let body = lower(file)
                 let client = clientOwning(file)
                 // In a client, a bare word ("ollama") is usually a label on a settings screen;
                 // only a host or package name means the browser calls the service itself.
                 let patterns = client == nil ? service.patterns : service.patterns.filter { $0.contains(".") || $0.contains("/") || $0.contains("@") }
-                guard patterns.contains(where: { body.range(of: $0, options: .caseInsensitive) != nil }) else { continue }
+                guard patterns.contains(where: { body.contains($0.lowercased()) }) else { continue }
                 if let client {
                     users[client.id, default: 0] += 1
                 } else if let owner = owner(file), !storageNames.contains(owner.name.lowercased()) {
@@ -399,8 +406,10 @@ public struct SystemMap: Equatable, Sendable {
     static func routes(in text: String) -> [Route] {
         guard text.contains("/") else { return [] }
         var found: [Route] = []
-        for (number, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-            let line = String(line)
+        for (number, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            // Regex matching is slow; most lines can't be a route, so check cheaply first.
+            guard raw.contains("(\"/") || raw.contains("('/") || raw.contains("(`/") || raw.contains("( \"/") || raw.contains("Handle") else { continue }
+            let line = String(raw)
             if let match = line.firstMatch(of: /Handle(?:Func)?\(\s*"(?:([A-Z]+)\s+)?(\/[^"]*)"/) {
                 found.append(Route(method: match.1.map(String.init), path: String(match.2), line: number + 1))
             } else if let match = line.firstMatch(of: /@\w+\.(get|post|put|patch|delete|route|api_route)\(\s*["'](\/[^"']*)["']/) {
@@ -430,7 +439,8 @@ public struct SystemMap: Equatable, Sendable {
     /// API paths a client asks for: string literals starting /api or /v1, up to the first
     /// interpolation or query.
     static func calledPaths(in text: String) -> [String] {
-        text.matches(of: /["'`](\/(?:api|v\d)(?:\/[^"'`\s?$]*)?)/).map { String($0.1) }
+        guard text.contains("/api") || text.contains("/v1") || text.contains("/v2") else { return [] }
+        return text.matches(of: /["'`](\/(?:api|v\d)(?:\/[^"'`\s?$]*)?)/).map { String($0.1) }
     }
 
     // MARK: Outside services

@@ -1,7 +1,8 @@
 import DanteKit
 import SwiftUI
 
-/// The Settings window (⌘,). Changes apply straight away; Claude's take effect from the next message.
+/// The app-wide settings, shown as a sheet when ⌘, is pressed before a project is open (with one
+/// open, `SettingsArea` has these and more). Changes apply straight away.
 struct SettingsView: View {
     @Environment(ThemeStore.self) private var themeStore
     @Bindable var preferences = Preferences.shared
@@ -32,7 +33,7 @@ struct SettingsView: View {
     }
 }
 
-private struct AppearanceSettings: View {
+struct AppearanceSettings: View {
     @Bindable var themeStore: ThemeStore
     @Bindable private var preferences = Preferences.shared
 
@@ -53,7 +54,7 @@ private struct AppearanceSettings: View {
     }
 }
 
-private struct EditorSettings: View {
+struct EditorSettings: View {
     @Bindable var preferences: Preferences
 
     var body: some View {
@@ -77,7 +78,7 @@ private struct EditorSettings: View {
     }
 }
 
-private struct FileSettings: View {
+struct FileSettings: View {
     @Bindable var preferences: Preferences
 
     var body: some View {
@@ -93,7 +94,7 @@ private struct FileSettings: View {
     }
 }
 
-private struct ClaudeSettings: View {
+struct ClaudeSettings: View {
     @Bindable var preferences: Preferences
 
     var body: some View {

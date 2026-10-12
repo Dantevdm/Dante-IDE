@@ -453,9 +453,11 @@ private struct ClaudeKnowsCard: View {
             Fact(label: "Rules for Claude", value: rules.isEmpty ? "none" : "\(rules.propose.count) · \(rules.flag.count) · \(rules.never.count)", present: !rules.isEmpty),
             Fact(label: "Project notes", value: fileManager.fileExists(atPath: workspace.url.appending(path: "CLAUDE.md").path) ? "CLAUDE.md" : "none",
                  present: fileManager.fileExists(atPath: workspace.url.appending(path: "CLAUDE.md").path)),
+            Fact(label: "Skills", value: skillCount == 0 ? "none" : "\(skillCount) in .claude/skills", present: skillCount > 0),
         ]
+        let reviewDue = ClaudeSkills.reviewDue(lastReview: UserDefaults.standard.object(forKey: "skillsReview." + workspace.url.path) as? Date)
         Card("What Claude knows") {
-            LinkButton("Spec") { session.area = .spec }
+            LinkButton("Manage") { session.area = .claude }
         } content: {
             Text("Every conversation starts from the project spec, so nothing has to be re-explained.")
                 .font(.dante(size: 12.5))
@@ -470,7 +472,21 @@ private struct ClaudeKnowsCard: View {
                         .foregroundStyle(fact.present ? theme.text.color : theme.text3.color)
                 }
             }
+            if reviewDue, workspace.files.count > 20 {
+                Button { session.area = .claude } label: {
+                    Label(skillCount == 0 ? "Claude could use skills for this project’s repeated work. See suggestions" : "Time to check the skills still fit the project",
+                          systemImage: "sparkle")
+                        .font(.dante(size: 12))
+                        .foregroundStyle(theme.accent.color)
+                }
+                .buttonStyle(.plain)
+            }
         }
+    }
+
+    private var skillCount: Int {
+        let folder = workspace.url.appending(path: ".claude/skills")
+        return ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).filter { !$0.hasPrefix(".") }.count
     }
 }
 

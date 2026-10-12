@@ -20,11 +20,6 @@ struct DanteApp: App {
         .commands {
             DanteCommands(themeStore: themeStore)
         }
-
-        Settings {
-            SettingsView()
-                .environment(themeStore)
-        }
     }
 }
 
@@ -101,6 +96,18 @@ struct RootView: View {
                 session.open(folder: folder)
                 for file in paths.dropFirst() { session.open(file: file) }
             }
+        }
+        // With no project open, ⌘, shows the app-wide settings here.
+        .sheet(isPresented: $session.showsAppSettings) {
+            VStack(spacing: 0) {
+                SettingsView()
+                HStack {
+                    Spacer()
+                    Button("Done") { session.showsAppSettings = false }.keyboardShortcut(.defaultAction)
+                }
+                .padding(12)
+            }
+            .environment(themeStore)
         }
         .sheet(isPresented: $session.isCloning) {
             CloneSheet(session: session)

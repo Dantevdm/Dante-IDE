@@ -1,0 +1,56 @@
+import Foundation
+import Testing
+@testable import DanteKit
+
+struct ClaudeSetupTests {
+    @Test func readsSkillFrontMatter() {
+        let text = "---\nname: add-endpoint\ndescription: \"Add an HTTP endpoint the house way\"\n---\n# Steps\n"
+        let meta = ClaudeSkills.frontMatter(text)
+        #expect(meta.name == "add-endpoint" && meta.description == "Add an HTTP endpoint the house way")
+        #expect(ClaudeSkills.frontMatter("# No front matter").name == nil)
+        #expect(ClaudeSkills.folderName("Add an API endpoint!") == "add-an-api-endpoint")
+    }
+
+    @Test func suggestsSkillsFromWhatTheProjectHas() {
+        let files = ["backend/internal/api/handlers.go", "backend/internal/api/handlers_test.go", "frontend/views/orders.js",
+                     "docker-compose.yml", "backend/migrations/001_init.sql", ".dante/tasks.yaml"]
+        let ids = ClaudeSkills.suggestions(files: files, stack: ["Go"], hasDante: true, existing: []).map(\.id)
+        #expect(ids == ["dante-tasks", "add-endpoint", "new-screen", "db-change", "local-env", "write-tests", "review-changes"])
+
+        let existing = [ClaudeSkill(name: "add-endpoint", description: "", scope: .project, file: URL(filePath: "/home/me/app/.claude/skills/add-endpoint/SKILL.md"))]
+        let left = ClaudeSkills.suggestions(files: files, stack: ["Go"], hasDante: false, existing: existing)
+        #expect(!left.map(\.id).contains("add-endpoint") && !left.map(\.id).contains("dante-tasks"))
+        #expect(left.first?.prompt.contains(".claude/skills/new-screen/SKILL.md") == true)
+    }
+
+    @Test func reviewsEveryFortnight() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        #expect(ClaudeSkills.reviewDue(lastReview: nil, now: now))
+        #expect(!ClaudeSkills.reviewDue(lastReview: now.addingTimeInterval(-3 * 86_400), now: now))
+        #expect(ClaudeSkills.reviewDue(lastReview: now.addingTimeInterval(-15 * 86_400), now: now))
+    }
+
+    @Test func readsConnectorsAndPermissions() {
+        let output = """
+        Checking MCP server health...
+
+        github: npx -y @modelcontextprotocol/server-github - ✓ Connected
+        notes: https://example.com/mcp (HTTP) - ✗ Failed to connect
+        """
+        let servers = MCPServer.parse(output)
+        #expect(servers.map(\.name) == ["github", "notes"])
+        #expect(servers[0].connected && servers[0].source == "npx -y @modelcontextprotocol/server-github")
+        #expect(!servers[1].connected && servers[1].status == "Failed to connect")
+
+        let permissions = ClaudePermissions.parse([#"{"permissions": {"allow": ["Bash(go test:*)"], "deny": ["Read(./data/**)"]}}"#, "{}"])
+        #expect(permissions.allow == ["Bash(go test:*)"] && permissions.deny == ["Read(./data/**)"] && permissions.ask.isEmpty)
+    }
+
+    @Test func toolVersions() {
+        #expect(Tool.version(from: "psql (PostgreSQL) 16.4") == "16.4")
+        #expect(Tool.version(from: "go version go1.23.2 darwin/arm64") == "1.23.2")
+        #expect(Tool.version(from: "nothing here") == nil)
+        let ids = Tool.relevant(stack: ["Go"]).map(\.id)
+        #expect(ids.contains("gopls") && !ids.contains("rust-analyzer") && ids.contains("psql"))
+    }
+}

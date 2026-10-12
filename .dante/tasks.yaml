@@ -276,3 +276,15 @@ tasks:
   title: "Map: System view from frontend screens through API routes and backend to data and outside services"
   phase: build
   state: review
+- id: DI-69
+  title: "Claude area: usage, skills with suggestions and a fortnightly review, memory cost, connectors, permissions"
+  phase: build
+  state: review
+- id: DI-70
+  title: "Settings in the window: theme previews, tools and database drivers, remove a project's .dante setup"
+  phase: build
+  state: review
+- id: DI-71
+  title: "Project setup can draft Claude skills; Home nudges when a skills review is due"
+  phase: build
+  state: review

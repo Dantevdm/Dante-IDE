@@ -7,6 +7,19 @@ struct DanteCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        // Settings live in the window, next to the project they can change; with no project
+        // open, a sheet has the app-wide part.
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") {
+                if session?.workspace != nil {
+                    session?.area = .settings
+                } else {
+                    session?.showsAppSettings = true
+                }
+            }
+            .keyboardShortcut(",")
+        }
+
         CommandGroup(replacing: .newItem) {
             Button("New Project…") { session?.newProject() }
                 .keyboardShortcut("n")

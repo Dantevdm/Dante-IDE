@@ -35,6 +35,13 @@ public struct ConnectionStore: Sendable {
         try write(store)
     }
 
+    /// Forgets every saved connection for a project (passwords stay in the Keychain until removed there).
+    public func removeAll(for project: URL) throws {
+        var store = all()
+        store[project.standardizedFileURL.path] = nil
+        try write(store)
+    }
+
     private func all() -> [String: [DatabaseConnection]] {
         guard let data = try? Data(contentsOf: file) else { return [:] }
         return (try? JSONDecoder().decode([String: [DatabaseConnection]].self, from: data)) ?? [:]
