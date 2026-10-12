@@ -54,3 +54,19 @@ struct ClaudeSetupTests {
         #expect(ids.contains("gopls") && !ids.contains("rust-analyzer") && ids.contains("psql"))
     }
 }
+
+struct TurnCheckpointTests {
+    @Test func undoPutsBackTheFirstVersionAndRemovesCreatedFiles() {
+        var disk: [String: String] = ["/home/me/app/a.go": "one"]
+        var checkpoint = TurnCheckpoint()
+        checkpoint.record("/home/me/app/a.go") { disk[$0] }
+        disk["/home/me/app/a.go"] = "two"
+        checkpoint.record("/home/me/app/a.go") { disk[$0] }   // a second edit keeps the first original
+        checkpoint.record("/home/me/app/new.go") { disk[$0] }
+        disk["/home/me/app/new.go"] = "created"
+        let restored = checkpoint.undo { path, text in disk[path] = text }
+        #expect(restored == ["/home/me/app/a.go", "/home/me/app/new.go"])
+        #expect(disk == ["/home/me/app/a.go": "one"])
+        #expect(checkpoint.undone && checkpoint.undo { _, _ in }.isEmpty)
+    }
+}

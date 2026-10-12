@@ -347,6 +347,30 @@ private struct TranscriptRow: View {
     let item: TranscriptItem
     let claude: ClaudeSession
 
+    /// Under a message whose turn changed files: undo all of them at once.
+    @ViewBuilder
+    private var undoControl: some View {
+        if let checkpoint = claude.checkpoints[item.id], !checkpoint.files.isEmpty {
+            let count = checkpoint.files.count
+            if checkpoint.undone {
+                Label("Changes undone", systemImage: "arrow.uturn.backward")
+                    .font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+            } else {
+                Button {
+                    claude.undoTurn(item.id)
+                } label: {
+                    Label("Undo this turn (\(count) file\(count == 1 ? "" : "s"))", systemImage: "arrow.uturn.backward")
+                        .font(.dante(size: 11, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(claude.state == .working ? theme.text3.color : theme.accent.color)
+                .disabled(claude.state == .working)
+                .help(checkpoint.files.map { ProposedChange.relativePath(of: URL(filePath: $0), in: claude.root) }.joined(separator: "\n")
+                      + (checkpoint.ranCommands ? "\nCommands Claude ran aren’t undone." : ""))
+            }
+        }
+    }
+
     var body: some View {
         switch item.content {
         case .user(let text, let attachments):
@@ -377,6 +401,8 @@ private struct TranscriptRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.raised.color))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.line.color))
+                .overlay(alignment: .bottomTrailing) { undoControl.offset(y: 22) }
+                .padding(.bottom, claude.checkpoints[item.id]?.files.isEmpty == false ? 22 : 0)
         case .assistant(let text):
             if !text.isEmpty { MarkdownText(text: text) }
         case .tool(let tool):

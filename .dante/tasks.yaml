@@ -288,3 +288,75 @@ tasks:
   title: "Project setup can draft Claude skills; Home nudges when a skills review is due"
   phase: build
   state: review
+- id: DI-72
+  title: "Claude: undo a whole turn (files put back as they were before it)"
+  phase: build
+  state: review
+- id: DI-73
+  title: "Map: screens that call the API get their own boxes and arrows"
+  phase: build
+  state: review
+- id: DI-74
+  title: "Tests: run tests for changed files, rerun failed only, Run again keeps the selection"
+  phase: build
+  state: todo
+- id: DI-75
+  title: "Tests: fix a failing test with Claude"
+  phase: build
+  state: todo
+- id: DI-76
+  title: "Claude panel: @file mentions and a / command menu"
+  phase: build
+  state: todo
+- id: DI-77
+  title: "Claude panel: notify when Claude finishes or needs approval while Dante is in the background"
+  phase: build
+  state: todo
+- id: DI-78
+  title: "Claude panel: Apply all for several proposed edits"
+  phase: build
+  state: todo
+- id: DI-79
+  title: "Tasks: a Claude conversation and a branch per task"
+  phase: build
+  state: todo
+- id: DI-80
+  title: "Claude area: list installed plugins"
+  phase: build
+  state: todo
+- id: DI-81
+  title: "Map: database tables in the Data lane, with arrows from the code that queries them"
+  phase: build
+  state: todo
+- id: DI-82
+  title: "Map: incoming webhooks from outside services"
+  phase: build
+  state: todo
+- id: DI-83
+  title: "Map: environment variables and secrets per part"
+  phase: build
+  state: todo
+- id: DI-84
+  title: "Map: export the System map as Mermaid into .dante/architecture.md"
+  phase: build
+  state: todo
+- id: DI-85
+  title: "Map: test coverage per part"
+  phase: build
+  state: todo
+- id: DI-86
+  title: "Ship: Claude reviews the branch diff before a pull request"
+  phase: build
+  state: todo
+- id: DI-87
+  title: "Settings: keyboard shortcut editor"
+  phase: build
+  state: todo
+- id: DI-88
+  title: "Settings: language server options per language"
+  phase: build
+  state: todo
+- id: DI-89
+  title: "Polish: try Remove .dante on a throwaway project; System map speed on a large repo"
+  phase: build
+  state: todo

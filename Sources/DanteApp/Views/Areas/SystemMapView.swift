@@ -211,7 +211,7 @@ private struct PartBox: View {
                     }
                     Spacer(minLength: 0)
                 }
-                if part.lane == .clients, !part.items.isEmpty {
+                if part.lane == .clients, part.id.hasPrefix("client:"), !part.items.isEmpty {
                     // Screens as one wrapped line; the inspector lists them all.
                     let names = part.items.prefix(shown).map(\.text).joined(separator: " · ")
                     Text(names + (part.items.count > shown ? " +\(part.items.count - shown)" : ""))
@@ -321,9 +321,10 @@ struct SystemSummary: View {
     let map: SystemMap
 
     var body: some View {
-        let screens = map.parts.filter { $0.lane == .clients }.reduce(0) { $0 + $1.items.count }
+        let clients = map.parts.filter { $0.lane == .clients && !$0.id.hasPrefix("screen:") }
+        let screens = clients.reduce(0) { $0 + $1.items.count }
         let stats: [(String, String, String)] = [
-            ("\(map.parts.filter { $0.lane == .clients }.count)", "client" + (map.parts.filter { $0.lane == .clients }.count == 1 ? "" : "s"), screens > 0 ? "\(screens) screens" : ""),
+            ("\(clients.count)", "client" + (clients.count == 1 ? "" : "s"), screens > 0 ? "\(screens) screens" : ""),
             ("\(map.routeCount)", "API routes", "\(map.parts.filter { $0.lane == .api }.count) groups"),
             ("\(map.parts.filter { $0.lane == .backend }.count)", "backend parts", ""),
             ("\(map.parts.filter { $0.lane == .data }.count)", "data stores", map.parts.filter { $0.lane == .data }.map(\.name).joined(separator: ", ")),

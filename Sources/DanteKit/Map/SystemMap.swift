@@ -218,13 +218,32 @@ public struct SystemMap: Equatable, Sendable {
             for (owner, count) in value.owners { link(id, owner, count) }
         }
 
-        // What each client calls.
+        // What each client calls. A screen that calls the API gets a box of its own, so the
+        // map shows which screens use which routes; calls from shared files stay on the app.
         for client in clients {
+            let screenFiles = Dictionary(client.items.compactMap { item in item.file.map { ($0, item.text) } }) { a, _ in a }
+            var screenCalls: [String: [String: Int]] = [:]
             for file in code where clientOwning(file)?.id == client.id {
                 for path in calledPaths(in: text(file)) {
                     let key = routeGroup(path)
-                    if groups[key] != nil { link(client.id, "route:" + key) }
+                    guard groups[key] != nil else { continue }
+                    if let screen = screenFiles[file] {
+                        screenCalls[screen, default: [:]]["route:" + key, default: 0] += 1
+                    } else {
+                        link(client.id, "route:" + key)
+                    }
                 }
+            }
+            guard screenCalls.count >= 2, screenCalls.count <= 24 else {
+                for (_, calls) in screenCalls { for (route, count) in calls { link(client.id, route, count) } }
+                continue
+            }
+            for item in client.items where screenCalls[item.text] != nil {
+                let id = "screen:\(client.id):\(item.text)"
+                let calls = screenCalls[item.text]!
+                parts.append(Part(id: id, name: item.text, lane: .clients, kind: client.kind,
+                                  detail: "\(client.name) · \(calls.count) route group\(calls.count == 1 ? "" : "s")", path: item.file, items: [item]))
+                for (route, count) in calls { link(id, route, count) }
             }
         }
         parts += backend

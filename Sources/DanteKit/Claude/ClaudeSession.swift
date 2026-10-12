@@ -154,6 +154,12 @@ public final class ClaudeSession {
     private var stderrTail = ""
     private var nextRequest = 0
 
+    /// Per turn, keyed by the user message's item id: the files approved edits replaced.
+    public private(set) var checkpoints: [String: TurnCheckpoint] = [:]
+    private var currentTurn: String?
+    /// Told to Claude with the next message, so it knows its edits were rolled back.
+    private var pendingNotice: String?
+
     private var index: [String: Int] = [:]
     private var streamingMessageID = ""
     private var streamingTextItemID: String?
@@ -211,9 +217,13 @@ public final class ClaudeSession {
         if process == nil {
             guard start() else { return }
         }
-        append(TranscriptItem(id: "user-\(UUID().uuidString)", content: .user(trimmed, attachments: attachments.map(\.name))))
+        let turn = "user-\(UUID().uuidString)"
+        currentTurn = turn
+        append(TranscriptItem(id: turn, content: .user(trimmed, attachments: attachments.map(\.name))))
         if trimmed.isEmpty { trimmed = "Take a look at \(attachments.count == 1 ? "this file" : "these files")." }
-        let message = context.map { "\(trimmed)\n\n<dante-context>\n\($0)\n</dante-context>" } ?? trimmed
+        let notes = [pendingNotice, context].compactMap { $0 }.joined(separator: "\n\n")
+        pendingNotice = nil
+        let message = notes.isEmpty ? trimmed : "\(trimmed)\n\n<dante-context>\n\(notes)\n</dante-context>"
         write(ClaudeInput.userMessage(message, attachments: attachments))
         state = .working
     }
@@ -227,6 +237,16 @@ public final class ClaudeSession {
 
     public func approve(_ toolID: String) {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status else { return }
+        if let turn = currentTurn {
+            var checkpoint = checkpoints[turn] ?? TurnCheckpoint()
+            if ["Edit", "MultiEdit", "Write", "NotebookEdit"].contains(tool.name),
+               let path = tool.input["file_path"]?.string ?? tool.input["notebook_path"]?.string {
+                checkpoint.record(path) { try? String(contentsOf: URL(filePath: $0), encoding: .utf8) }
+            } else if tool.name == "Bash" {
+                checkpoint.ranCommands = true
+            }
+            checkpoints[turn] = checkpoint
+        }
         write(ClaudeInput.allow(requestID: requestID, input: tool.input))
         updateTool(toolID) { $0.status = .running }
     }
@@ -250,12 +270,39 @@ public final class ClaudeSession {
         updateTool(toolID) { $0.status = .declined }
     }
 
+    /// Puts back every file Claude's approved edits changed in a turn. Claude hears about it
+    /// with the next message. Returns the files restored.
+    @discardableResult
+    public func undoTurn(_ turn: String) -> [URL] {
+        guard state != .working, var checkpoint = checkpoints[turn], !checkpoint.undone else { return [] }
+        var failed: [String] = []
+        let paths = checkpoint.undo { path, text in
+            let url = URL(filePath: path)
+            do {
+                if let text { try text.write(to: url, atomically: true, encoding: .utf8) } else { try FileManager.default.removeItem(at: url) }
+            } catch {
+                failed.append(path)
+            }
+        }
+        checkpoints[turn] = checkpoint
+        let urls = paths.map { URL(filePath: $0) }
+        urls.forEach(onFileChanged)
+        let names = paths.map { ProposedChange.relativePath(of: URL(filePath: $0), in: root) }
+        pendingNotice = "The user undid your changes from an earlier turn, so these files are back as they were: \(names.joined(separator: ", ")). Read them again before editing."
+        note("Undid the changes to \(names.count == 1 ? names[0] : "\(names.count) files")" + (checkpoint.ranCommands ? ". Commands that ran aren’t undone." : ".")
+             + (failed.isEmpty ? "" : " Couldn’t restore \(failed.count)."), isError: !failed.isEmpty)
+        return urls
+    }
+
     /// Ends the conversation and clears the transcript. The next message starts a new one.
     public func reset() {
         stop()
         items = []
         index = [:]
         queued = []
+        checkpoints = [:]
+        currentTurn = nil
+        pendingNotice = nil
         context = nil
         costBeforeThisProcess = 0
         totalCostUSD = 0

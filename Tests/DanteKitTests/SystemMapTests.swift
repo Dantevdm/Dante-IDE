@@ -118,6 +118,18 @@ struct SystemMapTests {
         #expect(map.parts.first { $0.container == "cache" }?.lane == .data)
     }
 
+    @Test func screensThatCallTheAPIGetTheirOwnBoxes() {
+        var files = Self.files
+        files["frontend/views/stats.js"] = "fetch('/api/stats')"
+        files["frontend/views/orders.js"] = "api(`/api/orders/${id}`)"
+        let paths = files.keys.sorted()
+        let map = SystemMap.build(files: paths, read: { files[$0] }, modules: ArchitectureGraph.goModules(files: paths) { files[$0] })
+        #expect(map.parts.filter { $0.lane == .clients }.map(\.name) == ["frontend", "orders", "stats"])
+        #expect(map.links.contains { $0.from == "screen:client:frontend:orders" && $0.to == "route:/api/orders" })
+        #expect(map.links.contains { $0.from == "screen:client:frontend:stats" && $0.to == "route:/api/stats" })
+        #expect(!map.links.contains { $0.from == "client:frontend" && $0.to.hasPrefix("route:") })
+    }
+
     @Test func routeShapes() {
         let go = SystemMap.routes(in: "r.Get(\"/accounts/{id}\", h)\nmux.HandleFunc(\"/health\", ok)")
         #expect(go == [.init(method: "GET", path: "/accounts/{id}", line: 1), .init(method: nil, path: "/health", line: 2)])
