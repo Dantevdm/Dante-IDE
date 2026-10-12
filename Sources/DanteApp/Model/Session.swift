@@ -195,6 +195,9 @@ final class Session {
     var claudeFocusRequest = 0
     /// Files waiting to go with the next message to Claude.
     var claudeAttachments: [Attachment] = []
+    /// Recent Claude usage on this Mac and the signed-in plan, for the panel's meter.
+    var claudeUsage: ClaudeUsage?
+    var claudeAccount: ClaudeAccount?
     var attachmentsLoading = 0
     var cursor = CursorPosition()
     var isCloning = false

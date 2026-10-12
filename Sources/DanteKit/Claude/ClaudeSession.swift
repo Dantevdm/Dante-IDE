@@ -50,8 +50,27 @@ public struct ToolActivity: Equatable, Sendable {
         case "TodoWrite": return "Updated its to-do list"
         case "Task", "Agent": return "Delegated"
         case "AskUserQuestion": return isAwaitingApproval ? "Asks" : (status == .declined ? "Skipped questions" : "Asked")
-        default: return name
+        case "EnterPlanMode": return "Planning first"
+        case "ExitPlanMode": return isAwaitingApproval ? "Plan ready" : (status == .declined ? "Kept planning" : "Started on the plan")
+        case "Skill": return "Used skill"
+        case "ToolSearch": return "Looked up tools"
+        default:
+            if let tool = Self.mcpTool(name) { return tool.action }
+            return name
         }
+    }
+
+    /// `mcp__server__do_thing` as a readable action and the server's name. Servers added by
+    /// claude.ai have an id rather than a name, so those read as "a connector".
+    static func mcpTool(_ name: String) -> (action: String, server: String)? {
+        guard name.hasPrefix("mcp__") else { return nil }
+        let parts = name.dropFirst(5).components(separatedBy: "__")
+        guard parts.count >= 2 else { return nil }
+        let words = parts.last!.replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
+        let action = words.prefix(1).uppercased() + words.dropFirst()
+        let server = parts.dropLast().joined(separator: " ")
+        let looksLikeID = server.count >= 32 && server.allSatisfy { $0.isHexDigit || $0 == "-" }
+        return (action, looksLikeID ? "a connector" : server)
     }
 
     /// The second half: the file, command, pattern or query it acted on.
@@ -65,7 +84,10 @@ public struct ToolActivity: Equatable, Sendable {
         if name == "AskUserQuestion" {
             return ClarifyingQuestion.parse(input).map { $0.header.isEmpty ? $0.question : $0.header }.joined(separator: ", ")
         }
-        return input["pattern"]?.string ?? input["url"]?.string ?? input["query"]?.string ?? input["description"]?.string ?? ""
+        if name == "Skill", let skill = input["skill"]?.string ?? input["command"]?.string { return skill }
+        let detail = input["pattern"]?.string ?? input["url"]?.string ?? input["query"]?.string ?? input["description"]?.string ?? ""
+        if let tool = Self.mcpTool(name) { return detail.isEmpty ? "in \(tool.server)" : "\(detail) · \(tool.server)" }
+        return detail
     }
 }
 
@@ -96,7 +118,18 @@ public final class ClaudeSession {
     public private(set) var items: [TranscriptItem] = []
     public private(set) var state: State = .idle
     public private(set) var model: String?
+    /// What the conversation has cost at API prices. On a Pro or Max plan nothing is billed
+    /// per token; it's a measure of how much of the plan's allowance the work took.
     public private(set) var totalCostUSD: Double = 0
+    /// Cost from earlier processes in this conversation (it resumes in a new one when
+    /// settings change), since each process reports its own running total.
+    private var costBeforeThisProcess: Double = 0
+    /// The tokens in the conversation's context as of Claude's latest reply.
+    public private(set) var context: TokenUsage?
+    /// The model's context window; Claude Code reports it at the end of each turn.
+    public private(set) var contextWindow = 200_000
+    /// The Claude Code session this conversation continues, for the history list.
+    public var conversationID: String? { sessionID }
     /// Claude Code replied that it isn't signed in.
     public private(set) var needsLogin = false
 
@@ -222,13 +255,38 @@ public final class ClaudeSession {
         stop()
         items = []
         index = [:]
+        queued = []
+        context = nil
+        costBeforeThisProcess = 0
         totalCostUSD = 0
         needsLogin = false
         sessionID = nil
         if executable != nil { state = .idle }
     }
 
+    /// Picks up an earlier conversation: its transcript is shown, and the next message
+    /// continues it with `--resume`.
+    public func resume(conversation id: String, items earlier: [TranscriptItem]) {
+        reset()
+        sessionID = id
+        for item in earlier { append(item) }
+        note("Earlier conversation. Your next message continues it.", isError: false)
+    }
+
+    /// Has Claude Code summarise the conversation so far, freeing context. Long conversations
+    /// cost more per message, because every message re-reads everything before it.
+    public func compact() {
+        guard state == .idle, !items.isEmpty, executable != nil else { return }
+        if process == nil {
+            guard start() else { return }
+        }
+        note("Compacting the conversation: Claude keeps a summary and drops the rest.", isError: false)
+        write(ClaudeInput.userMessage("/compact"))
+        state = .working
+    }
+
     public func stop() {
+        costBeforeThisProcess = totalCostUSD
         process?.terminationHandler = nil
         if process?.isRunning == true { process?.terminate() }
         process = nil
@@ -332,6 +390,7 @@ public final class ClaudeSession {
     }
 
     private func processEnded(status: Int32) {
+        costBeforeThisProcess = totalCostUSD
         process = nil
         stdin = nil
         for tool in pendingApprovals { updateTool(tool.id) { $0.status = .declined } }
@@ -398,7 +457,8 @@ public final class ClaudeSession {
                   case .assistant(let current) = items[position].content else { return }
             items[position].content = .assistant(current + text)
 
-        case .assistant(let messageID, let blocks):
+        case .assistant(let messageID, let blocks, let usage):
+            if let usage, usage.context > 0 { context = usage }
             for block in blocks {
                 switch block {
                 case .text(let text):
@@ -462,7 +522,8 @@ public final class ClaudeSession {
         case .result(let result):
             state = .idle
             streamingTextItemID = nil
-            if let cost = result.costUSD { totalCostUSD += cost }
+            if let cost = result.costUSD { totalCostUSD = costBeforeThisProcess + cost }
+            if let window = result.contextWindow, window > 0 { contextWindow = window }
             needsLogin = result.isError && result.text.localizedCaseInsensitiveContains("not logged in")
             // Errors such as "Not logged in" usually arrive as assistant text too.
             let alreadyShown = items.last.map { $0.content == .assistant(result.text) } ?? false

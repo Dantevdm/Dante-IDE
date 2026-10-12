@@ -11,7 +11,7 @@ struct ToolRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                if tool.change != nil, !tool.isAwaitingApproval { expanded.toggle() }
+                if tool.change != nil || tool.name == "ExitPlanMode", !tool.isAwaitingApproval { expanded.toggle() }
             } label: {
                 HStack(spacing: 7) {
                     statusIcon.frame(width: 14)
@@ -47,6 +47,11 @@ struct ToolRow: View {
                 }
             } else if let change = tool.change, tool.isAwaitingApproval || expanded {
                 DiffCard(change: change)
+            } else if tool.name == "ExitPlanMode", let plan = tool.input["plan"]?.string, tool.isAwaitingApproval || expanded {
+                MarkdownText(text: plan)
+                    .padding(12)
+                    .background(theme.card.color, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.line.color))
             } else if tool.isAwaitingApproval, let command = tool.input["command"]?.string {
                 CodeBlock(text: command, language: "shell")
             } else if tool.isAwaitingApproval {
@@ -115,12 +120,17 @@ private struct ApprovalBar: View {
         switch tool.name {
         case "Bash": "Run"
         case "Edit", "MultiEdit", "Write": "Apply"
+        case "ExitPlanMode": "Start building"
         default: "Allow"
         }
     }
 
     private var declineTitle: String {
-        tool.name == "Bash" ? "Don’t run" : "Decline"
+        switch tool.name {
+        case "Bash": "Don’t run"
+        case "ExitPlanMode": "Keep planning"
+        default: "Decline"
+        }
     }
 }
 

@@ -11,8 +11,9 @@ public enum ClaudeEvent: Equatable, Sendable {
     case blockStarted(isText: Bool)
     /// More text for the streaming message's latest text block.
     case textDelta(String)
-    /// A complete assistant message (Claude Code sends one per content block).
-    case assistant(messageID: String, blocks: [AssistantBlock])
+    /// A complete assistant message (Claude Code sends one per content block), with the
+    /// tokens the call used.
+    case assistant(messageID: String, blocks: [AssistantBlock], usage: TokenUsage? = nil)
     /// Results for tools Claude ran.
     case toolResults([ToolResult])
     /// Claude wants to use a tool that needs the user's approval.
@@ -42,8 +43,20 @@ public enum ClaudeEvent: Equatable, Sendable {
     public struct TurnResult: Equatable, Sendable {
         public var isError: Bool
         public var text: String
+        /// What the whole process has cost so far, at API prices: Claude Code reports a
+        /// running total, not this turn's share.
         public var costUSD: Double?
         public var durationMS: Int?
+        /// The model's context window, in tokens.
+        public var contextWindow: Int?
+
+        public init(isError: Bool, text: String, costUSD: Double? = nil, durationMS: Int? = nil, contextWindow: Int? = nil) {
+            self.isError = isError
+            self.text = text
+            self.costUSD = costUSD
+            self.durationMS = durationMS
+            self.contextWindow = contextWindow
+        }
     }
 
     /// Parses one line of stream-json output. Messages from subagents (those with a
@@ -81,7 +94,7 @@ public enum ClaudeEvent: Equatable, Sendable {
                 default: nil
                 }
             }
-            self = blocks.isEmpty ? .ignored : .assistant(messageID: message?["id"]?.string ?? "", blocks: blocks)
+            self = blocks.isEmpty ? .ignored : .assistant(messageID: message?["id"]?.string ?? "", blocks: blocks, usage: TokenUsage(message?["usage"]))
 
         case "user" where !isSubagent:
             let results: [ToolResult] = (json["message"]?["content"]?.array ?? []).compactMap { block in
@@ -104,7 +117,8 @@ public enum ClaudeEvent: Equatable, Sendable {
                 isError: json["is_error"]?.bool ?? (json["subtype"]?.string != "success"),
                 text: json["result"]?.string ?? "",
                 costUSD: json["total_cost_usd"]?.double,
-                durationMS: json["duration_ms"]?.int
+                durationMS: json["duration_ms"]?.int,
+                contextWindow: json["modelUsage"]?.object?.values.compactMap { $0["contextWindow"]?.int }.max()
             ))
 
         default:
@@ -116,6 +130,37 @@ public enum ClaudeEvent: Equatable, Sendable {
     private static func text(of content: JSONValue?) -> String {
         if let string = content?.string { return string }
         return (content?.array ?? []).compactMap { $0["text"]?.string }.joined(separator: "\n")
+    }
+}
+
+/// Tokens one call to the model used. The context it saw is everything it read: new input,
+/// input written to the cache, and input read back from it.
+public struct TokenUsage: Equatable, Sendable, Codable {
+    public var input: Int
+    public var output: Int
+    public var cacheWrite: Int
+    public var cacheRead: Int
+
+    public init(input: Int = 0, output: Int = 0, cacheWrite: Int = 0, cacheRead: Int = 0) {
+        self.input = input
+        self.output = output
+        self.cacheWrite = cacheWrite
+        self.cacheRead = cacheRead
+    }
+
+    public init?(_ json: JSONValue?) {
+        guard let json, json["input_tokens"] != nil || json["output_tokens"] != nil else { return nil }
+        self.init(input: json["input_tokens"]?.int ?? 0, output: json["output_tokens"]?.int ?? 0,
+                  cacheWrite: json["cache_creation_input_tokens"]?.int ?? 0, cacheRead: json["cache_read_input_tokens"]?.int ?? 0)
+    }
+
+    /// How much of the context window the conversation fills.
+    public var context: Int { input + cacheWrite + cacheRead + output }
+    /// Tokens that count fully against plan limits; cache reads cost about a tenth.
+    public var weighted: Int { input + output + cacheWrite }
+
+    public static func + (a: TokenUsage, b: TokenUsage) -> TokenUsage {
+        TokenUsage(input: a.input + b.input, output: a.output + b.output, cacheWrite: a.cacheWrite + b.cacheWrite, cacheRead: a.cacheRead + b.cacheRead)
     }
 }
 

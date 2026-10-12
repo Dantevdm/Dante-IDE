@@ -7,6 +7,7 @@ struct ClaudePanel: View {
     let session: Session
     let workspace: Workspace
     let claude: ClaudeSession
+    @State private var showsHistory = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,7 +47,11 @@ struct ClaudePanel: View {
             .help(Preferences.shared.claudeAsksFirst
                   ? "On: Claude asks clarifying questions before starting anything ambiguous. Click to let it go straight ahead."
                   : "Off: Claude goes straight ahead. Click to have it ask clarifying questions first.")
-            IconButton(symbol: "square.and.pencil", label: "New conversation") { claude.reset() }
+            IconButton(symbol: "clock.arrow.circlepath", label: "Earlier conversations") { showsHistory.toggle() }
+                .popover(isPresented: $showsHistory, arrowEdge: .bottom) {
+                    ConversationHistory(session: session) { showsHistory = false }
+                }
+            IconButton(symbol: "square.and.pencil", label: "New conversation (the current one stays in Earlier conversations)") { claude.reset() }
                 .disabled(claude.items.isEmpty)
             IconButton(symbol: "sidebar.right", label: "Hide Claude (⌥⌘L)") {
                 withAnimation(.snappy(duration: 0.22)) { session.showsClaude = false }
@@ -141,9 +146,16 @@ private struct Transcript: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(claude.items) { item in
-                        TranscriptRow(item: item, claude: claude)
+                // Not lazy: a lazy stack re-estimates row heights as text streams in, which
+                // makes the conversation jump up and down.
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(Self.segments(claude.items)) { segment in
+                        switch segment {
+                        case .item(let item):
+                            TranscriptRow(item: item, claude: claude)
+                        case .tools(let tools):
+                            ToolGroup(tools: tools, claude: claude)
+                        }
                     }
                     if claude.state == .working, claude.pendingApprovals.isEmpty {
                         ThinkingDots().padding(.leading, 2)
@@ -157,6 +169,94 @@ private struct Transcript: View {
             .defaultScrollAnchor(.bottom)
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
         }
+    }
+}
+
+extension Transcript {
+    enum Segment: Identifiable {
+        case item(TranscriptItem)
+        /// Three or more finished tool calls in a row with nothing to review, shown as one line.
+        case tools([ToolActivity])
+
+        var id: String {
+            switch self {
+            case .item(let item): item.id
+            case .tools(let tools): "group-" + (tools.first?.id ?? "")
+            }
+        }
+    }
+
+    static func segments(_ items: [TranscriptItem]) -> [Segment] {
+        var segments: [Segment] = []
+        var run: [TranscriptItem] = []
+        func flush() {
+            if run.count >= 3 {
+                segments.append(.tools(run.compactMap { if case .tool(let tool) = $0.content { tool } else { nil } }))
+            } else {
+                segments += run.map(Segment.item)
+            }
+            run = []
+        }
+        for item in items {
+            if case .tool(let tool) = item.content, tool.status == .done, tool.change == nil, tool.ruleNote == nil, tool.name != "AskUserQuestion" {
+                run.append(item)
+            } else {
+                flush()
+                segments.append(.item(item))
+            }
+        }
+        flush()
+        return segments
+    }
+}
+
+/// Finished tool calls folded into one line: "Read 4 files, ran 2 commands". Click to list them.
+private struct ToolGroup: View {
+    @Environment(\.theme) private var theme
+    let tools: [ToolActivity]
+    let claude: ClaudeSession
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { withAnimation(.snappy(duration: 0.18)) { expanded.toggle() } } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "checkmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.green.color).frame(width: 14)
+                    Text(summary).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text2.color).lineLimit(1)
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(tools, id: \.id) { tool in
+                        ToolRow(tool: tool, claude: claude)
+                    }
+                }
+                .padding(.leading, 12)
+                .overlay(alignment: .leading) { Rectangle().fill(theme.line.color).frame(width: 1) }
+            }
+        }
+    }
+
+    private var summary: String {
+        var counts: [(String, Int)] = []
+        func add(_ label: String) {
+            if let index = counts.firstIndex(where: { $0.0 == label }) { counts[index].1 += 1 } else { counts.append((label, 1)) }
+        }
+        for tool in tools {
+            switch tool.name {
+            case "Read": add("file read")
+            case "Bash": add("command")
+            case "Grep", "Glob": add("search")
+            case "WebFetch", "WebSearch": add("web lookup")
+            default: add("tool call")
+            }
+        }
+        return counts.prefix(3).map { "\($0.1) \($0.0)\($0.1 == 1 ? "" : "s")" }.joined(separator: ", ")
+            .replacingOccurrences(of: "searchs", with: "searches")
     }
 }
 

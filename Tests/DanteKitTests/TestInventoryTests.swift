@@ -131,3 +131,22 @@ struct TestGapsRankingTests {
         #expect(gaps.files[1].isInterface && !gaps.files[0].isInterface)
     }
 }
+
+struct NarrowingWrittenTests {
+    @Test func narrowsACustomGoCommand() {
+        let command = TestCommand(label: "cd backend && go test ./...", arguments: ["sh", "-c", "cd backend && go test -v ./..."], readsXUnit: false)
+        let tests = [WrittenTest(name: "TestSend", file: "backend/api/send_test.go", line: 4, category: "Unit", area: "backend/api"),
+                     WrittenTest(name: "TestStats", file: "backend/api/stats_test.go", line: 9, category: "Unit", area: "backend/api")]
+        let narrowed = command.only(written: tests)
+        #expect(narrowed?.arguments == ["sh", "-c", "cd backend && go test -v -run '^(TestSend|TestStats)$' ./..."])
+        #expect(narrowed?.label == "cd backend && go test ./... · 2 tests")
+    }
+
+    @Test func givesPytestAndJestTheFile() {
+        let pytest = TestCommand(label: "pytest -v", arguments: ["python3", "-m", "pytest", "-v"], readsXUnit: false)
+        let test = WrittenTest(name: "test_login", file: "tests/test_auth.py", line: 3, category: "Unit", area: "tests")
+        #expect(pytest.only(written: [test])?.arguments.last == "tests/test_auth.py::test_login")
+        let custom = TestCommand(label: "make", arguments: ["sh", "-c", "make check"], readsXUnit: false)
+        #expect(custom.only(written: [test]) == nil)
+    }
+}

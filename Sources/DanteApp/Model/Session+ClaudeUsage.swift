@@ -1,0 +1,30 @@
+import DanteKit
+import Foundation
+
+/// Usage and history for the Claude panel.
+extension Session {
+    /// Re-reads usage from Claude Code's transcripts; the plan once per window.
+    func refreshClaudeUsage() async {
+        let usage = await Task.detached(priority: .utility) { ClaudeUsage.load() }.value
+        claudeUsage = usage
+        if claudeAccount == nil, let path = claude?.executable {
+            claudeAccount = await ClaudeAccount.load(executable: path)
+        }
+    }
+
+    func claudeConversations() async -> [ClaudeHistory.Conversation] {
+        guard let root = workspace?.url else { return [] }
+        return await Task.detached(priority: .userInitiated) { ClaudeHistory.conversations(for: root) }.value
+    }
+
+    /// Shows an earlier conversation in the panel; the next message continues it.
+    func resumeConversation(_ conversation: ClaudeHistory.Conversation) async {
+        guard let root = workspace?.url, let claude else { return }
+        let url = ClaudeHistory.transcriptURL(for: conversation.id, root: root)
+        let items = await Task.detached(priority: .userInitiated) {
+            (try? String(contentsOf: url, encoding: .utf8)).map(ClaudeHistory.items(fromTranscript:)) ?? []
+        }.value
+        claude.resume(conversation: conversation.id, items: items)
+        showsClaude = true
+    }
+}

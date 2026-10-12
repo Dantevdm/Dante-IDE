@@ -81,17 +81,7 @@ struct Composer: View {
                     .strokeBorder(focused ? theme.accentLine.color : theme.line2.color)
             )
 
-            HStack(spacing: 6) {
-                Image(systemName: "hand.raised").font(.dante(size: 9.5))
-                Text("Claude asks before every edit and command.")
-                Spacer(minLength: 0)
-                if claude.totalCostUSD > 0 {
-                    Text(claude.totalCostUSD, format: .currency(code: "USD").precision(.fractionLength(2)))
-                        .help("Cost of this conversation")
-                }
-            }
-            .font(.dante(size: 10.5))
-            .foregroundStyle(theme.text3.color)
+            ClaudeFooter(session: session, claude: claude)
         }
         .padding(12)
         .onChange(of: session.claudeFocusRequest) { focused = true }

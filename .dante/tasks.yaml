@@ -260,3 +260,15 @@ tasks:
   title: "Env logs: hide health check requests; cards say checking until Docker answers"
   phase: build
   state: review
+- id: DI-65
+  title: "Claude: conversation history, plan usage estimate, context meter and compact, readable plan approvals"
+  phase: build
+  state: review
+- id: DI-66
+  title: "Claude panel: stop the transcript jumping; group runs of reads; fix the doubled cost"
+  phase: build
+  state: review
+- id: DI-67
+  title: "Tests: tick tests or run one category instead of the whole suite"
+  phase: build
+  state: review

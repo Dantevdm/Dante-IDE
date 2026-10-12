@@ -69,6 +69,20 @@ public struct TestCommand: Equatable, Sendable {
             return TestCommand(label: "\(label) · \(count)", arguments: narrowedArguments, readsXUnit: readsXUnit)
         case "python3":
             return narrowed(tests.map { "\($0.suite)::\($0.name)" })
+        case "sh" where arguments.count == 3:
+            // A custom test.command: narrow the go test or pytest inside it.
+            let script = arguments[2]
+            if let range = script.range(of: "go test -v") ?? script.range(of: "go test") {
+                let names = Set(tests.map { $0.name.components(separatedBy: "/")[0] }).sorted()
+                let pattern = "^(" + names.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|") + ")$"
+                let narrowedScript = script.replacingCharacters(in: range, with: "go test -v -run \(Shell.quote(pattern))")
+                return TestCommand(label: "\(label) · \(count)", arguments: ["sh", "-c", narrowedScript], readsXUnit: readsXUnit)
+            }
+            if script.contains("pytest") {
+                let expression = tests.map(\.name).joined(separator: " or ")
+                return TestCommand(label: "\(label) · \(count)", arguments: ["sh", "-c", script + " -k " + Shell.quote(expression)], readsXUnit: readsXUnit)
+            }
+            return nil
         case "npm", "pnpm", "yarn", "bun":
             // Jest and Vitest both take test files and a -t name pattern.
             let names = tests.map { NSRegularExpression.escapedPattern(for: $0.name) }.joined(separator: "|")
@@ -77,6 +91,24 @@ public struct TestCommand: Equatable, Sendable {
         default:
             return nil
         }
+    }
+}
+
+extension TestCommand {
+    /// The runner limited to tests read from the code, for running a category, a file or a
+    /// hand-picked few. Runners want the file for some languages and only the name for others.
+    public func only(written tests: [WrittenTest]) -> TestCommand? {
+        let tool = arguments.first ?? ""
+        let results = tests.map { test -> TestResult in
+            let lower = test.file.lowercased()
+            let suite: String
+            if tool == "python3" || lower.hasSuffix(".py") && tool == "sh" { suite = test.file }
+            else if ["npm", "pnpm", "yarn", "bun"].contains(tool) { suite = test.file }
+            else if tool == "cargo" { suite = "tests" }
+            else { suite = "" }
+            return TestResult(suite: suite, name: test.name, status: .passed)
+        }
+        return only(results)
     }
 }
 

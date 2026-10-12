@@ -46,7 +46,8 @@ struct TestsView: View {
             switch tab {
             case .run: runTab
             case .written:
-                WrittenTestsView(session: session, workspace: workspace, inventory: inventory, results: session.testRun?.results ?? []) { tab = .untested }
+                WrittenTestsView(session: session, workspace: workspace, inventory: inventory, results: session.testRun?.results ?? [],
+                                 runTests: runWritten) { tab = .untested }
             case .history: TestHistoryView(records: history)
             case .untested: UntestedView(session: session, workspace: workspace, gaps: gaps, hasTests: !(inventory?.tests.isEmpty ?? true))
             }
@@ -113,8 +114,16 @@ struct TestsView: View {
                     title: "Run \(command?.label ?? "the tests")",
                     message: "Results stream in as each test finishes, grouped by suite, with failures first."
                 ) {
-                    Button { run() } label: { Label("Run tests", systemImage: "play.fill") }
-                        .buttonStyle(DanteButtonStyle(primary: true))
+                    VStack(spacing: 12) {
+                        HStack(spacing: 8) {
+                            Button { run() } label: { Label("Run all tests", systemImage: "play.fill") }
+                                .buttonStyle(DanteButtonStyle(primary: true))
+                            if runWritten != nil, (inventory?.categories.count ?? 0) <= 1 {
+                                Button("Pick tests…") { tab = .written }.buttonStyle(DanteButtonStyle())
+                            }
+                        }
+                        categoryRuns
+                    }
                 }
                 DraftTestsCard(session: session, gaps: gaps) { tab = .untested }
             }
@@ -141,6 +150,33 @@ struct TestsView: View {
     private var runOnly: (([TestResult]) -> Void)? {
         guard let command, command.only([TestResult(suite: "", name: "x", status: .passed)]) != nil else { return nil }
         return { tests in if let narrowed = command.only(tests) { run(narrowed) } }
+    }
+
+    /// Runs tests read from the code, when the runner can be narrowed.
+    private var runWritten: (([WrittenTest]) -> Void)? {
+        guard let command, let sample = inventory?.tests.first, command.only(written: [sample]) != nil else { return nil }
+        return { tests in
+            guard let narrowed = command.only(written: tests) else { return }
+            run(narrowed)
+            tab = .run
+        }
+    }
+
+    /// "Run Unit (4)", one per category, before the first run.
+    @ViewBuilder
+    private var categoryRuns: some View {
+        if let inventory, let runWritten, inventory.categories.count > 1 {
+            HStack(spacing: 8) {
+                Text("Or run one kind:").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                ForEach(inventory.categories, id: \.self) { name in
+                    Button { runWritten(inventory.tests.filter { $0.category == name }) } label: {
+                        Label("\(name) (\(inventory.count(in: name)))", systemImage: "play")
+                    }
+                    .buttonStyle(DanteButtonStyle())
+                }
+                Button("Pick tests…") { tab = .written }.buttonStyle(DanteButtonStyle())
+            }
+        }
     }
 
     private func run(_ chosen: TestCommand? = nil) {

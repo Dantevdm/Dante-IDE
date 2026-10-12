@@ -152,10 +152,11 @@ struct ClaudeSessionTranscriptTests {
         #expect(session.items.count == 1) // the error isn't repeated as a notice
     }
 
-    @Test func resultEndsTheTurnAndAddsCost() {
+    @Test func resultEndsTheTurnAndKeepsTheRunningCost() {
         let session = session()
+        // Claude Code reports the process's total so far, so the latest one is the cost.
         session.handle(.result(.init(isError: false, text: "ok", costUSD: 0.1, durationMS: 5)))
-        session.handle(.result(.init(isError: false, text: "ok", costUSD: 0.2, durationMS: 5)))
+        session.handle(.result(.init(isError: false, text: "ok", costUSD: 0.3, durationMS: 5)))
         #expect(session.state == .idle)
         #expect(abs(session.totalCostUSD - 0.3) < 0.0001)
     }
@@ -276,7 +277,9 @@ struct ToolSummaryTests {
         var blocked = tool("Read", ["file_path": "/project/.env"])
         blocked.blockedByRule = true
         #expect(blocked.verb == "Blocked")
-        #expect(tool("mcp__thing__do", [:]).verb == "mcp__thing__do")
+        #expect(tool("mcp__thing__do", [:]).verb == "Do")
+        #expect(tool("mcp__thing__do", [:]).target(in: URL(filePath: "/home/me")) == "in thing")
+        #expect(tool("UnknownTool", [:]).verb == "UnknownTool")
         #expect(tool("TodoWrite", [:]).target(in: root) == "")
     }
 }

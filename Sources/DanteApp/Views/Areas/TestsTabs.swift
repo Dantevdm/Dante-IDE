@@ -64,11 +64,15 @@ struct WrittenTestsView: View {
     let workspace: Workspace
     let inventory: TestInventory?
     let results: [TestResult]
+    /// Runs the chosen tests; nil when the runner can't be narrowed to some tests.
+    let runTests: (([WrittenTest]) -> Void)?
     let showUntested: () -> Void
 
     @State private var category: String?
     @State private var query = ""
     @State private var collapsed: Set<String> = []
+    /// Tests ticked to run, by id.
+    @State private var selected: Set<String> = []
 
     var body: some View {
         if let inventory {
@@ -88,6 +92,7 @@ struct WrittenTestsView: View {
                 }
             } else {
                 categoryStrip(inventory)
+                if runTests != nil { selectionBar(inventory) }
                 list(inventory)
             }
         } else {
@@ -127,12 +132,59 @@ struct WrittenTestsView: View {
         }
     }
 
-    private func list(_ inventory: TestInventory) -> some View {
-        let statuses = self.statuses
-        let shown = inventory.tests.filter { test in
+    private func shown(_ inventory: TestInventory) -> [WrittenTest] {
+        inventory.tests.filter { test in
             (category == nil || test.category == category) &&
                 (query.isEmpty || test.name.localizedCaseInsensitiveContains(query) || test.file.localizedCaseInsensitiveContains(query))
         }
+    }
+
+    /// Run what's ticked, or everything the filter shows.
+    private func selectionBar(_ inventory: TestInventory) -> some View {
+        let visible = shown(inventory)
+        let chosen = inventory.tests.filter { selected.contains($0.id) }
+        return HStack(spacing: 10) {
+            Image(systemName: "checklist").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+            if chosen.isEmpty {
+                Text("Tick tests to run just those, or run what’s shown.")
+                    .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
+            } else {
+                Text("\(chosen.count) test\(chosen.count == 1 ? "" : "s") ticked")
+                    .font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
+                Button("Clear") { selected = [] }.buttonStyle(.plain).font(.dante(size: 12)).foregroundStyle(theme.accent.color)
+            }
+            Spacer()
+            if !visible.isEmpty, visible.count < inventory.tests.count {
+                Button { runTests?(visible) } label: {
+                    Label("Run \(category.map { "\($0) " } ?? "")shown (\(visible.count))", systemImage: "play")
+                }
+                .buttonStyle(DanteButtonStyle())
+            }
+            if !chosen.isEmpty {
+                Button { runTests?(chosen) } label: { Label("Run ticked (\(chosen.count))", systemImage: "play.fill") }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(chosen.isEmpty ? theme.card.color : theme.accentTint.color))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(chosen.isEmpty ? theme.line.color : theme.accentLine.color))
+    }
+
+    private func checkbox(_ on: Bool, mixed: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: on ? "checkmark.square.fill" : mixed ? "minus.square.fill" : "square")
+                .font(.dante(size: 12))
+                .foregroundStyle(on || mixed ? theme.accent.color : theme.text3.color)
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func list(_ inventory: TestInventory) -> some View {
+        let statuses = self.statuses
+        let shown = self.shown(inventory)
         let files = Dictionary(grouping: shown, by: \.file).sorted { $0.key < $1.key }
         return Card(category.map { "\($0) tests" } ?? "Tests by file") {
             HStack(spacing: 5) {
@@ -149,6 +201,15 @@ struct WrittenTestsView: View {
             }
             RowList(data: files.map { FileGroup(path: $0.key, tests: $0.value) }, padding: 0) { group in
                 VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 4) {
+                    if runTests != nil {
+                        let ids = Set(group.tests.map(\.id))
+                        let all = ids.isSubset(of: selected)
+                        checkbox(all, mixed: !all && !ids.isDisjoint(with: selected)) {
+                            if all { selected.subtract(ids) } else { selected.formUnion(ids) }
+                        }
+                        .help("Tick every test in this file")
+                    }
                     Button {
                         if collapsed.contains(group.path) { collapsed.remove(group.path) } else { collapsed.insert(group.path) }
                     } label: {
@@ -166,8 +227,15 @@ struct WrittenTestsView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    }
                     if !collapsed.contains(group.path) {
                         ForEach(group.tests) { test in
+                            HStack(spacing: 4) {
+                            if runTests != nil {
+                                checkbox(selected.contains(test.id)) {
+                                    if selected.contains(test.id) { selected.remove(test.id) } else { selected.insert(test.id) }
+                                }
+                            }
                             Button { session.open(file: workspace.url.appending(path: test.file), line: test.line) } label: {
                                 HStack(spacing: 8) {
                                     statusIcon(statuses[testKey(test.name)])
@@ -178,12 +246,13 @@ struct WrittenTestsView: View {
                                     }
                                     Text(":\(test.line)").font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
                                 }
-                                .padding(.leading, 18)
                                 .padding(.vertical, 3)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             .help("Open \(test.file):\(test.line)")
+                            }
+                            .padding(.leading, 18)
                         }
                         Spacer().frame(height: 6)
                     }
