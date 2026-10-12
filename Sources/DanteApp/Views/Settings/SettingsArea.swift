@@ -173,6 +173,10 @@ private struct ClaudePreferencesPane: View {
                     ForEach(Preferences.ClaudeModel.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 Toggle("Ask clarifying questions before ambiguous work", isOn: $preferences.claudeAsksFirst)
+                Toggle("Notify me when Claude finishes or needs approval while Dante is in the background", isOn: $preferences.notifiesOnClaude)
+                    .onChange(of: preferences.notifiesOnClaude) { _, on in
+                        if on { Task { if await !Session.requestNotificationPermission() { preferences.notifiesOnClaude = false } } }
+                    }
             } footer: {
                 Text("Changes apply from your next message. Sign-in and plan stay in Claude Code.")
             }

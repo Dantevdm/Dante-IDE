@@ -299,11 +299,11 @@ tasks:
 - id: DI-74
   title: "Tests: run tests for changed files, rerun failed only, Run again keeps the selection"
   phase: build
-  state: todo
+  state: review
 - id: DI-75
   title: "Tests: fix a failing test with Claude"
   phase: build
-  state: todo
+  state: review
 - id: DI-76
   title: "Claude panel: @file mentions and a / command menu"
   phase: build
@@ -311,7 +311,7 @@ tasks:
 - id: DI-77
   title: "Claude panel: notify when Claude finishes or needs approval while Dante is in the background"
   phase: build
-  state: todo
+  state: review
 - id: DI-78
   title: "Claude panel: Apply all for several proposed edits"
   phase: build

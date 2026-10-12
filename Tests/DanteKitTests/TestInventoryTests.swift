@@ -150,3 +150,17 @@ struct NarrowingWrittenTests {
         #expect(custom.only(written: [test]) == nil)
     }
 }
+
+struct TestImpactTests {
+    @Test func picksTestsInChangedFilesAndTheFilesNamedAfterChangedCode() {
+        let inventory = TestInventory(tests: [
+            WrittenTest(name: "TestSend", file: "mail/mailer_test.go", line: 3, category: "Unit", area: "mail"),
+            WrittenTest(name: "parses()", file: "Tests/KitTests/ParserTests.swift", line: 5, category: "Unit", area: "Kit"),
+            WrittenTest(name: "test_index", file: "app/tests/test_views.py", line: 1, category: "Unit", area: "app"),
+            WrittenTest(name: "renders", file: "web/src/Button.test.tsx", line: 2, category: "Unit", area: "web"),
+            WrittenTest(name: "TestOther", file: "other/other_test.go", line: 1, category: "Unit", area: "other"),
+        ])
+        let picked = TestImpact.tests(for: ["mail/mailer.go", "Sources/Kit/Parser.swift", "app/views.py", "web/src/Button.test.tsx", "README.md"], in: inventory)
+        #expect(picked.map(\.name) == ["TestSend", "parses()", "test_index", "renders"])
+    }
+}

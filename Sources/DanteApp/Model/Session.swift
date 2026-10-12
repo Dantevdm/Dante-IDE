@@ -403,6 +403,7 @@ final class Session {
             rules: { [weak workspace] in workspace?.claudeRules ?? ClaudeRules() }
         )
         claude.onFileChanged = { [weak workspace] url in workspace?.fileChanged(at: url) }
+        claude.onAttention = { [weak self] attention in self?.notifyClaude(attention) }
         applyClaudePreferences(to: claude)
         return claude
     }

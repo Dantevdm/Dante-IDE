@@ -36,10 +36,26 @@ struct TestsView: View {
                         .keyboardShortcut("u", modifiers: [.command, .shift])
                         .help(failedOnly.arguments.joined(separator: " "))
                 }
-                Button { run() } label: { Label(session.testRun == nil ? "Run tests" : "Run all again", systemImage: "play.fill") }
-                    .buttonStyle(DanteButtonStyle(primary: true))
-                    .disabled(command == nil)
-                    .keyboardShortcut("u", modifiers: .command)
+                if let runWritten, !changedTests.isEmpty {
+                    Button { runWritten(changedTests) } label: { Label("Run changed (\(changedTests.count))", systemImage: "arrow.triangle.branch") }
+                        .buttonStyle(DanteButtonStyle())
+                        .help("Tests in changed files and in the test files named after changed code")
+                }
+                if let last = session.testRun?.command, last != command {
+                    // The last run was a selection: running again repeats it, and Run all is beside it.
+                    Button { run() } label: { Label("Run all", systemImage: "play") }
+                        .buttonStyle(DanteButtonStyle())
+                        .disabled(command == nil)
+                    Button { self.run(last) } label: { Label("Run these again", systemImage: "play.fill") }
+                        .buttonStyle(DanteButtonStyle(primary: true))
+                        .keyboardShortcut("u", modifiers: .command)
+                        .help(last.label)
+                } else {
+                    Button { run() } label: { Label(session.testRun == nil ? "Run tests" : "Run all again", systemImage: "play.fill") }
+                        .buttonStyle(DanteButtonStyle(primary: true))
+                        .disabled(command == nil)
+                        .keyboardShortcut("u", modifiers: .command)
+                }
             }
         } content: {
             TestsTabBar(tab: $tab, counts: tabCounts)
@@ -144,6 +160,12 @@ struct TestsView: View {
 
     private func isCouldNotStart(_ run: TestRun) -> Bool {
         if case .couldNotStart = run.state { true } else { false }
+    }
+
+    /// Tests that go with the files changed in the working tree.
+    private var changedTests: [WrittenTest] {
+        guard let inventory, let changes = session.git.status?.changes, !changes.isEmpty else { return [] }
+        return TestImpact.tests(for: changes.map(\.path), in: inventory)
     }
 
     /// Runs some of the tests with the project's runner, when it can be narrowed.
@@ -304,6 +326,7 @@ private struct FailuresCard: View {
                         if let duration = result.duration {
                             Text(String(format: "%.2fs", duration)).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
                         }
+                        IconButton(symbol: "sparkle", label: "Fix \(result.name) with Claude", size: 10) { session.askClaude(prompt(for: [result])) }
                         if let runOnly, !run.isRunning {
                             IconButton(symbol: "play.fill", label: "Run \(result.name)", size: 10) { runOnly([result]) }
                         }
@@ -347,7 +370,8 @@ private struct FailuresCard: View {
     }
 
     private func prompt(for failures: [TestResult]) -> String {
-        var lines = ["These tests fail when I run `\(run.command.label)`. Find the cause and propose a fix. If the test is wrong rather than the code, say so before changing it."]
+        let opening = failures.count == 1 ? "This test fails" : "These tests fail"
+        var lines = ["\(opening) when I run `\(run.command.label)`. Read the test and the code it calls, find the cause and propose a fix. If the test is wrong rather than the code, say so before changing it. Afterwards, tell me the command to run just these tests."]
         for failure in failures.prefix(10) {
             lines.append("- \(failure.suite.isEmpty ? "" : failure.suite + ".")\(failure.name)")
             for issue in failure.issues.prefix(3) {

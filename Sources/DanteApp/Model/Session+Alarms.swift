@@ -1,4 +1,5 @@
 import DanteKit
+import AppKit
 import Foundation
 import UserNotifications
 
@@ -55,5 +56,22 @@ extension Session {
             content.sound = .default
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "alarm-\(alarm.id)", content: content, trigger: nil))
         }
+    }
+
+    /// Claude finished or is waiting, and Dante isn't the app in front.
+    func notifyClaude(_ attention: ClaudeSession.Attention) {
+        guard Preferences.shared.notifiesOnClaude, !NSApplication.shared.isActive, let workspace else { return }
+        let content = UNMutableNotificationContent()
+        content.subtitle = workspace.url.lastPathComponent
+        switch attention {
+        case .finished(let reply):
+            content.title = "Claude is done"
+            content.body = reply
+        case .needsApproval(let what):
+            content.title = "Claude is waiting for you"
+            content.body = what
+            content.sound = .default
+        }
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "claude-\(workspace.url.path)", content: content, trigger: nil))
     }
 }

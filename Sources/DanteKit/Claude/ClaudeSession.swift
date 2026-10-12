@@ -135,6 +135,15 @@ public final class ClaudeSession {
 
     /// Called after Claude changes a file, so open editors can reload it.
     public var onFileChanged: (URL) -> Void = { _ in }
+    /// Something the person should look at: a finished turn, or a change or question waiting.
+    public var onAttention: (Attention) -> Void = { _ in }
+
+    public enum Attention: Equatable, Sendable {
+        /// The turn ended; the start of Claude's last reply.
+        case finished(String)
+        /// A tool call waits for approval: what it is, in a few words.
+        case needsApproval(String)
+    }
 
     public let root: URL
     public let executable: String?
@@ -537,6 +546,9 @@ public final class ClaudeSession {
 
         case .permissionRequest(let request):
             let id = request.toolUseID ?? "request-\(request.requestID)"
+            defer {
+                if case .awaitingApproval = activity(id)?.status { onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input))) }
+            }
             let change = ProposedChange.make(toolName: request.toolName, input: request.input, root: root)
             if index[id] == nil {
                 append(TranscriptItem(id: id, content: .tool(ToolActivity(id: id, name: request.toolName, input: request.input, status: .running))))
@@ -580,11 +592,34 @@ public final class ClaudeSession {
             if !queued.isEmpty {
                 let next = queued.removeFirst()
                 send(next.text, context: next.context, attachments: next.attachments)
+            } else {
+                let reply = items.last { if case .assistant = $0.content { true } else { false } }
+                if case .assistant(let text) = reply?.content {
+                    onAttention(.finished(String(text.prefix(160))))
+                } else {
+                    onAttention(.finished(result.isError ? result.text : "Done."))
+                }
             }
 
         case .ignored:
             break
         }
+    }
+
+    private func activity(_ id: String) -> ToolActivity? {
+        guard let position = index[id], case .tool(let tool) = items[position].content else { return nil }
+        return tool
+    }
+
+    /// "Edit Mailer.swift", "Run go test ./...", "Answer a question".
+    static func attentionLabel(_ toolName: String, input: JSONValue) -> String {
+        if toolName == "AskUserQuestion" { return "Claude has a question" }
+        if toolName == "ExitPlanMode" { return "Claude's plan is ready" }
+        if let path = input["file_path"]?.string ?? input["notebook_path"]?.string {
+            return "\(toolName == "Write" ? "Write" : "Edit") \((path as NSString).lastPathComponent)"
+        }
+        if let command = input["command"]?.string { return "Run \(command.prefix(60))" }
+        return "Use \(toolName)"
     }
 
     // MARK: Transcript

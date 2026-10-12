@@ -53,6 +53,8 @@ public final class Preferences {
     public var usesGeist: Bool { didSet { defaults.set(usesGeist, forKey: Keys.usesGeist) } }
     /// A macOS notification when a monitoring alarm starts firing. Off until asked for.
     public var notifiesOnAlarms: Bool { didSet { defaults.set(notifiesOnAlarms, forKey: Keys.notifiesOnAlarms) } }
+    /// A notification when Claude finishes or waits for approval while Dante isn't in front.
+    public var notifiesOnClaude: Bool { didSet { defaults.set(notifiesOnClaude, forKey: Keys.notifiesOnClaude) } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -68,6 +70,7 @@ public final class Preferences {
         claudeModel = defaults.string(forKey: Keys.claudeModel).flatMap(ClaudeModel.init(rawValue:)) ?? .default
         usesGeist = bool(Keys.usesGeist, true)
         notifiesOnAlarms = bool(Keys.notifiesOnAlarms, false)
+        notifiesOnClaude = bool(Keys.notifiesOnClaude, false)
     }
 
     /// The indent width for a file: the chosen one, or the language's usual one.
@@ -100,6 +103,7 @@ public final class Preferences {
         static let claudeModel = "claudeModel"
         static let usesGeist = "usesGeist"
         static let notifiesOnAlarms = "notifiesOnAlarms"
+        static let notifiesOnClaude = "notifiesOnClaude"
     }
 }
 
