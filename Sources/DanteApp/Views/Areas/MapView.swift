@@ -10,17 +10,24 @@ struct MapView: View {
     let workspace: Workspace
 
     enum Source: String, CaseIterable, Identifiable {
-        case modules = "Modules", services = "Services"
+        case system = "System", modules = "Modules", services = "Services"
         var id: String { rawValue }
     }
 
     @State private var modules: ArchitectureGraph?
     @State private var services: ArchitectureGraph?
-    @State private var source: Source = .modules
+    @State private var system: SystemMap?
+    @State private var source: Source = .system
     @State private var showsTests = false
     @State private var selected: String?
     @State private var notes: String?
     @State private var loaded = false
+
+    private var showsSystem: Bool { source == .system && system?.isUseful == true }
+
+    private var sources: [Source] {
+        Source.allCases.filter { $0 == .system ? system?.isUseful == true : $0 == .modules ? modules != nil : services != nil }
+    }
 
     private var graph: ArchitectureGraph? {
         let base = source == .services ? (services ?? modules) : (modules ?? services)
@@ -31,24 +38,31 @@ struct MapView: View {
         HStack(spacing: 0) {
             AreaPage(
                 eyebrow: "Map · \(workspace.info.name ?? workspace.name)",
-                title: graph?.title ?? "Architecture",
-                subtitle: graph.map { "Generated from \($0.source). Arrows point from each part to what it uses." }
+                title: showsSystem || (source == .system && !loaded) ? "System" : graph?.title ?? "Architecture",
+                subtitle: showsSystem || (source == .system && !loaded) ? "From the clients people use, through the API and backend, to the data and outside services. Read from routes, fetch calls, imports and the compose file."
+                    : graph.map { "Generated from \($0.source). Arrows point from each part to what it uses." }
                     ?? "Dante draws the architecture from what the repo declares: Package.swift targets, docker-compose.yml services, or source folders."
             ) {
-                if modules != nil, services != nil {
+                if sources.count > 1 {
                     Picker("Source", selection: $source) {
-                        ForEach(Source.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(sources) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 180)
+                    .frame(width: CGFloat(sources.count) * 82)
                 }
-                if (source == .modules ? modules : services)?.nodes.contains(where: { $0.kind == .test }) == true {
+                if !showsSystem, (source == .modules ? modules : services)?.nodes.contains(where: { $0.kind == .test }) == true {
                     Toggle("Tests", isOn: $showsTests).toggleStyle(.checkbox)
                 }
                 IconButton(symbol: "arrow.clockwise", label: "Regenerate") { Task { await load() } }
             } content: {
-                if let graph, !graph.nodes.isEmpty {
+                if source == .system, system == nil, !loaded {
+                    ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 200)
+                } else if showsSystem, let system {
+                    SystemSummary(map: system)
+                    SystemDiagram(map: system, selected: $selected)
+                    if let graph { DriftCard(session: session, graph: graph, notes: notes) }
+                } else if let graph, !graph.nodes.isEmpty {
                     DiagramCard(graph: graph, selected: $selected)
                     DriftCard(session: session, graph: graph, notes: notes)
                 } else if loaded {
@@ -66,7 +80,11 @@ struct MapView: View {
                     ProgressView().controlSize(.small)
                 }
             }
-            if let graph, let id = selected, let node = graph.node(id) {
+            if showsSystem, let system, let id = selected, let part = system.part(id) {
+                Rectangle().fill(theme.line.color).frame(width: 1)
+                SystemInspector(session: session, workspace: workspace, map: system, part: part) { selected = nil }
+                    .frame(width: 300)
+            } else if !showsSystem, let graph, let id = selected, let node = graph.node(id) {
                 Rectangle().fill(theme.line.color).frame(width: 1)
                 Inspector(session: session, workspace: workspace, graph: graph, node: node) { selected = nil }
                     .frame(width: 290)
@@ -84,15 +102,25 @@ struct MapView: View {
             modules = output.succeeded ? ArchitectureGraph.swiftPackage(describeJSON: output.stdout) : nil
         } else {
             let files = workspace.files
-            modules = await Task.detached(priority: .utility) {
+            modules = await Task.detached(priority: .userInitiated) {
                 ArchitectureGraph.goModules(files: files) { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
                     ?? ArchitectureGraph.folders(files)
             }.value
         }
-        services = ComposeFile.load(projectRoot: root).map(ArchitectureGraph.compose)
-        if modules == nil, services != nil { source = .services }
+        let compose = ComposeFile.load(projectRoot: root)
+        services = compose.map(ArchitectureGraph.compose)
+        let files = workspace.files
+        let graph = modules
+        system = await Task.detached(priority: .userInitiated) {
+            SystemMap.build(files: files, read: { path in
+                // Only code and manifests are read; data files never are.
+                guard SystemMap.isReadable(path) else { return nil }
+                return try? String(contentsOf: root.appending(path: path), encoding: .utf8)
+            }, compose: compose, modules: graph)
+        }.value
+        if !sources.contains(source) { source = sources.first ?? .modules }
         notes = try? String(contentsOf: root.appending(path: ".dante/architecture.md"), encoding: .utf8)
-        if let selected, graph?.node(selected) == nil { self.selected = nil }
+        if let selected, graph?.node(selected) == nil, system?.part(selected) == nil { self.selected = nil }
         loaded = true
     }
 }

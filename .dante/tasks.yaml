@@ -272,3 +272,7 @@ tasks:
   title: "Tests: tick tests or run one category instead of the whole suite"
   phase: build
   state: review
+- id: DI-68
+  title: "Map: System view from frontend screens through API routes and backend to data and outside services"
+  phase: build
+  state: review
