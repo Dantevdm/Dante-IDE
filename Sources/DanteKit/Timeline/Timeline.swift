@@ -18,7 +18,8 @@ public struct TimelineEvent: Equatable, Sendable, Identifiable {
     public var outcome: Outcome = .neutral
     /// A commit hash, a Claude session id, or a CI run's address: what opening the event needs.
     public var reference: String?
-    /// A one-prompt Claude session: Dante's own commit messages, drafts and inline edits.
+    /// A one-prompt Claude session that used no tools: Dante's own commit messages, drafts
+    /// and inline edits (a one-question conversation in the panel reads files, so it isn't one).
     public var isQuick = false
 
     public init(id: String, kind: Kind, date: Date, title: String, detail: String? = nil, outcome: Outcome = .neutral,
@@ -171,6 +172,7 @@ public enum ClaudeTranscripts {
         var customTitle: String?
         var prompts = 0
         var edits = 0
+        var usedTools = false
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         for line in transcript.split(separator: "\n", omittingEmptySubsequences: true) {
@@ -182,6 +184,7 @@ public enum ClaudeTranscripts {
                 customTitle = value
                 continue
             }
+            if !usedTools, line.contains("\"type\":\"tool_use\"") { usedTools = true }
             if line.contains("\"name\":\"Edit\"") || line.contains("\"name\":\"Write\"") || line.contains("\"name\":\"MultiEdit\"") {
                 edits += 1
             }
@@ -203,7 +206,7 @@ public enum ClaudeTranscripts {
         if minutes > 0 { detail += " · \(minutes < 60 ? "\(minutes) min" : "\(minutes / 60) h \(minutes % 60) min")" }
         if edits > 0 { detail += " · \(edits) edit\(edits == 1 ? "" : "s")" }
         return TimelineEvent(id: "claude:\(id)", kind: .claude, date: last ?? start, title: shortTitle, detail: detail,
-                             reference: id, isQuick: prompts <= 1 && customTitle == nil)
+                             reference: id, isQuick: prompts <= 1 && !usedTools && customTitle == nil)
     }
 
     private static func timestamp(in line: Substring) -> String? {

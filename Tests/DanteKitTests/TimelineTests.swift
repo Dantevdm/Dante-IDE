@@ -30,6 +30,9 @@ import Testing
         #expect(ClaudeTranscripts.session(id: "abc", transcript: named)?.title == "Themes")
         let quick = #"{"type":"user","message":{"content":"Write a commit message"},"timestamp":"2026-05-01T10:00:01.000Z"}"#
         #expect(ClaudeTranscripts.session(id: "q", transcript: quick)?.isQuick == true)
+        // One question in the panel reads files; it's a conversation, not a one-shot job.
+        let asked = quick + "\n" + #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]},"timestamp":"2026-05-01T10:00:02.000Z"}"#
+        #expect(ClaudeTranscripts.session(id: "a", transcript: asked)?.isQuick == false)
         #expect(ClaudeTranscripts.session(id: "e", transcript: "") == nil)
     }
 

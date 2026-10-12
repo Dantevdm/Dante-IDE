@@ -59,18 +59,35 @@ struct ToolRow: View {
             }
 
             if case .failed(let message) = tool.status, !message.isEmpty {
-                Text(message.prefix(400))
-                    .font(.dante(size: 11, design: .monospaced))
-                    .foregroundStyle(theme.red.color)
-                    .lineLimit(4)
+                // Claude recovers from some failures on its own (a file too big to read in one
+                // go); those read as a note, not an error.
+                let routine = ToolRow.routineFailure(message)
+                Text(routine ?? String(message.prefix(400)))
+                    .font(.dante(size: 11, design: routine == nil ? .monospaced : .default))
+                    .foregroundStyle(routine == nil ? theme.red.color : theme.text3.color)
+                    .lineLimit(routine == nil ? 4 : 1)
                     .textSelection(.enabled)
                     .padding(.leading, 21)
+                    .help(message)
             }
 
             if tool.isAwaitingApproval, tool.name != "AskUserQuestion" {
                 ApprovalBar(tool: tool, claude: claude)
             }
         }
+    }
+
+    static func routineFailure(_ message: String) -> String? {
+        if message.contains("exceeds maximum allowed tokens") { return "Too long to read at once, so Claude reads it in parts." }
+        if message.contains("File has not been read yet") { return "Claude reads the file first, then retries." }
+        if message.contains("File has been modified since read") { return "The file changed; Claude re-reads it." }
+        if message.contains("String to replace not found") { return "The text had changed; Claude looks again." }
+        return nil
+    }
+
+    private var isRoutineFailure: Bool {
+        if case .failed(let message) = tool.status { return Self.routineFailure(message) != nil }
+        return false
     }
 
     @ViewBuilder
@@ -85,7 +102,9 @@ struct ToolRow: View {
         case .declined:
             Image(systemName: "nosign").font(.dante(size: 10, weight: .semibold)).foregroundStyle(theme.text3.color)
         case .failed:
-            Image(systemName: "xmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.red.color)
+            Image(systemName: isRoutineFailure ? "arrow.uturn.backward" : "xmark")
+                .font(.dante(size: 10, weight: .bold))
+                .foregroundStyle(isRoutineFailure ? theme.text3.color : theme.red.color)
         }
     }
 
