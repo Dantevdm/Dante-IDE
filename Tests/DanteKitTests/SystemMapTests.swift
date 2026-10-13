@@ -148,4 +148,69 @@ struct SystemMapTests {
         #expect(clients.first?.detail == "Next.js · 2 screens")
         #expect(clients.first?.items.map(\.text) == ["home", "orders/:id"])
     }
+
+    @Test func tablesWebhooksAndEnvironment() {
+        var files = Self.files
+        files["backend/internal/db/schema.sql"] = "CREATE TABLE IF NOT EXISTS orders (id INTEGER);\ncreate table \"settings\" (key TEXT);"
+        files["backend/internal/api/orders.go"] = """
+        package api
+        func (h *Handlers) list() { h.db.Query(`SELECT id FROM orders WHERE x = ?`) }
+        var token = os.Getenv("WHATSAPP_TOKEN")
+        var port = os.Getenv("PORT")
+        """
+        files["backend/internal/api/hooks.go"] = """
+        package api
+        func (h *Handlers) Register2(mux *http.ServeMux) {
+            mux.HandleFunc("POST /api/webhooks/whatsapp", h.inbound) // from graph.facebook.com
+        }
+        """
+        files["frontend/views/orders.js"] = "fetch('/api/orders'); const url = import.meta.env.VITE_API_URL"
+        let paths = files.keys.sorted()
+        let map = SystemMap.build(files: paths, read: { files[$0] }, modules: ArchitectureGraph.goModules(files: paths) { files[$0] })
+        let api = "code:example.com/shop/internal/api"
+
+        #expect(map.part("table:orders")?.detail == "SQLite table")
+        #expect(map.part("table:settings")?.detail == "SQLite table")
+        #expect(map.part("db:sqlite")?.items.map(\.text) == ["orders", "settings"])
+        #expect(map.links.contains { $0.from == api && $0.to == "table:orders" })
+        #expect(map.links.contains { $0.from == "code:example.com/shop/internal/db" && $0.to == "table:settings" })
+
+        #expect(map.part("route:/api/webhooks")?.isWebhook == true)
+        #expect(map.links.contains { $0.from == "ext:meta" && $0.to == "route:/api/webhooks" })
+
+        #expect(map.part(api)?.env == ["PORT", "WHATSAPP_TOKEN"])
+        #expect(map.part("client:frontend")?.env == ["VITE_API_URL"])
+        #expect(SystemMap.isSecret("WHATSAPP_TOKEN") && SystemMap.isSecret("SMTP_PASSWORD") && !SystemMap.isSecret("PORT"))
+    }
+
+    @Test func exportsMermaidIntoArchitectureNotes() {
+        let map = Self.build()
+        let chart = map.mermaid()
+        #expect(chart.hasPrefix("flowchart LR"))
+        #expect(chart.contains("subgraph API[\"API\"]") || chart.contains("[\"API"))
+        #expect(chart.contains("nclient_frontend --> nroute__api_orders"))
+        let date = Date(timeIntervalSince1970: 1_790_000_000)
+        let first = map.exporting(into: "# Notes\n\nKeep this.", date: date)
+        #expect(first.hasPrefix("# Notes\n\nKeep this.\n\n<!-- dante:system-map -->"))
+        let again = map.exporting(into: first + "\nAfter.", date: date)
+        #expect(again.components(separatedBy: "<!-- dante:system-map -->").count == 2)
+        #expect(again.hasSuffix("After."))
+    }
+
+    @Test func coverageReportsMatchProjectFiles() {
+        let files = ["backend/internal/api/handlers.go", "web/src/app.ts", "app/views.py", "other/api/handlers.go"]
+        let go = CoverageReport.parse("""
+        mode: set
+        example.com/shop/internal/api/handlers.go:10.2,12.3 2 1
+        example.com/shop/internal/api/handlers.go:14.2,15.3 3 0
+        example.com/shop/internal/api/handlers.go:10.2,12.3 2 0
+        """, files: files)
+        #expect(go.files["backend/internal/api/handlers.go"] == .init(covered: 2, total: 5))
+        #expect(go.files["other/api/handlers.go"] == nil)
+        let lcov = CoverageReport.parse("SF:/home/me/shop/web/src/app.ts\nLF:10\nLH:7\nend_of_record\n", files: files, root: "/home/me/shop")
+        #expect(lcov.files["web/src/app.ts"]?.fraction == 0.7)
+        let xml = CoverageReport.parse("<coverage><packages><package><classes><class filename=\"app/views.py\" line-rate=\"0.5\"><lines><line number=\"1\" hits=\"1\"/><line number=\"2\" hits=\"0\"/></lines></class></classes></package></packages></coverage>", files: files)
+        #expect(xml.files["app/views.py"] == .init(covered: 1, total: 2))
+    }
+
 }

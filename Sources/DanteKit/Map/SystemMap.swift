@@ -22,7 +22,7 @@ public struct SystemMap: Equatable, Sendable {
     }
 
     public enum Kind: String, Sendable {
-        case web, mobile, routes, app, package, database, cache, container, email, messaging, ai, payments, storage, monitoring, service
+        case web, mobile, routes, app, package, database, table, cache, container, email, messaging, ai, payments, storage, monitoring, service
     }
 
     /// A line inside a part: a screen, a route, a table. Routes keep where they're declared.
@@ -48,6 +48,10 @@ public struct SystemMap: Equatable, Sendable {
         public var items: [Item]
         /// The compose service it runs in, when there is one.
         public var container: String?
+        /// Environment variables it reads, by name only (from code and compose).
+        public var env: [String] = []
+        /// Incoming webhooks: routes in this group that outside services call.
+        public var isWebhook = false
 
         public init(id: String, name: String, lane: Lane, kind: Kind, detail: String = "", path: String? = nil, items: [Item] = [], container: String? = nil) {
             self.id = id
@@ -115,6 +119,7 @@ public struct SystemMap: Equatable, Sendable {
     public static func isReadable(_ path: String) -> Bool {
         let name = (path as NSString).lastPathComponent
         return codeExtensions.contains((path as NSString).pathExtension.lowercased())
+            || (path as NSString).pathExtension.lowercased() == "sql"
             || ["package.json", "go.mod", "requirements.txt", "pyproject.toml", "Cargo.toml", "Gemfile", "pubspec.yaml", "index.html", "schema.prisma", "pom.xml", "build.gradle"].contains(name)
     }
 
@@ -189,6 +194,7 @@ public struct SystemMap: Equatable, Sendable {
         }
 
         // API routes, grouped by their first meaningful path segment.
+        var webhookFiles: [(group: String, file: String)] = []
         var groups: [String: (items: [Item], owners: [String: Int])] = [:]
         for file in backendFiles {
             for route in routes(in: text(file)) where route.path != "/" {
@@ -214,7 +220,14 @@ public struct SystemMap: Equatable, Sendable {
             let order = ["GET", "POST", "PUT", "PATCH", "DELETE"]
             let detail = "\(value.items.count) route\(value.items.count == 1 ? "" : "s")" + (methods.isEmpty ? "" : " · " + methods.sorted { (order.firstIndex(of: $0) ?? 9) < (order.firstIndex(of: $1) ?? 9) }.joined(separator: " "))
             let id = "route:" + key
-            parts.append(Part(id: id, name: key == "…" ? "Other routes" : key, lane: .api, kind: .routes, detail: detail, items: value.items))
+            var part = Part(id: id, name: key == "…" ? "Other routes" : key, lane: .api, kind: .routes, detail: detail, items: value.items)
+            let hooks = value.items.filter { isWebhookRoute($0.text) }
+            if !hooks.isEmpty {
+                part.isWebhook = true
+                part.detail += " · webhook"
+                for hook in hooks { if let file = hook.file { webhookFiles.append((id, file)) } }
+            }
+            parts.append(part)
             for (owner, count) in value.owners { link(id, owner, count) }
         }
 
@@ -265,17 +278,56 @@ public struct SystemMap: Equatable, Sendable {
             let kind: Kind = lower.contains("redis") || lower.contains("memcache") ? .cache : .database
             stores.append(("db:" + lower, store, kind, "", [lower.components(separatedBy: " ").first ?? lower]))
         }
+        // Tables, from CREATE TABLE in the repo's SQL and code (never from a live database),
+        // with arrows from the packages whose queries name them.
+        var tableNames: [String] = []
+        for file in files where (file as NSString).pathExtension.lowercased() == "sql" || backendFiles.contains(file) {
+            guard !isTest(file), lower(file).contains("create table") else { continue }
+            for table in tables(in: text(file)) where !tableNames.contains(table) { tableNames.append(table) }
+        }
+        var tableUsers: [String: [String: Int]] = [:]
+        if !tableNames.isEmpty, let pattern = queryPattern(tableNames) {
+            for file in backendFiles {
+                let body = lower(file)
+                guard body.contains("select") || body.contains("insert") || body.contains("update") || body.contains("delete"),
+                      let owner = owner(file) else { continue }
+                let range = NSRange(body.startIndex..., in: body)
+                for match in pattern.matches(in: body, range: range) {
+                    if let name = Range(match.range(at: 1), in: body).map({ String(body[$0]) }),
+                       let table = tableNames.first(where: { $0.lowercased() == name }) {
+                        tableUsers[table, default: [:]][owner.id, default: 0] += 1
+                    }
+                }
+            }
+        }
+        let databases = stores.filter { $0.kind == .database }
+        let tableHome = databases.count == 1 ? databases[0].name : nil
+        let shownTables = tableNames.count <= 14 ? tableNames
+            : Array(tableNames.sorted { (tableUsers[$0]?.values.reduce(0, +) ?? 0) > (tableUsers[$1]?.values.reduce(0, +) ?? 0) }.prefix(13))
+        var ownersWithTables: Set<String> = []
+        for table in shownTables {
+            for (owner, _) in tableUsers[table] ?? [:] { ownersWithTables.insert(owner) }
+        }
+
         for store in stores {
-            parts.append(Part(id: store.id, name: store.name, lane: .data, kind: store.kind, detail: store.detail))
+            let items = store.kind == .database && store.id == databases.first?.id ? tableNames.map { Item($0) } : []
+            let detail = items.isEmpty ? store.detail : "\(items.count) table\(items.count == 1 ? "" : "s")" + (store.detail.isEmpty ? "" : " · " + store.detail)
+            parts.append(Part(id: store.id, name: store.name, lane: .data, kind: store.kind, detail: detail, items: items))
             var linked = false
             for file in backendFiles {
                 let body = lower(file)
                 if store.words.contains(where: { body.contains($0) }), let owner = owner(file) {
-                    link(owner.id, store.id)
                     linked = true
+                    if !ownersWithTables.contains(owner.id) || store.kind != .database { link(owner.id, store.id) }
                 }
             }
             if !linked { for part in backend where part.kind == .app { link(part.id, store.id) } }
+        }
+        for table in shownTables {
+            let users = tableUsers[table] ?? [:]
+            parts.append(Part(id: "table:" + table, name: table, lane: .data, kind: .table,
+                              detail: [tableHome.map { "\($0) table" } ?? "table", users.isEmpty ? "no queries found" : nil].compactMap { $0 }.joined(separator: " · ")))
+            for (owner, count) in users { link(owner, "table:" + table, count) }
         }
 
         // Outside services, from imports and URLs. Packages that only store settings (db,
@@ -301,6 +353,15 @@ public struct SystemMap: Equatable, Sendable {
             let name = service.id == "meta" && mentionsWhatsApp ? "WhatsApp Cloud API" : service.name
             parts.append(Part(id: "ext:" + service.id, name: name, lane: .outside, kind: service.kind, detail: service.detail))
             for (user, count) in users { link(user, "ext:" + service.id, count) }
+        }
+        // Incoming webhooks: the service whose name or host the handler mentions calls the route.
+        for (group, file) in webhookFiles {
+            let body = lower(file)
+            for service in outsideServices where parts.contains(where: { $0.id == "ext:" + service.id }) {
+                if service.patterns.contains(where: { body.contains($0.lowercased()) }) || body.contains(service.id + " webhook") {
+                    link("ext:" + service.id, group)
+                }
+            }
         }
 
         // Containers: services built from the repo mark the parts they run; data images join
@@ -335,6 +396,27 @@ public struct SystemMap: Equatable, Sendable {
                 for part in parts where part.container == dependent.name && part.lane == .backend && part.kind == .app { link(part.id, id) }
             }
         }
+
+        // Environment variables each part reads: names from the code, and compose's
+        // environment for the container a part runs in.
+        var env: [String: Set<String>] = [:]
+        for file in code {
+            let body = text(file)
+            guard body.contains("env") || body.contains("ENV") else { continue }
+            let names = environmentNames(in: body)
+            guard !names.isEmpty else { continue }
+            if let client = clientOwning(file) {
+                env[client.id, default: []].formUnion(names)
+            } else if let owner = owner(file) {
+                env[owner.id, default: []].formUnion(names)
+            }
+        }
+        for service in compose?.services ?? [] where !service.environment.isEmpty {
+            let runs = parts.filter { $0.container == service.name && $0.lane != .api }
+            let target = runs.first { $0.kind == .app } ?? runs.first
+            if let target { env[target.id, default: []].formUnion(service.environment.keys) }
+        }
+        for index in parts.indices { parts[index].env = (env[parts[index].id] ?? []).sorted() }
 
         let ordered = links.values.sorted { ($0.from, $0.to) < ($1.from, $1.to) }
         return SystemMap(parts: parts, links: ordered)
@@ -462,6 +544,61 @@ public struct SystemMap: Equatable, Sendable {
         return text.matches(of: /["'`](\/(?:api|v\d)(?:\/[^"'`\s?$]*)?)/).map { String($0.1) }
     }
 
+    // MARK: Tables, webhooks and environment
+
+    /// Table names from `CREATE TABLE` statements.
+    static func tables(in text: String) -> [String] {
+        let pattern = try! NSRegularExpression(pattern: #"create\s+(?:virtual\s+)?table\s+(?:if\s+not\s+exists\s+)?(?:[`"\[]?\w+[`"\]]?\.)?[`"\[]?(\w+)"#, options: .caseInsensitive)
+        var found: [String] = []
+        let range = NSRange(text.startIndex..., in: text)
+        for match in pattern.matches(in: text, range: range) {
+            if let name = Range(match.range(at: 1), in: text).map({ String(text[$0]) }), !found.contains(name), !name.lowercased().hasPrefix("sqlite_") {
+                found.append(name)
+            }
+        }
+        return found
+    }
+
+    /// Matches a query naming one of `tables` (in lowercased text): FROM, INTO, UPDATE, JOIN.
+    static func queryPattern(_ tables: [String]) -> NSRegularExpression? {
+        let names = tables.map { NSRegularExpression.escapedPattern(for: $0.lowercased()) }.joined(separator: "|")
+        return try? NSRegularExpression(pattern: #"\b(?:from|into|update|join|table)\s+[`"\[]?("# + names + #")\b"#)
+    }
+
+    static func isWebhookRoute(_ route: String) -> Bool {
+        let lower = route.lowercased()
+        return lower.contains("webhook") || lower.contains("/hooks/") || lower.contains("callback")
+    }
+
+    /// Environment variable names read in code: Go, JavaScript, Python, Ruby, Rust, Swift.
+    static func environmentNames(in text: String) -> Set<String> {
+        let pattern = try! NSRegularExpression(pattern: [
+            #"os\.(?:Getenv|LookupEnv)\("([A-Za-z_][A-Za-z0-9_]*)""#,
+            #"(?:process|import\.meta)\.env\.([A-Za-z_][A-Za-z0-9_]*)"#,
+            #"process\.env\[["']([A-Za-z_][A-Za-z0-9_]*)"#,
+            #"os\.(?:environ\.get|getenv)\(\s*["']([A-Za-z_][A-Za-z0-9_]*)"#,
+            #"os\.environ\[["']([A-Za-z_][A-Za-z0-9_]*)"#,
+            #"ENV(?:\.fetch\(|\[)["']([A-Za-z_][A-Za-z0-9_]*)"#,
+            #"env::var\("([A-Za-z_][A-Za-z0-9_]*)""#,
+            #"environment\["([A-Za-z_][A-Za-z0-9_]*)"\]"#,
+        ].joined(separator: "|"))
+        var names: Set<String> = []
+        let range = NSRange(text.startIndex..., in: text)
+        for match in pattern.matches(in: text, range: range) {
+            for group in 1..<match.numberOfRanges {
+                if let range = Range(match.range(at: group), in: text) { names.insert(String(text[range])) }
+            }
+        }
+        return names
+    }
+
+    /// Names that usually hold a secret: keys, tokens, passwords.
+    public static func isSecret(_ name: String) -> Bool {
+        let upper = name.uppercased()
+        return ["SECRET", "TOKEN", "PASSWORD", "PASSWD", "API_KEY", "APIKEY", "PRIVATE", "CREDENTIAL", "_KEY", "DSN"].contains { upper.contains($0) }
+            || upper.hasSuffix("_PASS") || upper.hasPrefix("KEY_")
+    }
+
     // MARK: Outside services
 
     struct OutsideService {
@@ -498,4 +635,74 @@ public struct SystemMap: Equatable, Sendable {
         .init(id: "kafka", name: "Kafka", kind: .messaging, detail: "event stream", patterns: ["segmentio/kafka-go", "confluent-kafka", "kafkajs", "IBM/sarama"]),
         .init(id: "rabbitmq", name: "RabbitMQ", kind: .messaging, detail: "queues", patterns: ["amqp091", "streadway/amqp", "amqplib", "import pika"]),
     ]
+}
+
+extension SystemMap {
+    /// Coverage per part: files under a part's path (or its routes' files), from a report.
+    public func coverage(_ report: CoverageReport) -> [String: CoverageReport.Lines] {
+        var result: [String: CoverageReport.Lines] = [:]
+        let owners = parts.filter { ($0.lane == .backend || ($0.lane == .clients && $0.id.hasPrefix("client:"))) && $0.path != nil }
+        for (file, lines) in report.files {
+            let owner = owners.filter { part in
+                let path = part.path ?? ""
+                return path == "." || path.isEmpty ? true : file.hasPrefix(path + "/")
+            }.max { ($0.path ?? "").count < ($1.path ?? "").count }
+            if let owner { add(lines, to: owner.id) }
+            for part in parts where part.lane == .api && part.items.contains(where: { $0.file == file }) || part.id.hasPrefix("screen:") && part.path == file {
+                add(lines, to: part.id)
+            }
+        }
+        func add(_ lines: CoverageReport.Lines, to id: String) {
+            var total = result[id] ?? CoverageReport.Lines(covered: 0, total: 0)
+            total.covered += lines.covered
+            total.total += lines.total
+            result[id] = total
+        }
+        return result.filter { $0.value.total > 0 }
+    }
+
+    /// The map as a Mermaid flowchart, one subgraph per lane.
+    public func mermaid() -> String {
+        func node(_ id: String) -> String {
+            "n" + String(id.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : "_" })
+        }
+        func label(_ text: String) -> String { text.replacingOccurrences(of: "\"", with: "'") }
+        var lines = ["flowchart LR"]
+        for (lane, parts) in lanes where !parts.isEmpty {
+            lines.append("  subgraph \(lane.title.replacingOccurrences(of: " ", with: "_"))[\"\(lane.title)\"]")
+            for part in parts {
+                let shape = part.kind == .database || part.kind == .table ? ("[(\"", "\")]") : ("[\"", "\"]")
+                lines.append("    \(node(part.id))\(shape.0)\(label(part.name))\(shape.1)")
+            }
+            lines.append("  end")
+        }
+        for link in links {
+            lines.append("  \(node(link.from)) --> \(node(link.to))")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    static let markerStart = "<!-- dante:system-map -->"
+    static let markerEnd = "<!-- /dante:system-map -->"
+
+    /// architecture.md with the map's section added or replaced; the rest is left alone.
+    public func exporting(into document: String?, date: Date = .now) -> String {
+        let day = date.formatted(.iso8601.year().month().day())
+        let section = """
+        \(Self.markerStart)
+        ## System map
+
+        Drawn by Dante from the code on \(day). Regenerate it from Map → System → Export.
+
+        ```mermaid
+        \(mermaid())
+        ```
+        \(Self.markerEnd)
+        """
+        guard let document, !document.isEmpty else { return "# Architecture\n\n" + section + "\n" }
+        if let start = document.range(of: Self.markerStart), let end = document.range(of: Self.markerEnd, range: start.upperBound..<document.endIndex) {
+            return document.replacingCharacters(in: start.lowerBound..<end.upperBound, with: section)
+        }
+        return document.trimmingCharacters(in: .newlines) + "\n\n" + section + "\n"
+    }
 }

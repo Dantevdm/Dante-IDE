@@ -22,6 +22,8 @@ struct MapView: View {
     @State private var selected: String?
     @State private var notes: String?
     @State private var loaded = false
+    @State private var coverage: CoverageReport?
+    @AppStorage("mapShowsCoverage") private var showsCoverage = false
 
     private var showsSystem: Bool { source == .system && system?.isUseful == true }
 
@@ -54,13 +56,22 @@ struct MapView: View {
                 if !showsSystem, (source == .modules ? modules : services)?.nodes.contains(where: { $0.kind == .test }) == true {
                     Toggle("Tests", isOn: $showsTests).toggleStyle(.checkbox)
                 }
+                if showsSystem, let coverage {
+                    Toggle("Coverage", isOn: $showsCoverage)
+                        .toggleStyle(.checkbox)
+                        .fixedSize()
+                        .help("Line coverage from \(coverage.source)\(coverage.date.map { ", written " + $0.formatted(.relative(presentation: .named)) } ?? "")")
+                }
+                if showsSystem, let system {
+                    IconButton(symbol: "square.and.arrow.up", label: "Export as Mermaid into .dante/architecture.md") { exportMermaid(system) }
+                }
                 IconButton(symbol: "arrow.clockwise", label: "Regenerate") { Task { await load() } }
             } content: {
                 if source == .system, system == nil, !loaded {
                     ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 200)
                 } else if showsSystem, let system {
                     SystemSummary(map: system)
-                    SystemDiagram(map: system, selected: $selected)
+                    SystemDiagram(map: system, selected: $selected, coverage: showsCoverage ? coverage.map(system.coverage) : nil)
                     if let graph { DriftCard(session: session, graph: graph, notes: notes) }
                 } else if let graph, !graph.nodes.isEmpty {
                     DiagramCard(graph: graph, selected: $selected)
@@ -82,7 +93,7 @@ struct MapView: View {
             }
             if showsSystem, let system, let id = selected, let part = system.part(id) {
                 Rectangle().fill(theme.line.color).frame(width: 1)
-                SystemInspector(session: session, workspace: workspace, map: system, part: part) { selected = nil }
+                SystemInspector(session: session, workspace: workspace, map: system, part: part, coverage: coverage.flatMap { system.coverage($0)[part.id] }) { selected = nil }
                     .frame(width: 300)
             } else if !showsSystem, let graph, let id = selected, let node = graph.node(id) {
                 Rectangle().fill(theme.line.color).frame(width: 1)
@@ -93,6 +104,18 @@ struct MapView: View {
         .background(theme.ground.color)
         .task(id: workspace.revision) { await load() }
         .onChange(of: source) { selected = nil }
+    }
+
+    private func exportMermaid(_ map: SystemMap) {
+        let url = workspace.danteFolder.appending(path: "architecture.md")
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let current = try? String(contentsOf: url, encoding: .utf8)
+            try map.exporting(into: current).write(to: url, atomically: true, encoding: .utf8)
+            session.open(file: url)
+        } catch {
+            session.errorMessage = "Couldn’t write architecture.md: \(error.localizedDescription)"
+        }
     }
 
     private func load() async {
@@ -115,9 +138,13 @@ struct MapView: View {
             SystemMap.build(files: files, read: { path in
                 // Only code and manifests are read; data files never are.
                 guard SystemMap.isReadable(path) else { return nil }
-                return try? String(contentsOf: root.appending(path: path), encoding: .utf8)
+                let url = root.appending(path: path)
+                // SQL is read for CREATE TABLE only; a large file is a dump, not a schema.
+                if path.lowercased().hasSuffix(".sql"), ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) > 1_000_000 { return nil }
+                return try? String(contentsOf: url, encoding: .utf8)
             }, compose: compose, modules: graph)
         }.value
+        coverage = await Task.detached(priority: .utility) { CoverageReport.load(root: root, files: files) }.value
         if !sources.contains(source) { source = sources.first ?? .modules }
         notes = try? String(contentsOf: root.appending(path: ".dante/architecture.md"), encoding: .utf8)
         if let selected, graph?.node(selected) == nil, system?.part(selected) == nil { self.selected = nil }

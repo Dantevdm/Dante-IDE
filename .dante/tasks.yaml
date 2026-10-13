@@ -327,23 +327,23 @@ tasks:
 - id: DI-81
   title: "Map: database tables in the Data lane, with arrows from the code that queries them"
   phase: build
-  state: todo
+  state: review
 - id: DI-82
   title: "Map: incoming webhooks from outside services"
   phase: build
-  state: todo
+  state: review
 - id: DI-83
   title: "Map: environment variables and secrets per part"
   phase: build
-  state: todo
+  state: review
 - id: DI-84
   title: "Map: export the System map as Mermaid into .dante/architecture.md"
   phase: build
-  state: todo
+  state: review
 - id: DI-85
   title: "Map: test coverage per part"
   phase: build
-  state: todo
+  state: review
 - id: DI-86
   title: "Ship: Claude reviews the branch diff before a pull request"
   phase: build

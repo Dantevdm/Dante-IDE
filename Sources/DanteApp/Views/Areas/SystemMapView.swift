@@ -7,6 +7,8 @@ struct SystemDiagram: View {
     @Environment(\.theme) private var theme
     let map: SystemMap
     @Binding var selected: String?
+    /// Line coverage per part, when the overlay is on.
+    var coverage: [String: CoverageReport.Lines]?
 
     static let width: CGFloat = 180
     static let gap: CGFloat = 44
@@ -50,7 +52,8 @@ struct SystemDiagram: View {
                                     LaneHeader(lane: section.lane, count: section.parts.count).padding(.top, 10)
                                 }
                                 ForEach(section.parts) { part in
-                                    PartBox(part: part, state: state(of: part), hue: hue(section.lane), showsContainer: showsContainer(part)) {
+                                    PartBox(part: part, state: state(of: part), hue: hue(section.lane), showsContainer: showsContainer(part),
+                                            coverage: coverage.map { $0[part.id]?.fraction ?? -1 }) {
                                         selected = selected == part.id ? nil : part.id
                                     }
                                     .anchorPreference(key: PartBoundsKey.self, value: .bounds) { [part.id: $0] }
@@ -184,6 +187,8 @@ private struct PartBox: View {
     let state: SystemDiagram.PartState
     let hue: Color
     var showsContainer = true
+    /// 0…1 with the overlay on; negative when the report has nothing for this part.
+    var coverage: Double?
     let action: () -> Void
     @State private var hovering = false
 
@@ -220,6 +225,9 @@ private struct PartBox: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.leading, 29)
+                }
+                if let coverage, part.lane != .data, part.lane != .outside {
+                    CoverageBar(fraction: coverage).padding(.leading, 29)
                 }
                 if showsContainer, let container = part.container {
                     HStack(spacing: 4) {
@@ -268,6 +276,7 @@ private struct PartBox: View {
         case .app: "terminal"
         case .package: "shippingbox"
         case .database: "cylinder.split.1x2"
+        case .table: "tablecells"
         case .cache: "bolt.horizontal"
         case .container: "cube"
         case .email: "envelope"
@@ -278,6 +287,34 @@ private struct PartBox: View {
         case .monitoring: "waveform.path.ecg"
         case .service: "globe"
         }
+    }
+}
+
+/// How much of a part the tests run: a bar and a percentage, coloured by how much.
+private struct CoverageBar: View {
+    @Environment(\.theme) private var theme
+    let fraction: Double
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if fraction < 0 {
+                Text("no coverage data").font(.dante(size: 10)).foregroundStyle(theme.text3.color)
+            } else {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(theme.raised.color)
+                        Capsule().fill(color).frame(width: max(3, proxy.size.width * fraction))
+                    }
+                }
+                .frame(height: 5)
+                Text("\(Int((fraction * 100).rounded()))%").font(.dante(size: 10, weight: .medium, design: .monospaced)).foregroundStyle(color)
+            }
+        }
+        .help(fraction < 0 ? "The coverage report has no lines from this part" : "Lines the tests run")
+    }
+
+    private var color: Color {
+        fraction >= 0.7 ? theme.green.color : fraction >= 0.4 ? theme.amber.color : theme.red.color
     }
 }
 
@@ -323,11 +360,13 @@ struct SystemSummary: View {
     var body: some View {
         let clients = map.parts.filter { $0.lane == .clients && !$0.id.hasPrefix("screen:") }
         let screens = clients.reduce(0) { $0 + $1.items.count }
+        let stores = map.parts.filter { $0.lane == .data && $0.kind != .table }
+        let tables = map.parts.filter { $0.kind == .table }.count
         let stats: [(String, String, String)] = [
             ("\(clients.count)", "client" + (clients.count == 1 ? "" : "s"), screens > 0 ? "\(screens) screens" : ""),
             ("\(map.routeCount)", "API routes", "\(map.parts.filter { $0.lane == .api }.count) groups"),
             ("\(map.parts.filter { $0.lane == .backend }.count)", "backend parts", ""),
-            ("\(map.parts.filter { $0.lane == .data }.count)", "data stores", map.parts.filter { $0.lane == .data }.map(\.name).joined(separator: ", ")),
+            ("\(stores.count)", stores.count == 1 ? "data store" : "data stores", tables > 0 ? "\(stores.map(\.name).joined(separator: ", ")) · \(tables) tables" : stores.map(\.name).joined(separator: ", ")),
             ("\(map.parts.filter { $0.lane == .outside }.count)", "outside services", map.parts.filter { $0.lane == .outside }.map(\.name).prefix(3).joined(separator: ", ")),
         ]
         HStack(spacing: 10) {
@@ -356,6 +395,7 @@ struct SystemInspector: View {
     let workspace: Workspace
     let map: SystemMap
     let part: SystemMap.Part
+    var coverage: CoverageReport.Lines?
     let close: () -> Void
 
     var body: some View {
@@ -372,7 +412,7 @@ struct SystemInspector: View {
                 }
                 if !part.items.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Eyebrow(part.lane == .api ? "Routes" : part.lane == .clients ? "Screens" : "Inside")
+                        Eyebrow(part.lane == .api ? "Routes" : part.lane == .clients ? "Screens" : part.kind == .database ? "Tables" : "Inside")
                         ForEach(part.items, id: \.self) { item in
                             Button {
                                 if let file = item.file { session.open(file: workspace.url.appending(path: file), line: item.line ?? 1) }
@@ -393,8 +433,24 @@ struct SystemInspector: View {
                         }
                     }
                 }
+                if !part.env.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Eyebrow("Environment")
+                        ForEach(part.env, id: \.self) { name in
+                            HStack(spacing: 6) {
+                                Image(systemName: SystemMap.isSecret(name) ? "lock.fill" : "dollarsign")
+                                    .font(.dante(size: 9.5))
+                                    .foregroundStyle(SystemMap.isSecret(name) ? theme.amber.color : theme.text3.color)
+                                    .frame(width: 12)
+                                Text(name).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color).textSelection(.enabled)
+                            }
+                            .help(SystemMap.isSecret(name) ? "Looks like a secret: keep it out of the repo" : "")
+                        }
+                    }
+                }
                 VStack(alignment: .leading, spacing: 0) {
                     if let path = part.path { row("Path", path, mono: true) }
+                    if let coverage { row("Coverage", "\(Int((coverage.fraction * 100).rounded()))% of \(coverage.total) lines") }
                     if let container = part.container { row("Runs in", "\(container) container", mono: false) }
                     row("Uses", map.uses(part.id).map(\.name).joined(separator: ", ").nonEmpty ?? "nothing found")
                     row("Used by", map.usedBy(part.id).map(\.name).joined(separator: ", ").nonEmpty ?? "nothing found")
