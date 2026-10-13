@@ -387,7 +387,7 @@ tasks:
 - id: DI-96
   title: "Merge conflicts: a three-way view in Changes"
   phase: build
-  state: todo
+  state: review
 - id: DI-97
   title: "Debugger: Debug Adapter Protocol, breakpoints and stepping (Go via dlv, Python via debugpy)"
   phase: build

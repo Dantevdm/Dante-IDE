@@ -368,8 +368,51 @@ public enum GitRepository {
         try await git(["checkout", "-q", "-b", name], in: root)
     }
 
-    private static func git(_ arguments: [String], in root: URL, network: Bool = false) async throws {
-        var extra: [String: String] = [:]
+    // MARK: Conflicts
+
+    /// The merge, rebase, cherry-pick or revert waiting on conflicts, if any.
+    public static func operation(in root: URL) async -> MergeOperation? {
+        let gitDir = await Shell.run(["git", "rev-parse", "--absolute-git-dir"], in: root)
+        guard gitDir.succeeded, !gitDir.stdout.isEmpty else { return nil }
+        let folder = URL(filePath: gitDir.stdout)
+        return MergeOperation.detect { try? String(contentsOf: folder.appending(path: $0), encoding: .utf8) }
+    }
+
+    /// The file's conflict written again from the index stages with diff3 markers, so each
+    /// hunk has its base even when the working file's markers don't.
+    public static func diff3(of path: String, in root: URL) async -> MergeConflict? {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "dante-merge-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var files: [String] = []
+        for (stage, name) in [(2, "ours"), (1, "base"), (3, "theirs")] {
+            // A file added on both sides has no base: merge against an empty one.
+            let blob = await Shell.run(["git", "show", ":\(stage):\(path)"], in: root, trimming: false)
+            let url = folder.appending(path: name)
+            try? Data((blob.succeeded ? blob.stdout : "").utf8).write(to: url)
+            files.append(url.path)
+        }
+        let merged = await Shell.run(["git", "merge-file", "-p", "--diff3", "-L", "ours", "-L", "base", "-L", "theirs"] + files, in: root, trimming: false)
+        return MergeConflict.parse(merged.stdout)
+    }
+
+    /// Writes the resolved text and stages it, which is how git marks a conflict resolved.
+    public static func markResolved(_ path: String, text: String, in root: URL) async throws {
+        try Data(text.utf8).write(to: root.appending(path: path))
+        try await git(["add", "--", path], in: root)
+    }
+
+    /// `git merge --continue` and the like, without opening an editor for the message.
+    public static func continueOperation(_ operation: MergeOperation, in root: URL) async throws {
+        try await git(operation.continueArguments, in: root, extra: ["GIT_EDITOR": "true"])
+    }
+
+    public static func abortOperation(_ operation: MergeOperation, in root: URL) async throws {
+        try await git(operation.abortArguments, in: root)
+    }
+
+    private static func git(_ arguments: [String], in root: URL, network: Bool = false, extra more: [String: String] = [:]) async throws {
+        var extra = more
         if network {
             // Fail rather than wait on an SSH passphrase or host-key prompt nobody can see.
             extra["GIT_SSH_COMMAND"] = ProcessInfo.processInfo.environment["GIT_SSH_COMMAND"] ?? "ssh -o BatchMode=yes"

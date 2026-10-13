@@ -9,7 +9,7 @@ struct StatusBar: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            if let branch = session.branch {
+            if let branch = session.git.status?.branch ?? session.branch {
                 Label(branch, systemImage: "arrow.triangle.branch")
             }
             if let current = workspace.lifecycle.currentIndex {

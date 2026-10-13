@@ -14,7 +14,9 @@ struct EditorArea: View {
             if !workspace.documents.isEmpty {
                 TabBar(session: session, workspace: workspace)
             }
-            if let target = session.git.diff {
+            if let target = session.git.diff, target.change.isConflicted {
+                ConflictView(session: session, workspace: workspace, change: target.change)
+            } else if let target = session.git.diff {
                 DiffView(session: session, workspace: workspace, target: target)
             } else if let panes = workspace.panes, let split = workspace.split {
                 HSplitView {

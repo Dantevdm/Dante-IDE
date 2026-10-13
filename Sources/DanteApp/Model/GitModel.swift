@@ -21,6 +21,8 @@ final class GitModel {
     private(set) var writingMessage = false
     /// The file whose diff the editor area shows.
     var diff: DiffTarget?
+    /// A merge, rebase, cherry-pick or revert stopped on conflicts.
+    private(set) var operation: MergeOperation?
 
     struct DiffTarget: Equatable {
         var change: GitStatus.Change
@@ -41,6 +43,7 @@ final class GitModel {
         self.root = root
         guard let root else { status = nil; branches = []; return }
         status = await GitRepository.status(in: root)
+        operation = status == nil ? nil : await GitRepository.operation(in: root)
         // Keep the open diff on the side of the file that still has changes.
         if let target = diff {
             if let change = status?.changes.first(where: { $0.path == target.change.path }) {
@@ -92,6 +95,30 @@ final class GitModel {
         diff = nil
         notice = "Committed “\(text.components(separatedBy: "\n")[0])”"
         if thenPush { await push() }
+    }
+
+    // MARK: Conflicts
+
+    /// Writes and stages the resolved file, then shows the next conflict.
+    func resolve(_ path: String, text: String) async {
+        guard await perform("Marking resolved…", { try await GitRepository.markResolved(path, text: text, in: $0) }) else { return }
+        notice = "Resolved \((path as NSString).lastPathComponent)"
+        diff = status?.conflicted.first.map { DiffTarget(change: $0, staged: false) }
+    }
+
+    func continueOperation() async {
+        guard let operation else { return }
+        if await perform("Continuing…", { try await GitRepository.continueOperation(operation, in: $0) }) {
+            notice = self.operation == nil ? "Finished the \(operation.kind.rawValue)" : "Next commit: resolve its conflicts"
+        }
+    }
+
+    func abortOperation() async {
+        guard let operation else { return }
+        if await perform("Aborting…", { try await GitRepository.abortOperation(operation, in: $0) }) {
+            diff = nil
+            notice = "Aborted the \(operation.kind.rawValue); back where you started"
+        }
     }
 
     // MARK: Remote

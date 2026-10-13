@@ -9,6 +9,7 @@ struct ChangesPanel: View {
     let session: Session
     let workspace: Workspace
     @State private var confirmDiscard: [GitStatus.Change]?
+    @State private var confirmAbort = false
 
     private var git: GitModel { session.git }
 
@@ -17,6 +18,7 @@ struct ChangesPanel: View {
             if let status = git.status {
                 commitBox(status)
                 if let error = git.error { banner(error) }
+                if let operation = git.operation { operationBanner(operation, conflicts: status.conflicted) }
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         if status.changes.isEmpty {
@@ -44,6 +46,11 @@ struct ChangesPanel: View {
                 .padding(14)
             }
         }
+        .confirmationDialog("Abort the \(git.operation?.kind.rawValue ?? "operation")?", isPresented: $confirmAbort) {
+            Button("Abort", role: .destructive) { Task { await git.abortOperation() } }
+        } message: {
+            Text("The branch goes back to how it was before it started, and conflict resolutions so far are lost.")
+        }
         .confirmationDialog(discardTitle, isPresented: Binding(get: { confirmDiscard != nil }, set: { if !$0 { confirmDiscard = nil } })) {
             Button("Discard Changes", role: .destructive) {
                 if let changes = confirmDiscard { Task { await git.discard(changes) } }
@@ -56,6 +63,37 @@ struct ChangesPanel: View {
     private var discardTitle: String {
         guard let changes = confirmDiscard else { return "" }
         return changes.count == 1 ? "Discard changes to \((changes[0].path as NSString).lastPathComponent)?" : "Discard \(changes.count) changes?"
+    }
+
+    // MARK: Merge, rebase, cherry-pick
+
+    private func operationBanner(_ operation: MergeOperation, conflicts: [GitStatus.Change]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.merge").foregroundStyle(conflicts.isEmpty ? theme.green.color : theme.amber.color)
+                Text(operation.title).font(.dante(size: 12.5, weight: .semibold)).foregroundStyle(theme.text.color).lineLimit(1)
+            }
+            Text(conflicts.isEmpty
+                 ? "All conflicts resolved. Continue to finish."
+                 : "\(conflicts.count) file\(conflicts.count == 1 ? "" : "s") with conflicts. Open one to choose between the sides.")
+                .font(.dante(size: 11.5))
+                .foregroundStyle(theme.text2.color)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Button("Continue") { Task { await git.continueOperation() } }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+                    .disabled(!conflicts.isEmpty || git.busy != nil)
+                Button("Abort…") { confirmAbort = true }
+                    .buttonStyle(DanteButtonStyle())
+                    .disabled(git.busy != nil)
+                Spacer()
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.amber.opacity(conflicts.isEmpty ? 0.06 : 0.12).color))
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
     }
 
     // MARK: Commit box
@@ -222,6 +260,8 @@ struct ChangesPanel: View {
                     discard: staged || change.isConflicted ? nil : { confirmDiscard = [change] },
                     staged: staged
                 )
+                // A file moving between groups (resolved, staged) gets a fresh row.
+                .id("\(title)/\(change.path)")
             }
         }
     }
