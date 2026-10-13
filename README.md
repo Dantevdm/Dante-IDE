@@ -1,12 +1,39 @@
-# Dante
+<p align="center"><img src="docs/images/icon.png" width="128" alt="Dante's icon"></p>
 
-A native macOS IDE organised around the whole software lifecycle: Discover, Define, Design, Build, Test, Release, Operate. Claude works alongside you as a pair, proposing changes you approve.
+<h1 align="center">Dante</h1>
 
-Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dante/`, so you and Claude are reading the same source of truth.
+<p align="center">A native macOS IDE organised around the whole software lifecycle, with Claude as a pair.</p>
 
-**Status:** milestone 3. Every lifecycle area has a working screen: Home, Plan, Map, Code, Tests, Env, Ship, Run, Docs and Spec, and the editor has tree-sitter highlighting and language servers. See the [design canvas](https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi).
+Dante follows a project from Discover through Define, Design, Build, Test, Release and Operate. The plan, tasks, docs and decisions live in the repo under `.dante/`, so you and Claude read the same source of truth, and Claude proposes every change as a diff you approve.
 
-## What works today
+![The system map: clients, API routes, backend, data and outside services, with test coverage](docs/images/map.jpg)
+
+| | |
+| --- | --- |
+| ![The editor with Claude beside it](docs/images/code.jpg) | ![Plan: phases, checklists and the task board](docs/images/plan.jpg) |
+| ![Docs with a sequence diagram drawn natively](docs/images/docs.jpg) | |
+
+## Install
+
+Download the DMG from [Releases](https://github.com/Dantevdm/Dante-IDE/releases), open it and drag Dante to Applications. Builds that aren't notarised yet need a right-click → Open the first time (or `xattr -dr com.apple.quarantine /Applications/Dante.app`).
+
+You'll want [Claude Code](https://claude.com/claude-code) installed and signed in for the Claude features, and git. Settings → Tools lists the optional extras (language servers, database clients, the GitHub CLI, Docker) with the command to install each.
+
+## The areas
+
+- **Home**: the project at a glance, and what changed since you were last here
+- **Plan**: lifecycle phases with ready and done checklists, and a task board; a task gets its own branch and Claude conversation
+- **Map**: the system from the code itself: screens, API routes, packages, tables, outside services and webhooks, with coverage and drift against your architecture notes
+- **Code**: a TextKit 2 editor with tree-sitter highlighting, language servers, split panes, git gutter and blame, search and replace, and ⌘I to edit with Claude
+- **Tests**: run the suite, only what your changes touch, or one test; history, flaky tests and the code no test covers
+- **Env** and **Data**: Docker Compose services with logs and port conflicts explained; Postgres, MySQL and SQLite browsing, query plans and migration previews
+- **Ship** and **Run**: changelog, CI and tags; Finish Task commits, has Claude review the branch, and opens the pull request; alarms, health checks and production logs
+- **Docs**, **Spec** and **Timeline**: markdown with native Mermaid diagrams, the `.dante` folder and exactly what Claude is told, and one stream of commits, Claude sessions, test runs and CI
+- **Claude**: the pair panel with diffs to approve, undo for a whole turn, `@file` mentions and `/` commands, plus skills, memory, plugins and usage in the Claude area
+
+<details>
+<summary><b>Everything that works today</b></summary>
+
 
 - Launch screen with recent projects, plus new project, open folder and clone
 - Dark, Light and Paper themes (⌥⌘T to cycle), set in Geist and Geist Mono (bundled; a setting switches to the system fonts)
@@ -40,12 +67,14 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Tests (⌘U): runs the project's tests (Swift, cargo, go, npm/pnpm/yarn/bun, pytest, or `test.command`), groups results by suite, re-runs just the failures (⇧⌘U) or any single test, and hands failures to Claude. Written lists every test in the code by category (Unit, Integration, End-to-end, UI, Performance, or your own from `test.categories` globs in project.yaml) and file, with each one's last result; results can be grouped by category too. History charts runs on this Mac and flags flaky and long-failing tests. Untested lists the functions and types no test names, logic before views, with Write tests per file and a concrete brief for Claude
 - Env: Docker Compose services with start, stop, logs, and Dockerfiles that are missing. Logs follow every service or one, with search (highlighted, or only matching lines), a level filter, the app's timestamps set apart, errors and warnings marked, and copy. They open at the newest line and stay there as lines arrive; scroll up to read back (following stops) and Jump to latest to return. The last 500 lines load by default, or 2,000, 10,000 or everything. Start and Rebuild show compose's output as it runs, and each service that isn't up says why: a failing health check (with the check's own error), a port something else on this Mac already holds, or a dependency it's waiting on. Find the cause hands that to Claude. A Ports card shows every port the compose file publishes and anything else listening that was started from the project, with the process, its command line and uptime; Stop asks it to quit. Before each start Dante checks the ports and, if one is taken, offers to stop what holds it, publish the service on the next free port (editing only that line of the compose file), or start anyway
 - Data: the project's databases (PostgreSQL, MySQL, SQLite). Dante finds them in compose files, `.env` URLs, Prisma/Rails/Django config and SQLite files, and says what the code uses (drivers, ORMs, migrations) even before there's a database. Browse tables a page at a time with sorting and a WHERE filter, see columns and foreign keys both ways, run SQL scripts in one session (⌘↩, with a check before anything that drops or rewrites whole tables), explain queries (with the tables read row by row to filter, the index that would help, and Claude to talk the plan through), preview what a script or migration file changes before it runs (checked against the live schema: missing tables, NOT NULL columns with no default, locking index builds, rows a drop deletes), export results, and see the live schema as an ER diagram you can save to docs. New database sets up a Docker Compose service (or a SQLite file) with a generated password in `.env`, on a free port, and starts it. Talks through `psql`, `mysql` and `sqlite3`, or the client inside the compose container; passwords live in the Keychain, connections stay on this Mac, and anything not on this Mac opens read-only. Claude writes queries from a description and fixes failing ones, with the schema as context
-- Map: the architecture from `Package.swift`, Docker Compose or source folders, with an inspector and drift against `.dante/architecture.md`
-- Ship: CI runs from `gh`, a changelog drafted from conventional commits since the last tag, a release checklist, and local tagging
+- Map: the system map (clients and their screens, API route groups, backend packages, data stores and tables, outside services and webhooks, linked by real calls), plus modules from `Package.swift` or Go imports and compose services; an inspector with environment variables and coverage, drift against `.dante/architecture.md`, and a Mermaid export into it
+- Ship: CI runs from `gh`, a changelog drafted from conventional commits since the last tag, a release checklist, and local tagging. Finish Task commits the task's work (warning first when the diff adds what looks like a secret), has Claude review the branch, and opens the pull request
 - Run: alarms, health checks and a production log stream from `operate:` in `.dante/project.yaml`. Alarms come from CloudWatch (read-only, through the `aws` command line and its existing login) or any command that prints them as JSON (`[{ name, state, reason, updated, url }]`, for Datadog, Grafana, Alertmanager…). Firing alarms sort first; one click makes a task linked to the alarm, an alarm that fires again after its task is done is flagged with Reopen, Investigate hands the alarm and matching log errors to Claude, and Notify me (off by default) sends a macOS notification when one starts firing. Log errors are grouped so each can become a task
 - Timeline: commits and tags, Claude Code sessions run in the project folder, test runs and GitHub Actions runs in one stream grouped by day. Click a commit to show it, a Claude session to resume it in the terminal, a CI run to open it
 - Claude rules in `.dante/project.yaml` (`claude: propose / flag / never`): flagged paths are called out on the diff, and never-paths are refused, reads included
 - Quitting with unsaved files asks once for every window: save, discard or cancel
+
+</details>
 
 ## Requirements
 
@@ -53,7 +82,7 @@ Dante keeps a project's plan, tasks, docs and decisions in the repo under `.dant
 - Xcode 16 or later (Swift 6)
 - [Claude Code](https://claude.com/claude-code), installed and signed in (`claude auth login`), for the Claude panel
 
-## Build and run
+## Build from source
 
 ```bash
 scripts/bundle.sh --open
@@ -66,6 +95,8 @@ open build/Dante.app --args ~/path/to/project
 ```
 
 Files after the folder open in tabs: `--args ~/project ~/project/Sources/main.swift`.
+
+`scripts/release.sh 0.2.0` builds `build/Dante-0.2.0.dmg`; it signs and notarises when `DEVELOPER_ID` and `NOTARY_PROFILE` are set (see the script).
 
 Run the tests:
 

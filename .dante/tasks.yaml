@@ -379,7 +379,7 @@ tasks:
 - id: DI-94
   title: "README with screenshots, and a draft GitHub release"
   phase: release
-  state: todo
+  state: review
 - id: DI-95
   title: "dante command-line tool: open a folder or files from the terminal"
   phase: build

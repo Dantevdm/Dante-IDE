@@ -70,11 +70,24 @@ private struct FitOrScroll<Content: View>: View {
                 .frame(width: natural.width * scale, height: natural.height * scale, alignment: .topLeading)
                 .frame(maxWidth: .infinity)
         } else {
+            // A little too wide is scaled down to fit; much too wide scrolls, with a visible
+            // scroller so the cut-off side doesn't look like the end of the diagram.
+            let natural = Self.size(of: content.fixedSize().environment(\.theme, theme))
             ViewThatFits(in: .horizontal) {
                 content.frame(maxWidth: .infinity)
-                ScrollView(.horizontal) { content }
+                scaled(0.85, natural)
+                scaled(0.72, natural)
+                scaled(0.6, natural)
+                ScrollView(.horizontal) { content }.scrollIndicators(.visible)
             }
         }
+    }
+
+    private func scaled(_ scale: CGFloat, _ natural: CGSize) -> some View {
+        content.fixedSize()
+            .scaleEffect(scale, anchor: .topLeading)
+            .frame(width: natural.width * scale, height: natural.height * scale, alignment: .topLeading)
+            .frame(maxWidth: .infinity)
     }
 
     @MainActor
