@@ -2,7 +2,7 @@ import DanteKit
 import Foundation
 
 /// Working on a task with Claude: each task gets its own branch and its own conversation,
-/// both remembered on the task in tasks.yaml (`branch:` and `conversation:`).
+/// the branch kept on the task in tasks.yaml (`branch:`), the conversation per Mac.
 extension Session {
     func workOn(_ task: PlanTask) async {
         guard let workspace, let claude else { return }
@@ -28,9 +28,10 @@ extension Session {
             if git.error == nil, task.extra["branch"] == nil { try? workspace.tasks.setField(task.id, "branch", branch) }
         }
 
-        if let conversation = task.extra["conversation"], conversation != claude.conversationID {
+        let saved = TaskConversations.conversation(for: task.id, in: workspace.url)
+        if let conversation = saved, conversation != claude.conversationID {
             if await resumeConversation(id: conversation) { focusClaude(); return }
-        } else if task.extra["conversation"] != nil {
+        } else if saved != nil {
             focusClaude()
             return
         }
@@ -46,6 +47,6 @@ extension Session {
     func linkConversation(_ id: String) {
         guard let task = claudeTaskLink, let workspace else { return }
         claudeTaskLink = nil
-        try? workspace.tasks.setField(task, "conversation", id)
+        TaskConversations.set(id, for: task, in: workspace.url)
     }
 }

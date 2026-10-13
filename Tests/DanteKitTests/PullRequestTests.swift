@@ -52,3 +52,41 @@ import Testing
         #expect(await !GitHub.hasGitHubRemote(in: folder.url))
     }
 }
+
+struct BranchReviewTests {
+    @Test func readsFindingsWithSeverityAndPlace() {
+        let answer = """
+        Here's what I found:
+        - [blocker] internal/api/orders.go:42 — the query builds SQL from user input; use a parameter.
+        - [Issue] `web/src/app.ts:7-9` - the error is swallowed.
+        * [nit] naming is inconsistent between handlers
+        - [praise] nice
+        """
+        let findings = BranchReview.parse(answer)
+        #expect(findings.map(\.severity) == [.blocker, .issue, .nit])
+        #expect(findings[0].file == "internal/api/orders.go" && findings[0].line == 42)
+        #expect(findings[0].text.hasPrefix("the query builds SQL"))
+        #expect(findings[1].file == "web/src/app.ts" && findings[1].line == 7)
+        #expect(findings[2].file == nil && findings[2].text == "naming is inconsistent between handlers")
+        #expect(BranchReview.parse("No findings.").isEmpty)
+    }
+
+    @Test func cutsLongDiffs() {
+        let prompt = BranchReview.prompt(task: nil, diff: String(repeating: "x", count: 50), commits: ["Add orders"], limit: 10)
+        #expect(prompt.contains("xxxxxxxxxx\n[diff cut at 10 characters]"))
+        #expect(prompt.contains("- Add orders"))
+    }
+}
+
+struct TaskConversationsTests {
+    @Test func remembersAConversationPerTaskAndProject() {
+        let defaults = UserDefaults(suiteName: "TaskConversationsTests")!
+        defaults.removePersistentDomain(forName: "TaskConversationsTests")
+        let root = URL(filePath: "/home/me/shop")
+        TaskConversations.set("abc", for: "SH-1", in: root, defaults: defaults)
+        #expect(TaskConversations.conversation(for: "SH-1", in: root, defaults: defaults) == "abc")
+        #expect(TaskConversations.conversation(for: "SH-1", in: URL(filePath: "/home/me/other"), defaults: defaults) == nil)
+        TaskConversations.set(nil, for: "SH-1", in: root, defaults: defaults)
+        #expect(TaskConversations.conversation(for: "SH-1", in: root, defaults: defaults) == nil)
+    }
+}

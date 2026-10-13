@@ -31,6 +31,9 @@ final class FinishTaskModel {
 
     private(set) var draftingCommit = false
     private(set) var draftingPull = false
+    /// Claude's review of the branch; nil until asked for.
+    private(set) var review: [ReviewFinding]?
+    private(set) var reviewing = false
     private(set) var step: String?
     private(set) var error: String?
     private(set) var pullRequestURL: URL?
@@ -101,12 +104,30 @@ final class FinishTaskModel {
         }
     }
 
+    /// Everything the pull request would contain: the branch's commits and what isn't committed.
+    private func fullDiff() async -> String {
+        async let branchDiff = createsBranch ? "" : GitHub.branchDiff(since: defaultBranch, in: root)
+        async let working = hasChanges ? GitRepository.workingDiff(in: root) : ""
+        return [await branchDiff, await working].filter { !$0.isEmpty }.joined(separator: "\n\nNot yet committed:\n")
+    }
+
+    func reviewBranch() async {
+        reviewing = true
+        defer { reviewing = false }
+        let diff = await fullDiff()
+        guard !diff.isEmpty else { review = []; return }
+        do {
+            review = BranchReview.parse(try await ClaudeQuick.text(BranchReview.prompt(task: task, diff: diff, commits: branchCommits),
+                                                                   system: BranchReview.system, in: root))
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     func draftPullRequest() async {
         draftingPull = true
         defer { draftingPull = false }
-        async let branchDiff = createsBranch ? "" : GitHub.branchDiff(since: defaultBranch, in: root)
-        async let working = hasChanges ? GitRepository.workingDiff(in: root) : ""
-        let diff = [await branchDiff, await working].filter { !$0.isEmpty }.joined(separator: "\n\nNot yet committed:\n")
+        let diff = await fullDiff()
         do {
             let answer = try await ClaudeQuick.text(PullRequestDraft.prompt(task: task, diff: diff, commits: branchCommits),
                                                     system: PullRequestDraft.system, in: root)

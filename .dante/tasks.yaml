@@ -347,7 +347,7 @@ tasks:
 - id: DI-86
   title: "Ship: Claude reviews the branch diff before a pull request"
   phase: build
-  state: todo
+  state: review
 - id: DI-87
   title: "Settings: keyboard shortcut editor"
   phase: build

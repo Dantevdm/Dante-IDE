@@ -336,7 +336,7 @@ struct CommandPalette: View {
         }
         if session.claude != nil {
             for task in workspace.tasks.tasks where task.state == .inProgress || task.state == .ready {
-                let verb = task.extra["conversation"] == nil ? "Work on" : "Continue"
+                let verb = TaskConversations.conversation(for: task.id, in: workspace.url) == nil ? "Work on" : "Continue"
                 list.append(action("\(verb) \(task.id) with Claude: \(task.title)", "sparkle") { Task { await session.workOn(task) } })
             }
         }

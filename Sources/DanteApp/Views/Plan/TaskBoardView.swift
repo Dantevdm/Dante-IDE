@@ -158,7 +158,7 @@ private struct TaskCard: View {
     @ViewBuilder
     private var menu: some View {
         if session.claude != nil {
-            Button(task.extra["conversation"] == nil ? "Work on This with Claude" : "Continue with Claude") { workOnWithClaude() }
+            Button(TaskConversations.conversation(for: task.id, in: workspace.url) == nil ? "Work on This with Claude" : "Continue with Claude") { workOnWithClaude() }
         }
         if task.state == .inProgress || task.state == .ready {
             Button("Finish with Commit and Pull Request…") { session.finish(task) }

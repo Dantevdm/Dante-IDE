@@ -35,6 +35,7 @@ struct FinishTaskSheet: View {
             } else {
                 branchSection
                 commitSection
+                reviewSection
                 pullRequestSection
             }
 
@@ -109,6 +110,64 @@ struct FinishTaskSheet: View {
                 Text("Nothing uncommitted. \(count) commit\(count == 1 ? "" : "s") on this branch \(count == 1 ? "goes" : "go") into the pull request.")
                     .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
+            }
+        }
+    }
+
+    private var reviewSection: some View {
+        section("Review") {
+            if model.reviewing {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text("Claude is reading the diff…").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                }
+            } else if let findings = model.review {
+                if findings.isEmpty {
+                    Label("Claude found nothing to change.", systemImage: "checkmark.seal").font(.dante(size: 12)).foregroundStyle(theme.green.color)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(findings) { finding in findingRow(finding) }
+                        }
+                    }
+                    .frame(maxHeight: 150)
+                    HStack {
+                        Button("Ask Claude to fix these") {
+                            session.askClaude(BranchReview.fixPrompt(findings))
+                            dismiss()
+                        }
+                        .buttonStyle(DanteButtonStyle())
+                        Button("Review again") { Task { await model.reviewBranch() } }.buttonStyle(.plain).font(.dante(size: 11.5)).foregroundStyle(theme.accent.color)
+                    }
+                }
+            } else {
+                HStack {
+                    Text("Have Claude read the branch’s changes for bugs, security slips and missing tests first.")
+                        .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button { Task { await model.reviewBranch() } } label: { Label("Review", systemImage: "sparkle") }
+                        .buttonStyle(DanteButtonStyle())
+                }
+            }
+        }
+    }
+
+    private func findingRow(_ finding: ReviewFinding) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Text(finding.severity.rawValue.uppercased())
+                .font(.dante(size: 9, weight: .bold))
+                .foregroundStyle(finding.severity == .blocker ? theme.red.color : finding.severity == .issue ? theme.amber.color : theme.text3.color)
+                .frame(width: 52, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                if let file = finding.file {
+                    Button("\(file)\(finding.line.map { ":\($0)" } ?? "")") {
+                        session.open(file: workspace.url.appending(path: file), line: finding.line ?? 1)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.dante(size: 11, design: .monospaced))
+                    .foregroundStyle(theme.accent.color)
+                }
+                Text(finding.text).font(.dante(size: 12)).foregroundStyle(theme.text.color).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
