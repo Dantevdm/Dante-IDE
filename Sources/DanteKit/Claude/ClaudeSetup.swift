@@ -230,3 +230,35 @@ public struct ClaudePermissions: Equatable, Sendable {
 
     public var isEmpty: Bool { allow.isEmpty && deny.isEmpty && ask.isEmpty }
 }
+
+/// A Claude Code plugin from `claude plugin list --json [--available]`: skills, commands,
+/// agents and hooks bundled together, installed from a marketplace.
+public struct ClaudePlugin: Identifiable, Equatable, Sendable {
+    public var name: String
+    public var marketplace: String?
+    public var description: String
+    public var version: String?
+    public var enabled: Bool
+    public var id: String { marketplace.map { "\(name)@\($0)" } ?? name }
+
+    /// Installed and available plugins. Field names vary between Claude Code versions,
+    /// so each is read from whichever spelling is there.
+    public static func parse(_ json: String) -> (installed: [ClaudePlugin], available: [ClaudePlugin]) {
+        guard let value = JSONValue(line: json.replacingOccurrences(of: "\n", with: " ")) else { return ([], []) }
+        func plugins(_ list: JSONValue?) -> [ClaudePlugin] {
+            (list?.array ?? []).compactMap { entry in
+                let id = entry["id"]?.string ?? entry["pluginId"]?.string
+                guard let name = entry["name"]?.string ?? id?.components(separatedBy: "@").first, !name.isEmpty else { return nil }
+                let marketplace = entry["marketplace"]?.string ?? entry["marketplaceName"]?.string
+                    ?? id.flatMap { $0.contains("@") ? $0.components(separatedBy: "@").last : nil }
+                return ClaudePlugin(
+                    name: name, marketplace: marketplace,
+                    description: entry["description"]?.string ?? entry["manifest"]?["description"]?.string ?? "",
+                    version: entry["version"]?.string,
+                    enabled: entry["enabled"]?.bool ?? entry["isEnabled"]?.bool ?? true)
+            }
+        }
+        if value.array != nil { return (plugins(value), []) }
+        return (plugins(value["installed"]), plugins(value["available"]))
+    }
+}

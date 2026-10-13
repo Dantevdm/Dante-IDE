@@ -246,6 +246,15 @@ public final class TaskBoard {
         }
     }
 
+    /// Sets or clears a field Dante keeps on a task beyond the usual ones (`branch:`,
+    /// `conversation:`); it's written with the task's other extra fields.
+    public func setField(_ id: PlanTask.ID, _ key: String, _ value: String?) throws {
+        try update { file in
+            guard let index = file.tasks.firstIndex(where: { $0.id == id }) else { return }
+            file.tasks[index].extra[key] = value
+        }
+    }
+
     public func delete(_ id: PlanTask.ID) throws {
         try update { $0.tasks.removeAll { $0.id == id } }
     }

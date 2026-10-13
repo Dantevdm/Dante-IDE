@@ -94,3 +94,16 @@ struct ComposerTokenTests {
         #expect(ComposerCommand.matching("", skills: [skill]).count == ComposerCommand.builtIn.count + 1)
     }
 }
+
+struct ClaudePluginTests {
+    @Test func readsInstalledAndAvailablePlugins() {
+        let json = """
+        {"installed":[{"id":"commit-tools@claude-plugins-official","version":"1.2.0","enabled":false,"description":"Commit helpers"}],
+         "available":[{"name":"pr-review","marketplaceName":"claude-plugins-official","description":"Reviews pull requests"}]}
+        """
+        let plugins = ClaudePlugin.parse(json)
+        #expect(plugins.installed == [ClaudePlugin(name: "commit-tools", marketplace: "claude-plugins-official", description: "Commit helpers", version: "1.2.0", enabled: false)])
+        #expect(plugins.available.map(\.id) == ["pr-review@claude-plugins-official"])
+        #expect(ClaudePlugin.parse("[]").installed.isEmpty)
+    }
+}

@@ -158,7 +158,7 @@ private struct TaskCard: View {
     @ViewBuilder
     private var menu: some View {
         if session.claude != nil {
-            Button("Work on This with Claude") { workOnWithClaude() }
+            Button(task.extra["conversation"] == nil ? "Work on This with Claude" : "Continue with Claude") { workOnWithClaude() }
         }
         if task.state == .inProgress || task.state == .ready {
             Button("Finish with Commit and Pull Request…") { session.finish(task) }
@@ -177,16 +177,7 @@ private struct TaskCard: View {
     }
 
     private func workOnWithClaude() {
-        attempt {
-            try workspace.tasks.setWorkingWithClaude(task.id, true)
-            if task.state == .ready { try workspace.tasks.move(task.id, to: .inProgress) }
-        }
-        var message = "Let's work on \(task.id): \(task.title)."
-        if let spec = task.spec { message += " The spec is .dante/\(spec); read it first." }
-        if let note = task.note { message += " Note: \(note)" }
-        message += " Propose a short plan before changing any files."
-        session.area = .code
-        session.askClaude(message)
+        Task { await session.workOn(task) }
     }
 
     private func attempt(_ action: () throws -> Void) {

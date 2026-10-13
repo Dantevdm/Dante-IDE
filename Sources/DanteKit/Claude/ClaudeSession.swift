@@ -137,6 +137,8 @@ public final class ClaudeSession {
     public var onFileChanged: (URL) -> Void = { _ in }
     /// Something the person should look at: a finished turn, or a change or question waiting.
     public var onAttention: (Attention) -> Void = { _ in }
+    /// Claude Code named the conversation (its session id), for linking it to a task.
+    public var onConversationStarted: (String) -> Void = { _ in }
 
     public enum Attention: Equatable, Sendable {
         /// The turn ended; the start of Claude's last reply.
@@ -511,7 +513,10 @@ public final class ClaudeSession {
         switch event {
         case .started(let sessionID, let model):
             self.model = model
-            if !sessionID.isEmpty { self.sessionID = sessionID }
+            if !sessionID.isEmpty, self.sessionID != sessionID {
+                self.sessionID = sessionID
+                onConversationStarted(sessionID)
+            }
 
         case .messageStarted(let id):
             streamingMessageID = id

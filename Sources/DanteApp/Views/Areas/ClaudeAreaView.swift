@@ -15,6 +15,9 @@ struct ClaudeAreaView: View {
     @State private var conversations: [ClaudeHistory.Conversation] = []
     @State private var servers: [MCPServer]?
     @State private var checkingServers = false
+    @State private var plugins: [ClaudePlugin]?
+    @State private var available: [ClaudePlugin]?
+    @State private var browsing = false
     @State private var removing: ClaudeSkill?
     @State private var lastReview: Date?
 
@@ -50,8 +53,9 @@ struct ClaudeAreaView: View {
             }
             HStack(alignment: .top, spacing: 16) {
                 connectorsCard
-                conversationsCard
+                pluginsCard
             }
+            conversationsCard
         }
         .task(id: workspace.revision) { await load() }
         .confirmationDialog("Move \(removing?.name ?? "this skill") to the Trash?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
@@ -281,6 +285,69 @@ struct ClaudeAreaView: View {
         let output = await Shell.run([executable, "mcp", "list"], in: workspace.url)
         servers = MCPServer.parse(output.stdout)
         checkingServers = false
+    }
+
+    // MARK: Plugins
+
+    private var pluginsCard: some View {
+        Card("Plugins") {
+            Button {
+                Task { await loadPlugins(available: true) }
+            } label: {
+                if browsing { ProgressView().controlSize(.mini) } else { Text(available == nil ? "Browse" : "Refresh") }
+            }
+            .buttonStyle(DanteButtonStyle())
+            .disabled(browsing || session.claude?.executable == nil)
+        } content: {
+            Text("Plugins bundle skills, commands, agents and hooks from a marketplace. Dante types the command into the terminal for you to run.")
+                .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+            if let plugins {
+                if plugins.isEmpty {
+                    Text("None installed.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                }
+                RowList(data: plugins, padding: 8) { plugin in
+                    HStack(spacing: 8) {
+                        Circle().fill(plugin.enabled ? theme.green.color : theme.text3.color).frame(width: 7, height: 7)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(plugin.name + (plugin.version.map { " " + $0 } ?? "")).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
+                            Text(plugin.description.isEmpty ? (plugin.marketplace ?? "") : plugin.description).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        }
+                        Spacer()
+                        LinkButton(plugin.enabled ? "Disable" : "Enable") {
+                            session.typeInTerminal("claude plugin \(plugin.enabled ? "disable" : "enable") \(Shell.quote(plugin.id))")
+                        }
+                    }
+                }
+            }
+            if let available {
+                let fresh = available.filter { candidate in !(plugins ?? []).contains { $0.id == candidate.id } }
+                Eyebrow("Available")
+                if fresh.isEmpty {
+                    Text("Nothing more in your marketplaces. Add one with claude plugin marketplace add.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                }
+                RowList(data: Array(fresh.prefix(12)), padding: 8) { plugin in
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(plugin.name).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
+                            Text(plugin.description).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(2)
+                        }
+                        Spacer()
+                        LinkButton("Install…") { session.typeInTerminal("claude plugin install \(Shell.quote(plugin.id))") }
+                    }
+                }
+            }
+        }
+        .task(id: workspace.revision) { if plugins == nil { await loadPlugins(available: false) } }
+    }
+
+    private func loadPlugins(available withAvailable: Bool) async {
+        guard let executable = session.claude?.executable else { return }
+        if withAvailable { browsing = true }
+        let output = await Shell.run([executable, "plugin", "list", "--json"] + (withAvailable ? ["--available"] : []), in: workspace.url)
+        let parsed = ClaudePlugin.parse(output.stdout)
+        plugins = parsed.installed
+        if withAvailable { available = parsed.available }
+        browsing = false
     }
 
     // MARK: Conversations

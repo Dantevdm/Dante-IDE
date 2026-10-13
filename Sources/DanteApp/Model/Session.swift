@@ -201,6 +201,8 @@ final class Session {
     private(set) var terminalInput: TerminalInput?
     /// Bumped to move keyboard focus to Claude's message box.
     var claudeFocusRequest = 0
+    /// The task whose conversation is starting, so its id can be written to the task.
+    var claudeTaskLink: PlanTask.ID?
     /// The Claude panel's history and usage popovers, so `/history` and `/context` can open them.
     var claudeShowsHistory = false
     var claudeShowsUsage = false
@@ -407,6 +409,7 @@ final class Session {
         )
         claude.onFileChanged = { [weak workspace] url in workspace?.fileChanged(at: url) }
         claude.onAttention = { [weak self] attention in self?.notifyClaude(attention) }
+        claude.onConversationStarted = { [weak self] id in self?.linkConversation(id) }
         applyClaudePreferences(to: claude)
         return claude
     }

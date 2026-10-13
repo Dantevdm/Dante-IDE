@@ -319,11 +319,11 @@ tasks:
 - id: DI-79
   title: "Tasks: a Claude conversation and a branch per task"
   phase: build
-  state: todo
+  state: review
 - id: DI-80
   title: "Claude area: list installed plugins"
   phase: build
-  state: todo
+  state: review
 - id: DI-81
   title: "Map: database tables in the Data lane, with arrows from the code that queries them"
   phase: build

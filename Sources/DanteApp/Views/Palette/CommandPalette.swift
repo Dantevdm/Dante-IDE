@@ -334,6 +334,12 @@ struct CommandPalette: View {
         if let claude = session.claude, !claude.items.isEmpty {
             list.append(action("New Claude conversation", "square.and.pencil") { claude.reset() })
         }
+        if session.claude != nil {
+            for task in workspace.tasks.tasks where task.state == .inProgress || task.state == .ready {
+                let verb = task.extra["conversation"] == nil ? "Work on" : "Continue"
+                list.append(action("\(verb) \(task.id) with Claude: \(task.title)", "sparkle") { Task { await session.workOn(task) } })
+            }
+        }
         for area in Area.allCases where area != session.area {
             list.append(action("Go to \(area.title)", area.symbol) { session.area = area })
         }

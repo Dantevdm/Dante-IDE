@@ -19,12 +19,19 @@ extension Session {
 
     /// Shows an earlier conversation in the panel; the next message continues it.
     func resumeConversation(_ conversation: ClaudeHistory.Conversation) async {
-        guard let root = workspace?.url, let claude else { return }
-        let url = ClaudeHistory.transcriptURL(for: conversation.id, root: root)
+        _ = await resumeConversation(id: conversation.id)
+    }
+
+    /// False when Claude Code no longer has the transcript.
+    func resumeConversation(id: String) async -> Bool {
+        guard let root = workspace?.url, let claude else { return false }
+        let url = ClaudeHistory.transcriptURL(for: id, root: root)
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
         let items = await Task.detached(priority: .userInitiated) {
             (try? String(contentsOf: url, encoding: .utf8)).map(ClaudeHistory.items(fromTranscript:)) ?? []
         }.value
-        claude.resume(conversation: conversation.id, items: items)
+        claude.resume(conversation: id, items: items)
         showsClaude = true
+        return true
     }
 }
