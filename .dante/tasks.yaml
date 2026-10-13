@@ -375,7 +375,7 @@ tasks:
 - id: DI-93
   title: "Release: app icon, release build script (Developer ID signing and notarisation when credentials exist), DMG"
   phase: release
-  state: todo
+  state: review
 - id: DI-94
   title: "README with screenshots, and a draft GitHub release"
   phase: release
