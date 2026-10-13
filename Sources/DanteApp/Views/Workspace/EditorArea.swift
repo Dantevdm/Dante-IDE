@@ -72,7 +72,10 @@ struct EditorArea: View {
             completion: session.completionSource(for: document),
             actions: session.editorActions(for: document),
             preferences: Preferences.shared,
-            onFocus: { if let side { workspace.focusPane(right: side == .right) } }
+            onFocus: { if let side { workspace.focusPane(right: side == .right) } },
+            breakpoints: Set(session.breakpointLines(in: document.url).map { $0 - 1 }),
+            onToggleBreakpoint: DebugAdapter.for(file: document.url.path) == nil ? nil : { session.toggleBreakpoint(in: document.url, line: $0 + 1) },
+            executionLine: session.executionLine(in: document)
         )
         .id(document.id)
         .task(id: document.id) { session.languages?.opened(document) }
@@ -102,6 +105,9 @@ private struct DocumentEditor: View {
     let actions: EditorActions
     let preferences: Preferences
     let onFocus: () -> Void
+    let breakpoints: Set<Int>
+    let onToggleBreakpoint: ((Int) -> Void)?
+    let executionLine: Int?
     /// The file as of HEAD; nil when it isn't tracked.
     @State private var base: String?
     @State private var lineChanges: [Int: LineChange] = [:]
@@ -124,7 +130,10 @@ private struct DocumentEditor: View {
             wrapsLines: preferences.wrapsLines,
             completesWhileTyping: preferences.completesWhileTyping,
             onFocus: onFocus,
-            takesFocus: isFocused
+            takesFocus: isFocused,
+            breakpoints: breakpoints,
+            onToggleBreakpoint: onToggleBreakpoint,
+            executionLine: executionLine
         )
         .task(id: gitRevision) {
             base = await GitGutter.headText(of: document.url, in: root)

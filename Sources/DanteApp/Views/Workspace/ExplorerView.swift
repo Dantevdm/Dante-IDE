@@ -40,11 +40,12 @@ struct ExplorerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 2) {
-                tab("Explorer", .files)
-                tab("Search", .search)
-                tab("Changes", .changes, count: session.git.changeCount)
-                tab("Problems", .problems, count: problemCount.total, alert: problemCount.errors > 0)
-                Spacer()
+                // The selected tab's name goes first when the sidebar is too narrow for it.
+                ViewThatFits(in: .horizontal) {
+                    tabs(titled: true)
+                    tabs(titled: false)
+                }
+                Spacer(minLength: 0)
                 if session.sidebar == .files {
                     IconButton(symbol: "doc.badge.plus", label: "New file", size: 11) { startNew(folder: false) }
                     IconButton(symbol: "folder.badge.plus", label: "New folder", size: 11) { startNew(folder: true) }
@@ -60,6 +61,8 @@ struct ExplorerView: View {
                 ChangesPanel(session: session, workspace: workspace)
             } else if session.sidebar == .problems {
                 ProblemsPanel(session: session, workspace: workspace)
+            } else if session.sidebar == .debug {
+                DebugPanel(session: session, workspace: workspace)
             } else {
                 tree
             }
@@ -73,19 +76,32 @@ struct ExplorerView: View {
         return (files.reduce(0) { $0 + $1.errors + $1.warnings }, files.reduce(0) { $0 + $1.errors })
     }
 
-    private func tab(_ title: String, _ sidebar: Session.Sidebar, count: Int = 0, alert: Bool = false) -> some View {
+    private func tabs(titled: Bool) -> some View {
+        let problems = problemCount
+        return HStack(spacing: 2) {
+            tab("Explorer", .files, titled: titled)
+            tab("Search", .search, titled: titled)
+            tab("Changes", .changes, count: session.git.changeCount, titled: titled)
+            tab("Problems", .problems, count: problems.total, alert: problems.errors > 0, titled: titled)
+            tab("Debug", .debug, titled: titled)
+        }
+        .fixedSize()
+    }
+
+    private func tab(_ title: String, _ sidebar: Session.Sidebar, count: Int = 0, alert: Bool = false, titled: Bool) -> some View {
         let selected = session.sidebar == sidebar
         let symbol = switch sidebar {
         case .files: "folder"
         case .search: "magnifyingglass"
         case .changes: "arrow.triangle.branch"
         case .problems: "exclamationmark.triangle"
+        case .debug: session.debug.map { $0.state == .running || $0.state == .stopped } == true ? "ladybug.fill" : "ladybug"
         }
         return Button { session.sidebar = sidebar } label: {
             HStack(spacing: 5) {
                 Image(systemName: symbol)
                     .font(.dante(size: 11.5, weight: .medium))
-                if selected {
+                if selected && titled {
                     Text(title.uppercased())
                         .font(.dante(size: 10.5, weight: .medium))
                         .tracking(0.9)
@@ -108,7 +124,7 @@ struct ExplorerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(sidebar == .search ? Shortcuts.label("Find in Project", "findInProject") : sidebar == .changes ? Shortcuts.label("Source Control", "sourceControl") : sidebar == .problems ? Shortcuts.label("Problems", "problems") : "Files")
+        .help(sidebar == .search ? Shortcuts.label("Find in Project", "findInProject") : sidebar == .changes ? Shortcuts.label("Source Control", "sourceControl") : sidebar == .problems ? Shortcuts.label("Problems", "problems") : sidebar == .debug ? Shortcuts.label("Debug", "debugStart") : "Files")
         .accessibilityLabel(count > 0 ? "\(title), \(count) \(sidebar == .problems ? "problems" : "changes")" : title)
         .accessibilityAddTraits(session.sidebar == sidebar ? .isSelected : [])
     }

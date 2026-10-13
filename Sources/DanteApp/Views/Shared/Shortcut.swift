@@ -14,7 +14,7 @@ extension KeyBinding {
         case "space": .space
         case "delete": .delete
         case "escape": .escape
-        default: KeyEquivalent(self.key.first ?? " ")
+        default: functionKey.map { KeyEquivalent(Character(UnicodeScalar($0)!)) } ?? KeyEquivalent(self.key.first ?? " ")
         }
         var flags: EventModifiers = []
         if modifiers.contains(.command) { flags.insert(.command) }
@@ -33,9 +33,11 @@ extension KeyBinding {
         if flags.contains(.option) { modifiers.insert(.option) }
         if flags.contains(.control) { modifiers.insert(.control) }
         let named: [UInt16: String] = [123: "left", 124: "right", 126: "up", 125: "down", 36: "return", 48: "tab", 49: "space", 51: "delete", 53: "escape"]
-        let key = named[event.keyCode] ?? event.charactersIgnoringModifiers?.lowercased() ?? ""
+        let functionKeys: [UInt16: String] = [122: "f1", 120: "f2", 99: "f3", 118: "f4", 96: "f5", 97: "f6", 98: "f7", 100: "f8", 101: "f9", 109: "f10", 103: "f11", 111: "f12"]
+        let key = functionKeys[event.keyCode] ?? named[event.keyCode] ?? event.charactersIgnoringModifiers?.lowercased() ?? ""
         // Plain letters would fire while typing; a shortcut needs ⌘ or ⌃, or ⌥ with a named key.
-        guard !key.isEmpty, modifiers.contains(.command) || modifiers.contains(.control) || (named[event.keyCode] != nil && !modifiers.isEmpty) else { return nil }
+        // Function keys work on their own.
+        guard !key.isEmpty, functionKeys[event.keyCode] != nil || modifiers.contains(.command) || modifiers.contains(.control) || (named[event.keyCode] != nil && !modifiers.isEmpty) else { return nil }
         self.init(key, modifiers)
     }
 }
@@ -118,8 +120,14 @@ extension KeyBinding {
         case "space": return " "
         case "delete": return "\u{8}"
         case "escape": return "\u{1b}"
-        default: return key
+        default: return functionKey.map(function) ?? key
         }
+    }
+
+    /// The AppKit character for "f1"…"f12", nil for any other key.
+    var functionKey: Int? {
+        guard key.count >= 2, key.first == "f", let number = Int(key.dropFirst()), (1...12).contains(number) else { return nil }
+        return NSF1FunctionKey + number - 1
     }
 
     var menuModifiers: NSEvent.ModifierFlags {

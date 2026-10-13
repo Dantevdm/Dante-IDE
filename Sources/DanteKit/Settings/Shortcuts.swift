@@ -2,7 +2,8 @@ import Foundation
 import Observation
 
 /// A key and its modifiers, as the menus use them. `key` is one character, or a name for
-/// the keys that have none: left, right, up, down, return, tab, space, delete, escape.
+/// the keys that have none: left, right, up, down, return, tab, space, delete, escape,
+/// and f1 to f12.
 public struct KeyBinding: Codable, Equatable, Hashable, Sendable {
     public enum Modifier: String, Codable, CaseIterable, Sendable, Comparable {
         // Display order, as macOS menus show them.
@@ -100,6 +101,13 @@ public final class Shortcuts {
         .init("biggerText", "Bigger Text", "View", KeyBinding("+")),
         .init("smallerText", "Smaller Text", "View", KeyBinding("-")),
         .init("actualSize", "Actual Size", "View", KeyBinding("0")),
+        .init("debugStart", "Start Debugging", "Debug", KeyBinding("f5", [])),
+        .init("debugContinue", "Continue", "Debug", KeyBinding("y", [.command, .control])),
+        .init("debugStepOver", "Step Over", "Debug", KeyBinding("f6", [])),
+        .init("debugStepIn", "Step Into", "Debug", KeyBinding("f7", [])),
+        .init("debugStepOut", "Step Out", "Debug", KeyBinding("f8", [])),
+        .init("debugStop", "Stop Debugging", "Debug", KeyBinding("f5", [.shift])),
+        .init("debugToggleBreakpoint", "Toggle Breakpoint", "Debug", KeyBinding("f9", [])),
     ]
 
     /// Shortcuts the person changed; `.some(nil)` means they removed it.

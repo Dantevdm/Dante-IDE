@@ -12,6 +12,16 @@ final class LineNumberRuler: NSRulerView {
     /// Lines with a diagnostic, and the colour of the most severe one.
     var diagnosticMarks: [Int: NSColor] = [:] { didSet { if diagnosticMarks != oldValue { needsDisplay = true } } }
 
+    /// Zero-based lines with a breakpoint, drawn as a tag behind the number.
+    var breakpoints: Set<Int> = [] { didSet { if breakpoints != oldValue { needsDisplay = true } } }
+    var breakpointColor = NSColor.systemBlue { didSet { needsDisplay = true } }
+    var breakpointTextColor = NSColor.white { didSet { needsDisplay = true } }
+    /// The zero-based line the debugger is stopped on.
+    var executionLine: Int? { didSet { if executionLine != oldValue { needsDisplay = true } } }
+    var executionColor = NSColor.systemYellow { didSet { needsDisplay = true } }
+    /// Clicking a line number toggles a breakpoint there; nil leaves the gutter inert.
+    var onToggleBreakpoint: ((Int) -> Void)?
+
     /// UTF-16 offsets where each line starts.
     private var lineStarts: [Int] = [0]
     private var activeLine = 0
@@ -64,6 +74,41 @@ final class LineNumberRuler: NSRulerView {
         return low
     }
 
+    override func mouseDown(with event: NSEvent) {
+        guard let onToggleBreakpoint, let line = line(at: convert(event.locationInWindow, from: nil)) else {
+            return super.mouseDown(with: event)
+        }
+        onToggleBreakpoint(line)
+    }
+
+    /// NSRulerView's own press action asks for a tab-stop marker in a sheet. A press has no
+    /// line to act on, so it does nothing; Toggle Breakpoint works from the keyboard.
+    override func accessibilityPerformPress() -> Bool { true }
+
+    override func resetCursorRects() {
+        if onToggleBreakpoint != nil { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+
+    /// The zero-based line drawn at a point in the ruler.
+    private func line(at point: NSPoint) -> Int? {
+        guard let textView, let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager else { return nil }
+        let inText = textView.convert(point, from: self)
+        let y = inText.y - textView.textContainerOrigin.y
+        guard let fragment = layoutManager.textLayoutFragment(for: NSPoint(x: 0, y: max(y, 0))) else {
+            return lineStarts.count - 1
+        }
+        let offset = contentManager.offset(from: contentManager.documentRange.location, to: fragment.rangeInElement.location)
+        var line = lineIndex(forOffset: offset)
+        // Wrapped lines and the empty last line: count the line fragments above the point.
+        let frame = fragment.layoutFragmentFrame
+        if y > frame.minY, let lines = fragment.textLineFragments.last(where: { $0.typographicBounds.minY <= y - frame.minY }),
+           lines.characterRange.length == 0, line + 1 < lineStarts.count {
+            line += 1
+        }
+        return line
+    }
+
     override func drawHashMarksAndLabels(in rect: NSRect) {
         backgroundColor.setFill()
         bounds.fill()
@@ -78,16 +123,43 @@ final class LineNumberRuler: NSRulerView {
         paragraph.alignment = .right
 
         func draw(line: Int, top: CGFloat, height: CGFloat) {
+            let hasBreakpoint = breakpoints.contains(line)
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
-                .foregroundColor: line == activeLine ? activeTextColor : textColor,
+                .foregroundColor: hasBreakpoint ? breakpointTextColor : (line == activeLine ? activeTextColor : textColor),
                 .paragraphStyle: paragraph,
             ]
             let label = "\(line + 1)" as NSString
             let size = label.size(withAttributes: attributes)
             let point = convert(NSPoint(x: 0, y: top + textView.textContainerOrigin.y), from: textView)
             let box = NSRect(x: 0, y: point.y + (height - size.height) / 2, width: ruleThickness - 14, height: size.height)
+            if hasBreakpoint {
+                // A tag pointing at the code, like Xcode's.
+                let tag = NSRect(x: 4, y: point.y + 2, width: ruleThickness - 12, height: max(height - 4, 10))
+                let path = NSBezierPath()
+                let tip: CGFloat = 5
+                path.move(to: NSPoint(x: tag.minX + 2, y: tag.minY))
+                path.line(to: NSPoint(x: tag.maxX - tip, y: tag.minY))
+                path.line(to: NSPoint(x: tag.maxX, y: tag.midY))
+                path.line(to: NSPoint(x: tag.maxX - tip, y: tag.maxY))
+                path.line(to: NSPoint(x: tag.minX + 2, y: tag.maxY))
+                path.appendArc(withCenter: NSPoint(x: tag.minX + 2, y: tag.midY), radius: tag.height / 2, startAngle: 90, endAngle: 270)
+                path.close()
+                breakpointColor.setFill()
+                path.fill()
+            }
             label.draw(in: box, withAttributes: attributes)
+            if line == executionLine {
+                // An arrow at the gutter's edge for the line the program is stopped on.
+                let mid = point.y + height / 2
+                let arrow = NSBezierPath()
+                arrow.move(to: NSPoint(x: ruleThickness - 9, y: mid - 5))
+                arrow.line(to: NSPoint(x: ruleThickness - 2, y: mid))
+                arrow.line(to: NSPoint(x: ruleThickness - 9, y: mid + 5))
+                arrow.close()
+                executionColor.setFill()
+                arrow.fill()
+            }
             if let mark = changeMarks[line] {
                 mark.color.setFill()
                 let x = ruleThickness - 5

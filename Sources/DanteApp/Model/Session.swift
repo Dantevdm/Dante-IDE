@@ -128,7 +128,7 @@ final class Session {
     /// Bumped when HEAD moves (a commit, checkout or reset), so views comparing against it reload.
     var gitRevision = 0
 
-    enum Sidebar { case files, search, changes, problems }
+    enum Sidebar { case files, search, changes, problems, debug }
     var sidebar: Sidebar = .files
     let search = SearchState()
     /// Source control: status, staging, commits, branches.
@@ -208,6 +208,10 @@ final class Session {
     var claudeShowsUsage = false
     /// The Map's last build, kept while the window is open.
     @ObservationIgnored var mapCache: MapCache?
+    /// 1-based breakpoint lines per file path, saved per project on this Mac.
+    var breakpoints: [String: Set<Int>] = [:]
+    /// The debugging run, while there is one (and after it ends, until the next).
+    var debug: DebugSession?
     /// The window this session draws into, to bring forward when `dante` opens something in it.
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored var shipCache: ShipCache?
@@ -271,8 +275,11 @@ final class Session {
         recordVisit()
         claude?.stop()
         languages?.stop()
+        stopDebugging()
+        debug = nil
         let workspace = Workspace(url: url)
         self.workspace = workspace
+        loadBreakpoints()
         loadSinceLastVisit(for: workspace)
         claude = makeClaude(for: workspace)
         languages = LanguageServices(root: url)
@@ -355,6 +362,7 @@ final class Session {
     /// The window closed: stop every process and watcher it started. Unsaved changes were
     /// already handled by the close or quit prompt.
     func shutdown() {
+        stopDebugging()
         recordVisit()
         claude?.stop()
         languages?.stop()

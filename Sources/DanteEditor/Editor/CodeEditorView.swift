@@ -63,6 +63,12 @@ public struct CodeEditorView: NSViewRepresentable {
     var takesFocus: Bool
     /// Called with the one-based line at the top of the view when the user scrolls.
     var onScroll: ((Int) -> Void)?
+    /// Zero-based lines with a breakpoint.
+    var breakpoints: Set<Int>
+    /// Called with a zero-based line when its number is clicked; nil keeps the gutter inert.
+    var onToggleBreakpoint: ((Int) -> Void)?
+    /// The zero-based line the debugger is stopped on in this file.
+    var executionLine: Int?
 
     public init(
         text: Binding<String>,
@@ -82,7 +88,10 @@ public struct CodeEditorView: NSViewRepresentable {
         completesWhileTyping: Bool = true,
         onFocus: (() -> Void)? = nil,
         takesFocus: Bool = true,
-        onScroll: ((Int) -> Void)? = nil
+        onScroll: ((Int) -> Void)? = nil,
+        breakpoints: Set<Int> = [],
+        onToggleBreakpoint: ((Int) -> Void)? = nil,
+        executionLine: Int? = nil
     ) {
         _text = text
         self.language = language
@@ -102,6 +111,9 @@ public struct CodeEditorView: NSViewRepresentable {
         self.onFocus = onFocus
         self.takesFocus = takesFocus
         self.onScroll = onScroll
+        self.breakpoints = breakpoints
+        self.onToggleBreakpoint = onToggleBreakpoint
+        self.executionLine = executionLine
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -215,6 +227,16 @@ public struct CodeEditorView: NSViewRepresentable {
             coordinator.diagnostics = diagnostics
             coordinator.applyTokens()
         }
+        if let ruler = coordinator.ruler {
+            ruler.breakpoints = breakpoints
+            if (ruler.onToggleBreakpoint == nil) != (onToggleBreakpoint == nil) { ruler.window?.invalidateCursorRects(for: ruler) }
+            ruler.onToggleBreakpoint = onToggleBreakpoint
+            ruler.executionLine = executionLine
+        }
+        if textView.executionLine != executionLine {
+            textView.executionLine = executionLine
+            textView.needsDisplay = true
+        }
         if let range = reveal {
             let length = (textView.string as NSString).length
             let clamped = NSRange(location: min(range.location, length), length: min(range.length, length - min(range.location, length)))
@@ -327,6 +349,10 @@ public struct CodeEditorView: NSViewRepresentable {
             ruler?.textColor = theme.lineNumber.nsColor
             ruler?.activeTextColor = theme.lineNumberActive.nsColor
             ruler?.backgroundColor = theme.codeBackground.nsColor
+            ruler?.breakpointColor = theme.accent.nsColor
+            ruler?.breakpointTextColor = theme.onAccent.nsColor
+            ruler?.executionColor = theme.amber.nsColor
+            textView.executionColor = theme.amber.opacity(theme.isDark ? 0.16 : 0.2).nsColor
             textView.needsDisplay = true
         }
 
@@ -663,6 +689,9 @@ public struct EditorActions {
 /// Draws a soft band behind the line with the caret.
 public final class CodeTextView: NSTextView {
     var currentLineColor: NSColor = .clear
+    /// The zero-based line the debugger is stopped on, banded in `executionColor`.
+    var executionLine: Int?
+    var executionColor: NSColor = .clear
     var canJumpToDefinition = false
     var onDefinition: ((Int) -> Void)?
     var canHover = false
@@ -807,6 +836,7 @@ public final class CodeTextView: NSTextView {
 
     public override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
+        if let executionLine { drawBand(forLine: executionLine, color: executionColor) }
         guard selectedRange().length == 0,
               let layoutManager = textLayoutManager,
               let contentManager = layoutManager.textContentManager,
@@ -819,5 +849,26 @@ public final class CodeTextView: NSTextView {
         let band = NSRect(x: 0, y: frame.minY + textContainerOrigin.y, width: bounds.width, height: frame.height)
         currentLineColor.setFill()
         band.fill()
+    }
+
+    /// Fills the full width behind one line, found by counting newlines up to it.
+    private func drawBand(forLine line: Int, color: NSColor) {
+        let text = string as NSString
+        var start = 0
+        var index = 0
+        while index < line {
+            let next = text.range(of: "\n", options: .literal, range: NSRange(location: start, length: text.length - start))
+            guard next.location != NSNotFound else { return }
+            start = next.location + 1
+            index += 1
+        }
+        guard let layoutManager = textLayoutManager,
+              let contentManager = layoutManager.textContentManager,
+              let location = contentManager.location(contentManager.documentRange.location, offsetBy: start),
+              let fragment = layoutManager.textLayoutFragment(for: location) else { return }
+        var frame = fragment.layoutFragmentFrame
+        if let first = fragment.textLineFragments.first { frame.size.height = first.typographicBounds.height }
+        color.setFill()
+        NSRect(x: 0, y: frame.minY + textContainerOrigin.y, width: bounds.width, height: frame.height).fill()
     }
 }

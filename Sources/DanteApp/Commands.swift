@@ -129,6 +129,35 @@ struct DanteCommands: Commands {
                 .disabled(session?.git.isRepository != true)
         }
 
+        CommandMenu("Debug") {
+            let debug = session?.debug
+            let live = debug.map { $0.state != .ended } ?? false
+            let stopped = debug?.state == .stopped
+            Button("Start Debugging") { session?.startDebugging() }
+                .shortcut("debugStart")
+                .disabled(session?.canDebugActiveFile != true && !stopped)
+            Button("Continue") { debug?.resume() }
+                .shortcut("debugContinue")
+                .disabled(!stopped)
+            Divider()
+            Button("Step Over") { debug?.stepOver() }
+                .shortcut("debugStepOver")
+                .disabled(!stopped)
+            Button("Step Into") { debug?.stepIn() }
+                .shortcut("debugStepIn")
+                .disabled(!stopped)
+            Button("Step Out") { debug?.stepOut() }
+                .shortcut("debugStepOut")
+                .disabled(!stopped)
+            Divider()
+            Button("Stop Debugging") { session?.stopDebugging() }
+                .shortcut("debugStop")
+                .disabled(!live)
+            Button("Toggle Breakpoint") { session?.toggleBreakpointAtCursor() }
+                .shortcut("debugToggleBreakpoint")
+                .disabled(session?.canDebugActiveFile != true)
+        }
+
         CommandGroup(before: .toolbar) {
             Button(session?.showsTerminal == true ? "Hide Terminal" : "Show Terminal") {
                 session?.showsTerminal.toggle()
