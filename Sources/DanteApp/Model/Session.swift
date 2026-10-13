@@ -201,6 +201,9 @@ final class Session {
     private(set) var terminalInput: TerminalInput?
     /// Bumped to move keyboard focus to Claude's message box.
     var claudeFocusRequest = 0
+    /// The Claude panel's history and usage popovers, so `/history` and `/context` can open them.
+    var claudeShowsHistory = false
+    var claudeShowsUsage = false
     /// Files waiting to go with the next message to Claude.
     var claudeAttachments: [Attachment] = []
     /// Recent Claude usage on this Mac and the signed-in plan, for the panel's meter.

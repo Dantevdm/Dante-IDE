@@ -7,7 +7,6 @@ struct ClaudeFooter: View {
     @Environment(\.theme) private var theme
     let session: Session
     let claude: ClaudeSession
-    @State private var showsUsage = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -23,10 +22,10 @@ struct ClaudeFooter: View {
                 }
             }
             Spacer(minLength: 4)
-            Button { showsUsage.toggle() } label: { usageLabel }
+            Button { session.claudeShowsUsage.toggle() } label: { usageLabel }
                 .buttonStyle(.plain)
                 .help("Your Claude usage on this Mac")
-                .popover(isPresented: $showsUsage, arrowEdge: .top) {
+                .popover(isPresented: Bindable(session).claudeShowsUsage, arrowEdge: .top) {
                     UsagePopover(session: session, claude: claude)
                 }
         }

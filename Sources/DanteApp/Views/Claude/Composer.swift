@@ -11,9 +11,19 @@ struct Composer: View {
     let claude: ClaudeSession
     @State private var draft = ""
     @FocusState private var focused: Bool
+    /// The highlighted row in the @ or / list.
+    @State private var picked = 0
+    /// The token the list was dismissed for with Esc, so it stays closed until the next one.
+    @State private var dismissed: String?
+    @State private var skills: [ClaudeSkill] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let token = openToken, !suggestions(for: token).isEmpty {
+                SuggestionList(rows: suggestions(for: token), picked: min(picked, suggestions(for: token).count - 1)) { index in
+                    choose(index, for: token)
+                }
+            }
             VStack(alignment: .leading, spacing: 7) {
             if !session.claudeAttachments.isEmpty || session.attachmentsLoading > 0 {
                 FlowLayout(spacing: 5) {
@@ -45,6 +55,19 @@ struct Composer: View {
                     .lineLimit(1...8)
                     .focused($focused)
                     .onSubmit(send)
+                    .onKeyPress(keys: [.upArrow, .downArrow, .tab, .return, .escape]) { press in
+                        guard let token = openToken else { return .ignored }
+                        let count = suggestions(for: token).count
+                        guard count > 0 else { return .ignored }
+                        switch press.key {
+                        case .upArrow: picked = (min(picked, count - 1) + count - 1) % count
+                        case .downArrow: picked = (min(picked, count - 1) + 1) % count
+                        case .escape: dismissed = draft
+                        default: choose(min(picked, count - 1), for: token)
+                        }
+                        return .handled
+                    }
+                    .onChange(of: draft) { picked = 0 }
                     .disabled(isUnavailable)
                     .padding(.vertical, 2)
 
@@ -85,6 +108,9 @@ struct Composer: View {
         }
         .padding(12)
         .onChange(of: session.claudeFocusRequest) { focused = true }
+        .task(id: session.workspace?.revision) {
+            if let root = session.workspace?.url { skills = ClaudeSkills.load(root: root) }
+        }
         .background(PasteInterceptor(isActive: focused) { pasteAttachments() })
     }
 
@@ -131,8 +157,97 @@ struct Composer: View {
 
     private func send() {
         guard canSend else { return }
-        session.askClaude(draft)
+        let mentioned = ComposerToken.mentions(in: draft, files: Set(session.workspace?.files ?? []))
+        let instructions = mentioned.isEmpty ? nil : "The user pointed at these project files with @; read them before answering: " + mentioned.joined(separator: ", ")
+        session.askClaude(draft, instructions: instructions)
         draft = ""
+    }
+
+    // MARK: @ and / lists
+
+    private var openToken: ComposerToken? {
+        guard focused, dismissed != draft, let token = ComposerToken.current(in: draft) else { return nil }
+        return token
+    }
+
+    private func suggestions(for token: ComposerToken) -> [SuggestionList.Row] {
+        switch token.kind {
+        case .mention:
+            guard let workspace = session.workspace else { return [] }
+            let open = workspace.documents.compactMap { document -> String? in
+                let path = document.url.path
+                let root = workspace.url.path + "/"
+                return path.hasPrefix(root) ? String(path.dropFirst(root.count)) : nil
+            }
+            let paths = token.query.isEmpty
+                ? Array(open.prefix(8))
+                : FuzzyMatch.rank(token.query, in: workspace.files, limit: 8).map(\.path)
+            return paths.map { SuggestionList.Row(id: $0, symbol: "doc", title: ($0 as NSString).lastPathComponent, detail: ($0 as NSString).deletingLastPathComponent) }
+        case .command:
+            return ComposerCommand.matching(token.query, skills: skills).prefix(8).map { command in
+                let symbol = if case .skill = command.action { "book.closed" } else { "slash.circle" }
+                return SuggestionList.Row(id: command.name, symbol: symbol, title: "/" + command.name, detail: command.detail)
+            }
+        }
+    }
+
+    private func choose(_ index: Int, for token: ComposerToken) {
+        let rows = suggestions(for: token)
+        guard rows.indices.contains(index) else { return }
+        switch token.kind {
+        case .mention:
+            draft = token.replacing(in: draft, with: "@" + rows[index].id)
+        case .command:
+            guard let command = ComposerCommand.matching(token.query, skills: skills).first(where: { $0.name == rows[index].id }) else { return }
+            draft = ""
+            switch command.action {
+            case .compact: claude.compact()
+            case .newConversation: claude.reset()
+            case .context: session.claudeShowsUsage = true
+            case .history: session.claudeShowsHistory = true
+            case .skills: session.area = .claude
+            case .skill(let name): draft = "Use the \(name) skill to "
+            }
+        }
+        picked = 0
+    }
+}
+
+/// Files for `@` or commands for `/`, over the message box.
+private struct SuggestionList: View {
+    @Environment(\.theme) private var theme
+    struct Row: Identifiable {
+        var id: String
+        var symbol: String
+        var title: String
+        var detail: String
+    }
+    let rows: [Row]
+    let picked: Int
+    let choose: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                Button { choose(index) } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: row.symbol).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color).frame(width: 14)
+                        Text(row.title).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
+                        Text(row.detail).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.head)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(index == picked ? theme.accentTint.color : .clear))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            Text("↑↓ to move · ↩ or ⇥ to pick · esc to close").font(.dante(size: 10)).foregroundStyle(theme.text3.color).padding(.horizontal, 8).padding(.top, 3)
+        }
+        .padding(5)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card.color))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.line2.color))
     }
 }
 

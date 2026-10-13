@@ -202,6 +202,22 @@ public final class ClaudeSession {
         queued.removeAll { $0.id == id }
     }
 
+    /// The turn whose file edits are applied as they arrive ("Apply the rest of this turn").
+    /// They are still checkpointed, so Undo this turn puts them back.
+    public private(set) var autoAppliedTurn: String?
+
+    public var appliesRestOfTurn: Bool { autoAppliedTurn != nil && autoAppliedTurn == currentTurn }
+
+    /// Applies every waiting file edit, and with `restOfTurn` the ones still to come this turn.
+    public func applyAll(restOfTurn: Bool = false) {
+        if restOfTurn { autoAppliedTurn = currentTurn }
+        for tool in pendingApprovals where Self.editTools.contains(tool.name) { approve(tool.id) }
+    }
+
+    public func stopApplyingRestOfTurn() { autoAppliedTurn = nil }
+
+    static let editTools: Set<String> = ["Edit", "MultiEdit", "Write", "NotebookEdit"]
+
     public var pendingApprovals: [ToolActivity] {
         items.compactMap { item in
             if case .tool(let tool) = item.content, tool.isAwaitingApproval { tool } else { nil }
@@ -248,7 +264,7 @@ public final class ClaudeSession {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status else { return }
         if let turn = currentTurn {
             var checkpoint = checkpoints[turn] ?? TurnCheckpoint()
-            if ["Edit", "MultiEdit", "Write", "NotebookEdit"].contains(tool.name),
+            if Self.editTools.contains(tool.name),
                let path = tool.input["file_path"]?.string ?? tool.input["notebook_path"]?.string {
                 checkpoint.record(path) { try? String(contentsOf: URL(filePath: $0), encoding: .utf8) }
             } else if tool.name == "Bash" {
@@ -311,6 +327,7 @@ public final class ClaudeSession {
         queued = []
         checkpoints = [:]
         currentTurn = nil
+        autoAppliedTurn = nil
         pendingNotice = nil
         context = nil
         costBeforeThisProcess = 0
@@ -547,7 +564,13 @@ public final class ClaudeSession {
         case .permissionRequest(let request):
             let id = request.toolUseID ?? "request-\(request.requestID)"
             defer {
-                if case .awaitingApproval = activity(id)?.status { onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input))) }
+                if case .awaitingApproval = activity(id)?.status {
+                    if appliesRestOfTurn, Self.editTools.contains(request.toolName), activity(id)?.ruleNote == nil {
+                        approve(id)
+                    } else {
+                        onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input)))
+                    }
+                }
             }
             let change = ProposedChange.make(toolName: request.toolName, input: request.input, root: root)
             if index[id] == nil {

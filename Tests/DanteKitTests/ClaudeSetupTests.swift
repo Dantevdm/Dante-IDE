@@ -70,3 +70,27 @@ struct TurnCheckpointTests {
         #expect(checkpoint.undone && checkpoint.undo { _, _ in }.isEmpty)
     }
 }
+
+struct ComposerTokenTests {
+    @Test func findsTheMentionOrCommandBeingTyped() {
+        #expect(ComposerToken.current(in: "look at @mail")?.query == "mail")
+        #expect(ComposerToken.current(in: "look at @mail")?.kind == .mention)
+        #expect(ComposerToken.current(in: "write to me@example.com") == nil)
+        #expect(ComposerToken.current(in: "@a.go then") == nil)
+        #expect(ComposerToken.current(in: "/comp")?.kind == .command)
+        #expect(ComposerToken.current(in: "/compact now") == nil)
+        let token = ComposerToken.current(in: "fix @hand")!
+        #expect(token.replacing(in: "fix @hand", with: "@api/handlers.go") == "fix @api/handlers.go ")
+    }
+
+    @Test func readsMentionedProjectFiles() {
+        let files: Set<String> = ["api/handlers.go", "README.md"]
+        #expect(ComposerToken.mentions(in: "compare @api/handlers.go, @README.md and @nope.txt (@README.md)", files: files) == ["api/handlers.go", "README.md"])
+    }
+
+    @Test func commandsMatchByPrefixFirst() {
+        let skill = ClaudeSkill(name: "db-change", description: "Schema changes", scope: .project, file: URL(filePath: "/home/me/p/.claude/skills/db-change/SKILL.md"))
+        #expect(ComposerCommand.matching("c", skills: [skill]).map(\.name) == ["compact", "context", "db-change"])
+        #expect(ComposerCommand.matching("", skills: [skill]).count == ComposerCommand.builtIn.count + 1)
+    }
+}

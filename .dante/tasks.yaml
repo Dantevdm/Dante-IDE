@@ -307,7 +307,7 @@ tasks:
 - id: DI-76
   title: "Claude panel: @file mentions and a / command menu"
   phase: build
-  state: todo
+  state: review
 - id: DI-77
   title: "Claude panel: notify when Claude finishes or needs approval while Dante is in the background"
   phase: build
@@ -315,7 +315,7 @@ tasks:
 - id: DI-78
   title: "Claude panel: Apply all for several proposed edits"
   phase: build
-  state: todo
+  state: review
 - id: DI-79
   title: "Tasks: a Claude conversation and a branch per task"
   phase: build

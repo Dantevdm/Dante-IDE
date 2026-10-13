@@ -7,7 +7,6 @@ struct ClaudePanel: View {
     let session: Session
     let workspace: Workspace
     let claude: ClaudeSession
-    @State private var showsHistory = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,6 +17,7 @@ struct ClaudePanel: View {
             if claude.needsLogin {
                 SignInBanner(session: session)
             }
+            ApplyAllBar(claude: claude)
             Composer(session: session, claude: claude)
         }
         .background(theme.panel.color)
@@ -47,9 +47,9 @@ struct ClaudePanel: View {
             .help(Preferences.shared.claudeAsksFirst
                   ? "On: Claude asks clarifying questions before starting anything ambiguous. Click to let it go straight ahead."
                   : "Off: Claude goes straight ahead. Click to have it ask clarifying questions first.")
-            IconButton(symbol: "clock.arrow.circlepath", label: "Earlier conversations") { showsHistory.toggle() }
-                .popover(isPresented: $showsHistory, arrowEdge: .bottom) {
-                    ConversationHistory(session: session) { showsHistory = false }
+            IconButton(symbol: "clock.arrow.circlepath", label: "Earlier conversations") { session.claudeShowsHistory.toggle() }
+                .popover(isPresented: Bindable(session).claudeShowsHistory, arrowEdge: .bottom) {
+                    ConversationHistory(session: session) { session.claudeShowsHistory = false }
                 }
             IconButton(symbol: "square.and.pencil", label: "New conversation (the current one stays in Earlier conversations)") { claude.reset() }
                 .disabled(claude.items.isEmpty)
@@ -68,6 +68,58 @@ struct ClaudePanel: View {
         case .working: "Working…"
         case .idle: "Proposes, you apply"
         }
+    }
+}
+
+/// Over the composer while file edits wait: which files, Apply all, and the option to apply
+/// the rest of the turn's edits as they come (Undo this turn still puts them back).
+private struct ApplyAllBar: View {
+    @Environment(\.theme) private var theme
+    let claude: ClaudeSession
+
+    var body: some View {
+        let edits = claude.pendingApprovals.filter { $0.change != nil }
+        if claude.appliesRestOfTurn, claude.state == .working {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle").foregroundStyle(theme.green.color)
+                Text("Applying this turn’s edits as they come").foregroundStyle(theme.text2.color)
+                Spacer()
+                Button("Stop") { claude.stopApplyingRestOfTurn() }.buttonStyle(.plain).foregroundStyle(theme.accent.color)
+            }
+            .font(.dante(size: 11.5))
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+        } else if !edits.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(edits.count == 1 ? "1 edit waiting" : "\(edits.count) edits waiting")
+                        .font(.dante(size: 11.5, weight: .semibold)).foregroundStyle(theme.text.color)
+                    Text(files(edits)).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.tail)
+                    Spacer(minLength: 4)
+                }
+                HStack(spacing: 6) {
+                    Button(edits.count == 1 ? "Apply" : "Apply all") { claude.applyAll() }
+                        .buttonStyle(DanteButtonStyle(primary: true))
+                    Button("Apply the rest of this turn") { claude.applyAll(restOfTurn: true) }
+                        .buttonStyle(DanteButtonStyle())
+                        .help("Applies these and every edit Claude makes until the turn ends. Undo this turn puts them all back.")
+                    Spacer()
+                    Button("Decline all") { for edit in edits { claude.decline(edit.id) } }
+                        .buttonStyle(.plain).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card.color))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.accentLine.color))
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+        }
+    }
+
+    private func files(_ edits: [ToolActivity]) -> String {
+        var names: [String] = []
+        for edit in edits { if let name = edit.change?.url.lastPathComponent, !names.contains(name) { names.append(name) } }
+        return names.joined(separator: ", ")
     }
 }
 
