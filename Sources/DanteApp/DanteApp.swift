@@ -65,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// One window: the launch screen until a folder is open, then the workspace.
 struct RootView: View {
     @Environment(ThemeStore.self) private var themeStore
+    @Environment(\.openWindow) private var openWindow
     @State private var session: Session
 
     init(recents: RecentProjects) {
@@ -90,14 +91,21 @@ struct RootView: View {
         .focusedSceneValue(\.session, session)
         .navigationTitle(session.workspace?.name ?? "Dante")
         .onDisappear { session.shutdown() }
+        .background(WindowReader { session.window = $0 })
         .onAppear {
             let paths = AppDelegate.launchPaths
             AppDelegate.launchPaths = []
             if let folder = paths.first {
                 session.open(folder: folder)
                 for file in paths.dropFirst() { session.open(file: file) }
+            } else if let target = Opener.takePending() {
+                session.apply(target)
             }
         }
+        // `dante` sends dante://open URLs; Finder and the Dock send file URLs. Existing
+        // windows take them rather than SwiftUI making a new window for each.
+        .onOpenURL { Opener.handle($0, from: session, openWindow: openWindow) }
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         // With no project open, ⌘, shows the app-wide settings here.
         .sheet(isPresented: $session.showsAppSettings) {
             VStack(spacing: 0) {

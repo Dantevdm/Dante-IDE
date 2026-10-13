@@ -6,6 +6,8 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .executable(name: "Dante", targets: ["DanteApp"]),
+        // The `dante` command, bundled into the app as Contents/Resources/bin/dante.
+        .executable(name: "dante-cli", targets: ["DanteCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.2.0"),
@@ -22,6 +24,9 @@ let package = Package(
         .package(url: "https://github.com/tree-sitter/tree-sitter-json", exact: "0.24.8"),
     ],
     targets: [
+        // What the `dante` command asks the app to open, and which window each part goes to.
+        .target(name: "DanteOpen"),
+        .executableTarget(name: "DanteCLI", dependencies: ["DanteOpen"]),
         // Models with no UI: themes, workspace, documents, lifecycle, tasks, Claude.
         .target(name: "DanteKit", dependencies: [.product(name: "Yams", package: "Yams")]),
         // The TextKit 2 code editor and syntax highlighting.
@@ -47,10 +52,11 @@ let package = Package(
             dependencies: [
                 "DanteKit",
                 "DanteEditor",
+                "DanteOpen",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ]
         ),
-        .testTarget(name: "DanteKitTests", dependencies: ["DanteKit"]),
+        .testTarget(name: "DanteKitTests", dependencies: ["DanteKit", "DanteOpen"]),
         .testTarget(name: "DanteEditorTests", dependencies: ["DanteEditor"]),
     ]
 )

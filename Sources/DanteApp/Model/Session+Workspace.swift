@@ -16,7 +16,6 @@ extension Session {
         }
     }
 
-    /// Opens a file from the Problems panel at a diagnostic.
     /// Opens a file with a 1-based line in view, for tests and search results.
     func open(file url: URL, line: Int) {
         open(file: url)

@@ -18,12 +18,17 @@ for arg in "$@"; do
 done
 
 swift build -c "$configuration" --product Dante
+swift build -c "$configuration" --product dante-cli
 bin_dir="$(swift build -c "$configuration" --show-bin-path)"
 
 app="build/Dante.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin_dir/Dante" "$app/Contents/MacOS/Dante"
+
+# The `dante` command; Settings → Tools says how to put it on the PATH.
+mkdir -p "$app/Contents/Resources/bin"
+cp "$bin_dir/dante-cli" "$app/Contents/Resources/bin/dante"
 
 cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 
@@ -51,6 +56,28 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>dev.dante.ide.open</string>
+      <key>CFBundleURLSchemes</key><array><string>dante</string></array>
+    </dict>
+  </array>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>Folder</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key><array><string>public.folder</string></array>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key><string>Source</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key><array><string>public.source-code</string><string>public.plain-text</string><string>public.json</string><string>public.yaml</string></array>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST

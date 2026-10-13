@@ -383,7 +383,7 @@ tasks:
 - id: DI-95
   title: "dante command-line tool: open a folder or files from the terminal"
   phase: build
-  state: todo
+  state: review
 - id: DI-96
   title: "Merge conflicts: a three-way view in Changes"
   phase: build

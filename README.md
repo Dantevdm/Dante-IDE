@@ -17,6 +17,8 @@ Dante follows a project from Discover through Define, Design, Build, Test, Relea
 
 Download the DMG from [Releases](https://github.com/Dantevdm/Dante-IDE/releases), open it and drag Dante to Applications. Builds that aren't notarised yet need a right-click → Open the first time (or `xattr -dr com.apple.quarantine /Applications/Dante.app`).
 
+To open projects from the terminal, Settings → Tools → dante command links `dante` onto your PATH; then `dante .`, `dante -n ~/other-project` or `dante src/main.go:42`.
+
 You'll want [Claude Code](https://claude.com/claude-code) installed and signed in for the Claude features, and git. Settings → Tools lists the optional extras (language servers, database clients, the GitHub CLI, Docker) with the command to install each.
 
 ## The areas

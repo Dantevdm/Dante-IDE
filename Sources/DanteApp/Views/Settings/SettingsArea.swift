@@ -201,6 +201,8 @@ private struct ToolsPane: View {
     let workspace: Workspace
     @State private var statuses: [String: ToolStatus] = [:]
     @State private var showsAll = false
+    @State private var command: CommandLineTool.State?
+    private let bundledCommand = CommandLineTool.bundled()
 
     private var languages: [String] {
         let names: [String: String] = ["go": "Go", "js": "JavaScript", "mjs": "JavaScript", "jsx": "JavaScript", "ts": "TypeScript", "tsx": "TypeScript",
@@ -212,6 +214,7 @@ private struct ToolsPane: View {
 
     var body: some View {
         Form {
+            SwiftUI.Section("Dante") { commandRow }
             ForEach(Tool.Group.allCases, id: \.self) { group in
                 let inGroup = tools.filter { $0.group == group }
                 if !inGroup.isEmpty {
@@ -260,7 +263,49 @@ private struct ToolsPane: View {
         }
     }
 
+    /// The `dante` command: open folders and files from any terminal.
+    private var commandRow: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("dante command").font(.dante(size: 13, weight: .medium))
+                Text("Open folders and files from the terminal: dante . or dante src/main.go:42")
+                    .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+            }
+            Spacer()
+            if let bundledCommand {
+                let install = CommandLineTool.installCommand(
+                    source: bundledCommand.path,
+                    path: Shell.environment()["PATH"] ?? "",
+                    home: NSHomeDirectory(),
+                    isWritable: { FileManager.default.isWritableFile(atPath: $0) }
+                )
+                switch command {
+                case .installed(let path):
+                    Label("Installed", systemImage: "checkmark.circle.fill")
+                        .font(.dante(size: 12))
+                        .foregroundStyle(theme.green.color)
+                        .help(path)
+                case .elsewhere(let path):
+                    Text("Points to another copy").font(.dante(size: 12)).foregroundStyle(theme.amber.color).help(path)
+                    Button("Link This Copy…") { session.typeInTerminal(install) }.help(install)
+                case .notInstalled:
+                    Text("Not installed").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                    Button("Install…") { session.typeInTerminal(install) }.help(install)
+                case nil:
+                    ProgressView().controlSize(.mini)
+                }
+            } else {
+                Text("Comes with the app bundle").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+            }
+        }
+    }
+
     private func check() async {
+        if let bundledCommand {
+            let found = Shell.which(CommandLineTool.name)
+            let resolved = found.map { URL(filePath: $0).resolvingSymlinksInPath().path }
+            command = CommandLineTool.state(found: found, resolved: resolved, bundled: bundledCommand.resolvingSymlinksInPath().path)
+        }
         await withTaskGroup(of: (String, ToolStatus).self) { group in
             for tool in tools where statuses[tool.id] == nil {
                 group.addTask { (tool.id, await ToolStatus.check(tool)) }

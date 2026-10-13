@@ -208,6 +208,8 @@ final class Session {
     var claudeShowsUsage = false
     /// The Map's last build, kept while the window is open.
     @ObservationIgnored var mapCache: MapCache?
+    /// The window this session draws into, to bring forward when `dante` opens something in it.
+    @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored var shipCache: ShipCache?
     /// Files waiting to go with the next message to Claude.
     var claudeAttachments: [Attachment] = []
