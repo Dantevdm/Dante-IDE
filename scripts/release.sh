@@ -20,6 +20,13 @@ if [[ -z "$version" ]]; then echo "usage: scripts/release.sh <version>" >&2; exi
 DANTE_VERSION="$version" scripts/bundle.sh
 app="build/Dante.app"
 
+# SwiftPM writes the build folder's path into the binary (it looks for resource bundles
+# there first), so a build under your home folder carries your user name. Build published
+# releases from a neutral checkout, e.g. `git worktree add /tmp/dante-release v0.2.0`.
+if strings -a "$app/Contents/MacOS/Dante" | grep -q -F "$HOME/"; then
+  echo "Note: the binary contains $HOME (the build folder's path). Build from a folder outside your home before publishing."
+fi
+
 if [[ -n "${DEVELOPER_ID:-}" ]]; then
   echo "Signing with the Developer ID and the hardened runtime…"
   codesign --force --deep --options runtime --timestamp --sign "$DEVELOPER_ID" "$app"
@@ -45,5 +52,5 @@ else
   echo "Not notarised: set DEVELOPER_ID and NOTARY_PROFILE to notarise."
 fi
 
-shasum -a 256 "$dmg" | tee "$dmg.sha256"
+(cd build && shasum -a 256 "Dante-${version}.dmg") | tee "$dmg.sha256"
 echo "Built $dmg"

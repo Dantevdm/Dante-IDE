@@ -7,7 +7,7 @@ Native macOS IDE in Swift 6 / SwiftUI, built with SwiftPM (no Xcode project). De
 - Build: `swift build`
 - Test: `swift test` (Swift Testing: `import Testing`, `@Test`, `#expect`)
 - App bundle: `scripts/bundle.sh [debug] [--open]` → `build/Dante.app` (bundle id `dev.dante.ide`)
-- Release: `scripts/release.sh <version>` → `build/Dante-<version>.dmg` (signs and notarises only when `DEVELOPER_ID` and `NOTARY_PROFILE` are set; otherwise ad-hoc). The icon is drawn by `swift scripts/make_icon.swift` into `Resources/AppIcon.icns`.
+- Release: `scripts/release.sh <version>` → `build/Dante-<version>.dmg` (signs and notarises only when `DEVELOPER_ID` and `NOTARY_PROFILE` are set; otherwise ad-hoc). Build anything you publish from a checkout outside the home folder (`git worktree add /tmp/dante-release <tag>`): SwiftPM writes the build path, and so the user name, into the binary. The icon is drawn by `swift scripts/make_icon.swift` into `Resources/AppIcon.icns`.
 - Open a folder on launch: `open build/Dante.app --args "$PWD"` (files after the folder open in tabs) (AppDelegate turns off `NSTreatUnknownArgumentsAsOpen`; otherwise AppKit treats the path as an open-file event and SwiftUI makes no window)
 
 ## Modules
