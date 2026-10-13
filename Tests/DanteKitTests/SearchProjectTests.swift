@@ -43,4 +43,16 @@ struct ProjectSearchTests {
         #expect(result.files.map(\.path) == ["a.txt"])
         #expect(result.matchCount == 1)
     }
+
+    @Test func keepsPathOrderAcrossChunksAndStopsAtTheLimit() async throws {
+        let folder = try TemporaryFolder()
+        let paths = (0..<3_000).map { String(format: "f%04d.txt", $0) }
+        for path in paths { try folder.write(path, "hit\nhit\n") }
+        let all = await ProjectSearch.run(.init(text: "hit"), root: folder.url, paths: paths)
+        #expect(all.files.map(\.path) == Array(paths.prefix(2_500)))
+        #expect(all.matchCount == ProjectSearch.limit && all.truncated)
+
+        let some = await ProjectSearch.run(.init(text: "hit"), root: folder.url, paths: Array(paths.prefix(900)))
+        #expect(some.files.map(\.path) == Array(paths.prefix(900)) && some.matchCount == 1_800 && !some.truncated)
+    }
 }

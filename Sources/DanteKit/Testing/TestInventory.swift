@@ -115,43 +115,61 @@ public struct TestInventory: Equatable, Sendable {
 
     // MARK: Parsing
 
+    /// Built once: a regex literal is compiled again every time the code holding it runs.
+    private enum Pattern {
+        nonisolated(unsafe) static let goTest = /^func\s+(Test\w*)\s*\(\s*\w+\s+\*testing\.T\s*\)/
+        nonisolated(unsafe) static let goBenchmark = /^func\s+(Benchmark\w*)\s*\(\s*\w+\s+\*testing\.B\s*\)/
+        nonisolated(unsafe) static let goFuzz = /^func\s+(Fuzz\w*)\s*\(\s*\w+\s+\*testing\.F\s*\)/
+        nonisolated(unsafe) static let swiftTest = /@Test\b(?:\([^)]*\))?\s*(?:@\w+\s+)*(?:(?:static|nonisolated|private|fileprivate|internal|public)\s+)*func\s+(`?[\w]+`?)/
+        nonisolated(unsafe) static let swiftAfterTestAttribute = /^\s*(?:(?:static|nonisolated|private)\s+)*func\s+(`?\w+`?)/
+        nonisolated(unsafe) static let xcTest = /^\s*(?:@\w+\s+)*(?:override\s+)?func\s+(test\w+)\s*\(\s*\)/
+        nonisolated(unsafe) static let pythonTest = /^\s*(?:async\s+)?def\s+(test\w*)\s*\(/
+        nonisolated(unsafe) static let jsTest = /^\s*(?:it|test)(?:\.(?:only|skip|concurrent|todo|each\([^)]*\)))?\s*\(\s*['"`]((?:[^'"`\\]|\\.)+)['"`]/
+        nonisolated(unsafe) static let jsBench = /^\s*bench\s*\(\s*['"`]([^'"`]+)['"`]/
+        nonisolated(unsafe) static let rustFunction = /^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/
+        nonisolated(unsafe) static let jvmTest = /(?:void|fun)\s+`?([\w ]+?)`?\s*\(/
+        nonisolated(unsafe) static let rubyIt = /^\s*it\s+['"]([^'"]+)['"]/
+        nonisolated(unsafe) static let rubyTest = /^\s*def\s+(test_\w+)/
+    }
+
     /// The tests declared in one file.
     public static func tests(in text: String, path: String, rules: [CategoryRule] = []) -> [WrittenTest] {
         let lines = text.components(separatedBy: "\n")
         let lower = path.lowercased()
         var found: [(name: String, line: Int, kind: String?)] = []
 
-        func scan(_ pattern: Regex<(Substring, Substring)>, kind: String? = nil) {
-            for (index, line) in lines.enumerated() {
+        // `hint` is a word the line must contain: a cheap check that spares most lines the regex.
+        func scan(_ pattern: Regex<(Substring, Substring)>, kind: String? = nil, hint: String) {
+            for (index, line) in lines.enumerated() where line.contains(hint) {
                 if let match = line.firstMatch(of: pattern) { found.append((String(match.1), index + 1, kind)) }
             }
         }
 
         if lower.hasSuffix(".go") {
-            scan(/^func\s+(Test\w*)\s*\(\s*\w+\s+\*testing\.T\s*\)/)
-            scan(/^func\s+(Benchmark\w*)\s*\(\s*\w+\s+\*testing\.B\s*\)/, kind: performance)
-            scan(/^func\s+(Fuzz\w*)\s*\(\s*\w+\s+\*testing\.F\s*\)/)
+            scan(Pattern.goTest, hint: "testing.T")
+            scan(Pattern.goBenchmark, kind: performance, hint: "testing.B")
+            scan(Pattern.goFuzz, hint: "testing.F")
         } else if lower.hasSuffix(".swift") {
             // @Test func name(), @Test("Display name") func name(), and XCTest's func testName().
             for (index, line) in lines.enumerated() {
                 let previous = index > 0 ? lines[index - 1] : ""
-                if let match = line.firstMatch(of: /@Test\b(?:\([^)]*\))?\s*(?:@\w+\s+)*(?:(?:static|nonisolated|private|fileprivate|internal|public)\s+)*func\s+(`?[\w]+`?)/) {
+                if line.contains("@Test"), let match = line.firstMatch(of: Pattern.swiftTest) {
                     found.append((String(match.1), index + 1, nil))
-                } else if previous.trimmingCharacters(in: .whitespaces).hasPrefix("@Test"), let match = line.firstMatch(of: /^\s*(?:(?:static|nonisolated|private)\s+)*func\s+(`?\w+`?)/) {
+                } else if previous.trimmingCharacters(in: .whitespaces).hasPrefix("@Test"), let match = line.firstMatch(of: Pattern.swiftAfterTestAttribute) {
                     found.append((String(match.1), index + 1, nil))
-                } else if let match = line.firstMatch(of: /^\s*(?:@\w+\s+)*(?:override\s+)?func\s+(test\w+)\s*\(\s*\)/) {
+                } else if line.contains("func test"), let match = line.firstMatch(of: Pattern.xcTest) {
                     found.append((String(match.1), index + 1, nil))
                 }
             }
         } else if lower.hasSuffix(".py") {
-            scan(/^\s*(?:async\s+)?def\s+(test\w*)\s*\(/)
+            scan(Pattern.pythonTest, hint: "def")
         } else if [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"].contains(where: { lower.hasSuffix($0) }) {
-            scan(/^\s*(?:it|test)(?:\.(?:only|skip|concurrent|todo|each\([^)]*\)))?\s*\(\s*['"`]((?:[^'"`\\]|\\.)+)['"`]/)
-            scan(/^\s*bench\s*\(\s*['"`]([^'"`]+)['"`]/, kind: performance)
+            scan(Pattern.jsTest, hint: "(")
+            scan(Pattern.jsBench, kind: performance, hint: "bench")
         } else if lower.hasSuffix(".rs") {
             for (index, line) in lines.enumerated() where line.contains("#[test]") || line.contains("#[tokio::test") {
                 for next in lines.dropFirst(index + 1).prefix(3) {
-                    if let match = next.firstMatch(of: /^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/) {
+                    if let match = next.firstMatch(of: Pattern.rustFunction) {
                         found.append((String(match.1), index + 1, nil))
                         break
                     }
@@ -160,15 +178,15 @@ public struct TestInventory: Equatable, Sendable {
         } else if lower.hasSuffix(".java") || lower.hasSuffix(".kt") {
             for (index, line) in lines.enumerated() where line.contains("@Test") {
                 for next in lines.dropFirst(index).prefix(3) {
-                    if let match = next.firstMatch(of: /(?:void|fun)\s+`?([\w ]+?)`?\s*\(/) {
+                    if let match = next.firstMatch(of: Pattern.jvmTest) {
                         found.append((String(match.1), index + 1, nil))
                         break
                     }
                 }
             }
         } else if lower.hasSuffix(".rb") {
-            scan(/^\s*it\s+['"]([^'"]+)['"]/)
-            scan(/^\s*def\s+(test_\w+)/)
+            scan(Pattern.rubyIt, hint: "it")
+            scan(Pattern.rubyTest, hint: "test_")
         }
 
         let fileCategory = category(path: path, text: text, rules: rules)

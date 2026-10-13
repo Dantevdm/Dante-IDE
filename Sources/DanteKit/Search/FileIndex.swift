@@ -12,7 +12,6 @@ public enum FileIndex {
 
     /// Walks the project. Hidden files are included, since `.dante/`, `.github/` and dotfiles matter here.
     public static func scan(_ root: URL, fileManager: FileManager = .default) -> [String] {
-        let rootPath = root.standardizedFileURL.path
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -20,7 +19,11 @@ public enum FileIndex {
         ) else { return [] }
 
         var paths: [String] = []
+        // The enumerator may spell the root differently (/private/var for /var), so its own
+        // spelling is taken from the first item, which always sits directly in the root.
+        var prefix: String?
         for case let url as URL in enumerator {
+            if prefix == nil { prefix = url.deletingLastPathComponent().path + "/" }
             let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             if skippedNames.contains(url.lastPathComponent) {
                 // Only for folders: on a file (.DS_Store) it skips the rest of the folder it's in.
@@ -28,9 +31,9 @@ public enum FileIndex {
                 continue
             }
             guard !isDirectory else { continue }
-            let path = url.standardizedFileURL.path
-            guard path.hasPrefix(rootPath + "/") else { continue }
-            paths.append(String(path.dropFirst(rootPath.count + 1)))
+            let path = url.path
+            guard let prefix, path.hasPrefix(prefix) else { continue }
+            paths.append(String(path.dropFirst(prefix.count)))
             if paths.count >= limit { break }
         }
         return paths.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
@@ -47,8 +50,18 @@ public enum FuzzyMatch {
     }
 
     public static func match(_ query: String, in candidate: String) -> Result? {
-        let needle = Array(query.lowercased().filter { !$0.isWhitespace })
+        match(needle(query), in: candidate)
+    }
+
+    private static func needle(_ query: String) -> [Character] {
+        Array(query.lowercased().filter { !$0.isWhitespace })
+    }
+
+    private static func match(_ needle: [Character], in candidate: String) -> Result? {
         guard !needle.isEmpty else { return Result(score: 0, indices: []) }
+        // Most candidates lack the query's letters in order; finding that out on the bytes is
+        // much cheaper than the character arrays the scoring needs.
+        if let bytes = asciiBytes(needle), !containsInOrder(bytes, candidate) { return nil }
         let haystack = Array(candidate)
         let lowered = haystack.map { Character($0.lowercased()) }
         let nameStart = (haystack.lastIndex(of: "/").map { $0 + 1 }) ?? 0
@@ -65,9 +78,10 @@ public enum FuzzyMatch {
 
     /// Ranks candidates, best first, keeping at most `limit`.
     public static func rank(_ query: String, in candidates: [String], limit: Int = 50) -> [(path: String, result: Result)] {
+        let needle = needle(query)
         var matches: [(path: String, result: Result)] = []
         for candidate in candidates {
-            if let result = match(query, in: candidate) { matches.append((candidate, result)) }
+            if let result = match(needle, in: candidate) { matches.append((candidate, result)) }
         }
         matches.sort {
             $0.result.score != $1.result.score ? $0.result.score > $1.result.score : $0.path.count < $1.path.count
@@ -97,6 +111,24 @@ public enum FuzzyMatch {
             position = chosen + 1
         }
         return indices
+    }
+
+    private static func asciiBytes(_ needle: [Character]) -> [UInt8]? {
+        let bytes = needle.compactMap(\.asciiValue)
+        return bytes.count == needle.count ? bytes : nil
+    }
+
+    /// Whether the lowercase ASCII `needle` appears in order in `candidate`, ignoring case.
+    private static func containsInOrder(_ needle: [UInt8], _ candidate: String) -> Bool {
+        var index = 0
+        for byte in candidate.utf8 {
+            let lower = byte >= 65 && byte <= 90 ? byte + 32 : byte
+            if lower == needle[index] {
+                index += 1
+                if index == needle.count { return true }
+            }
+        }
+        return false
     }
 
     private static func fits(_ needle: [Character], in haystack: [Character], after index: Int) -> Bool {

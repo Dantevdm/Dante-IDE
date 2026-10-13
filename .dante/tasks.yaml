@@ -395,7 +395,8 @@ tasks:
 - id: DI-98
   title: "Large repos: time the file index, search and test inventory at 50k files"
   phase: build
-  state: todo
+  state: review
+  notes: "Release build, 50k files: index 0.6s, quick open 8ms, search 0.15-0.6s (parallel), test inventory 0.8s, untested 2.5s (background). TestGaps was 33s (quadratic test-file lookups)."
 - id: DI-99
   title: "Remote projects over SSH (scope first; may stay a plan)"
   phase: build

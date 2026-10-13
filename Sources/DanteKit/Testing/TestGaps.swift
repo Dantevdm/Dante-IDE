@@ -56,9 +56,11 @@ public struct TestGaps: Equatable, Sendable {
         }
         var sources: [(path: String, text: String)] = []
         var seenContent: Set<Int> = []
+        let testFiles = Set(inventory.testFiles)
         // Build output last, so its copies of source files are the ones skipped.
-        let ordered = files.sorted { (isBuildCopy($0) ? 1 : 0, $0) < (isBuildCopy($1) ? 1 : 0, $1) }
-        for file in ordered where isSource(file) && !inventory.testFiles.contains(file) {
+        let candidates = files.filter { isSource($0) && !testFiles.contains($0) }
+        let ordered = candidates.filter { !isBuildCopy($0) } + candidates.filter(isBuildCopy)
+        for file in ordered {
             let url = root.appending(path: file)
             guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= sizeLimit,
                   let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
@@ -72,29 +74,30 @@ public struct TestGaps: Equatable, Sendable {
     /// Pure: which declarations in `sources` the test code never names.
     public static func find(sources: [(path: String, text: String)], testText: String, testFiles: [String]) -> TestGaps {
         let mentioned = identifiers(in: testText)
-        var files: [UntestedFile] = []
-        var declarations = 0
-        for source in sources {
-            let language = Language(url: URL(filePath: source.path))
-            let names = DeclarationScanner.symbols(in: source.text, language: language, url: URL(filePath: source.path))
-                .filter { $0.kind == .function || $0.kind == .type }
-                .map { $0.name.trimmingCharacters(in: CharacterSet(charactersIn: "`")) }
-                .filter { $0.count > 2 && !ignoredNames.contains($0) && !$0.hasPrefix("_") }
-            var unique: [String] = []
-            for name in names where !unique.contains(name) { unique.append(name) }
-            guard !unique.isEmpty else { continue }
-            declarations += unique.count
-            let untested = unique.filter { !mentioned.contains($0) }
-            let lineCount = source.text.components(separatedBy: "\n").count - (source.text.hasSuffix("\n") ? 1 : 0)
-            files.append(UntestedFile(path: source.path, lines: lineCount,
-                                      declared: unique, untested: untested, hasTestFile: hasConventionalTest(source.path, testFiles: testFiles)))
-        }
+        let tests = TestFileNames(testFiles)
+        var files = sources.compactMap { untested(in: $0, mentioned: mentioned, tests: tests) }
+        let declarations = files.reduce(0) { $0 + $1.declared.count }
         // Logic before interface, then the most untested, then the bigger file.
         files.sort { a, b in
             if a.isInterface != b.isInterface { return !a.isInterface }
             return (a.untested.count, a.lines) > (b.untested.count, b.lines)
         }
         return TestGaps(files: files, sourceFiles: sources.count, declarations: declarations)
+    }
+
+    private static func untested(in source: (path: String, text: String), mentioned: Set<String>, tests: TestFileNames) -> UntestedFile? {
+        let language = Language(url: URL(filePath: source.path))
+        let names = DeclarationScanner.symbols(in: source.text, language: language, url: URL(filePath: source.path))
+            .filter { $0.kind == .function || $0.kind == .type }
+            .map { $0.name.trimmingCharacters(in: CharacterSet(charactersIn: "`")) }
+            .filter { $0.count > 2 && !ignoredNames.contains($0) && !$0.hasPrefix("_") }
+        var unique: [String] = []
+        for name in names where !unique.contains(name) { unique.append(name) }
+        guard !unique.isEmpty else { return nil }
+        let untested = unique.filter { !mentioned.contains($0) }
+        let lineCount = source.text.utf8.count { $0 == 0x0A } + (source.text.isEmpty || source.text.hasSuffix("\n") ? 0 : 1)
+        return UntestedFile(path: source.path, lines: lineCount,
+                            declared: unique, untested: untested, hasTestFile: hasConventionalTest(source.path, tests: tests))
     }
 
     static func isSource(_ path: String) -> Bool {
@@ -134,7 +137,17 @@ public struct TestGaps: Equatable, Sendable {
         return found
     }
 
-    static func hasConventionalTest(_ path: String, testFiles: [String]) -> Bool {
+    /// Test files by path and by name, so each source checks for its test in constant time.
+    struct TestFileNames {
+        var paths: Set<String>
+        var names: Set<String>
+        init(_ files: [String]) {
+            paths = Set(files)
+            names = Set(files.map { ($0 as NSString).lastPathComponent })
+        }
+    }
+
+    static func hasConventionalTest(_ path: String, tests: TestFileNames) -> Bool {
         let name = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
         let folder = (path as NSString).deletingLastPathComponent
         let candidates = [
@@ -142,9 +155,7 @@ public struct TestGaps: Equatable, Sendable {
             "\(name)Tests.swift", "\(name)Test.swift", "test_\(name).py", "\(name)_test.py",
             "\(name).test.ts", "\(name).test.js", "\(name).spec.ts", "\(name).spec.js", "\(name).test.tsx", "\(name)_spec.rb",
         ]
-        return testFiles.contains { file in
-            candidates.contains { $0.contains("/") ? file == $0 : (file as NSString).lastPathComponent == $0 }
-        }
+        return candidates.contains { $0.contains("/") ? tests.paths.contains($0) : tests.names.contains($0) }
     }
 
     /// For Claude: the gaps found, so it starts from facts rather than a guess.

@@ -58,22 +58,51 @@ public enum ProjectSearch {
     /// `overrides` are texts to search instead of what's on disk: open files with unsaved edits.
     public static func run(_ query: Query, root: URL, paths: [String], overrides: [String: String] = [:]) async -> Result {
         guard let expression = query.expression else { return Result() }
+        // Chunks of the project are searched a wave at a time, one per core, then put back in
+        // path order; a wave that reaches the limit is the last.
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        let chunkSize = max(200, paths.count / (cores * 4) + 1)
+        let chunks = stride(from: 0, to: paths.count, by: chunkSize).map { paths[$0..<min($0 + chunkSize, paths.count)] }
         return await Task.detached(priority: .userInitiated) {
             var result = Result()
-            for path in paths {
+            for wave in stride(from: 0, to: chunks.count, by: cores) {
                 if Task.isCancelled { break }
-                guard let text = overrides[path] ?? readText(root.appending(path: path)) else { continue }
-                let matches = Self.matches(in: text, expression: expression, limit: limit - result.matchCount)
-                guard !matches.isEmpty else { continue }
-                result.files.append(FileMatches(path: path, matches: matches))
-                result.matchCount += matches.count
-                if result.matchCount >= limit {
-                    result.truncated = true
-                    break
+                let found = await withTaskGroup(of: (Int, [FileMatches]).self) { group in
+                    for index in wave..<min(wave + cores, chunks.count) {
+                        group.addTask { (index - wave, search(chunks[index], root: root, expression: expression, overrides: overrides)) }
+                    }
+                    var found = Array(repeating: [FileMatches](), count: min(cores, chunks.count - wave))
+                    for await (index, files) in group { found[index] = files }
+                    return found
+                }
+                for file in found.joined() {
+                    let room = limit - result.matchCount
+                    result.files.append(file.matches.count > room ? FileMatches(path: file.path, matches: Array(file.matches.prefix(room))) : file)
+                    result.matchCount += min(file.matches.count, room)
+                    if result.matchCount >= limit {
+                        result.truncated = true
+                        return result
+                    }
                 }
             }
             return result
         }.value
+    }
+
+    /// One chunk of files, in order, stopping at `limit` matches.
+    private static func search(_ paths: ArraySlice<String>, root: URL, expression: NSRegularExpression, overrides: [String: String]) -> [FileMatches] {
+        var files: [FileMatches] = []
+        var count = 0
+        for path in paths {
+            if Task.isCancelled { break }
+            guard let text = overrides[path] ?? readText(root.appending(path: path)) else { continue }
+            let matches = Self.matches(in: text, expression: expression, limit: limit - count)
+            guard !matches.isEmpty else { continue }
+            files.append(FileMatches(path: path, matches: matches))
+            count += matches.count
+            if count >= limit { break }
+        }
+        return files
     }
 
     /// Text files only: skips large files and anything with a NUL byte near the start.
