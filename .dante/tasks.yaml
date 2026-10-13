@@ -401,3 +401,5 @@ tasks:
   title: "Remote projects over SSH (scope first; may stay a plan)"
   phase: build
   state: todo
+  spec: docs/plans/remote-ssh.md
+  notes: "Scoped: a Host seam for processes, a ProjectFiles protocol, polling over one multiplexed ssh connection. First useful version is about 1.5 weeks."
