@@ -206,6 +206,9 @@ final class Session {
     /// The Claude panel's history and usage popovers, so `/history` and `/context` can open them.
     var claudeShowsHistory = false
     var claudeShowsUsage = false
+    /// The Map's last build, kept while the window is open.
+    @ObservationIgnored var mapCache: MapCache?
+    @ObservationIgnored var shipCache: ShipCache?
     /// Files waiting to go with the next message to Claude.
     var claudeAttachments: [Attachment] = []
     /// Recent Claude usage on this Mac and the signed-in plan, for the panel's meter.

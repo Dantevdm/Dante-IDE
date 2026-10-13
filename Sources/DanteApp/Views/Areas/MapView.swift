@@ -119,6 +119,15 @@ struct MapView: View {
     }
 
     private func load() async {
+        // Coming back to the Map shows what was built for this revision instead of building
+        // it again, which takes seconds on a big repo.
+        if let cache = session.mapCache, cache.revision == workspace.revision {
+            (modules, services, system, coverage, notes) = (cache.modules, cache.services, cache.system, cache.coverage, cache.notes)
+            if !sources.contains(source) { source = sources.first ?? .modules }
+            loaded = true
+            return
+        }
+        let revision = workspace.revision
         let root = workspace.url
         if FileManager.default.fileExists(atPath: root.appending(path: "Package.swift").path) {
             let output = await Shell.run(["swift", "package", "describe", "--type", "json"], in: root)
@@ -148,8 +157,19 @@ struct MapView: View {
         if !sources.contains(source) { source = sources.first ?? .modules }
         notes = try? String(contentsOf: root.appending(path: ".dante/architecture.md"), encoding: .utf8)
         if let selected, graph?.node(selected) == nil, system?.part(selected) == nil { self.selected = nil }
+        session.mapCache = MapCache(revision: revision, modules: modules, services: services, system: system, coverage: coverage, notes: notes)
         loaded = true
     }
+}
+
+/// The Map's last build for a window, so switching areas doesn't rebuild it.
+struct MapCache {
+    var revision: Int
+    var modules: ArchitectureGraph?
+    var services: ArchitectureGraph?
+    var system: SystemMap?
+    var coverage: CoverageReport?
+    var notes: String?
 }
 
 // MARK: Diagram

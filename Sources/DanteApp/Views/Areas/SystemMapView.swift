@@ -357,17 +357,22 @@ struct SystemSummary: View {
     @Environment(\.theme) private var theme
     let map: SystemMap
 
+    private static func counted(_ count: Int, _ one: String, _ many: String) -> String { "\(count) \(count == 1 ? one : many)" }
+
     var body: some View {
         let clients = map.parts.filter { $0.lane == .clients && !$0.id.hasPrefix("screen:") }
         let screens = clients.reduce(0) { $0 + $1.items.count }
         let stores = map.parts.filter { $0.lane == .data && $0.kind != .table }
         let tables = map.parts.filter { $0.kind == .table }.count
+        let routeGroups = map.parts.filter { $0.lane == .api }.count
+        let backend = map.parts.filter { $0.lane == .backend }.count
+        let outside = map.parts.filter { $0.lane == .outside }
         let stats: [(String, String, String)] = [
-            ("\(clients.count)", "client" + (clients.count == 1 ? "" : "s"), screens > 0 ? "\(screens) screens" : ""),
-            ("\(map.routeCount)", "API routes", "\(map.parts.filter { $0.lane == .api }.count) groups"),
-            ("\(map.parts.filter { $0.lane == .backend }.count)", "backend parts", ""),
-            ("\(stores.count)", stores.count == 1 ? "data store" : "data stores", tables > 0 ? "\(stores.map(\.name).joined(separator: ", ")) · \(tables) tables" : stores.map(\.name).joined(separator: ", ")),
-            ("\(map.parts.filter { $0.lane == .outside }.count)", "outside services", map.parts.filter { $0.lane == .outside }.map(\.name).prefix(3).joined(separator: ", ")),
+            ("\(clients.count)", clients.count == 1 ? "client" : "clients", screens > 0 ? Self.counted(screens, "screen", "screens") : ""),
+            ("\(map.routeCount)", map.routeCount == 1 ? "API route" : "API routes", Self.counted(routeGroups, "group", "groups")),
+            ("\(backend)", backend == 1 ? "backend part" : "backend parts", ""),
+            ("\(stores.count)", stores.count == 1 ? "data store" : "data stores", ([stores.map(\.name).joined(separator: ", ")] + (tables > 0 ? [Self.counted(tables, "table", "tables")] : [])).filter { !$0.isEmpty }.joined(separator: " · ")),
+            ("\(outside.count)", outside.count == 1 ? "outside service" : "outside services", outside.map(\.name).prefix(3).joined(separator: ", ")),
         ]
         HStack(spacing: 10) {
             ForEach(stats, id: \.1) { value, label, note in

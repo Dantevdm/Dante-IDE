@@ -111,8 +111,12 @@ public struct SystemMap: Equatable, Sendable {
 
     static func isTest(_ path: String) -> Bool {
         let name = (path as NSString).lastPathComponent
+        // Class-style names need the capital: "ParserTests.swift", but not "Latest.swift".
+        let testNames = ["Tests.swift", "Test.swift", "Test.java", "Test.kt", "Tests.cs", "Test.cs", "_spec.rb", "_test.rb", "_test.py", "_test.exs"]
+        let testFolders: Set<String> = ["tests", "test", "__tests__", "spec", "specs", "testdata", "fixtures", "__mocks__", "e2e"]
         return name.hasSuffix("_test.go") || name.contains(".test.") || name.contains(".spec.") || name.hasPrefix("test_")
-            || path.split(separator: "/").contains { $0 == "tests" || $0 == "test" || $0 == "__tests__" }
+            || testNames.contains { name.hasSuffix($0) && name.count > $0.count }
+            || path.split(separator: "/").dropLast().contains { testFolders.contains($0.lowercased()) }
     }
 
     /// Files the map reads: code and the manifests that name frameworks and drivers.
@@ -326,7 +330,10 @@ public struct SystemMap: Equatable, Sendable {
         // with arrows from the packages whose queries name them.
         var tableNames: [String] = []
         let backendSet = Set(backendFiles)
-        for file in files where (file as NSString).pathExtension.lowercased() == "sql" || backendSet.contains(file) {
+        // Without a database in sight, CREATE TABLE in code is more likely an example or a
+        // tool's own fixtures than this app's schema, so only .sql files count.
+        let hasDatabase = !profile.engines.isEmpty || profile.otherStores.contains { !$0.lowercased().contains("redis") && !$0.lowercased().contains("memcache") }
+        for file in files where (file as NSString).pathExtension.lowercased() == "sql" || (hasDatabase && backendSet.contains(file)) {
             guard !isTest(file), has(lower(file), "create table") else { continue }
             for table in tables(in: text(file)) where !tableNames.contains(table) { tableNames.append(table) }
         }
@@ -381,18 +388,28 @@ public struct SystemMap: Equatable, Sendable {
         // models, migrations) mention hosts without calling them, so they don't count.
         let storageNames: Set<String> = ["db", "database", "store", "storage", "models", "model", "migrations", "migrate", "seed", "repository", "repo", "schema", "persistence"]
         let mentionsWhatsApp = backendFiles.contains { has(lower($0), "whatsapp") }
-        for service in outsideServices {
+        // Which services each file names: by host, package or name in backend code, but only
+        // by host or package in a client, where a bare word ("ollama") is usually a label on
+        // a settings screen rather than the browser calling the service itself.
+        let servicePatterns = outsideServices.map { service in
+            let server = service.patterns.map { $0.lowercased() }
+            return (server: server, client: server.filter { $0.contains(".") || $0.contains("/") || $0.contains("@") })
+        }
+        var named: [String: [Int]] = [:]
+        for file in code {
+            let body = lower(file)
+            let inClient = clientOwning(file) != nil
+            let hits = servicePatterns.indices.filter { index in
+                (inClient ? servicePatterns[index].client : servicePatterns[index].server).contains { has(body, $0) }
+            }
+            // A file naming many services is a list of them (a tool's own catalogue, a
+            // settings screen), not code that calls them all.
+            if !hits.isEmpty, hits.count < 6 { named[file] = hits }
+        }
+        for (index, service) in outsideServices.enumerated() {
             var users: [String: Int] = [:]
-            // In a client, a bare word ("ollama") is usually a label on a settings screen;
-            // only a host or package name means the browser calls the service itself.
-            let serverPatterns = service.patterns.map { $0.lowercased() }
-            let clientPatterns = serverPatterns.filter { $0.contains(".") || $0.contains("/") || $0.contains("@") }
-            for file in code {
-                let body = lower(file)
-                let client = clientOwning(file)
-                let patterns = client == nil ? serverPatterns : clientPatterns
-                guard patterns.contains(where: { has(body, $0) }) else { continue }
-                if let client {
+            for file in code where named[file]?.contains(index) == true {
+                if let client = clientOwning(file) {
                     users[client.id, default: 0] += 1
                 } else if let owner = owner(file), !storageNames.contains(owner.name.lowercased()) {
                     users[owner.id, default: 0] += 1
@@ -560,6 +577,9 @@ public struct SystemMap: Equatable, Sendable {
             // Regex matching is slow; most lines can't be a route, so check cheaply first.
             guard has(raw, "(\"/") || has(raw, "('/") || has(raw, "(`/") || has(raw, "( \"/") || has(raw, "Handle") else { continue }
             let line = String(raw)
+            let trimmed = line.drop { $0 == " " || $0 == "\t" }
+            // Examples in comments and doc comments aren't routes.
+            if trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") || trimmed.hasPrefix("*") || trimmed.hasPrefix("# ") || trimmed.hasPrefix("--") { continue }
             let range = NSRange(line.startIndex..., in: line)
             func group(_ match: NSTextCheckingResult, _ index: Int) -> String? {
                 Range(match.range(at: index), in: line).map { String(line[$0]) }

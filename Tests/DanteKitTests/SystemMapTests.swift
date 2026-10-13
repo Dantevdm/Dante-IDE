@@ -239,4 +239,25 @@ struct SystemMapTests {
         #expect(names.allSatisfy { $0 == names[0] })
         #expect(names[0].contains("Other routes"))
     }
+    @Test func testsFixturesCommentsAndCataloguesStayOffTheMap() {
+        #expect(SystemMap.isTest("Tests/AppTests/ParserTests.swift"))
+        #expect(SystemMap.isTest("src/test/java/app/UserTest.java"))
+        #expect(SystemMap.isTest("internal/x/testdata/routes.go"))
+        #expect(!SystemMap.isTest("Sources/App/Latest.swift"))
+        #expect(!SystemMap.isTest("Sources/App/Contest.swift"))
+
+        let files: [String: String] = [
+            "go.mod": "module example.com/x\n",
+            "main.go": "package main\n// e.g. mux.HandleFunc(\"GET /docs/example\", h)\nfunc main() { mux.HandleFunc(\"GET /api/orders\", h) }",
+            "catalog.go": "package main\nvar known = []string{\"api.stripe.com\", \"api.openai.com\", \"api.anthropic.com\", \"hooks.slack.com\", \"api.twilio.com\", \"api.sendgrid.com\"}",
+            "schema.go": "package main\nconst example = `CREATE TABLE widgets (id int)`",
+            "Tests/MainTests/RoutesTests.swift": "app.get(\"/api/fixture\")",
+        ]
+        let paths = Array(files.keys).sorted()
+        let map = SystemMap.build(files: paths, read: { files[$0] })
+        let routes = map.parts.filter { $0.lane == .api }.flatMap(\.items).map(\.text)
+        #expect(routes == ["GET /api/orders"])
+        #expect(!map.parts.contains { $0.lane == .outside })
+        #expect(!map.parts.contains { $0.kind == .table })
+    }
 }

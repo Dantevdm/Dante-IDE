@@ -67,10 +67,13 @@ struct ShipView: View {
     }
 
     private func load() async {
+        // Show the last result while the fresh one loads (CI goes to the network).
+        if git == nil, let cache = session.shipCache { (git, ci) = (cache.git, cache.ci) }
         async let snapshot = GitSnapshot.load(in: workspace.url)
         async let runs = CIRun.load(projectRoot: workspace.url)
         git = await snapshot
         ci = await runs
+        session.shipCache = ShipCache(git: git, ci: ci)
     }
 
     private func tag() {
@@ -176,7 +179,7 @@ private struct ChangelogCard: View {
 
     var body: some View {
         let doneTasks = workspace.tasks.tasks.filter { $0.state == .done }
-        Card("Changelog · \(draft?.version ?? "")") {
+        Card(draft.map { "Changelog · \($0.version)" } ?? "Changelog") {
             Button("Polish with Claude") {
                 guard let draft else { return }
                 session.askClaude("Here's a changelog Dante drafted from commit subjects since \(draft.previous ?? "the first commit"). Rewrite it for users: merge duplicates, drop internal refactors, keep it short. Don't change files.\n\n\(draft.markdown)")
@@ -297,4 +300,10 @@ private struct ReleaseChecklist: View {
     private var fromPhaseDoc: [Check] {
         (workspace.phaseDocs["release"]?.doneWhen ?? []).map { Check(text: $0.text, done: $0.done) }
     }
+}
+
+/// Ship's last load for a window, shown while it reloads.
+struct ShipCache {
+    var git: GitSnapshot?
+    var ci: Result<[CIRun], CIRun.Unavailable>?
 }

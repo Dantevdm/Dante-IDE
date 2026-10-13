@@ -363,7 +363,7 @@ tasks:
 - id: DI-90
   title: "Review sweep: every area in Dark, Light and Paper; fix layout bugs"
   phase: build
-  state: todo
+  state: review
 - id: DI-91
   title: "Commit message drafter: show a refusal or secret warning as a warning, not as the message"
   phase: build
