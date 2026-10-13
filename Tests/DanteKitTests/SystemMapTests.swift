@@ -213,4 +213,30 @@ struct SystemMapTests {
         #expect(xml.files["app/views.py"] == .init(covered: 1, total: 2))
     }
 
+    @Test func byteSearchAndKeywordLines() {
+        #expect(SystemMap.has("calls api.stripe.com here", "stripe.com"))
+        #expect(!SystemMap.has("short", "longer than it"))
+        #expect(SystemMap.has("anything", ""))
+        #expect(SystemMap.has("naïve café", "café"))
+        let sql = "select *\nfrom\n  users\nwhere id = 1\n-- unrelated"
+        #expect(SystemMap.lines(of: sql, holding: ["from"], andNext: true) == "from\n  users")
+        #expect(SystemMap.lines(of: "a\nENV x\nb", holding: ["ENV"]) == "ENV x")
+    }
+
+    @Test func goPackageClause() {
+        #expect(ArchitectureGraph.goPackage("// Package main is the server.\npackage main\n\nfunc main() {}") == "main")
+        #expect(ArchitectureGraph.goPackage("package store // import \"x\"") == "store")
+        #expect(ArchitectureGraph.goPackage("func f() {}") == nil)
+    }
+
+    @Test func manyRouteGroupsKeepTheSameOnesEveryTime() {
+        var files: [String: String] = ["go.mod": "module example.com/x\n"]
+        for n in 0..<20 { files["h\(n).go"] = "package main\nfunc r(mux *http.ServeMux) { mux.HandleFunc(\"GET /g\(n)/a\", h) }" }
+        let paths = Array(files.keys).sorted()
+        let names = (0..<3).map { _ in
+            SystemMap.build(files: paths, read: { files[$0] }).parts.filter { $0.lane == .api }.map(\.name)
+        }
+        #expect(names.allSatisfy { $0 == names[0] })
+        #expect(names[0].contains("Other routes"))
+    }
 }

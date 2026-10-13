@@ -123,6 +123,32 @@ public struct SystemMap: Equatable, Sendable {
             || ["package.json", "go.mod", "requirements.txt", "pyproject.toml", "Cargo.toml", "Gemfile", "pubspec.yaml", "index.html", "schema.prisma", "pom.xml", "build.gradle"].contains(name)
     }
 
+    /// Whether `body` holds `needle`, compared byte for byte. `String.contains` walks
+    /// characters, which made the map take a minute on a repo of a few thousand files.
+    static func has(_ body: some StringProtocol, _ needle: String) -> Bool {
+        let found = body.utf8.withContiguousStorageIfAvailable { hay in
+            needle.utf8.withContiguousStorageIfAvailable { word -> Bool in
+                guard !word.isEmpty else { return true }
+                guard hay.count >= word.count, let h = hay.baseAddress, let w = word.baseAddress else { return false }
+                return memmem(h, hay.count, w, word.count) != nil
+            }
+        }
+        return (found ?? nil) ?? body.contains(needle)
+    }
+
+    /// The lines of `text` that hold one of `needles` (and the line after each, with
+    /// `andNext`), so a regex only scans the lines that could match.
+    static func lines(of text: String, holding needles: [String], andNext: Bool = false) -> String {
+        var kept: [Substring] = []
+        var keepNext = false
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let holds = needles.contains { has(line, $0) }
+            if holds || keepNext { kept.append(line) }
+            keepNext = andNext && holds
+        }
+        return kept.joined(separator: "\n")
+    }
+
     static func isCode(_ path: String) -> Bool {
         let parts = path.split(separator: "/").map(String.init)
         guard codeExtensions.contains((path as NSString).pathExtension.lowercased()) else { return false }
@@ -140,14 +166,17 @@ public struct SystemMap: Equatable, Sendable {
         var texts: [String: String] = [:]
         func text(_ path: String) -> String {
             if let known = texts[path] { return known }
-            let value = read(path) ?? ""
+            // Native UTF-8, so the byte searches below don't go through a bridged NSString.
+            var value = read(path) ?? ""
+            value.makeContiguousUTF8()
             texts[path] = value
             return value
         }
         var lowered: [String: String] = [:]
         func lower(_ path: String) -> String {
             if let known = lowered[path] { return known }
-            let value = text(path).lowercased()
+            var value = text(path).lowercased()
+            value.makeContiguousUTF8()
             lowered[path] = value
             return value
         }
@@ -156,8 +185,12 @@ public struct SystemMap: Equatable, Sendable {
         let clients = frontends(files: files, read: read)
         func root(_ part: Part) -> String { part.path == "." ? "" : part.path ?? "" }
         let clientRoots = clients.map(root)
+        var clientOf: [String: Part?] = [:]
         func clientOwning(_ path: String) -> Part? {
-            clients.filter { root($0).isEmpty || path.hasPrefix(root($0) + "/") }.max { root($0).count < root($1).count }
+            if let known = clientOf[path] { return known }
+            let found = clients.filter { root($0).isEmpty || path.hasPrefix(root($0) + "/") }.max { root($0).count < root($1).count }
+            clientOf[path] = .some(found)
+            return found
         }
         parts += clients
 
@@ -184,8 +217,16 @@ public struct SystemMap: Equatable, Sendable {
         if backend.isEmpty, !backendFiles.isEmpty {
             backend = [Part(id: "code:server", name: "server", lane: .backend, kind: .app, detail: "\(backendFiles.count) files")]
         }
+        // By folder: every file in one folder has the same owner.
+        var owners: [String: Part?] = [:]
         func owner(_ file: String) -> Part? {
             let folder = (file as NSString).deletingLastPathComponent
+            if let known = owners[folder] { return known }
+            let found = findOwner(folder)
+            owners[folder] = .some(found)
+            return found
+        }
+        func findOwner(_ folder: String) -> Part? {
             let candidates = backend.filter { part in
                 guard let path = part.path else { return false }
                 return path == "." ? !folder.contains("/") || folder.isEmpty : (folder == path || folder.hasPrefix(path + "/"))
@@ -197,16 +238,19 @@ public struct SystemMap: Equatable, Sendable {
         var webhookFiles: [(group: String, file: String)] = []
         var groups: [String: (items: [Item], owners: [String: Int])] = [:]
         for file in backendFiles {
-            for route in routes(in: text(file)) where route.path != "/" {
+            let found = routes(in: text(file))
+            guard !found.isEmpty else { continue }
+            let ownerID = owner(file)?.id
+            for route in found where route.path != "/" {
                 let key = routeGroup(route.path)
-                var entry = groups[key] ?? ([], [:])
-                entry.items.append(Item([route.method, route.path].compactMap { $0 }.joined(separator: " "), file: file, line: route.line))
-                if let owner = owner(file) { entry.owners[owner.id, default: 0] += 1 }
-                groups[key] = entry
+                // Mutated in place: copying the entry out and back copies its items each time.
+                groups[key, default: ([], [:])].items.append(Item([route.method, route.path].compactMap { $0 }.joined(separator: " "), file: file, line: route.line))
+                if let ownerID { groups[key, default: ([], [:])].owners[ownerID, default: 0] += 1 }
             }
         }
         if groups.count > 12 {
-            let kept = groups.sorted { $0.value.items.count > $1.value.items.count }.prefix(11).map(\.key)
+            // Ties go by name, so the same repo always keeps the same groups.
+            let kept = groups.sorted { ($1.value.items.count, $0.key) < ($0.value.items.count, $1.key) }.prefix(11).map(\.key)
             var other: ([Item], [String: Int]) = ([], [:])
             for (key, value) in groups where !kept.contains(key) {
                 other.0 += value.items
@@ -281,19 +325,22 @@ public struct SystemMap: Equatable, Sendable {
         // Tables, from CREATE TABLE in the repo's SQL and code (never from a live database),
         // with arrows from the packages whose queries name them.
         var tableNames: [String] = []
-        for file in files where (file as NSString).pathExtension.lowercased() == "sql" || backendFiles.contains(file) {
-            guard !isTest(file), lower(file).contains("create table") else { continue }
+        let backendSet = Set(backendFiles)
+        for file in files where (file as NSString).pathExtension.lowercased() == "sql" || backendSet.contains(file) {
+            guard !isTest(file), has(lower(file), "create table") else { continue }
             for table in tables(in: text(file)) where !tableNames.contains(table) { tableNames.append(table) }
         }
         var tableUsers: [String: [String: Int]] = [:]
         if !tableNames.isEmpty, let pattern = queryPattern(tableNames) {
             for file in backendFiles {
                 let body = lower(file)
-                guard body.contains("select") || body.contains("insert") || body.contains("update") || body.contains("delete"),
+                guard has(body, "select") || has(body, "insert") || has(body, "update") || has(body, "delete"),
                       let owner = owner(file) else { continue }
-                let range = NSRange(body.startIndex..., in: body)
-                for match in pattern.matches(in: body, range: range) {
-                    if let name = Range(match.range(at: 1), in: body).map({ String(body[$0]) }),
+                // Only lines with a keyword (and the line after, for "FROM" at a line's end).
+                let query = lines(of: body, holding: ["from", "into", "update", "join", "table"], andNext: true)
+                let range = NSRange(query.startIndex..., in: query)
+                for match in pattern.matches(in: query, range: range) {
+                    if let name = Range(match.range(at: 1), in: query).map({ String(query[$0]) }),
                        let table = tableNames.first(where: { $0.lowercased() == name }) {
                         tableUsers[table, default: [:]][owner.id, default: 0] += 1
                     }
@@ -316,7 +363,7 @@ public struct SystemMap: Equatable, Sendable {
             var linked = false
             for file in backendFiles {
                 let body = lower(file)
-                if store.words.contains(where: { body.contains($0) }), let owner = owner(file) {
+                if store.words.contains(where: { has(body, $0) }), let owner = owner(file) {
                     linked = true
                     if !ownersWithTables.contains(owner.id) || store.kind != .database { link(owner.id, store.id) }
                 }
@@ -333,16 +380,18 @@ public struct SystemMap: Equatable, Sendable {
         // Outside services, from imports and URLs. Packages that only store settings (db,
         // models, migrations) mention hosts without calling them, so they don't count.
         let storageNames: Set<String> = ["db", "database", "store", "storage", "models", "model", "migrations", "migrate", "seed", "repository", "repo", "schema", "persistence"]
-        let mentionsWhatsApp = backendFiles.contains { lower($0).contains("whatsapp") }
+        let mentionsWhatsApp = backendFiles.contains { has(lower($0), "whatsapp") }
         for service in outsideServices {
             var users: [String: Int] = [:]
+            // In a client, a bare word ("ollama") is usually a label on a settings screen;
+            // only a host or package name means the browser calls the service itself.
+            let serverPatterns = service.patterns.map { $0.lowercased() }
+            let clientPatterns = serverPatterns.filter { $0.contains(".") || $0.contains("/") || $0.contains("@") }
             for file in code {
                 let body = lower(file)
                 let client = clientOwning(file)
-                // In a client, a bare word ("ollama") is usually a label on a settings screen;
-                // only a host or package name means the browser calls the service itself.
-                let patterns = client == nil ? service.patterns : service.patterns.filter { $0.contains(".") || $0.contains("/") || $0.contains("@") }
-                guard patterns.contains(where: { body.contains($0.lowercased()) }) else { continue }
+                let patterns = client == nil ? serverPatterns : clientPatterns
+                guard patterns.contains(where: { has(body, $0) }) else { continue }
                 if let client {
                     users[client.id, default: 0] += 1
                 } else if let owner = owner(file), !storageNames.contains(owner.name.lowercased()) {
@@ -358,7 +407,7 @@ public struct SystemMap: Equatable, Sendable {
         for (group, file) in webhookFiles {
             let body = lower(file)
             for service in outsideServices where parts.contains(where: { $0.id == "ext:" + service.id }) {
-                if service.patterns.contains(where: { body.contains($0.lowercased()) }) || body.contains(service.id + " webhook") {
+                if service.patterns.contains(where: { has(body, $0.lowercased()) }) || has(body, service.id + " webhook") {
                     link("ext:" + service.id, group)
                 }
             }
@@ -402,8 +451,8 @@ public struct SystemMap: Equatable, Sendable {
         var env: [String: Set<String>] = [:]
         for file in code {
             let body = text(file)
-            guard body.contains("env") || body.contains("ENV") else { continue }
-            let names = environmentNames(in: body)
+            guard has(body, "env") || has(body, "ENV") else { continue }
+            let names = environmentNames(in: lines(of: body, holding: ["env", "ENV"]))
             guard !names.isEmpty else { continue }
             if let client = clientOwning(file) {
                 env[client.id, default: []].formUnion(names)
@@ -505,22 +554,32 @@ public struct SystemMap: Equatable, Sendable {
     /// Route registrations: Go's ServeMux ("GET /path"), chi/gin/echo/express style
     /// `router.get("/path")`, and Python decorators (`@app.get("/path")`).
     static func routes(in text: String) -> [Route] {
-        guard text.contains("/") else { return [] }
+        guard has(text, "(\"/") || has(text, "('/") || has(text, "(`/") || has(text, "( \"/") || has(text, "Handle") else { return [] }
         var found: [Route] = []
         for (number, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
             // Regex matching is slow; most lines can't be a route, so check cheaply first.
-            guard raw.contains("(\"/") || raw.contains("('/") || raw.contains("(`/") || raw.contains("( \"/") || raw.contains("Handle") else { continue }
+            guard has(raw, "(\"/") || has(raw, "('/") || has(raw, "(`/") || has(raw, "( \"/") || has(raw, "Handle") else { continue }
             let line = String(raw)
-            if let match = line.firstMatch(of: /Handle(?:Func)?\(\s*"(?:([A-Z]+)\s+)?(\/[^"]*)"/) {
-                found.append(Route(method: match.1.map(String.init), path: String(match.2), line: number + 1))
-            } else if let match = line.firstMatch(of: /@\w+\.(get|post|put|patch|delete|route|api_route)\(\s*["'](\/[^"']*)["']/) {
-                let verb = String(match.1).uppercased()
-                found.append(Route(method: verb == "ROUTE" || verb == "API_ROUTE" ? nil : verb, path: String(match.2), line: number + 1))
-            } else if let match = line.firstMatch(of: /\b(?:app|router|r|mux|e|g|api|server|srv|routes|v\d|grp|group|[a-z]\w*(?:Router|Group|Routes))\.(get|post|put|patch|delete|Get|Post|Put|Patch|Delete|GET|POST|PUT|PATCH|DELETE)\(\s*["'`](\/[^"'`]*)["'`]/) {
-                found.append(Route(method: String(match.1).uppercased(), path: String(match.2), line: number + 1))
+            let range = NSRange(line.startIndex..., in: line)
+            func group(_ match: NSTextCheckingResult, _ index: Int) -> String? {
+                Range(match.range(at: index), in: line).map { String(line[$0]) }
+            }
+            if let match = RoutePattern.handle.firstMatch(in: line, range: range), let path = group(match, 2) {
+                found.append(Route(method: group(match, 1), path: path, line: number + 1))
+            } else if let match = RoutePattern.decorator.firstMatch(in: line, range: range), let verb = group(match, 1)?.uppercased(), let path = group(match, 2) {
+                found.append(Route(method: verb == "ROUTE" || verb == "API_ROUTE" ? nil : verb, path: path, line: number + 1))
+            } else if let match = RoutePattern.router.firstMatch(in: line, range: range), let verb = group(match, 1), let path = group(match, 2) {
+                found.append(Route(method: verb.uppercased(), path: path, line: number + 1))
             }
         }
         return found
+    }
+
+    /// Compiled once: Swift `Regex` literals were most of the map's build time on big repos.
+    private enum RoutePattern {
+        nonisolated(unsafe) static let handle = try! NSRegularExpression(pattern: #"Handle(?:Func)?\(\s*"(?:([A-Z]+)\s+)?(/[^"]*)""#)
+        nonisolated(unsafe) static let decorator = try! NSRegularExpression(pattern: #"@\w+\.(get|post|put|patch|delete|route|api_route)\(\s*["'](/[^"']*)["']"#)
+        nonisolated(unsafe) static let router = try! NSRegularExpression(pattern: #"\b(?:app|router|r|mux|e|g|api|server|srv|routes|v\d|grp|group|[a-z]\w*(?:Router|Group|Routes))\.(get|post|put|patch|delete|Get|Post|Put|Patch|Delete|GET|POST|PUT|PATCH|DELETE)\(\s*["'`](/[^"'`]*)["'`]"#)
     }
 
     /// "/api/templates/{id}" → "/api/templates". Version and api prefixes are kept as part
@@ -540,7 +599,7 @@ public struct SystemMap: Equatable, Sendable {
     /// API paths a client asks for: string literals starting /api or /v1, up to the first
     /// interpolation or query.
     static func calledPaths(in text: String) -> [String] {
-        guard text.contains("/api") || text.contains("/v1") || text.contains("/v2") else { return [] }
+        guard has(text, "/api") || has(text, "/v1") || has(text, "/v2") else { return [] }
         return text.matches(of: /["'`](\/(?:api|v\d)(?:\/[^"'`\s?$]*)?)/).map { String($0.1) }
     }
 
@@ -572,7 +631,17 @@ public struct SystemMap: Equatable, Sendable {
 
     /// Environment variable names read in code: Go, JavaScript, Python, Ruby, Rust, Swift.
     static func environmentNames(in text: String) -> Set<String> {
-        let pattern = try! NSRegularExpression(pattern: [
+        var names: Set<String> = []
+        let range = NSRange(text.startIndex..., in: text)
+        for match in environmentPattern.matches(in: text, range: range) {
+            for group in 1..<match.numberOfRanges {
+                if let range = Range(match.range(at: group), in: text) { names.insert(String(text[range])) }
+            }
+        }
+        return names
+    }
+
+    nonisolated(unsafe) private static let environmentPattern = try! NSRegularExpression(pattern: [
             #"os\.(?:Getenv|LookupEnv)\("([A-Za-z_][A-Za-z0-9_]*)""#,
             #"(?:process|import\.meta)\.env\.([A-Za-z_][A-Za-z0-9_]*)"#,
             #"process\.env\[["']([A-Za-z_][A-Za-z0-9_]*)"#,
@@ -582,15 +651,6 @@ public struct SystemMap: Equatable, Sendable {
             #"env::var\("([A-Za-z_][A-Za-z0-9_]*)""#,
             #"environment\["([A-Za-z_][A-Za-z0-9_]*)"\]"#,
         ].joined(separator: "|"))
-        var names: Set<String> = []
-        let range = NSRange(text.startIndex..., in: text)
-        for match in pattern.matches(in: text, range: range) {
-            for group in 1..<match.numberOfRanges {
-                if let range = Range(match.range(at: group), in: text) { names.insert(String(text[range])) }
-            }
-        }
-        return names
-    }
 
     /// Names that usually hold a secret: keys, tokens, passwords.
     public static func isSecret(_ name: String) -> Bool {

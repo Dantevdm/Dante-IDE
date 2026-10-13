@@ -359,4 +359,4 @@ tasks:
 - id: DI-89
   title: "Polish: try Remove .dante on a throwaway project; System map speed on a large repo"
   phase: build
-  state: todo
+  state: review

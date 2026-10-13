@@ -163,7 +163,7 @@ public struct ArchitectureGraph: Equatable, Sendable {
             var entry = packages[folder] ?? (0, false, [])
             entry.files += 1
             if let text = read(file) {
-                if text.contains(/(?m)^package\s+main\b/) { entry.isMain = true }
+                if goPackage(text) == "main" { entry.isMain = true }
                 entry.imports.formUnion(goImports(text))
             }
             packages[folder] = entry
@@ -201,6 +201,18 @@ public struct ArchitectureGraph: Equatable, Sendable {
     }
 
     /// The import paths in a Go file: single imports and import blocks.
+    /// The name in a Go file's package clause, which comes before any code. Read line by
+    /// line: a regex over the whole file was slow on big repos.
+    static func goPackage(_ text: String) -> String? {
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard line.hasPrefix("package ") || line.hasPrefix("package\t") else { continue }
+            return line.dropFirst("package".count).trimmingCharacters(in: .whitespaces)
+                .split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "/" || $0 == ";" }).first.map(String.init)
+        }
+        return nil
+    }
+
     static func goImports(_ text: String) -> Set<String> {
         var found: Set<String> = []
         var inBlock = false
