@@ -62,6 +62,7 @@ struct ChangesPanel: View {
 
     private func commitBox(_ status: GitStatus) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let warning = git.messageWarning { CommitWarning(text: warning) }
             ZStack(alignment: .topLeading) {
                 if git.message.isEmpty {
                     Text(status.staged.isEmpty ? "Message (commits all changes)" : "Message")
@@ -312,5 +313,28 @@ private struct ChangeRow: View {
         case .renamed, .copied: theme.accent.color
         default: theme.amber.color
         }
+    }
+}
+
+/// A likely secret in the commit, or Claude's note instead of a message.
+struct CommitWarning: View {
+    @Environment(\.theme) private var theme
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.dante(size: 11))
+                .foregroundStyle(theme.amber.color)
+            Text(text)
+                .font(.dante(size: 11.5))
+                .foregroundStyle(theme.text.color)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.amber.color.opacity(0.12)))
+        .accessibilityElement(children: .combine)
     }
 }

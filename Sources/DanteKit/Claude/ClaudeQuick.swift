@@ -24,7 +24,41 @@ public enum ClaudeQuick {
 
 /// Builds the request for a commit message and tidies the answer.
 public enum CommitMessage {
-    public static let system = "You write git commit messages. Reply with the commit message only: no preamble, no code fences, no quotes."
+    public static let system = "You write git commit messages. Reply with the commit message only: no preamble, no code fences, no quotes. If the changes add something that shouldn't be committed, such as a password, key or token, start with one line \"WARNING: <what and where>\" and then still write the message."
+
+    /// A drafted message, and anything Claude (or the reply's shape) says is wrong with the commit.
+    public struct Draft: Equatable, Sendable {
+        public var message: String
+        public var warning: String?
+    }
+
+    /// Splits a `WARNING:` line off the answer. A reply that reads like an explanation
+    /// rather than a message ("I notice this diff contains…") is all warning.
+    public static func read(_ answer: String) -> Draft {
+        var warnings: [String] = []
+        var kept: [String] = []
+        for line in answer.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "**", with: "")
+            if trimmed.uppercased().hasPrefix("WARNING:") || trimmed.uppercased().hasPrefix("⚠️") {
+                let text = trimmed.drop { $0 != ":" }.dropFirst().trimmingCharacters(in: .whitespaces)
+                warnings.append(text.isEmpty ? trimmed : text)
+            } else {
+                kept.append(line)
+            }
+        }
+        let message = clean(kept.joined(separator: "\n"))
+        if looksLikeProse(message) {
+            return Draft(message: "", warning: ([message] + warnings).joined(separator: " "))
+        }
+        return Draft(message: message, warning: warnings.isEmpty ? nil : warnings.joined(separator: " "))
+    }
+
+    /// A first line that starts like a sentence to the person, not a commit subject.
+    static func looksLikeProse(_ message: String) -> Bool {
+        guard let subject = message.split(separator: "\n").first.map(String.init) else { return false }
+        let openers = ["I ", "I'm ", "I’m ", "I can", "I won", "I notice", "I see", "Sorry", "Unfortunately", "This diff contains", "The staged changes contain", "Before committing", "It looks like", "Note:"]
+        return openers.contains { subject.hasPrefix($0) }
+    }
 
     /// `finishing` names a task the commit completes, so the message can say so.
     public static func prompt(diff: String, recentSubjects: [String], tasks: [String], finishing: String? = nil) -> String {

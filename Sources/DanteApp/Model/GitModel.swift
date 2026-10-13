@@ -15,6 +15,8 @@ final class GitModel {
     /// A short confirmation, such as "Pushed to origin/main".
     var notice: String?
     var message = ""
+    /// A likely secret in the diff, or what Claude said instead of a message.
+    var messageWarning: String?
     var amend = false
     private(set) var writingMessage = false
     /// The file whose diff the editor area shows.
@@ -85,6 +87,7 @@ final class GitModel {
         }
         guard committed else { return }
         message = ""
+        messageWarning = nil
         amend = false
         diff = nil
         notice = "Committed “\(text.components(separatedBy: "\n")[0])”"
@@ -141,9 +144,14 @@ final class GitModel {
         }
         async let diffText = GitRepository.stagedDiff(in: root)
         async let subjects = GitRepository.recentSubjects(in: root)
-        let prompt = CommitMessage.prompt(diff: await diffText, recentSubjects: await subjects, tasks: tasks)
+        let diff = await diffText
+        let found = SecretScan.warning(SecretScan.findings(inDiff: diff))
+        messageWarning = found
+        let prompt = CommitMessage.prompt(diff: diff, recentSubjects: await subjects, tasks: tasks)
         do {
-            message = CommitMessage.clean(try await ClaudeQuick.text(prompt, system: CommitMessage.system, in: root))
+            let draft = CommitMessage.read(try await ClaudeQuick.text(prompt, system: CommitMessage.system, in: root))
+            if !draft.message.isEmpty { message = draft.message }
+            messageWarning = found ?? draft.warning
         } catch {
             self.error = GitRepository.Failure(message: error.localizedDescription)
         }

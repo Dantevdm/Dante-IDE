@@ -104,6 +104,7 @@ struct FinishTaskSheet: View {
     private var commitSection: some View {
         section("Commit", drafting: model.draftingCommit, redraft: model.hasChanges ? { Task { await model.draftCommitMessage() } } : nil) {
             if model.hasChanges {
+                if let warning = model.commitWarning { CommitWarning(text: warning) }
                 editor($model.commitMessage, height: 84, monospaced: true)
             } else {
                 let count = model.branchCommits.count

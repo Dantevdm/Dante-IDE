@@ -360,3 +360,43 @@ tasks:
   title: "Polish: try Remove .dante on a throwaway project; System map speed on a large repo"
   phase: build
   state: review
+- id: DI-90
+  title: "Review sweep: every area in Dark, Light and Paper; fix layout bugs"
+  phase: build
+  state: todo
+- id: DI-91
+  title: "Commit message drafter: show a refusal or secret warning as a warning, not as the message"
+  phase: build
+  state: review
+- id: DI-92
+  title: "Check custom shortcuts reach the menus live; notifications left for a foreground check"
+  phase: build
+  state: todo
+- id: DI-93
+  title: "Release: app icon, release build script (Developer ID signing and notarisation when credentials exist), DMG"
+  phase: release
+  state: todo
+- id: DI-94
+  title: "README with screenshots, and a draft GitHub release"
+  phase: release
+  state: todo
+- id: DI-95
+  title: "dante command-line tool: open a folder or files from the terminal"
+  phase: build
+  state: todo
+- id: DI-96
+  title: "Merge conflicts: a three-way view in Changes"
+  phase: build
+  state: todo
+- id: DI-97
+  title: "Debugger: Debug Adapter Protocol, breakpoints and stepping (Go via dlv, Python via debugpy)"
+  phase: build
+  state: todo
+- id: DI-98
+  title: "Large repos: time the file index, search and test inventory at 50k files"
+  phase: build
+  state: todo
+- id: DI-99
+  title: "Remote projects over SSH (scope first; may stay a plan)"
+  phase: build
+  state: todo

@@ -90,3 +90,46 @@ struct TaskConversationsTests {
         #expect(TaskConversations.conversation(for: "SH-1", in: root, defaults: defaults) == nil)
     }
 }
+
+struct SecretScanTests {
+    @Test func findsKeysInAddedLinesWithTheirLines() {
+        let diff = """
+        diff --git a/config.go b/config.go
+        --- a/config.go
+        +++ b/config.go
+        @@ -10,3 +10,5 @@ package config
+         var region = "eu-west-1"
+        -var key = ""
+        +var key = "AKIAABCDEFGHIJKLMNOP"
+        +var dsn = "postgres://app:hunter22@db:5432/app"
+         var debug = false
+        +var token = os.Getenv("TOKEN")
+        """
+        let found = SecretScan.findings(inDiff: diff)
+        #expect(found.map(\.line) == [11, 12])
+        #expect(found.first?.kind == "An AWS access key")
+        #expect(found.first?.file == "config.go")
+        #expect(SecretScan.warning(found)?.contains("config.go:11 and 1 more") == true)
+    }
+
+    @Test func placeholdersAndRemovedLinesAreFine() {
+        let diff = """
+        +++ b/.env.example
+        @@ -0,0 +1,2 @@
+        +PASSWORD="changeme"
+        +DATABASE_URL=postgres://user:password@localhost/db
+        -API_KEY="AKIAABCDEFGHIJKLMNOP"
+        """
+        #expect(SecretScan.findings(inDiff: diff).isEmpty)
+    }
+
+    @Test func commitDraftSplitsWarningsAndRefusals() {
+        let warned = CommitMessage.read("WARNING: config.go adds an AWS key\nAdd the config loader\n\nReads settings from the environment.")
+        #expect(warned.message == "Add the config loader\n\nReads settings from the environment.")
+        #expect(warned.warning == "config.go adds an AWS key")
+        let refused = CommitMessage.read("I notice this diff contains what looks like a real API key in config.go. You should remove it before committing.")
+        #expect(refused.message.isEmpty)
+        #expect(refused.warning?.hasPrefix("I notice") == true)
+        #expect(CommitMessage.read("Fix the login redirect").warning == nil)
+    }
+}

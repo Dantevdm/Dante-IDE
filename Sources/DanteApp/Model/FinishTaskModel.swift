@@ -30,6 +30,8 @@ final class FinishTaskModel {
     private(set) var pullRequestUnavailable: String?
 
     private(set) var draftingCommit = false
+    /// A likely secret in the diff, or what Claude said instead of a message.
+    private(set) var commitWarning: String?
     private(set) var draftingPull = false
     /// Claude's review of the branch; nil until asked for.
     private(set) var review: [ReviewFinding]?
@@ -95,9 +97,14 @@ final class FinishTaskModel {
         defer { draftingCommit = false }
         async let diff = GitRepository.workingDiff(in: root)
         async let subjects = GitRepository.recentSubjects(in: root)
-        let prompt = CommitMessage.prompt(diff: await diff, recentSubjects: await subjects, tasks: [], finishing: "\(task.id): \(task.title)")
+        let changes = await diff
+        let found = SecretScan.warning(SecretScan.findings(inDiff: changes))
+        commitWarning = found
+        let prompt = CommitMessage.prompt(diff: changes, recentSubjects: await subjects, tasks: [], finishing: "\(task.id): \(task.title)")
         do {
-            commitMessage = CommitMessage.clean(try await ClaudeQuick.text(prompt, system: CommitMessage.system, in: root))
+            let draft = CommitMessage.read(try await ClaudeQuick.text(prompt, system: CommitMessage.system, in: root))
+            commitMessage = draft.message.isEmpty ? (commitMessage.isEmpty ? task.title : commitMessage) : draft.message
+            commitWarning = found ?? draft.warning
         } catch {
             if commitMessage.isEmpty { commitMessage = task.title }
             self.error = error.localizedDescription
