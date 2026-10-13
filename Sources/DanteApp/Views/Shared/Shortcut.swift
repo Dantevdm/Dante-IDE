@@ -53,3 +53,81 @@ extension View {
         keyboardShortcut(Shortcuts.shared.binding(id)?.keyboardShortcut)
     }
 }
+
+/// Puts a changed shortcut on the menu item that's already in the menu bar. SwiftUI's own
+/// items won't take back the shortcut they were built with, so a reset to the default can
+/// need a restart; `needsRestart` lists those for Settings to say so.
+@MainActor @Observable
+final class MenuShortcuts {
+    static let shared = MenuShortcuts()
+    private(set) var needsRestart: Set<String> = []
+
+    static func install() {
+        Shortcuts.shared.onChange = { command, before, after in
+            guard let item = item(for: command, currently: before) else { return }
+            apply(after, to: item)
+            // SwiftUI sometimes rewrites the item when it next updates the menus (on a reset it
+            // put back the modifiers but not the key), so set it again once that's done.
+            for delay in [0.3, 1.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    MainActor.assumeIsolated {
+                        let now = Shortcuts.shared.binding(command.id)
+                        guard let fresh = MenuShortcuts.item(for: command, currently: now) ?? MenuShortcuts.item(for: command, currently: before) else { return }
+                        apply(now, to: fresh)
+                        let took = fresh.keyEquivalent == (now?.menuKey ?? "") && fresh.keyEquivalentModifierMask == (now?.menuModifiers ?? [])
+                        if took { shared.needsRestart.remove(command.id) } else { shared.needsRestart.insert(command.id) }
+                    }
+                }
+            }
+        }
+    }
+
+    private static func apply(_ binding: KeyBinding?, to item: NSMenuItem) {
+        item.keyEquivalentModifierMask = binding?.menuModifiers ?? []
+        item.keyEquivalent = binding?.menuKey ?? ""
+    }
+
+    /// The item in the command's menu with its title, or failing that (a title that
+    /// changes, like Show/Hide Claude) the one on the old shortcut.
+    static func item(for command: ShortcutCommand, currently before: KeyBinding?) -> NSMenuItem? {
+        let menus = (NSApp.mainMenu?.items ?? []).compactMap(\.submenu)
+        let menu = command.menu == "Dante" ? menus.first : menus.first { $0.title == command.menu }
+        let items = (menu.map { [$0] } ?? menus).flatMap(allItems)
+        func plain(_ title: String) -> String { title.replacingOccurrences(of: "…", with: "").replacingOccurrences(of: "...", with: "") }
+        if let titled = items.first(where: { plain($0.title) == plain(command.title) }) { return titled }
+        guard let before else { return nil }
+        return items.first { $0.keyEquivalent == before.menuKey && $0.keyEquivalentModifierMask == before.menuModifiers }
+    }
+
+    private static func allItems(_ menu: NSMenu) -> [NSMenuItem] {
+        menu.items.flatMap { [$0] + ($0.submenu.map(allItems) ?? []) }
+    }
+}
+
+extension KeyBinding {
+    /// The key as an `NSMenuItem` key equivalent.
+    var menuKey: String {
+        func function(_ key: Int) -> String { String(Character(UnicodeScalar(key)!)) }
+        switch key {
+        case "left": return function(NSLeftArrowFunctionKey)
+        case "right": return function(NSRightArrowFunctionKey)
+        case "up": return function(NSUpArrowFunctionKey)
+        case "down": return function(NSDownArrowFunctionKey)
+        case "return": return "\r"
+        case "tab": return "\t"
+        case "space": return " "
+        case "delete": return "\u{8}"
+        case "escape": return "\u{1b}"
+        default: return key
+        }
+    }
+
+    var menuModifiers: NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if modifiers.contains(.command) { flags.insert(.command) }
+        if modifiers.contains(.shift) { flags.insert(.shift) }
+        if modifiers.contains(.option) { flags.insert(.option) }
+        if modifiers.contains(.control) { flags.insert(.control) }
+        return flags
+    }
+}

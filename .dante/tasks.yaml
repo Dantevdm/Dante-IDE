@@ -371,7 +371,7 @@ tasks:
 - id: DI-92
   title: "Check custom shortcuts reach the menus live; notifications left for a foreground check"
   phase: build
-  state: todo
+  state: review
 - id: DI-93
   title: "Release: app icon, release build script (Developer ID signing and notarisation when credentials exist), DMG"
   phase: release

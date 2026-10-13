@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MenuShortcuts.install()
         // Needed when running the bare executable (`swift run`) rather than the .app bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()

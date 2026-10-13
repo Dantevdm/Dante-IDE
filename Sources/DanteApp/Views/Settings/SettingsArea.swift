@@ -442,6 +442,10 @@ private struct KeyboardPane: View {
                 Text("Also on \(conflicts.map(\.title).joined(separator: ", ")); whichever is available at the time runs.")
                     .font(.dante(size: 11)).foregroundStyle(theme.amber.color)
             }
+            if MenuShortcuts.shared.needsRestart.contains(command.id) {
+                Text("The menu shows this after Dante restarts.")
+                    .font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+            }
         }
     }
 }

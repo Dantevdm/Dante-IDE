@@ -125,15 +125,30 @@ public final class Shortcuts {
 
     public func isChanged(_ id: String) -> Bool { overrides[id] != nil }
 
+    /// Called with the command, its old binding and its new one after each change. SwiftUI
+    /// doesn't rebuild menus it has already made, so the app updates the menu item here.
+    public var onChange: ((ShortcutCommand, KeyBinding?, KeyBinding?) -> Void)?
+
     public func set(_ binding: KeyBinding?, for id: String) {
+        let before = self.binding(id)
         let original = Self.commands.first { $0.id == id }?.defaultBinding
         if binding == original { overrides[id] = nil } else { overrides[id] = .some(binding) }
         save()
+        changed(id, from: before)
     }
 
     public func reset(_ id: String? = nil) {
+        let ids = id.map { [$0] } ?? Array(overrides.keys)
+        let before = Dictionary(uniqueKeysWithValues: ids.map { ($0, binding($0)) })
         if let id { overrides[id] = nil } else { overrides = [:] }
         save()
+        for id in ids { changed(id, from: before[id] ?? nil) }
+    }
+
+    private func changed(_ id: String, from before: KeyBinding?) {
+        guard let command = Self.commands.first(where: { $0.id == id }) else { return }
+        let after = binding(id)
+        if after != before { onChange?(command, before, after) }
     }
 
     /// Other commands already on `binding`.
