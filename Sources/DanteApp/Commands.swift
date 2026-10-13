@@ -17,19 +17,19 @@ struct DanteCommands: Commands {
                     session?.showsAppSettings = true
                 }
             }
-            .keyboardShortcut(",")
+            .shortcut("settings")
         }
 
         CommandGroup(replacing: .newItem) {
             Button("New Project…") { session?.newProject() }
-                .keyboardShortcut("n")
+                .shortcut("newProject")
             Button("New Window") { openWindow(id: "workspace") }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .shortcut("newWindow")
             Divider()
             Button("Open Folder…") { session?.openFolderPanel() }
-                .keyboardShortcut("o")
+                .shortcut("openFolder")
             Button("Clone Repository…") { session?.isCloning = true }
-                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .shortcut("clone")
             Button("Set Up Project for Dante…") { session?.offerSetup(force: true) }
                 .disabled(session?.workspace == nil)
             Divider()
@@ -50,78 +50,82 @@ struct DanteCommands: Commands {
 
         CommandGroup(replacing: .saveItem) {
             Button("Save") { session?.saveActive() }
-                .keyboardShortcut("s")
+                .shortcut("save")
                 .disabled(session?.workspace?.activeDocument == nil)
             Button("Save All") { session?.saveAll() }
-                .keyboardShortcut("s", modifiers: [.command, .option])
+                .shortcut("saveAll")
                 .disabled(session?.workspace == nil)
             Divider()
             Button("Close Tab") { session?.closeActiveTab() }
-                .keyboardShortcut("w")
+                .shortcut("closeTab")
         }
 
         // ⌘P is Open Quickly here, as in Xcode and VS Code.
         CommandGroup(replacing: .printItem) {
             Button("Export Doc as PDF…") { session?.exportDoc() }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .shortcut("exportDoc")
                 .disabled(session?.area != .docs)
             Button("Print Doc…") { session?.exportDoc(printing: true) }
-                .keyboardShortcut("p")
+                .shortcut("printDoc")
                 .disabled(session?.area != .docs)
         }
 
         CommandGroup(after: .textEditing) {
             Divider()
             Button("Search or Ask…") { session?.palette = .all }
-                .keyboardShortcut("k")
+                .shortcut("searchOrAsk")
                 .disabled(session?.workspace == nil)
             Button("Open Quickly…") { session?.palette = .files }
-                .keyboardShortcut("p")
+                .shortcut("openQuickly")
                 .disabled(session?.workspace == nil)
             Button("Find in Project…") { session?.showSearch() }
-                .keyboardShortcut("f", modifiers: [.shift, .command])
+                .shortcut("findInProject")
                 .disabled(session?.workspace == nil)
             Button("Go to Symbol…") { session?.palette = .symbols }
-                .keyboardShortcut("o", modifiers: [.shift, .command])
+                .shortcut("goToSymbol")
                 .disabled(session?.workspace == nil)
             Button("Jump to Definition") { session?.jumpToDefinitionAtCursor() }
-                .keyboardShortcut("j", modifiers: [.control, .command])
+                .shortcut("jumpToDefinition")
                 .disabled(session?.workspace?.activeDocument == nil)
             Button("Edit with Claude…") { session?.editWithClaude() }
-                .keyboardShortcut("i")
+                .shortcut("editWithClaude")
                 .disabled(session?.workspace?.activeDocument == nil)
             Button("Find References") { session?.findReferencesAtCursor() }
-                .keyboardShortcut("f", modifiers: [.control, .shift, .command])
+                .shortcut("findReferences")
                 .disabled(session?.workspace?.activeDocument == nil)
             Button("Rename Symbol…") { session?.renameSymbolAtCursor() }
-                .keyboardShortcut("e", modifiers: [.control, .command])
+                .shortcut("renameSymbol")
                 .disabled(session?.workspace?.activeDocument == nil)
             Button("Format Document") { session?.formatActiveDocument() }
-                .keyboardShortcut("i", modifiers: [.control, .shift])
+                .shortcut("formatDocument")
                 .disabled(session?.workspace?.activeDocument == nil)
             Divider()
             Button("Problems") { session?.showProblems() }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .shortcut("problems")
                 .disabled(session?.workspace == nil)
         }
 
         CommandMenu("Git") {
             Button("Finish Task…") { session?.finishCurrentTask() }
+                .shortcut("finishTask")
                 .disabled(session?.workspace == nil)
             Divider()
             Button("Source Control") { session?.showChanges() }
-                .keyboardShortcut("g", modifiers: [.control, .shift])
+                .shortcut("sourceControl")
                 .disabled(session?.workspace == nil)
             Divider()
             Button("Push") { if let git = session?.git { Task { await git.push() } } }
+                .shortcut("push")
                 .disabled(session?.git.isRepository != true)
             Button("Pull") { if let git = session?.git { Task { await git.pull() } } }
+                .shortcut("pull")
                 .disabled(session?.git.isRepository != true)
             Button("Fetch") { if let git = session?.git { Task { await git.fetch() } } }
+                .shortcut("fetch")
                 .disabled(session?.git.isRepository != true)
             Divider()
             Button("Switch Branch…") { session?.showsBranches = true }
-                .keyboardShortcut("b", modifiers: [.control, .shift])
+                .shortcut("switchBranch")
                 .disabled(session?.git.isRepository != true)
         }
 
@@ -129,37 +133,37 @@ struct DanteCommands: Commands {
             Button(session?.showsTerminal == true ? "Hide Terminal" : "Show Terminal") {
                 session?.showsTerminal.toggle()
             }
-            .keyboardShortcut("`", modifiers: .control)
+            .shortcut("toggleTerminal")
             .disabled(session?.workspace == nil)
             Button("Back") { session?.goBack() }
-                .keyboardShortcut(.leftArrow, modifiers: [.control, .command])
+                .shortcut("back")
                 .disabled(session?.history.canGoBack != true)
             Button("Forward") { session?.goForward() }
-                .keyboardShortcut(.rightArrow, modifiers: [.control, .command])
+                .shortcut("forward")
                 .disabled(session?.history.canGoForward != true)
             Divider()
             Button("New Terminal") { session?.newTerminal() }
-                .keyboardShortcut("`", modifiers: [.control, .shift])
+                .shortcut("newTerminal")
                 .disabled(session?.workspace == nil)
 
             Button("Ask Claude") { session?.focusClaude() }
-                .keyboardShortcut("l")
+                .shortcut("askClaude")
                 .disabled(session?.claude == nil)
             Button(session?.showsClaude == true ? "Hide Claude" : "Show Claude") {
                 session?.showsClaude.toggle()
             }
-            .keyboardShortcut("l", modifiers: [.command, .option])
+            .shortcut("toggleClaude")
             .disabled(session?.claude == nil)
 
             Button("Next Tab") { session?.selectTab(offset: 1) }
-                .keyboardShortcut("]", modifiers: [.command, .shift])
+                .shortcut("nextTab")
             Button("Previous Tab") { session?.selectTab(offset: -1) }
-                .keyboardShortcut("[", modifiers: [.command, .shift])
+                .shortcut("previousTab")
             Button(session?.workspace?.split == nil ? "Split Editor" : "Close Split") { session?.toggleSplit() }
-                .keyboardShortcut("\\", modifiers: .command)
+                .shortcut("split")
                 .disabled(session?.workspace?.activeDocument == nil)
             Button("Focus Other Pane") { session?.focusOtherPane() }
-                .keyboardShortcut("\\", modifiers: [.command, .option])
+                .shortcut("focusOtherPane")
                 .disabled(session?.workspace?.split == nil)
             Divider()
 
@@ -167,14 +171,14 @@ struct DanteCommands: Commands {
                 ForEach(ThemeID.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
             Button("Next Theme") { themeStore.cycle() }
-                .keyboardShortcut("t", modifiers: [.command, .option])
+                .shortcut("nextTheme")
             Divider()
             Button("Bigger Text") { themeStore.adjustFontSize(by: 1) }
-                .keyboardShortcut("+")
+                .shortcut("biggerText")
             Button("Smaller Text") { themeStore.adjustFontSize(by: -1) }
-                .keyboardShortcut("-")
+                .shortcut("smallerText")
             Button("Actual Size") { themeStore.editorFontSize = 13 }
-                .keyboardShortcut("0")
+                .shortcut("actualSize")
             Divider()
         }
     }

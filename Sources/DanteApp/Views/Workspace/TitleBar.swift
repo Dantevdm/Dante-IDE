@@ -20,10 +20,10 @@ struct TitleBar: View {
 
             HStack(spacing: 6) {
                 HStack(spacing: 0) {
-                    IconButton(symbol: "chevron.left", label: "Back (⌃⌘← or the mouse’s back button)", size: 11) { session.goBack() }
+                    IconButton(symbol: "chevron.left", label: Shortcuts.shared.binding("back").map { "Back (\($0.display) or the mouse’s back button)" } ?? "Back (the mouse’s back button)", size: 11) { session.goBack() }
                         .disabled(!session.history.canGoBack)
                         .opacity(session.history.canGoBack ? 1 : 0.35)
-                    IconButton(symbol: "chevron.right", label: "Forward (⌃⌘→)", size: 11) { session.goForward() }
+                    IconButton(symbol: "chevron.right", label: Shortcuts.label("Forward", "forward"), size: 11) { session.goForward() }
                         .disabled(!session.history.canGoForward)
                         .opacity(session.history.canGoForward ? 1 : 0.35)
                 }
@@ -36,7 +36,7 @@ struct TitleBar: View {
                 ClaudeToggle(session: session)
                 IconButton(
                     symbol: session.showsTerminal ? "terminal.fill" : "terminal",
-                    label: session.showsTerminal ? "Hide terminal (⌃`)" : "Show terminal (⌃`)"
+                    label: Shortcuts.label(session.showsTerminal ? "Hide terminal" : "Show terminal", "toggleTerminal")
                 ) {
                     withAnimation(.snappy(duration: 0.22)) { session.showsTerminal.toggle() }
                 }
@@ -154,7 +154,7 @@ private struct ClaudeToggle: View {
     var body: some View {
         IconButton(
             symbol: "sparkle",
-            label: session.showsClaude ? "Hide Claude (⌥⌘L)" : "Show Claude (⌥⌘L)"
+            label: Shortcuts.label(session.showsClaude ? "Hide Claude" : "Show Claude", "toggleClaude")
         ) {
             withAnimation(.snappy(duration: 0.22)) { session.showsClaude.toggle() }
         }

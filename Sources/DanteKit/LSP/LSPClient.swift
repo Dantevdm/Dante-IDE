@@ -43,11 +43,15 @@ public final class LSPClient {
     private var versions: [String: Int] = [:]
     private var ready: Task<Bool, Never>?
 
-    public init(server: LanguageServer, root: URL, environment: [String: String]) throws {
+    /// The person's settings for this server, from Settings → Languages.
+    let options: LanguageServerOptions?
+
+    public init(server: LanguageServer, root: URL, environment: [String: String], options: LanguageServerOptions? = nil) throws {
         guard let command = server.resolve(environment: environment) else {
             throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey: "\(server.name) isn’t installed."])
         }
         self.server = server
+        self.options = options
         self.root = root.standardizedFileURL
         let stdin = Pipe()
         let stdout = Pipe()
@@ -259,6 +263,7 @@ public final class LSPClient {
                 ],
                 "workspace": ["workspaceFolders": true, "configuration": true, "didChangeWatchedFiles": ["dynamicRegistration": false]],
             ],
+            "initializationOptions": options?.settingsJSON ?? .null,
         ])
         guard result["capabilities"] != nil else {
             if case .starting = state { state = .stopped("\(server.name) didn’t start.") }
@@ -299,9 +304,10 @@ public final class LSPClient {
         let id = message["id"]
         switch (method, id) {
         case (let method?, let id?):
-            // A request from the server. Dante has no settings to give, so answer each item with null.
-            let count = message["params"]?["items"]?.array?.count
-            let result: JSONValue = method == "workspace/configuration" ? .array(Array(repeating: .null, count: count ?? 0)) : .null
+            // A request from the server: settings come from Settings → Languages, else null.
+            let items = message["params"]?["items"]?.array ?? []
+            let result: JSONValue = method == "workspace/configuration"
+                ? .array(items.map { options?.configuration(section: $0["section"]?.string) ?? .null }) : .null
             send(["jsonrpc": "2.0", "id": id, "result": result])
         case (nil, let id?):
             if let number = id.int, let continuation = pending.removeValue(forKey: number) {

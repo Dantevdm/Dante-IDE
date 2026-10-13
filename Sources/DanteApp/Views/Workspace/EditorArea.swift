@@ -255,7 +255,7 @@ private struct PathBar: View {
             Text(document.kind.opensAsText ? document.language.displayName : document.kind.title)
                 .foregroundStyle(theme.text3.color)
             if let closeSplit {
-                IconButton(symbol: "xmark", label: "Close Split (⌘\\)", size: 9, action: closeSplit)
+                IconButton(symbol: "xmark", label: Shortcuts.label("Close Split", "split"), size: 9, action: closeSplit)
                     .padding(.trailing, -10)
             }
         }

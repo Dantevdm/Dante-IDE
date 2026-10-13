@@ -351,11 +351,11 @@ tasks:
 - id: DI-87
   title: "Settings: keyboard shortcut editor"
   phase: build
-  state: todo
+  state: review
 - id: DI-88
   title: "Settings: language server options per language"
   phase: build
-  state: todo
+  state: review
 - id: DI-89
   title: "Polish: try Remove .dante on a throwaway project; System map speed on a large repo"
   phase: build

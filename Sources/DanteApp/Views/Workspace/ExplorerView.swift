@@ -108,7 +108,7 @@ struct ExplorerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(sidebar == .search ? "Find in Project (⇧⌘F)" : sidebar == .changes ? "Source Control (⌃⇧G)" : sidebar == .problems ? "Problems (⇧⌘M)" : "Files")
+        .help(sidebar == .search ? Shortcuts.label("Find in Project", "findInProject") : sidebar == .changes ? Shortcuts.label("Source Control", "sourceControl") : sidebar == .problems ? Shortcuts.label("Problems", "problems") : "Files")
         .accessibilityLabel(count > 0 ? "\(title), \(count) \(sidebar == .problems ? "problems" : "changes")" : title)
         .accessibilityAddTraits(session.sidebar == sidebar ? .isSelected : [])
     }

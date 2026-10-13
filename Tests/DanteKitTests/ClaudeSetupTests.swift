@@ -107,3 +107,44 @@ struct ClaudePluginTests {
         #expect(ClaudePlugin.parse("[]").installed.isEmpty)
     }
 }
+
+@MainActor
+struct ShortcutsTests {
+    @Test func overridesSurviveARelaunchAndConflictsAreFound() {
+        let defaults = UserDefaults(suiteName: "ShortcutsTests")!
+        defaults.removePersistentDomain(forName: "ShortcutsTests")
+        let shortcuts = Shortcuts(defaults: defaults)
+        #expect(shortcuts.binding("findInProject")?.display == "⇧⌘F")
+        shortcuts.set(KeyBinding("k", [.command, .shift]), for: "findInProject")
+        shortcuts.set(nil, for: "push")
+        shortcuts.set(nil, for: "save")
+        #expect(shortcuts.conflicts(KeyBinding("p"), except: "printDoc").map(\.id) == ["openQuickly"])
+
+        let again = Shortcuts(defaults: defaults)
+        #expect(again.binding("findInProject") == KeyBinding("K", [.shift, .command]))
+        #expect(again.binding("save") == nil && again.isChanged("save"))
+        #expect(!again.isChanged("push"))
+        again.reset("save")
+        #expect(again.binding("save")?.display == "⌘S")
+        #expect(KeyBinding("left", [.command, .control]).display == "⌃⌘←")
+    }
+}
+
+struct LanguageServerOptionsTests {
+    @Test func commandSettingsAndConfigurationSections() {
+        let options = LanguageServerOptions(command: "\"/home/me/my tools/pyright-langserver\" --stdio",
+                                            settings: "{\"python\": {\"analysis\": {\"typeCheckingMode\": \"strict\"}}}")
+        #expect(options.commandWords == ["/home/me/my tools/pyright-langserver", "--stdio"])
+        #expect(options.configuration(section: "python.analysis")["typeCheckingMode"]?.string == "strict")
+        #expect(options.configuration(section: "go") == .null)
+        #expect(options.configuration(section: nil)["python"] != nil)
+        #expect(LanguageServer.for(.python)!.applying(options).commands == [options.commandWords])
+        #expect(LanguageServerOptions(settings: "[1]").settingsError != nil)
+        #expect(LanguageServerOptions(settings: "").settingsError == nil)
+
+        let defaults = UserDefaults(suiteName: "LanguageServerOptionsTests")!
+        defaults.removePersistentDomain(forName: "LanguageServerOptionsTests")
+        LanguageServerOptions.save(["gopls": LanguageServerOptions(enabled: false), "Pyright": LanguageServerOptions()], defaults: defaults)
+        #expect(LanguageServerOptions.load(defaults: defaults) == ["gopls": LanguageServerOptions(enabled: false)])
+    }
+}

@@ -53,7 +53,7 @@ struct ClaudePanel: View {
                 }
             IconButton(symbol: "square.and.pencil", label: "New conversation (the current one stays in Earlier conversations)") { claude.reset() }
                 .disabled(claude.items.isEmpty)
-            IconButton(symbol: "sidebar.right", label: "Hide Claude (⌥⌘L)") {
+            IconButton(symbol: "sidebar.right", label: Shortcuts.label("Hide Claude", "toggleClaude")) {
                 withAnimation(.snappy(duration: 0.22)) { session.showsClaude = false }
             }
         }

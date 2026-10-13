@@ -20,8 +20,10 @@ public final class LanguageServices {
         guard let server = LanguageServer.for(language) else { return nil }
         if let client = clients[server.name] { return client }
         guard unavailable[server.name] == nil else { return nil }
+        let options = LanguageServerOptions.load()[server.name]
+        guard options?.enabled ?? true else { return nil }
         do {
-            let client = try LSPClient(server: server, root: root, environment: Shell.environment())
+            let client = try LSPClient(server: server.applying(options), root: root, environment: Shell.environment(), options: options)
             clients[server.name] = client
             return client
         } catch {
@@ -158,6 +160,12 @@ public final class LanguageServices {
             pending.cancel()
             await client.change(document.url, text: document.text)
         }
+    }
+
+    /// Stops a server so the next file in its language starts it with new options.
+    public func restart(_ serverName: String) {
+        clients.removeValue(forKey: serverName)?.stop()
+        unavailable[serverName] = nil
     }
 
     public func stop() {

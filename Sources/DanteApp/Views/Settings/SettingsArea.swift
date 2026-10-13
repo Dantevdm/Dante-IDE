@@ -11,13 +11,15 @@ struct SettingsArea: View {
     let workspace: Workspace
 
     enum Section: String, CaseIterable, Identifiable {
-        case appearance = "Appearance", editor = "Editor", files = "Files", claude = "Claude", tools = "Tools & drivers", project = "This project"
+        case appearance = "Appearance", editor = "Editor", keyboard = "Keyboard", languages = "Languages", files = "Files", claude = "Claude", tools = "Tools & drivers", project = "This project"
         var id: String { rawValue }
 
         var symbol: String {
             switch self {
             case .appearance: "paintpalette"
             case .editor: "chevron.left.forwardslash.chevron.right"
+            case .keyboard: "keyboard"
+            case .languages: "curlybraces"
             case .files: "doc"
             case .claude: "sparkle"
             case .tools: "wrench.and.screwdriver"
@@ -57,6 +59,8 @@ struct SettingsArea: View {
                 switch section {
                 case .appearance: AppearancePane(themeStore: themeStore)
                 case .editor: EditorSettings(preferences: Preferences.shared)
+                case .keyboard: KeyboardPane()
+                case .languages: LanguagesPane(session: session)
                 case .files: FileSettings(preferences: Preferences.shared)
                 case .claude: ClaudePreferencesPane(session: session)
                 case .tools: ToolsPane(session: session, workspace: workspace)
@@ -359,6 +363,186 @@ private struct ProjectPane: View {
             message = "Moved .dante to the Trash."
         } catch {
             message = "Couldn’t move .dante to the Trash: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: Keyboard
+
+private struct KeyboardPane: View {
+    @Environment(\.theme) private var theme
+    private let shortcuts = Shortcuts.shared
+    @State private var recording: String?
+
+    private var menus: [String] {
+        var seen: [String] = []
+        for command in Shortcuts.commands where !seen.contains(command.menu) { seen.append(command.menu) }
+        return seen
+    }
+
+    var body: some View {
+        Form {
+            ForEach(menus, id: \.self) { menu in
+                SwiftUI.Section(menu) {
+                    ForEach(Shortcuts.commands.filter { $0.menu == menu }) { command in
+                        row(command)
+                    }
+                }
+            }
+            SwiftUI.Section {
+                HStack {
+                    Text("Click a shortcut, then press the new keys. ⌫ removes it, esc cancels.")
+                        .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                    Spacer()
+                    Button("Restore All Defaults") { shortcuts.reset() }
+                        .disabled(shortcuts.overrides.isEmpty)
+                }
+            }
+        }
+        .background(KeyRecorder(isActive: recording != nil) { event in
+            guard let id = recording else { return }
+            if event.keyCode == 53 { recording = nil; return }
+            if event.keyCode == 51, event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.function).isEmpty {
+                shortcuts.set(nil, for: id)
+                recording = nil
+                return
+            }
+            if let binding = KeyBinding(event: event) {
+                shortcuts.set(binding, for: id)
+                recording = nil
+            }
+        })
+    }
+
+    private func row(_ command: ShortcutCommand) -> some View {
+        let binding = shortcuts.binding(command.id)
+        let conflicts = binding.map { shortcuts.conflicts($0, except: command.id) } ?? []
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(command.title)
+                Spacer()
+                if shortcuts.isChanged(command.id) {
+                    Button { shortcuts.reset(command.id) } label: { Image(systemName: "arrow.uturn.backward") }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(theme.text3.color)
+                        .help("Back to \(command.defaultBinding?.display ?? "no shortcut")")
+                }
+                Button { recording = recording == command.id ? nil : command.id } label: {
+                    Text(recording == command.id ? "Type a shortcut…" : binding?.display ?? "None")
+                        .font(.dante(size: 12, design: .monospaced))
+                        .foregroundStyle(recording == command.id ? theme.accent.color : binding == nil ? theme.text3.color : theme.text.color)
+                        .frame(minWidth: 110)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(recording == command.id ? theme.accentTint.color : theme.raised.color))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(recording == command.id ? theme.accentLine.color : theme.line2.color))
+                }
+                .buttonStyle(.plain)
+            }
+            if !conflicts.isEmpty {
+                Text("Also on \(conflicts.map(\.title).joined(separator: ", ")); whichever is available at the time runs.")
+                    .font(.dante(size: 11)).foregroundStyle(theme.amber.color)
+            }
+        }
+    }
+}
+
+/// Hands key presses to `record` while a shortcut is being recorded, and swallows them.
+private struct KeyRecorder: NSViewRepresentable {
+    let isActive: Bool
+    let record: @MainActor (NSEvent) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let coordinator = context.coordinator
+        coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard coordinator.isActive else { return event }
+            MainActor.assumeIsolated { coordinator.record?(event) }
+            return nil
+        }
+        return NSView()
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.isActive = isActive
+        context.coordinator.record = record
+    }
+
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
+        if let monitor = coordinator.monitor { NSEvent.removeMonitor(monitor) }
+    }
+
+    @MainActor
+    final class Coordinator {
+        var isActive = false
+        var record: (@MainActor (NSEvent) -> Void)?
+        var monitor: Any?
+    }
+}
+
+// MARK: Languages
+
+private struct LanguagesPane: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    @State private var options: [String: LanguageServerOptions] = LanguageServerOptions.load()
+    @State private var saved: [String: LanguageServerOptions] = LanguageServerOptions.load()
+
+    var body: some View {
+        Form {
+            ForEach(LanguageServer.all, id: \.name) { server in
+                SwiftUI.Section {
+                    Toggle("Run \(server.name)", isOn: binding(server.name, \.enabled))
+                    TextField("Command", text: binding(server.name, \.command),
+                              prompt: Text(server.commands.map { $0.joined(separator: " ") }.joined(separator: "  or  ")))
+                        .font(.dante(size: 12, design: .monospaced))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Settings (JSON)").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
+                        TextEditor(text: binding(server.name, \.settings))
+                            .font(.dante(size: 12, design: .monospaced))
+                            .scrollContentBackground(.hidden)
+                            .padding(5)
+                            .frame(height: 70)
+                            .background(theme.raised.color, in: RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line.color))
+                        if let error = options[server.name]?.settingsError {
+                            Text(error).font(.dante(size: 11)).foregroundStyle(theme.red.color)
+                        }
+                    }
+                    if (options[server.name] ?? LanguageServerOptions()) != (saved[server.name] ?? LanguageServerOptions()) {
+                        HStack {
+                            Spacer()
+                            Button("Revert") { options[server.name] = saved[server.name] }
+                            Button("Apply and Restart") { apply(server.name) }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(options[server.name]?.settingsError != nil)
+                        }
+                    }
+                } header: {
+                    Text("\(server.name) · \(server.languageIDs.keys.map(\.displayName).sorted().joined(separator: ", "))")
+                }
+            }
+            SwiftUI.Section {
+                Text("Settings go to the server when it starts and whenever it asks for them. A server restarts the next time a file in its language opens.")
+                    .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+            }
+        }
+    }
+
+    private func binding<Value>(_ name: String, _ path: WritableKeyPath<LanguageServerOptions, Value>) -> Binding<Value> {
+        Binding(get: { (options[name] ?? LanguageServerOptions())[keyPath: path] },
+                set: { value in var current = options[name] ?? LanguageServerOptions(); current[keyPath: path] = value; options[name] = current })
+    }
+
+    private func apply(_ name: String) {
+        LanguageServerOptions.save(options)
+        saved = options
+        session.languages?.restart(name)
+        // Files already open in that language get the server back right away.
+        if let workspace = session.workspace {
+            for document in workspace.documents where LanguageServer.for(document.language)?.name == name {
+                session.languages?.opened(document)
+            }
         }
     }
 }
