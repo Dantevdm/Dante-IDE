@@ -176,31 +176,9 @@ public enum Git {
 
     @discardableResult
     static func run(_ arguments: [String], in directory: URL) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(filePath: "/usr/bin/env")
-            process.arguments = arguments
-            process.currentDirectoryURL = directory
-            var environment = ProcessInfo.processInfo.environment
-            environment["GIT_TERMINAL_PROMPT"] = "0"
-            process.environment = environment
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-            process.terminationHandler = { process in
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-                if process.terminationStatus == 0 {
-                    continuation.resume(returning: output)
-                } else {
-                    continuation.resume(throwing: CommandError(output: output))
-                }
-            }
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+        let output = await Shell.run(arguments, in: directory)
+        let text = [output.stdout, output.stderr].filter { !$0.isEmpty }.joined(separator: "\n")
+        guard output.succeeded else { throw CommandError(output: text) }
+        return text
     }
 }

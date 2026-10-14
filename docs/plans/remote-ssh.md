@@ -1,66 +1,43 @@
 # Remote projects over SSH
 
-Open a project that lives on another machine (a dev box, a cloud VM, a Linux server) and work on it as if it were local: edit files, run Claude Code, tests, git, language servers and the terminal there, with Dante's UI on this Mac.
+Open a project that lives on another machine (a dev box, a cloud VM, a Linux server) and work on it as if it were local, with Dante's UI on this Mac.
 
-Status: scoped, not started (DI-99). This document is the plan; nothing below exists yet.
+Status: the first version is built (DI-99). File → Open Remote… (⌃⌘O), the launch screen and the project menu open one.
 
-## What has to change
+## How it works
 
-Dante assumes the project is on the local disk in three ways:
+Dante keeps a **mirror**: a copy of the project on this Mac, in `~/Library/Application Support/Dante/Remote/<host>/<hash>/<name>`, kept in step with the host by rsync. Everything that only reads files (the editor, Map, Docs, Plan, the test inventory, search) works on the mirror unchanged. Everything that runs a program runs **on the host**:
 
-| Seam | Today | Size |
+| What | Where it runs | How |
 |---|---|---|
-| Processes | `Shell.run` / `Shell.stream` for most commands, plus six direct `Process()` sites (Claude Code, language servers, the debugger, git helpers, the CLI) | 27 files call `Shell`; 6 start processes themselves |
-| Files | `FileManager` and `String(contentsOf:)` / `write(to:)` straight against `Workspace.url` | 84 reads/writes in 41 files; `FileManager` in 52 files |
-| Watching | `DirectoryWatcher` (FSEvents) drives `Workspace.reloadSpec`, the file index and external-change reloads | 2 files |
+| git, tests, `Shell.run` / `Shell.stream` | host | `RemoteRegistry` maps a mirror folder to the host's folder; `Shell` sends the command over ssh in the user's login shell |
+| Claude Code | host | `ClaudeSession` starts `claude` over ssh; paths in tool calls are mapped to the mirror for diffs and checks, and back for approvals |
+| Terminal | host | `ssh -t` into the project folder |
+| Language servers | this Mac, on the mirror | unchanged; they need the toolchain here |
+| Debugger | off | it would run the program on this Mac |
 
-Everything process-based moves to a remote host almost for free once commands can be sent there. The file system calls are the bulk of the work.
+There's no agent installed on the host and no FUSE. The host needs sshd and rsync. Dante connects with the user's keys or ssh agent, with `BatchMode=yes`, and never asks for a password. One shared connection per host (`ControlMaster`, sockets in `/tmp/dante-ssh-<uid>`) keeps each command to one round trip.
 
-## Approach
+## Syncing
 
-No agent installed on the remote and no FUSE. Dante drives the remote with plain `ssh` and POSIX tools that every Linux and macOS host has (`sh`, `cat`, `find`, `git`, `mv`, `stat`), so the only requirement is SSH access with a key (or an agent): Dante never asks for passwords, like git's network commands today (`BatchMode=yes`).
+`RemoteSync` runs on local changes (FSEvents on the mirror), after every command or Claude tool that ran on the host, and on a timer (every 4 s while Dante is in front, 30 s otherwise). Each sync:
 
-One multiplexed connection per window: `ssh -o ControlMaster=auto -o ControlPath=~/Library/Caches/Dante/ssh/%C -o ControlPersist=10m -o BatchMode=yes <host>`. Each command after the first costs a round trip, not a handshake.
+1. deletes on the host the files deleted here since the last sync. More than max(50, a quarter of the project) at once are held back as a likely accident, and copied back instead;
+2. removes here what the host deleted, if it hasn't changed here since the last sync (an edit here outlives a deletion there);
+3. pushes the files made or changed here since the last sync, and only those (`--files-from`), so a stale copy never overwrites the host's;
+4. pulls what changed there (`-u`: when both sides changed a file, the newer wins).
 
-### 1. A `Host` seam (no behaviour change)
+The files and modification times after each sync are saved beside the mirror (`<name>.synced.json`), so a relaunch knows what changed while Dante was closed. Without that record, the host decides.
 
-- `enum Host { case local; case ssh(alias: String) }` on `Workspace`.
-- `Shell.run`/`stream` take a host; `.ssh` wraps the command as `ssh … <host> 'cd <root> && exec <quoted args>'` (`Shell.quote` already exists). The six `Process()` sites move behind the same call, keeping their stdin/stdout pipes (Claude Code's stream-json, LSP and DAP over stdio work unchanged over an ssh pipe).
-- Tests: the wrapped command lines, quoting of awkward paths.
+Not synced: `.git` (except `HEAD`, so the branch shows), dependency and build folders (`node_modules`, `.build`, `build`, `dist`, `target`, `vendor`, virtualenvs…), and files over 20 MB.
 
-### 2. A `ProjectFiles` protocol
+## Not yet
 
-- `read(path) / write(path, data) / list(folder) / exists / remove / move / modified(path)`, with `LocalFiles` (today's code) and `RemoteFiles` (`cat`, `cat > tmp && mv tmp path` for atomic writes, `find -printf` / `stat` for listings).
-- Port in order of value: the editor's open and save, `FileIndex.scan` (remotely `git ls-files -co --exclude-standard`, falling back to `find` with the skipped names), `.dante/` (`Workspace.reloadSpec`), then the areas.
-- Whole-project passes (Map, Tests inventory, Untested, search) read thousands of files. Run them where the files are rather than copying: search becomes `git grep -n -I` / `grep -rn` on the host and is parsed into `ProjectSearch.Result`; the others read through a single `tar -c <files> | …` stream per pass instead of one `cat` per file.
+- Language servers on the host (they'd need their URIs mapped like Claude's paths). Today they run here, so a Go or Node project needs its toolchain and dependencies on this Mac for diagnostics.
+- Docker/Compose and Data against the host's containers (port forwarding with `ssh -L`).
+- Claude history, usage and the Timeline's Claude sessions: their transcripts are on the host.
+- Password or keyboard-interactive auth.
 
-### 3. Watching
+## Testing
 
-- Poll every few seconds over the shared connection: `git status --porcelain=v1 -z` plus `find .dante -newer <stamp>`; use `inotifywait -m -r` when the host has it.
-
-### 4. Paths
-
-- Language servers and the debugger report remote paths; `LSPClient` and `DebugSession` map `file://` URIs between the remote root and a local placeholder root (`dante-remote://<host>/<path>` as the document URL).
-- Claude Code runs on the host (`ssh -T host claude --input-format stream-json …`), so its edits and tool calls already use remote paths. It must be installed and signed in there; the Claude area says so when `claude` isn't found.
-
-### 5. UI
-
-- File → Open Remote… lists `Host` aliases from `~/.ssh/config` (and a field for `user@host`), then a folder picker that browses over ssh.
-- The title bar shows the host; the terminal opens `ssh -t <host>` in the project folder.
-- Areas not yet ported show "Not available for remote projects yet" instead of reading the local disk.
-
-## Out of scope for the first version
-
-- Docker/Compose and Data against the remote's containers (they'd need port forwarding: `ssh -L`).
-- Password and keyboard-interactive auth, jump hosts beyond what `~/.ssh/config` already does.
-- Windows hosts.
-
-## Estimate and order
-
-1. Host seam: about 2 days, all testable without a remote.
-2. Editor, file index and `.dante/` over `RemoteFiles`, Open Remote…, terminal: about 1 week. This is the first useful version: edit, Claude, git, tests and the terminal on a remote box.
-3. Language servers and debugger path mapping: 2–3 days.
-4. Search, Map, Tests inventory and Untested on the host: about 1 week.
-5. Polling watcher, reconnects after sleep, error states: 2–3 days.
-
-Test against a local Linux VM or container with sshd (needs one image download, so ask first).
+`RemoteSyncTests` sync a folder on this Mac through an ssh stand-in (`DANTE_SSH`) that skips the options and runs the command locally. The same stand-in works for the app: `open --env DANTE_SSH=<script> build/Dante.app`.

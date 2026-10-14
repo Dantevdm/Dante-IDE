@@ -44,7 +44,7 @@ extension Session {
     }
 
     var canDebugActiveFile: Bool {
-        guard let document = workspace?.activeDocument else { return false }
+        guard remoteSync == nil, let document = workspace?.activeDocument else { return false }
         return DebugAdapter.for(file: document.url.path) != nil
     }
 
@@ -52,6 +52,10 @@ extension Session {
     func startDebugging() {
         if let debug, debug.state == .stopped { debug.resume(); return }
         guard let workspace, let document = workspace.activeDocument else { return }
+        guard remoteSync == nil else {
+            errorMessage = "The debugger runs programs on this Mac, so it isn’t available for remote projects yet."
+            return
+        }
         guard let adapter = DebugAdapter.for(file: document.url.path) else {
             errorMessage = "Dante can debug Go and Python files. Open one and start again."
             return

@@ -66,6 +66,7 @@ public final class Shortcuts {
         .init("newWindow", "New Window", "File", KeyBinding("n", [.command, .shift])),
         .init("openFolder", "Open Folder…", "File", KeyBinding("o")),
         .init("clone", "Clone Repository…", "File", KeyBinding("c", [.command, .shift])),
+        .init("openRemote", "Open Remote…", "File", KeyBinding("o", [.command, .control])),
         .init("save", "Save", "File", KeyBinding("s")),
         .init("saveAll", "Save All", "File", KeyBinding("s", [.command, .option])),
         .init("closeTab", "Close Tab", "File", KeyBinding("w")),

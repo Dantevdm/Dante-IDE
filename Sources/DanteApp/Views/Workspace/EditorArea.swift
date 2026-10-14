@@ -74,7 +74,7 @@ struct EditorArea: View {
             preferences: Preferences.shared,
             onFocus: { if let side { workspace.focusPane(right: side == .right) } },
             breakpoints: Set(session.breakpointLines(in: document.url).map { $0 - 1 }),
-            onToggleBreakpoint: DebugAdapter.for(file: document.url.path) == nil ? nil : { session.toggleBreakpoint(in: document.url, line: $0 + 1) },
+            onToggleBreakpoint: session.remoteSync != nil || DebugAdapter.for(file: document.url.path) == nil ? nil : { session.toggleBreakpoint(in: document.url, line: $0 + 1) },
             executionLine: session.executionLine(in: document)
         )
         .id(document.id)

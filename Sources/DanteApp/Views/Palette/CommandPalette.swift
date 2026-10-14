@@ -325,6 +325,7 @@ struct CommandPalette: View {
             action("Save all", "square.and.arrow.down.on.square", "⌥⌘S") { session.saveAll() },
             action("Open folder…", "folder", "⌘O") { session.openFolderPanel() },
             action("Clone repository…", "arrow.down.circle") { session.isCloning = true },
+            action("Open remote project…", "network") { session.showsOpenRemote = true },
             action("Close project", "xmark.square") { session.closeProject() },
             action("Reveal project in Finder", "finder") { NSWorkspace.shared.activateFileViewerSelecting([workspace.url]) },
         ]

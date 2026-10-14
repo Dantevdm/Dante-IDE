@@ -56,7 +56,7 @@ struct DebugPanel: View {
                 status(debug)
             } else {
                 let file = workspace.activeDocument
-                let adapter = file.flatMap { DebugAdapter.for(file: $0.url.path) }
+                let adapter = session.remoteSync == nil ? file.flatMap { DebugAdapter.for(file: $0.url.path) } : nil
                 Button {
                     session.startDebugging()
                 } label: {
@@ -88,6 +88,7 @@ struct DebugPanel: View {
     }
 
     private func hint(adapter: DebugAdapter?, file: EditorDocument?) -> String {
+        if session.remoteSync != nil { return "The debugger runs programs on this Mac, so it isn’t available for remote projects yet." }
         guard let file else { return "Open a Go or Python file to debug it." }
         guard let adapter else { return "Dante debugs Go (with Delve) and Python (with debugpy). \(file.url.lastPathComponent) isn’t either." }
         let what = adapter.id == "go" ? (file.url.lastPathComponent.hasSuffix("_test.go") ? "this package’s tests" : "this file’s package") : "this file"

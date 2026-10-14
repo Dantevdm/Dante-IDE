@@ -132,6 +132,17 @@ private struct TerminalHost: NSViewRepresentable {
         environment.append("HOME=\(FileManager.default.homeDirectoryForCurrentUser.path)")
         if let lang = ProcessInfo.processInfo.environment["LANG"] { environment.append("LANG=\(lang)") } else { environment.append("LANG=en_US.UTF-8") }
         if let user = ProcessInfo.processInfo.environment["USER"] { environment.append("USER=\(user)") }
+        if let remote = RemoteRegistry.project(containing: directory) {
+            // A remote project's shell is on its host, in the same folder.
+            let command = "cd \(Shell.quote(remote.path)) && exec \"$SHELL\" -l"
+            view.startProcess(
+                executable: SSH.program,
+                args: SSH.arguments(host: remote.project.host, command: command, terminal: true),
+                environment: environment,
+                currentDirectory: FileManager.default.homeDirectoryForCurrentUser.path
+            )
+            return view
+        }
         view.startProcess(
             executable: shell,
             args: ["-l"],

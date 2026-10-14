@@ -122,6 +122,10 @@ struct RootView: View {
             CloneSheet(session: session)
                 .environment(\.theme, theme)
         }
+        .sheet(isPresented: $session.showsOpenRemote) {
+            RemoteSheet(session: session)
+                .environment(\.theme, theme)
+        }
         .sheet(isPresented: Binding(get: { session.setupProfile != nil && session.workspace != nil }, set: { if !$0 { session.setupProfile = nil } })) {
             if let profile = session.setupProfile, let workspace = session.workspace {
                 SetupSheet(session: session, workspace: workspace, profile: profile)

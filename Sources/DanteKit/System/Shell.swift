@@ -24,14 +24,13 @@ public enum Shell {
     /// can't fill a pipe and stall it. A missing tool comes back as status 127.
     /// `trimming: false` keeps stdout exactly as written, for file contents. `extra` adds
     /// environment variables, for secrets that mustn't appear in the arguments.
+    /// In a remote project's mirror the command runs on its host instead, over ssh.
     public static func run(_ arguments: [String], in directory: URL, trimming: Bool = true, extra: [String: String] = [:]) async -> Output {
-        await withCheckedContinuation { continuation in
+        let remote = RemoteRegistry.project(containing: directory)
+        let output: Output = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
-                process.executableURL = URL(filePath: "/usr/bin/env")
-                process.arguments = arguments
-                process.currentDirectoryURL = directory
-                process.environment = environment().merging(extra) { $1 }
+                configure(process, arguments, in: directory, extra: extra, remote: remote)
                 let out = Pipe(), err = Pipe()
                 process.standardOutput = out
                 process.standardError = err
@@ -59,7 +58,28 @@ public enum Shell {
                 ))
             }
         }
+        // The command may have changed files there (a checkout, a formatter).
+        if let remote { RemoteRegistry.commandFinished(for: remote.project) }
+        return output
     }
+
+    /// `/usr/bin/env` with the arguments, or ssh to the host for a folder in a remote mirror.
+    static func configure(_ process: Process, _ arguments: [String], in directory: URL, extra: [String: String] = [:],
+                          remote: (project: RemoteProject, path: String)?) {
+        process.executableURL = URL(filePath: "/usr/bin/env")
+        process.environment = environment().merging(extra) { $1 }
+        if let remote {
+            let command = SSH.remoteCommand(arguments, in: remote.path, environment: remoteEnvironment.merging(extra) { $1 })
+            process.arguments = [SSH.program] + SSH.arguments(host: remote.project.host, command: command)
+            process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+        } else {
+            process.arguments = arguments
+            process.currentDirectoryURL = directory
+        }
+    }
+
+    /// What `environment()` sets for parsing, for commands run on a host.
+    static let remoteEnvironment = ["GIT_TERMINAL_PROMPT": "0", "NO_COLOR": "1", "TERM": "dumb"]
 
     /// A long-running command whose output arrives line by line (stdout and stderr merged),
     /// for test runs and `docker compose logs -f`.
@@ -89,10 +109,12 @@ public enum Shell {
 
     public static func stream(_ arguments: [String], in directory: URL) throws -> Running {
         let process = Process()
-        process.executableURL = URL(filePath: "/usr/bin/env")
-        process.arguments = arguments
-        process.currentDirectoryURL = directory
-        process.environment = environment()
+        let remote = RemoteRegistry.project(containing: directory)
+        configure(process, arguments, in: directory, remote: remote)
+        if let remote {
+            let project = remote.project
+            process.terminationHandler = { _ in RemoteRegistry.commandFinished(for: project) }
+        }
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe

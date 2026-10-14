@@ -149,6 +149,9 @@ public final class ClaudeSession {
 
     public let root: URL
     public let executable: String?
+    /// Set when `root` is a remote project's mirror: Claude Code runs on the host, and file
+    /// paths in its tool calls are read as the mirror's while Dante shows and checks them.
+    public let remote: RemoteProject?
     private let systemPrompt: () -> String
     private let rules: () -> ClaudeRules
     private var startedRules = ClaudeRules()
@@ -180,9 +183,10 @@ public final class ClaudeSession {
     public init(root: URL, executable: String?, systemPrompt: @escaping () -> String, rules: @escaping () -> ClaudeRules = { ClaudeRules() }) {
         self.root = root
         self.executable = executable
+        self.remote = RemoteRegistry.project(containing: root)?.project
         self.systemPrompt = systemPrompt
         self.rules = rules
-        if executable == nil {
+        if executable == nil, remote == nil {
             state = .unavailable("Claude Code isn’t installed. Install it from claude.com/claude-code, then reopen the project.")
         }
     }
@@ -274,7 +278,7 @@ public final class ClaudeSession {
             }
             checkpoints[turn] = checkpoint
         }
-        write(ClaudeInput.allow(requestID: requestID, input: tool.input))
+        write(ClaudeInput.allow(requestID: requestID, input: hostPaths(tool.input)))
         updateTool(toolID) { $0.status = .running }
     }
 
@@ -284,7 +288,7 @@ public final class ClaudeSession {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status,
               case .object(var input) = tool.input else { return }
         input["answers"] = .object(answers.mapValues { .string($0) })
-        write(ClaudeInput.allow(requestID: requestID, input: .object(input)))
+        write(ClaudeInput.allow(requestID: requestID, input: hostPaths(.object(input))))
         updateTool(toolID) {
             $0.input = .object(input)
             $0.status = .running
@@ -372,13 +376,20 @@ public final class ClaudeSession {
     // MARK: Process
 
     private func start() -> Bool {
-        guard let executable else { return false }
+        guard executable != nil || remote != nil else { return false }
         let process = Process()
-        process.executableURL = URL(filePath: executable)
-        process.currentDirectoryURL = root
         let rules = rules()
         let prompt = asksFirst ? systemPrompt() + "\n\n" + ClaudeBrief.clarifyingQuestions : systemPrompt()
-        process.arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel)
+        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel)
+        if let remote {
+            process.executableURL = URL(filePath: "/usr/bin/env")
+            process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+            process.arguments = [SSH.program] + SSH.arguments(host: remote.host, command: SSH.remoteCommand(["claude"] + arguments, in: remote.path))
+        } else if let executable {
+            process.executableURL = URL(filePath: executable)
+            process.currentDirectoryURL = root
+            process.arguments = arguments
+        }
         startedRules = rules
         startedAsksFirst = asksFirst
         startedModel = requestedModel
@@ -510,6 +521,7 @@ public final class ClaudeSession {
     // MARK: Events
 
     func handle(_ event: ClaudeEvent) {
+        let event = remote.map { Self.mirrorPaths(event, $0) } ?? event
         switch event {
         case .started(let sessionID, let model):
             self.model = model
@@ -563,6 +575,8 @@ public final class ClaudeSession {
                     if let change = tool.change ?? ProposedChange.make(toolName: tool.name, input: tool.input, root: root) {
                         onFileChanged(change.url)
                     }
+                    // Claude worked on the host; bring its changes into the mirror.
+                    if let remote { RemoteRegistry.commandFinished(for: remote) }
                 }
             }
 
@@ -637,6 +651,41 @@ public final class ClaudeSession {
     private func activity(_ id: String) -> ToolActivity? {
         guard let position = index[id], case .tool(let tool) = items[position].content else { return nil }
         return tool
+    }
+
+    // MARK: Remote paths
+
+    static let pathKeys = ["file_path", "notebook_path", "path"]
+
+    /// The input with the path keys rewritten, where `transform` maps them.
+    static func mappingPaths(_ input: JSONValue, _ transform: (String) -> String?) -> JSONValue {
+        guard case .object(var object) = input else { return input }
+        for key in pathKeys {
+            if let path = object[key]?.string, let mapped = transform(path) { object[key] = .string(mapped) }
+        }
+        return .object(object)
+    }
+
+    /// Tool calls from the host, with its paths as the mirror's.
+    static func mirrorPaths(_ event: ClaudeEvent, _ remote: RemoteProject) -> ClaudeEvent {
+        switch event {
+        case .assistant(let messageID, let blocks, let usage):
+            return .assistant(messageID: messageID, blocks: blocks.map { block in
+                guard case .toolUse(let id, let name, let input) = block else { return block }
+                return .toolUse(id: id, name: name, input: mappingPaths(input, remote.localPath(forRemote:)))
+            }, usage: usage)
+        case .permissionRequest(var request):
+            request.input = mappingPaths(request.input, remote.localPath(forRemote:))
+            return .permissionRequest(request)
+        default:
+            return event
+        }
+    }
+
+    /// An input going back to Claude Code, with the mirror's paths as the host's.
+    private func hostPaths(_ input: JSONValue) -> JSONValue {
+        guard let remote else { return input }
+        return Self.mappingPaths(input, remote.remotePath(forLocal:))
     }
 
     /// "Edit Mailer.swift", "Run go test ./...", "Answer a question".

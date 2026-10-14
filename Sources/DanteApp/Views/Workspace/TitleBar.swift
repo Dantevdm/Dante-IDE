@@ -28,6 +28,9 @@ struct TitleBar: View {
                         .opacity(session.history.canGoForward ? 1 : 0.35)
                 }
                 ProjectMenu(session: session, workspace: workspace)
+                if let sync = session.remoteSync {
+                    RemoteChip(session: session, sync: sync)
+                }
                 if let branch = session.git.status?.branch ?? session.branch {
                     BranchButton(session: session, branch: branch)
                 }
@@ -64,6 +67,7 @@ private struct ProjectMenu: View {
         Menu {
             Button("Open Folder…") { session.openFolderPanel() }
             Button("Clone Repository…") { session.isCloning = true }
+            Button("Open Remote…") { session.showsOpenRemote = true }
             let others = recents.items.filter { $0.path != workspace.url.path }
             if !others.isEmpty {
                 Section("Recent") {
@@ -163,5 +167,52 @@ private struct ClaudeToggle: View {
                 StatusDot(color: theme.amber.color, size: 6).offset(x: -3, y: 3)
             }
         }
+    }
+}
+
+/// The host a remote project lives on, and how its copy here is keeping up. Click to sync now.
+private struct RemoteChip: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let sync: RemoteSync
+    @State private var hovering = false
+
+    var body: some View {
+        Button { session.syncRemoteNow() } label: {
+            HStack(spacing: 5) {
+                Group {
+                    switch sync.state {
+                    case .syncing: Image(systemName: "arrow.triangle.2.circlepath")
+                    case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(theme.amber.color)
+                    case .idle: Image(systemName: "network")
+                    }
+                }
+                .font(.dante(size: 10.5, weight: .medium))
+                Text(sync.project.host)
+                    .font(.dante(size: 11.5, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(theme.text2.color)
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? theme.raised.color : theme.raised.opacity(0.5).color))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
+    }
+
+    private var help: String {
+        var lines = ["\(sync.project.label), copied to this Mac. Click to sync now."]
+        switch sync.state {
+        case .failed(let message): lines.append("Last sync failed: \(message)")
+        case .syncing: lines.append("Syncing…")
+        case .idle: if let date = sync.lastSynced { lines.append("Synced \(date.formatted(date: .omitted, time: .standard)).") }
+        }
+        if sync.heldDeletions > 0 {
+            lines.append("\(sync.heldDeletions) files deleted here at once weren’t deleted on the host, in case that was a mistake; they were copied back.")
+        }
+        return lines.joined(separator: "\n")
     }
 }

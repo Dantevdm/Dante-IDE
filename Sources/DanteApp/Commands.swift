@@ -30,6 +30,8 @@ struct DanteCommands: Commands {
                 .shortcut("openFolder")
             Button("Clone Repository…") { session?.isCloning = true }
                 .shortcut("clone")
+            Button("Open Remote…") { session?.showsOpenRemote = true }
+                .shortcut("openRemote")
             Button("Set Up Project for Dante…") { session?.offerSetup(force: true) }
                 .disabled(session?.workspace == nil)
             Divider()

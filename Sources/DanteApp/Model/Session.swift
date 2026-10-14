@@ -212,6 +212,8 @@ final class Session {
     var breakpoints: [String: Set<Int>] = [:]
     /// The debugging run, while there is one (and after it ends, until the next).
     var debug: DebugSession?
+    /// Set while the open folder is a remote project's mirror.
+    var remoteSync: RemoteSync?
     /// The window this session draws into, to bring forward when `dante` opens something in it.
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored var shipCache: ShipCache?
@@ -223,6 +225,7 @@ final class Session {
     var attachmentsLoading = 0
     var cursor = CursorPosition()
     var isCloning = false
+    var showsOpenRemote = false
     var errorMessage: String?
 
     init(recents: RecentProjects) {
@@ -277,6 +280,8 @@ final class Session {
         languages?.stop()
         stopDebugging()
         debug = nil
+        // Before anything starts a process in the folder, so commands go to the host.
+        attachRemote(for: url)
         let workspace = Workspace(url: url)
         self.workspace = workspace
         loadBreakpoints()
@@ -362,6 +367,7 @@ final class Session {
     /// The window closed: stop every process and watcher it started. Unsaved changes were
     /// already handled by the close or quit prompt.
     func shutdown() {
+        detachRemote()
         stopDebugging()
         recordVisit()
         claude?.stop()
@@ -390,6 +396,7 @@ final class Session {
 
     private func filesChanged(_ changed: [URL]) {
         guard let workspace else { return }
+        remoteSync?.request()
         let result = workspace.applyExternalChanges(changed)
         languages?.filesChanged(changed)
         if result.gitHeadChanged {

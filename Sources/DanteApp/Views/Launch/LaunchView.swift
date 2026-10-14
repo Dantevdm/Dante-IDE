@@ -100,14 +100,17 @@ struct LaunchView: View {
         VStack(alignment: .leading, spacing: 26) {
             VStack(alignment: .leading, spacing: 10) {
                 Eyebrow("Start")
-                StartAction(symbol: "plus", title: "New project", subtitle: "Create a folder and start in Discover", shortcut: "⌘N") {
+                StartAction(symbol: "plus", title: "New project", subtitle: "Create a folder and start in Discover", shortcut: Shortcuts.shared.binding("newProject")?.display ?? "") {
                     session.newProject()
                 }
-                StartAction(symbol: "folder", title: "Open folder", subtitle: "Any project, with or without .dante/", shortcut: "⌘O") {
+                StartAction(symbol: "folder", title: "Open folder", subtitle: "Any project, with or without .dante/", shortcut: Shortcuts.shared.binding("openFolder")?.display ?? "") {
                     session.openFolderPanel()
                 }
-                StartAction(symbol: "arrow.triangle.branch", title: "Clone repository", subtitle: "From GitHub or any Git URL", shortcut: "⇧⌘C") {
+                StartAction(symbol: "arrow.triangle.branch", title: "Clone repository", subtitle: "From GitHub or any Git URL", shortcut: Shortcuts.shared.binding("clone")?.display ?? "") {
                     session.isCloning = true
+                }
+                StartAction(symbol: "network", title: "Open remote", subtitle: "A folder on another machine, over ssh", shortcut: Shortcuts.shared.binding("openRemote")?.display ?? "") {
+                    session.showsOpenRemote = true
                 }
             }
 
@@ -204,12 +207,15 @@ private struct RecentRow: View {
     @State private var hovering = false
     @State private var lifecycle = Lifecycle()
 
+    private var remote: RemoteProject? { RemoteRegistry.known(mirror: project.url) }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(project.name).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
-                    Text(project.displayPath)
+                    // A remote project's mirror is named by where it really lives.
+                    Text(remote.map { "\($0.host):\($0.path)" } ?? project.displayPath)
                         .font(.dante(size: 11.5, design: .monospaced))
                         .foregroundStyle(theme.text3.color)
                         .lineLimit(1)
