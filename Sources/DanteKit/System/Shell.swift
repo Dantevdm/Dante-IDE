@@ -30,16 +30,20 @@ public enum Shell {
         let output: Output = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
-                configure(process, arguments, in: directory, extra: extra, remote: remote)
-                let out = Pipe(), err = Pipe()
+                let input = configure(process, arguments, in: directory, extra: extra, remote: remote)
+                let out = Pipe(), err = Pipe(), inPipe = Pipe()
                 process.standardOutput = out
                 process.standardError = err
-                process.standardInput = FileHandle.nullDevice
+                process.standardInput = input == nil ? FileHandle.nullDevice : inPipe
                 do {
                     try process.run()
                 } catch {
                     continuation.resume(returning: Output(status: 127, stdout: "", stderr: error.localizedDescription))
                     return
+                }
+                if let input {
+                    try? inPipe.fileHandleForWriting.write(contentsOf: input)
+                    try? inPipe.fileHandleForWriting.close()
                 }
                 let errors = Box()
                 let group = DispatchGroup()
@@ -64,18 +68,36 @@ public enum Shell {
     }
 
     /// `/usr/bin/env` with the arguments, or ssh to the host for a folder in a remote mirror.
+    /// Returns what to write to the command's stdin: `extra` for a host, which must not go on
+    /// the ssh command line.
+    @discardableResult
     static func configure(_ process: Process, _ arguments: [String], in directory: URL, extra: [String: String] = [:],
-                          remote: (project: RemoteProject, path: String)?) {
+                          remote: (project: RemoteProject, path: String)?) -> Data? {
         process.executableURL = URL(filePath: "/usr/bin/env")
         process.environment = environment().merging(extra) { $1 }
         if let remote {
-            let command = SSH.remoteCommand(arguments, in: remote.path, environment: remoteEnvironment.merging(extra) { $1 })
+            let (arguments, input) = readingEnvironment(arguments, extra)
+            let command = SSH.remoteCommand(arguments, in: remote.path, environment: remoteEnvironment)
             process.arguments = [SSH.program] + SSH.arguments(host: remote.project.host, command: command)
             process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
-        } else {
-            process.arguments = arguments
-            process.currentDirectoryURL = directory
+            return input
         }
+        process.arguments = arguments
+        process.currentDirectoryURL = directory
+        return nil
+    }
+
+    /// For a command on a host: `extra` (passwords, mostly) travels on stdin, where `ps` on
+    /// neither machine shows it, and a POSIX sh there reads it into the environment before
+    /// starting the command. A value can't hold a newline; one becomes a space.
+    static func readingEnvironment(_ arguments: [String], _ extra: [String: String]) -> (arguments: [String], input: Data?) {
+        let names = extra.keys.sorted().filter { name in
+            name.first.map { $0 == "_" || $0.isLetter } == true && name.allSatisfy { $0.isASCII && ($0 == "_" || $0.isLetter || $0.isNumber) }
+        }
+        guard !names.isEmpty else { return (arguments, nil) }
+        let script = names.map { "IFS= read -r \($0); export \($0)" }.joined(separator: "; ") + #"; exec "$@""#
+        let lines = names.map { (extra[$0] ?? "").replacingOccurrences(of: "\r\n", with: " ").replacingOccurrences(of: "\n", with: " ") }
+        return (["sh", "-c", script, "sh"] + arguments, Data((lines.joined(separator: "\n") + "\n").utf8))
     }
 
     /// What `environment()` sets for parsing, for commands run on a host.

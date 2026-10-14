@@ -23,8 +23,9 @@ struct DataOverview: View {
     }
 
     private var route: String {
-        switch DatabaseClient.route(for: connection, hasCompose: model.hasCompose) {
-        case .local(let path): "\((path as NSString).lastPathComponent) on this Mac"
+        let remote = model.root.flatMap { RemoteRegistry.project(containing: $0)?.project }
+        return switch DatabaseClient.route(for: connection, hasCompose: model.hasCompose, projectRoot: model.root) {
+        case .local(let path): "\((path as NSString).lastPathComponent) on \(remote?.host ?? "this Mac")"
         case .compose(let service): "\(connection.engine.client) inside the \(service) container"
         case .missing: "\(connection.engine.client) isn’t installed"
         }

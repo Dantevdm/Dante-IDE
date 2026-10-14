@@ -37,6 +37,11 @@ public final class RemoteSync {
     @ObservationIgnored private var pending: Task<Void, Never>?
     @ObservationIgnored private var polling: Task<Void, Never>?
 
+    /// The host's published ports, forwarded to the same ports here.
+    public private(set) var forwarded: Set<Int> = []
+    /// Ports that couldn't be forwarded (taken on this Mac, mostly), with ssh's reason.
+    public private(set) var unforwarded: [Int: String] = [:]
+
     public init(project: RemoteProject) {
         self.project = project
         snapshot = Self.loadSnapshot(for: project)
@@ -73,6 +78,24 @@ public final class RemoteSync {
         pending?.cancel()
         polling = nil
         pending = nil
+        let ports = forwarded, host = project.host
+        forwarded = []
+        // The shared connection outlives the window by a few minutes; its forwards shouldn't.
+        if !ports.isEmpty { Task.detached { for port in ports { await SSH.forward(port, host: host, cancel: true) } } }
+    }
+
+    // MARK: Ports
+
+    /// Forwards the ports not yet forwarded or tried, so `localhost:<port>` on this Mac reaches
+    /// the host's service: browsers, health checks, database tools.
+    public func forward(_ ports: Set<Int>) async {
+        for port in ports.subtracting(forwarded).subtracting(unforwarded.keys).sorted() {
+            if let problem = await SSH.forward(port, host: project.host) {
+                unforwarded[port] = problem
+            } else {
+                forwarded.insert(port)
+            }
+        }
     }
 
     // MARK: Syncing

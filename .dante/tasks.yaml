@@ -402,4 +402,4 @@ tasks:
   phase: build
   state: review
   spec: docs/plans/remote-ssh.md
-  notes: "Built as a local mirror synced with rsync, with commands, Claude Code, the terminal and language servers on the host. Docker/Data and remote Claude history are still to do (see the spec)."
+  notes: "Built as a local mirror synced with rsync, with commands, Claude Code, the terminal and language servers on the host; Docker and Data run there too, with service ports forwarded here. Remote Claude history is still to do (see the spec)."

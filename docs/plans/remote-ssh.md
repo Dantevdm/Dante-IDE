@@ -14,6 +14,9 @@ Dante keeps a **mirror**: a copy of the project on this Mac, in `~/Library/Appli
 | Claude Code | host | `ClaudeSession` starts `claude` over ssh; paths in tool calls are mapped to the mirror for diffs and checks, and back for approvals |
 | Terminal | host | `ssh -t` into the project folder |
 | Language servers | host, when it has them | on opening, one ssh call asks the host which servers it has (`LanguageServer.hostProbeScript`); those start there over ssh and `LSPURIMap` rewrites URIs between the mirror and the host. Servers already running here move across. Servers the host lacks, or with a command set in Settings → Languages, run here on the mirror |
+| Docker Compose, logs | host | `docker compose` goes through `Shell` like any command; the Env area says "On <host>" and skips checking ports on this Mac |
+| Ports | forwarded | running services' published ports are forwarded to the same port here (`ssh -O forward -L 127.0.0.1:p:localhost:p` on the shared connection), so browsers, health checks and database tools on this Mac reach them. A port taken here isn't forwarded and is marked in Ports. Forwards are cancelled when the window closes |
+| Data | host | psql/mysql/sqlite3 run there, through the compose service when there is one; "localhost" in a connection means the host. Passwords and other environment for a host command go on its stdin, never the ssh command line (`Shell.readingEnvironment`) |
 | Debugger | off | it would run the program on this Mac |
 
 There's no agent installed on the host and no FUSE. The host needs sshd and rsync. Dante connects with the user's keys or ssh agent, with `BatchMode=yes`, and never asks for a password. One shared connection per host (`ControlMaster`, sockets in `/tmp/dante-ssh-<uid>`) keeps each command to one round trip.
@@ -33,7 +36,6 @@ Not synced: `.git` (except `HEAD`, so the branch shows), dependency and build fo
 
 ## Not yet
 
-- Docker/Compose and Data against the host's containers (port forwarding with `ssh -L`).
 - Claude history, usage and the Timeline's Claude sessions: their transcripts are on the host.
 - Password or keyboard-interactive auth.
 

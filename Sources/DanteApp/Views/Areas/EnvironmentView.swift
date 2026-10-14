@@ -47,7 +47,7 @@ struct EnvironmentView: View {
     var body: some View {
         AreaPage(
             eyebrow: "Environments",
-            title: "Local",
+            title: session.remoteSync.map { "On \($0.project.host)" } ?? "Local",
             subtitle: compose.map { "Runs \($0.url.lastPathComponent) with Docker. Start, stop and rebuild services, read their logs, or let Claude write the Docker files the project is missing." }
                 ?? "Run the project’s services in Docker: databases, queues and the app itself, the same way every time."
         ) {
@@ -98,7 +98,7 @@ struct EnvironmentView: View {
                     ComposeLogsPanel(root: workspace.url, services: compose.services.map(\.name), service: $logService, waiting: waiting)
                 }
                 HStack(alignment: .top, spacing: 12) {
-                    PortsCard(ports: projectPorts(compose), stop: stop)
+                    PortsCard(ports: projectPorts(compose), remote: session.remoteSync, stop: stop)
                         .frame(maxWidth: .infinity)
                     DockerfilesCard(session: session, compose: compose, dockerfiles: dockerfiles)
                         .frame(maxWidth: .infinity)
@@ -258,6 +258,7 @@ struct EnvironmentView: View {
         guard compose != nil else { containers = nil; return }
         let next = await ContainerState.load(projectRoot: workspace.url)
         if next != containers { containers = next }
+        if case .success(let list) = next { await session.forwardPorts(of: list) }
         await diagnose()
     }
 
@@ -266,7 +267,8 @@ struct EnvironmentView: View {
             if !notes.isEmpty { notes = [:] }
             return
         }
-        let nextHolders = await PortCheck.holders(await ListeningPort.load())
+        // A remote project's ports are the host's; what holds them on this Mac doesn't matter.
+        let nextHolders = session.remoteSync == nil ? await PortCheck.holders(await ListeningPort.load()) : []
         if nextHolders != holders { holders = nextHolders }
         var health: [String: String] = [:]
         for container in list where container.health == "unhealthy" && !container.name.isEmpty {
@@ -280,7 +282,7 @@ struct EnvironmentView: View {
     /// checks and can take a minute before it says anything went wrong.
     /// Starts (`up`) look for taken ports first and ask what to do about them.
     private func act(_ id: String, _ arguments: [String], checkingPorts: Bool = true) {
-        if checkingPorts, arguments.first == "up", let compose {
+        if checkingPorts, arguments.first == "up", let compose, session.remoteSync == nil {
             busy = id
             Task {
                 let found = await PortCheck.holders(await ListeningPort.load())
@@ -582,13 +584,16 @@ private struct PortsCard: View {
     }
 
     let ports: [Row]
+    /// For a remote project: which ports reach the host from here.
+    let remote: RemoteSync?
     let stop: (PortHolder) -> Void
     @State private var confirming: PortHolder?
 
     var body: some View {
         if !ports.isEmpty {
             Card("Ports") {
-                Text("Checked before every start").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                Text(remote.map { "Forwarded from \($0.project.host) to this Mac" } ?? "Checked before every start")
+                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color)
             } content: {
                 RowList(data: ports, padding: 6) { row in
                     HStack(spacing: 10) {
@@ -634,11 +639,17 @@ private struct PortsCard: View {
             let owner = row.service.map { "Taken: \($0) needs it. " } ?? ""
             return owner + "\(holder.listening.command), pid \(holder.pid)\(holder.elapsed.map { ", up \($0)" } ?? "")\(row.inProject ? " · from this project" : "")"
         }
+        if let remote {
+            if remote.unforwarded[row.port] != nil { return "\(row.service ?? "") · taken on this Mac, not forwarded" }
+            if row.isContainer { return "\(row.service ?? "") · Docker on \(remote.project.host)\(remote.forwarded.contains(row.port) ? ", forwarded" : "")" }
+            return "\(row.service ?? "") · not running"
+        }
         if row.isContainer { return "\(row.service ?? "") · Docker" }
         return "\(row.service ?? "") · free"
     }
 
     private func color(_ row: Row) -> Color {
+        if let remote, remote.unforwarded[row.port] != nil { return theme.amber.color }
         if row.holder != nil { return row.service == nil ? theme.accent.color : theme.amber.color }
         return row.isContainer ? theme.green.color : theme.text3.color
     }

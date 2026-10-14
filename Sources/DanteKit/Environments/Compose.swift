@@ -158,9 +158,12 @@ public struct ContainerState: Equatable, Sendable, Identifiable {
 
     /// The containers for a project, or nil when Docker isn't available or not running.
     public static func load(projectRoot: URL) async -> Result<[ContainerState], DockerUnavailable> {
-        guard Shell.which("docker") != nil else { return .failure(.notInstalled) }
+        // A remote project's containers are the host's; its docker is the one that counts.
+        let remote = RemoteRegistry.project(containing: projectRoot) != nil
+        guard remote || Shell.which("docker") != nil else { return .failure(.notInstalled) }
         let output = await Shell.run(["docker", "compose", "ps", "--all", "--format", "json"], in: projectRoot)
         guard output.succeeded else {
+            if remote, output.status == 127 { return .failure(.notInstalled) }
             let message = output.message
             if message.contains("Cannot connect") || message.contains("daemon") || message.contains("docker.sock") {
                 return .failure(.notRunning)

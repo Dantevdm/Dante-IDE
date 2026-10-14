@@ -70,6 +70,14 @@ struct RemoteProjectTests {
         #expect(arguments.suffix(2) == ["/home/me/Mirror/shop/", "devbox:/srv/shop/"])
     }
 
+    @Test func sendsEnvironmentOnStdinNotTheCommandLine() throws {
+        let (arguments, input) = Shell.readingEnvironment(["psql", "-c", "select 1"], ["PGPASSWORD": "pa ss'word", "PGAPPNAME": "Dante", "BAD NAME": "x"])
+        #expect(arguments == ["sh", "-c", #"IFS= read -r PGAPPNAME; export PGAPPNAME; IFS= read -r PGPASSWORD; export PGPASSWORD; exec "$@""#, "sh", "psql", "-c", "select 1"])
+        #expect(input.map { String(decoding: $0, as: UTF8.self) } == "Dante\npa ss'word\n")
+        #expect(Shell.readingEnvironment(["ls"], [:]).input == nil)
+        #expect(SSH.forwardSpec(5432) == "127.0.0.1:5432:localhost:5432")
+    }
+
     @Test func explainsFailures() {
         let denied = Shell.Output(status: 255, stdout: "", stderr: "me@devbox: Permission denied (publickey).")
         #expect(RemoteSync.explain(denied, host: "devbox").contains("ssh key"))
@@ -196,6 +204,22 @@ struct RemoteSyncTests {
         #expect(output.succeeded)
         // Whatever this Mac has; each command is a full path the host can start.
         #expect(LanguageServer.hostCommands(fromProbe: output.stdout).values.allSatisfy { FileManager.default.isExecutableFile(atPath: $0[0]) })
+    }
+
+    @Test func runsDatabaseClientsOnTheHost() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        try await RemoteSync(project: project).pullAll()
+        RemoteRegistry.register(project) {}
+        defer { RemoteRegistry.unregister(mirror: project.mirror) }
+        let secret = await Shell.run(["sh", "-c", #"printf %s "$PGPASSWORD""#], in: project.mirrorURL, extra: ["PGPASSWORD": "it's secret"])
+        #expect(secret.stdout == "it's secret")
+
+        let postgres = DatabaseConnection(name: "app", engine: .postgres, database: "app", service: "db")
+        #expect(DatabaseClient.route(for: postgres, hasCompose: true, projectRoot: project.mirrorURL) == .compose(service: "db"))
+        #expect(DatabaseClient.route(for: postgres, hasCompose: false, projectRoot: project.mirrorURL) == .local("psql"))
+        let sqlite = DatabaseConnection(name: "local", engine: .sqlite, database: "dev.db", file: "data/dev.db")
+        let command = DatabaseClient.command(for: SQLScript.statements("select 1"), on: sqlite, password: nil, route: .local("sqlite3"), projectRoot: project.mirrorURL)
+        #expect(command.arguments.contains(host.appending(path: "data/dev.db").path))
     }
 
     @Test func runsCommandsForTheMirrorOnTheHost() async throws {

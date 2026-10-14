@@ -52,7 +52,13 @@ public enum DatabaseClient {
         case missing
     }
 
-    public static func route(for connection: DatabaseConnection, hasCompose: Bool) -> Route {
+    public static func route(for connection: DatabaseConnection, hasCompose: Bool, projectRoot: URL? = nil) -> Route {
+        // A remote project's host, which Dante can't look at first: the container when there
+        // is one, else the host's own client. Either way "localhost" means the host.
+        if let projectRoot, RemoteRegistry.project(containing: projectRoot) != nil {
+            if hasCompose, let service = connection.service { return .compose(service: service) }
+            return .local(connection.engine.client)
+        }
         if let path = Shell.which(connection.engine.client) { return .local(path) }
         if hasCompose, let service = connection.service, Shell.which("docker") != nil { return .compose(service: service) }
         return .missing
@@ -103,7 +109,8 @@ public enum DatabaseClient {
             pieces = ["-e", script]
             base = ["mysql"] + flags
         case .sqlite:
-            let path = connection.fileURL(projectRoot: projectRoot)?.path ?? connection.database
+            var path = connection.fileURL(projectRoot: projectRoot)?.path ?? connection.database
+            if let remote = RemoteRegistry.project(containing: projectRoot)?.project { path = remote.remotePath(forLocal: path) ?? path }
             var flags = ["-bail", "-csv", "-header", "-nullvalue", null]
             if connection.readOnly { flags.append("-readonly") }
             for (index, statement) in statements.enumerated() {
@@ -130,7 +137,7 @@ public enum DatabaseClient {
         if connection.readOnly, let write = statements.first(where: \.changesData) {
             return QueryRun(error: "\(connection.name) is read-only, so Dante won’t run “\(write.text.prefix(60))”. Turn off read-only in the connection to change data.")
         }
-        let route = route(for: connection, hasCompose: hasCompose)
+        let route = route(for: connection, hasCompose: hasCompose, projectRoot: projectRoot)
         if route == .missing {
             return QueryRun(error: "Dante needs \(connection.engine.client) to talk to \(connection.engine.name). Install it with: \(connection.engine.install)")
         }

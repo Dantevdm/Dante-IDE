@@ -18,11 +18,13 @@ struct NewDatabaseSheet: View {
     @State private var creating = false
     @State private var error: String?
     private let compose: ComposeFile?
-    private let hasDocker = Shell.which("docker") != nil
+    /// A remote project uses the host's docker, which can't be checked from here.
+    private let hasDocker: Bool
 
     init(session: Session, workspace: Workspace) {
         self.session = session
         self.workspace = workspace
+        hasDocker = session.remoteSync != nil || Shell.which("docker") != nil
         let compose = ComposeFile.load(projectRoot: workspace.url)
         self.compose = compose
         let engine = session.data.profile.suggestedEngine ?? .postgres

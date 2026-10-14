@@ -124,6 +124,19 @@ public enum SSH {
         return RemoteSync.explain(Shell.Output(status: result.status, stdout: "", stderr: result.errors), host: host)
     }
 
+    /// Forwards a port on this Mac to the same port on the host, through the shared
+    /// connection; `cancel` takes the forward down again. Returns ssh's complaint on failure,
+    /// usually that the port is taken here.
+    @discardableResult
+    public static func forward(_ port: Int, host: String, cancel: Bool = false) async -> String? {
+        let result = await runDetached(["-o", "ControlPath=\(controlFolder)/%C", "-O", cancel ? "cancel" : "forward", "-L", forwardSpec(port), host])
+        guard result.status != 0 else { return nil }
+        return result.errors.isEmpty ? "ssh couldn’t forward port \(port)." : result.errors
+    }
+
+    /// Loopback only here, so the forward isn't open to the network this Mac is on.
+    static func forwardSpec(_ port: Int) -> String { "127.0.0.1:\(port):localhost:\(port)" }
+
     private static func runDetached(_ arguments: [String]) async -> (status: Int32, errors: String) {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
