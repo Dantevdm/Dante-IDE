@@ -170,7 +170,7 @@ private struct TaskCard: View {
             }
         }
         if let spec = task.spec {
-            Button("Open Spec") { session.open(file: workspace.danteFolder.appending(path: spec)) }
+            Button("Open Spec") { session.open(file: task.specURL(in: workspace.url) ?? workspace.danteFolder.appending(path: spec)) }
         }
         Divider()
         Button("Delete Task", role: .destructive) { attempt { try workspace.tasks.delete(task.id) } }

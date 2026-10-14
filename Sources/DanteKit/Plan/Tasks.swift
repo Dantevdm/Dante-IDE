@@ -45,7 +45,8 @@ public struct PlanTask: Codable, Equatable, Identifiable, Sendable {
     /// Lower-case phase name, e.g. `build`.
     public var phase: String
     public var state: TaskState
-    /// A doc the task implements, relative to `.dante/` (e.g. `specs/limits.md`).
+    /// A doc the task implements, relative to `.dante/` (e.g. `specs/limits.md`), or to the
+    /// repo (`docs/plans/x.md`): see `specURL(in:)`.
     public var spec: String?
     public var note: String?
     /// Being worked on with Claude.
@@ -54,6 +55,22 @@ public struct PlanTask: Codable, Equatable, Identifiable, Sendable {
     public var alarm: String?
     /// Fields Dante doesn't use (`source:`, `owner:`…), kept so saving the board doesn't drop them.
     public var extra: [String: String] = [:]
+
+    /// The spec's file: under `.dante/` when it's there, else from the repo's root.
+    public func specURL(in root: URL, fileManager: FileManager = .default) -> URL? {
+        guard let spec, !spec.isEmpty else { return nil }
+        let inDante = root.appending(path: ".dante").appending(path: spec)
+        if fileManager.fileExists(atPath: inDante.path) { return inDante }
+        let inRepo = root.appending(path: spec)
+        return fileManager.fileExists(atPath: inRepo.path) ? inRepo : nil
+    }
+
+    /// The spec's path from the repo's root, as written for Claude and shown on cards.
+    public func specPath(in root: URL) -> String? {
+        guard let spec else { return nil }
+        guard let url = specURL(in: root) else { return ".dante/" + spec }
+        return String(url.standardizedFileURL.path.dropFirst(root.standardizedFileURL.path.count + 1))
+    }
 
     private struct Key: CodingKey {
         var stringValue: String

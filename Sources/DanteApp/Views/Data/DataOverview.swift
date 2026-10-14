@@ -301,7 +301,8 @@ struct DataEmptyState: View {
                     detail: engine == .sqlite
                         ? "A file in the repo, with DATABASE_URL in .env."
                         : "A Docker Compose service with a volume and health check, a generated password in .env, and DATABASE_URL set.",
-                    recommended: true
+                    // Only when the code points at an engine; a project that needs no database gets no nudge.
+                    recommended: profile.suggestedEngine != nil
                 ) { model.showsNewDatabase = true }
                 OptionCard(symbol: "link", title: "Connect to a database",
                            detail: "Paste a DATABASE_URL or fill in the host. Passwords go in the Keychain; anything not on this Mac opens read-only.") {

@@ -707,8 +707,11 @@ public struct SystemMap: Equatable, Sendable {
         .init(id: "paypal", name: "PayPal", kind: .payments, detail: "payments", patterns: ["api.paypal.com", "paypal-"]),
         .init(id: "s3", name: "Amazon S3", kind: .storage, detail: "object storage", patterns: ["aws-sdk-go-v2/service/s3", "aws-sdk-go/service/s3", "@aws-sdk/client-s3", "s3.amazonaws.com", "boto3.client('s3')", "boto3.client(\"s3\")"]),
         .init(id: "gcs", name: "Google Cloud Storage", kind: .storage, detail: "object storage", patterns: ["cloud.google.com/go/storage", "@google-cloud/storage"]),
-        .init(id: "firebase", name: "Firebase", kind: .service, detail: "auth, data, messaging", patterns: ["firebase"]),
-        .init(id: "supabase", name: "Supabase", kind: .service, detail: "auth and Postgres", patterns: ["supabase"]),
+        // Packages and hosts, not the bare name: tools mention "supabase/migrations/" and the like.
+        .init(id: "firebase", name: "Firebase", kind: .service, detail: "auth, data, messaging",
+              patterns: ["firebaseio.com", "firebase-admin", "firebase_admin", "from 'firebase/", "from \"firebase/", "firebase.google.com/go", "import firebase", "package:firebase_"]),
+        .init(id: "supabase", name: "Supabase", kind: .service, detail: "auth and Postgres",
+              patterns: [".supabase.co", "@supabase/", "from supabase import", "supabase-community/", "package:supabase_flutter"]),
         .init(id: "auth0", name: "Auth0", kind: .service, detail: "sign-in", patterns: ["auth0"]),
         .init(id: "sentry", name: "Sentry", kind: .monitoring, detail: "error reporting", patterns: ["getsentry/sentry-go", "@sentry/", "sentry_sdk", "sentry.io"]),
         .init(id: "github", name: "GitHub API", kind: .service, detail: "api.github.com", patterns: ["api.github.com", "google/go-github", "@octokit/"]),

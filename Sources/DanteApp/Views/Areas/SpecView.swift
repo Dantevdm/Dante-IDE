@@ -10,6 +10,7 @@ struct SpecView: View {
 
     @State private var selectedPath: String?
     @State private var text: String?
+    @State private var contentWidth: CGFloat = 1000
 
     private var specFiles: [String] {
         workspace.files.filter { $0.hasPrefix(".dante/") }.sorted { a, b in
@@ -45,10 +46,13 @@ struct SpecView: View {
                     }
                     .buttonStyle(DanteButtonStyle())
                 } content: {
-                    HStack(alignment: .top, spacing: 16) {
+                    // Side by side when there's room; with the Claude panel open on a laptop the
+                    // checks go under the file, or the window would be pushed wider than itself.
+                    let layout = contentWidth >= 380 + 16 + 340 ? AnyLayout(HStackLayout(alignment: .top, spacing: 16)) : AnyLayout(VStackLayout(spacing: 16))
+                    layout {
                         if let selected {
                             FileCard(session: session, workspace: workspace, path: selected, text: text)
-                                .frame(minWidth: 380)
+                                .frame(maxWidth: .infinity)
                         }
                         VStack(spacing: 16) {
                             ValidationCard(issues: SpecCheck.run(workspace)) { path in
@@ -56,8 +60,10 @@ struct SpecView: View {
                             }
                             ClaudeGetsCard(sections: ClaudeBrief.sections(for: workspace))
                         }
-                        .frame(width: 340)
+                        .frame(width: contentWidth >= 380 + 16 + 340 ? 340 : nil)
                     }
+                    .frame(maxWidth: .infinity)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
                 }
             } else {
                 AreaPage(eyebrow: "Project spec", title: "No .dante folder yet", subtitle: nil) {

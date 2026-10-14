@@ -58,18 +58,20 @@ public struct ClaudeUsage: Equatable, Sendable {
     /// Each model call once: Claude Code writes a line per content block, all carrying the
     /// same message id and usage.
     public static func entries(fromTranscript text: String) -> [Entry] {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let assistant = Array(#""type":"assistant""#.utf8), usageKey = Array(#""usage":{"#.utf8)
         var seen: Set<String> = []
         var entries: [Entry] = []
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard line.contains("\"type\":\"assistant\""), line.contains("\"usage\""),
-                  let json = JSONValue(line: String(line)), json["type"]?.string == "assistant",
-                  let stamp = json["timestamp"]?.string, let date = formatter.date(from: stamp),
-                  let usage = TokenUsage(json["message"]?["usage"]) else { continue }
-            let key = (json["message"]?["id"]?.string ?? "") + ":" + (json["requestId"]?.string ?? stamp)
-            guard seen.insert(key).inserted else { continue }
-            entries.append(Entry(date: date, usage: usage, model: json["message"]?["model"]?.string ?? ""))
+        // Byte-level, since a long session's transcript is hundreds of megabytes: only the
+        // `usage` object is parsed.
+        TranscriptScan.lines(text) { line in
+            guard TranscriptScan.has(line, usageKey), TranscriptScan.has(line, assistant),
+                  TranscriptScan.topLevelType(line) == "assistant",
+                  let stamp = TranscriptScan.string("timestamp", in: line), let date = TranscriptScan.date(stamp),
+                  let usage = TranscriptScan.usage(in: line) else { return }
+            let id = TranscriptScan.string("id", in: line, startingWith: "msg_") ?? ""
+            let key = id + ":" + (TranscriptScan.string("requestId", in: line) ?? stamp)
+            guard seen.insert(key).inserted else { return }
+            entries.append(Entry(date: date, usage: usage, model: TranscriptScan.string("model", in: line) ?? ""))
         }
         return entries
     }

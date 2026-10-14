@@ -91,8 +91,8 @@ struct DocumentBody: View {
             DocTable(header: header, rows: rows, inline: { inline($0, size: 13) })
         case .rule:
             Rectangle().fill(theme.line.color).frame(height: 1).padding(.vertical, 6)
-        case .image(let alt, let source):
-            DocImage(alt: alt, source: source, base: root.appending(path: (path as NSString).deletingLastPathComponent))
+        case .image(let alt, let source, let width):
+            DocImage(alt: alt, source: source, base: root.appending(path: (path as NSString).deletingLastPathComponent), width: width)
         }
     }
 }

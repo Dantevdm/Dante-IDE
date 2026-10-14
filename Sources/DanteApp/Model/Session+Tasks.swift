@@ -38,7 +38,7 @@ extension Session {
         claude.reset()
         claudeTaskLink = task.id
         var message = "Let's work on \(task.id): \(task.title)."
-        if let spec = task.spec { message += " The spec is .dante/\(spec); read it first." }
+        if let spec = task.specPath(in: workspace.url) { message += " The spec is \(spec); read it first." }
         if let note = task.note { message += " Note: \(note)" }
         message += " Propose a short plan before changing any files."
         askClaude(message)

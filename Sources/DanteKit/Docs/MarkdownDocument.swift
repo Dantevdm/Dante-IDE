@@ -14,7 +14,8 @@ public struct MarkdownDocument: Equatable, Sendable {
         case table(header: [String], rows: [[String]])
         case rule
         /// A paragraph that is just `![alt](source)`.
-        case image(alt: String, source: String)
+        /// `width` comes from an HTML `<img width=…>`.
+        case image(alt: String, source: String, width: Int? = nil)
     }
 
     public struct ListItem: Equatable, Sendable {
@@ -92,17 +93,34 @@ public struct MarkdownDocument: Equatable, Sendable {
                 continue
             }
 
-            if let heading = Self.heading(trimmed) {
-                flush()
-                var anchor = Self.slug(heading.text)
+            func addHeading(level: Int, text: String) {
+                var anchor = Self.slug(text)
                 if let seen = anchors[anchor] {
                     anchors[anchor] = seen + 1
                     anchor += "-\(seen + 1)"
                 } else {
                     anchors[anchor] = 0
                 }
-                blocks.append(.heading(level: heading.level, text: heading.text, anchor: anchor))
+                blocks.append(.heading(level: level, text: text, anchor: anchor))
+            }
+
+            if let heading = Self.heading(trimmed) {
+                flush()
+                addHeading(level: heading.level, text: heading.text)
                 index += 1
+                continue
+            }
+
+            // An HTML block (a README's centred logo and title) runs to the next blank line.
+            if paragraph.isEmpty, trimmed.wholeMatch(of: Self.htmlStart) != nil || trimmed.hasPrefix("<!--") {
+                var html: [String] = []
+                while index < lines.count, !lines[index].trimmingCharacters(in: .whitespaces).isEmpty {
+                    html.append(lines[index])
+                    index += 1
+                }
+                for block in Self.htmlBlocks(html.joined(separator: "\n")) {
+                    if case .heading(let level, let text, _) = block { addHeading(level: level, text: text) } else { blocks.append(block) }
+                }
                 continue
             }
 
@@ -163,6 +181,49 @@ public struct MarkdownDocument: Equatable, Sendable {
         }
         flush()
         return blocks
+    }
+
+    nonisolated(unsafe) static let htmlStart = /<\/?[A-Za-z][A-Za-z0-9-]*(\s[^>]*)?\/?>.*/
+    nonisolated(unsafe) static let htmlComment = /<!--[\s\S]*?-->/
+    nonisolated(unsafe) static let htmlImage = /<img\s[^>]*>/.ignoresCase()
+    nonisolated(unsafe) static let htmlHeading = /<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/.ignoresCase()
+    nonisolated(unsafe) static let htmlTag = /<\/?([A-Za-z][A-Za-z0-9]*)[^>]*>/
+
+    /// What a GitHub-style HTML block shows: its images, a heading, or its text without tags.
+    static func htmlBlocks(_ html: String) -> [Block] {
+        let html = html.replacing(htmlComment, with: "")
+        var blocks: [Block] = []
+        for match in html.matches(of: htmlImage) {
+            let tag = String(match.output)
+            guard let source = attribute("src", in: tag) else { continue }
+            blocks.append(.image(alt: attribute("alt", in: tag) ?? "", source: source, width: attribute("width", in: tag).flatMap { Int($0) }))
+        }
+        if let heading = html.firstMatch(of: htmlHeading) {
+            let text = plain(String(heading.output.2))
+            if !text.isEmpty { blocks.append(.heading(level: Int(heading.output.1) ?? 1, text: text, anchor: "")) }
+            return blocks
+        }
+        let text = plain(html)
+        if !text.isEmpty { blocks.append(.paragraph(text)) }
+        return blocks
+    }
+
+    static func attribute(_ name: String, in tag: String) -> String? {
+        guard let regex = try? Regex("\\b\(name)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))").ignoresCase(),
+              let match = tag.firstMatch(of: regex) else { return nil }
+        for index in 1...3 { if let value = match.output[index].substring { return String(value) } }
+        return nil
+    }
+
+    /// Text with tags removed and the common entities decoded.
+    static func plain(_ html: String) -> String {
+        // Block tags break words apart; inline ones (`<b>`, `<a>`) don't.
+        let blockTags: Set<String> = ["p", "br", "div", "li", "ul", "ol", "tr", "td", "th", "table", "h1", "h2", "h3", "h4", "h5", "h6", "picture", "source"]
+        let text = html.replacing(htmlTag) { blockTags.contains($0.output.1.lowercased()) ? " " : "" }
+            .replacingOccurrences(of: "&nbsp;", with: " ").replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">").replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'").replacingOccurrences(of: "&amp;", with: "&")
+        return text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     static func heading(_ line: String) -> (level: Int, text: String)? {

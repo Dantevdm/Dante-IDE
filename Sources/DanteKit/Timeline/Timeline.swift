@@ -168,38 +168,40 @@ public enum ClaudeTranscripts {
     /// Reads a transcript: its title (set by the user, else the first prompt), when it
     /// started and ended, and how many prompts the person typed.
     public static func session(id: String, transcript: String) -> TimelineEvent? {
-        var first: Date?
-        var last: Date?
+        var firstStamp: String?
+        var lastStamp: String?
         var title: String?
         var customTitle: String?
         var prompts = 0
         var edits = 0
         var usedTools = false
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        for line in transcript.split(separator: "\n", omittingEmptySubsequences: true) {
-            if let stamp = timestamp(in: line), let date = formatter.date(from: stamp) {
-                if first == nil { first = date }
-                last = date
+        // Transcripts run to hundreds of megabytes: see `TranscriptScan`. Only a typed prompt
+        // is parsed as JSON.
+        TranscriptScan.lines(transcript) { line in
+            if let stamp = TranscriptScan.string("timestamp", in: line) {
+                if firstStamp == nil { firstStamp = stamp }
+                lastStamp = stamp
             }
-            if line.contains("\"type\":\"custom-title\""), let value = JSONValue(line: String(line))?["customTitle"]?.string {
+            if TranscriptScan.has(line, Needle.customTitle), let value = JSONValue(line: TranscriptScan.text(line))?["customTitle"]?.string {
                 customTitle = value
-                continue
+                return
             }
-            if !usedTools, line.contains("\"type\":\"tool_use\"") { usedTools = true }
-            if line.contains("\"name\":\"Edit\"") || line.contains("\"name\":\"Write\"") || line.contains("\"name\":\"MultiEdit\"") {
-                edits += 1
-            }
-            // Typed prompts are user messages whose content is a plain string.
-            guard line.contains("\"type\":\"user\""), line.contains("\"content\":\""), !line.contains("\"isMeta\":true"),
-                  let value = JSONValue(line: String(line)), value["type"]?.string == "user",
-                  let content = value["message"]?["content"]?.string else { continue }
+            if !usedTools, TranscriptScan.has(line, Needle.toolUse) { usedTools = true }
+            if Needle.edits.contains(where: { TranscriptScan.has(line, $0) }) { edits += 1 }
+            // Typed prompts are user messages whose content is a plain string. (Tool results
+            // hold strings too, deeper down, and are big: they're skipped before parsing.)
+            guard TranscriptScan.has(line, Needle.user), TranscriptScan.has(line, Needle.stringContent), !TranscriptScan.has(line, Needle.meta),
+                  !TranscriptScan.has(line, Needle.toolResult),
+                  let value = JSONValue(line: TranscriptScan.text(line)), value["type"]?.string == "user",
+                  let content = value["message"]?["content"]?.string else { return }
             let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
             // Command output and system notes come wrapped in tags.
-            guard !text.isEmpty, !text.hasPrefix("<") else { continue }
+            guard !text.isEmpty, !text.hasPrefix("<") else { return }
             prompts += 1
             if title == nil { title = text }
         }
+        let first = firstStamp.flatMap(TranscriptScan.date)
+        let last = lastStamp.flatMap(TranscriptScan.date)
         guard let start = first, let name = customTitle ?? title else { return nil }
         let oneLine = name.replacingOccurrences(of: "\n", with: " ")
         let shortTitle = oneLine.count > 90 ? String(oneLine.prefix(89)) + "…" : oneLine
@@ -211,11 +213,14 @@ public enum ClaudeTranscripts {
                              reference: id, isQuick: prompts <= 1 && !usedTools && customTitle == nil)
     }
 
-    private static func timestamp(in line: Substring) -> String? {
-        guard let range = line.range(of: "\"timestamp\":\"") else { return nil }
-        let rest = line[range.upperBound...]
-        guard let end = rest.firstIndex(of: "\"") else { return nil }
-        return String(rest[..<end])
+    private enum Needle {
+        static let customTitle = Array(#""type":"custom-title""#.utf8)
+        static let toolUse = Array(#""type":"tool_use""#.utf8)
+        static let edits = [#""name":"Edit""#, #""name":"Write""#, #""name":"MultiEdit""#].map { Array($0.utf8) }
+        static let user = Array(#""type":"user""#.utf8)
+        static let stringContent = Array(#""content":""#.utf8)
+        static let toolResult = Array(#""tool_use_id""#.utf8)
+        static let meta = Array(#""isMeta":true"#.utf8)
     }
 }
 

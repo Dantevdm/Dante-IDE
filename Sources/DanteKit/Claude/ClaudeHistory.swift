@@ -38,8 +38,15 @@ public enum ClaudeHistory {
         var items: [TranscriptItem] = []
         var toolIndex: [String: Int] = [:]
         var textBlocks: [String: Int] = [:]
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let json = JSONValue(line: String(line)), json["isSidechain"]?.bool != true, json["isMeta"]?.bool != true else { continue }
+        var lines: [String] = []
+        // Only user and assistant lines are parsed; progress and snapshot lines are most of a
+        // long transcript (see `TranscriptScan`).
+        TranscriptScan.lines(text) { line in
+            let type = TranscriptScan.topLevelType(line)
+            if type == "user" || type == "assistant" { lines.append(TranscriptScan.text(line)) }
+        }
+        for line in lines {
+            guard let json = JSONValue(line: line), json["isSidechain"]?.bool != true, json["isMeta"]?.bool != true else { continue }
             let message = json["message"]
             switch json["type"]?.string {
             case "user":

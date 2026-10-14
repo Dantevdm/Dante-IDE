@@ -59,8 +59,8 @@ public enum SpecCheck {
                 if !phases.contains(task.phase.lowercased()) {
                     issues.append(Issue(severity: .warning, message: "\(task.id) is in phase “\(task.phase)”, which isn’t in the lifecycle.", path: ".dante/tasks.yaml"))
                 }
-                if let spec = task.spec, !fileManager.fileExists(atPath: root.appending(path: ".dante/\(spec)").path) {
-                    issues.append(Issue(severity: .warning, message: "\(task.id) points at .dante/\(spec), which doesn’t exist.", path: ".dante/tasks.yaml"))
+                if let spec = task.spec, task.specURL(in: root, fileManager: fileManager) == nil {
+                    issues.append(Issue(severity: .warning, message: "\(task.id) points at \(spec), which isn’t in .dante/ or the repo.", path: ".dante/tasks.yaml"))
                 }
             }
         }

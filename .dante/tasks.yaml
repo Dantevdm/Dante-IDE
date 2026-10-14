@@ -408,3 +408,8 @@ tasks:
   phase: build
   state: review
   notes: "BreakpointShift maps each edit: lines below move with added or removed newlines, a line deleted whole loses its breakpoint. Only the focused pane reports edits, so a split on one file doesn't move them twice. A running program isn't told."
+- id: DI-101
+  title: "Review sweep: every area on the Dante repo in all three themes"
+  phase: build
+  state: wip
+  notes: "Fixed so far: Map linked Supabase from its name alone; Data suggested Postgres on a project without a database; Timeline, usage and history read huge transcripts byte by byte (TranscriptScan); README HTML showed raw in Docs; Spec checks found repo-relative spec paths missing; Spec overflowed the window and clipped the rail."

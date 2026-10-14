@@ -149,6 +149,19 @@ struct SystemMapTests {
         #expect(clients.first?.items.map(\.text) == ["home", "orders/:id"])
     }
 
+    @Test func servicesNeedAPackageOrHostNotJustTheirName() {
+        var files = Self.files
+        files["backend/internal/api/detect.go"] = "package api\nvar roots = []string{\"supabase/migrations/\", \"firebase.json\"}"
+        var paths = files.keys.sorted()
+        var map = SystemMap.build(files: paths, read: { files[$0] }, modules: ArchitectureGraph.goModules(files: paths) { files[$0] })
+        #expect(map.part("ext:supabase") == nil && map.part("ext:firebase") == nil)
+
+        files["backend/internal/api/auth.go"] = "package api\nconst url = \"https://abc.supabase.co/auth/v1\""
+        paths = files.keys.sorted()
+        map = SystemMap.build(files: paths, read: { files[$0] }, modules: ArchitectureGraph.goModules(files: paths) { files[$0] })
+        #expect(map.part("ext:supabase") != nil)
+    }
+
     @Test func tablesWebhooksAndEnvironment() {
         var files = Self.files
         files["backend/internal/db/schema.sql"] = "CREATE TABLE IF NOT EXISTS orders (id INTEGER);\ncreate table \"settings\" (key TEXT);"

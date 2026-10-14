@@ -10,18 +10,20 @@ struct DocImage: View {
     let alt: String
     let source: String
     let base: URL
+    /// From an HTML `<img width=…>`, in points; otherwise the image's own size, up to 700.
+    var width: Int? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let remote = URL(string: source), remote.scheme?.hasPrefix("http") == true {
                 AsyncImage(url: remote) { image in
-                    image.resizable().scaledToFit().frame(maxWidth: 700, alignment: .leading)
+                    image.resizable().scaledToFit().frame(maxWidth: CGFloat(width ?? 700), alignment: .leading)
                 } placeholder: {
                     placeholder("Loading \(remote.host() ?? "image")…")
                 }
             } else if let image = NSImage(contentsOf: base.appending(path: source.removingPercentEncoding ?? source).standardizedFileURL) {
                 Image(nsImage: image).resizable().scaledToFit()
-                    .frame(maxWidth: min(image.size.width, 700), alignment: .leading)
+                    .frame(maxWidth: width.map { CGFloat($0) } ?? min(image.size.width, 700), alignment: .leading)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
                 placeholder("Missing image: \(source)")
