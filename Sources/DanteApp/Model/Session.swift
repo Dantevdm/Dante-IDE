@@ -428,7 +428,10 @@ final class Session {
             rules: { [weak workspace] in workspace?.claudeRules ?? ClaudeRules() }
         )
         claude.onFileChanged = { [weak workspace] url in workspace?.fileChanged(at: url) }
-        claude.onAttention = { [weak self] attention in self?.notifyClaude(attention) }
+        claude.onAttention = { [weak self] attention in
+            self?.notifyClaude(attention)
+            self?.pullRemoteTranscripts()
+        }
         claude.onConversationStarted = { [weak self] id in self?.linkConversation(id) }
         applyClaudePreferences(to: claude)
         return claude

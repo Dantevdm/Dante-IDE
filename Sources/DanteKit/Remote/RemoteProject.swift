@@ -37,6 +37,21 @@ public struct RemoteProject: Codable, Hashable, Sendable {
             .appending(path: "Dante/Remote")
     }
 
+    /// Copies of Claude Code's transcripts for this project from the host, beside the mirror,
+    /// for history, the Timeline and the usage estimate.
+    public var transcriptsURL: URL { URL(filePath: mirror + ".claude", directoryHint: .isDirectory) }
+
+    /// Every remote project's transcript copies on this Mac.
+    public static func transcriptFolders(in base: URL = mirrorsBase) -> [URL] {
+        let hosts = (try? FileManager.default.contentsOfDirectory(at: base, includingPropertiesForKeys: nil)) ?? []
+        return hosts.flatMap { host in
+            let hashes = (try? FileManager.default.contentsOfDirectory(at: host, includingPropertiesForKeys: nil)) ?? []
+            return hashes.flatMap { hash in
+                ((try? FileManager.default.contentsOfDirectory(at: hash, includingPropertiesForKeys: nil)) ?? []).filter { $0.pathExtension == "claude" }
+            }
+        }
+    }
+
     /// The host's path for a local file or folder inside the mirror.
     public func remotePath(forLocal local: String) -> String? {
         guard let relative = Self.relative(local, under: mirror) else { return nil }

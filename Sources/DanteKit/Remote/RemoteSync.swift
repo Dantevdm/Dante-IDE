@@ -187,6 +187,20 @@ public final class RemoteSync {
     }
 
     @discardableResult
+    /// Copies this project's Claude Code transcripts from the host (`~/.claude/projects/…`).
+    /// Quietly does nothing when there are none yet.
+    public func pullTranscripts() async {
+        try? FileManager.default.createDirectory(at: project.transcriptsURL, withIntermediateDirectories: true)
+        _ = try? await run(Self.transcriptArguments(for: project))
+    }
+
+    nonisolated static func transcriptArguments(for project: RemoteProject) -> [String] {
+        let folder = ".claude/projects/" + ClaudeTranscripts.encode(project.path) + "/"
+        // `~/` stays unquoted so the host's shell expands it.
+        return ["rsync", "-az", "-u", "--include=*.jsonl", "--exclude=*", "-e", SSH.rsyncShell,
+                "\(project.host):~/\(Shell.quote(folder))", project.transcriptsURL.path + "/"]
+    }
+
     private func run(_ arguments: [String]) async throws -> String {
         let output = await Shell.run(arguments, in: FileManager.default.homeDirectoryForCurrentUser)
         guard output.succeeded else { throw Failure(message: Self.explain(output, host: project.host)) }

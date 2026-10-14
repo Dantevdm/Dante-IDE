@@ -78,6 +78,24 @@ struct RemoteProjectTests {
         #expect(SSH.forwardSpec(5432) == "127.0.0.1:5432:localhost:5432")
     }
 
+    @Test func copiesTheHostsTranscriptsBesideTheMirror() throws {
+        let arguments = RemoteSync.transcriptArguments(for: project)
+        #expect(arguments.suffix(2) == ["devbox:~/.claude/projects/-srv-shop/", "/home/me/Mirror/shop.claude/"])
+        #expect(arguments.contains("--include=*.jsonl") && arguments.contains("--exclude=*"))
+
+        let base = FileManager.default.temporaryDirectory.appending(path: "dante-transcripts-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let copy = base.appending(path: "devbox/ab12/shop.claude")
+        try FileManager.default.createDirectory(at: copy, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: base.appending(path: "devbox/ab12/shop"), withIntermediateDirectories: true)
+        #expect(RemoteProject.transcriptFolders(in: base).map(\.lastPathComponent) == ["shop.claude"])
+
+        RemoteRegistry.register(project) {}
+        defer { RemoteRegistry.unregister(mirror: project.mirror) }
+        #expect(ClaudeTranscripts.folder(for: URL(filePath: "/home/me/Mirror/shop")).path == "/home/me/Mirror/shop.claude")
+        #expect(ClaudeTranscripts.folder(for: URL(filePath: "/home/me/Other"), home: URL(filePath: "/home/me")).path == "/home/me/.claude/projects/-home-me-Other")
+    }
+
     @Test func explainsFailures() {
         let denied = Shell.Output(status: 255, stdout: "", stderr: "me@devbox: Permission denied (publickey).")
         #expect(RemoteSync.explain(denied, host: "devbox").contains("ssh key"))

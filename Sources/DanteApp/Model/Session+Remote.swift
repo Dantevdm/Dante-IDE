@@ -17,6 +17,7 @@ extension Session {
         Task {
             if let problem = await SSH.connect(host: project.host) { errorMessage = problem }
             await sync.sync()
+            await sync.pullTranscripts()
             await findLanguageServers(on: project)
             if ComposeFile.find(in: project.mirrorURL) != nil, case .success(let containers) = await ContainerState.load(projectRoot: project.mirrorURL) {
                 await forwardPorts(of: containers)
@@ -43,6 +44,12 @@ extension Session {
         guard let remoteSync else { return }
         let ports = containers.filter { $0.state == "running" }.flatMap(\.ports).compactMap { Int($0.drop { $0 == ":" }) }
         await remoteSync.forward(Set(ports))
+    }
+
+    /// After each Claude turn: its transcript is on the host.
+    func pullRemoteTranscripts() {
+        guard let remoteSync else { return }
+        Task { await remoteSync.pullTranscripts() }
     }
 
     func detachRemote() {

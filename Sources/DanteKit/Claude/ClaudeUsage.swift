@@ -36,12 +36,14 @@ public struct ClaudeUsage: Equatable, Sendable {
         self.busiestWindow = busiestWindow
     }
 
-    /// Reads transcripts changed in the last week from `~/.claude/projects`.
-    public static func load(home: URL = FileManager.default.homeDirectoryForCurrentUser, now: Date = .now) -> ClaudeUsage {
+    /// Reads transcripts changed in the last week from `~/.claude/projects`, and remote
+    /// projects' copies from their hosts (the same account's limits).
+    public static func load(home: URL = FileManager.default.homeDirectoryForCurrentUser, now: Date = .now, remote: [URL]? = nil) -> ClaudeUsage {
         let since = now.addingTimeInterval(-7 * 86_400)
         let projects = home.appending(path: ".claude/projects")
         var entries: [Entry] = []
-        let folders = (try? FileManager.default.contentsOfDirectory(at: projects, includingPropertiesForKeys: nil)) ?? []
+        let folders = ((try? FileManager.default.contentsOfDirectory(at: projects, includingPropertiesForKeys: nil)) ?? [])
+            + (remote ?? RemoteProject.transcriptFolders())
         for folder in folders {
             let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
             for file in files where file.pathExtension == "jsonl" {

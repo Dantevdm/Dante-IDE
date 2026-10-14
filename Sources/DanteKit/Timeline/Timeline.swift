@@ -142,8 +142,10 @@ public struct TestRecord: Codable, Equatable, Sendable {
 /// Claude Code's transcripts for a project: `~/.claude/projects/<path with every
 /// other character as ->/<session>.jsonl`.
 public enum ClaudeTranscripts {
+    /// A remote project's are copied from its host beside the mirror (`RemoteSync.pullTranscripts`).
     public static func folder(for root: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
-        home.appending(path: ".claude/projects").appending(path: encode(root.standardizedFileURL.path))
+        if let remote = RemoteRegistry.project(containing: root), remote.path == remote.project.path { return remote.project.transcriptsURL }
+        return home.appending(path: ".claude/projects").appending(path: encode(root.standardizedFileURL.path))
     }
 
     static func encode(_ path: String) -> String {
