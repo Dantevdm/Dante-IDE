@@ -23,13 +23,33 @@ public final class LanguageServices {
         let options = LanguageServerOptions.load()[server.name]
         guard options?.enabled ?? true else { return nil }
         do {
-            let client = try LSPClient(server: server.applying(options), root: root, environment: Shell.environment(), options: options)
+            let client = try LSPClient(server: server.applying(options), root: root, environment: Shell.environment(), options: options,
+                                       host: host(for: server, options: options))
             clients[server.name] = client
             return client
         } catch {
             unavailable[server.name] = error.localizedDescription
             return nil
         }
+    }
+
+    /// For a remote project, the server on its host when the host has it (and no command of
+    /// the person's own is set, since that names a program on this Mac).
+    private func host(for server: LanguageServer, options: LanguageServerOptions?) -> LSPClient.Host? {
+        guard options?.commandWords.isEmpty ?? true, let remote = RemoteRegistry.project(containing: root)?.project,
+              let command = RemoteRegistry.hostServers(for: remote)?[server.name] else { return nil }
+        return LSPClient.Host(project: remote, command: command)
+    }
+
+    /// Servers running on this Mac that the host turned out to have: restarted there.
+    /// Returns their names, so the caller can open their files again.
+    @discardableResult
+    public func moveToHost() -> [String] {
+        guard let remote = RemoteRegistry.project(containing: root)?.project,
+              let available = RemoteRegistry.hostServers(for: remote) else { return [] }
+        let names = clients.filter { !$0.value.runsOnHost && available[$0.key] != nil }.map(\.key)
+        names.forEach(restart)
+        return names
     }
 
     /// Whichever client already holds `language`'s files, without starting one.

@@ -34,13 +34,16 @@ struct ProblemsPanel: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
+                        // One stack per file: rows keyed by offset would otherwise share ids across files.
                         ForEach(files) { file in
-                            ProblemFileHeader(file: file, isCollapsed: collapsed.contains(file.path), fix: { session.fixWithClaude(file) }) {
-                                if collapsed.contains(file.path) { collapsed.remove(file.path) } else { collapsed.insert(file.path) }
-                            }
-                            if !collapsed.contains(file.path) {
-                                ForEach(Array(file.diagnostics.enumerated()), id: \.offset) { _, diagnostic in
-                                    ProblemRow(diagnostic: diagnostic) { session.reveal(diagnostic, in: file.url) }
+                            VStack(alignment: .leading, spacing: 0) {
+                                ProblemFileHeader(file: file, isCollapsed: collapsed.contains(file.path), fix: { session.fixWithClaude(file) }) {
+                                    if collapsed.contains(file.path) { collapsed.remove(file.path) } else { collapsed.insert(file.path) }
+                                }
+                                if !collapsed.contains(file.path) {
+                                    ForEach(Array(file.diagnostics.enumerated()), id: \.offset) { _, diagnostic in
+                                        ProblemRow(diagnostic: diagnostic) { session.reveal(diagnostic, in: file.url) }
+                                    }
                                 }
                             }
                         }

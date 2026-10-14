@@ -46,6 +46,36 @@ public struct LanguageServer: Hashable, Sendable {
         return nil
     }
 
+    // MARK: On a remote project's host
+
+    /// A script for the host that prints `name<TAB>path args…` for each server it has: the
+    /// first of the server's commands found on PATH or in the usual tool folders. xcrun
+    /// commands are skipped; hosts are rarely Macs.
+    public static func hostProbeScript(_ servers: [LanguageServer] = all) -> String {
+        var lines = [#"PATH="$PATH:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$HOME/.local/bin""#]
+        for server in servers {
+            let commands = server.commands.filter { $0.first != "xcrun" && !$0.isEmpty }
+            guard !commands.isEmpty else { continue }
+            let branches = commands.map { command in
+                let rest = command.dropFirst().map(Shell.quote).joined(separator: " ")
+                return "if p=$(command -v \(Shell.quote(command[0])) 2>/dev/null); then printf '%s\\t%s\\n' \(Shell.quote(server.name)) \"$p\(rest.isEmpty ? "" : " " + rest)\""
+            }
+            lines.append(branches.joined(separator: "; el") + "; fi")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// The probe's output as server name → command words on the host.
+    public static func hostCommands(fromProbe output: String) -> [String: [String]] {
+        var found: [String: [String]] = [:]
+        for line in output.components(separatedBy: "\n") {
+            let parts = line.split(separator: "\t", maxSplits: 1).map(String.init)
+            guard parts.count == 2, parts[1].hasPrefix("/") else { continue }
+            found[parts[0]] = parts[1].split(separator: " ").map(String.init)
+        }
+        return found
+    }
+
     private static func xcrunFinds(_ tool: String) -> Bool {
         let process = Process()
         process.executableURL = URL(filePath: "/usr/bin/xcrun")

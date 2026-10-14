@@ -17,6 +17,21 @@ extension Session {
         Task {
             if let problem = await SSH.connect(host: project.host) { errorMessage = problem }
             await sync.sync()
+            await findLanguageServers(on: project)
+        }
+    }
+
+    /// Asks the host which language servers it has; those run there from now on, with the
+    /// project's toolchain and dependencies, and any already running here move across.
+    private func findLanguageServers(on project: RemoteProject) async {
+        let command = SSH.remoteCommand(["sh", "-c", LanguageServer.hostProbeScript()], in: project.path)
+        let output = await Shell.run([SSH.program] + SSH.arguments(host: project.host, command: command), in: FileManager.default.homeDirectoryForCurrentUser)
+        guard output.succeeded, remoteSync?.project == project else { return }
+        RemoteRegistry.setHostServers(LanguageServer.hostCommands(fromProbe: output.stdout), for: project)
+        let moved = languages?.moveToHost() ?? []
+        guard !moved.isEmpty, let workspace else { return }
+        for document in workspace.documents where LanguageServer.for(document.language).map({ moved.contains($0.name) }) == true {
+            languages?.opened(document)
         }
     }
 

@@ -46,18 +46,42 @@ public final class LSPClient {
     /// The person's settings for this server, from Settings → Languages.
     let options: LanguageServerOptions?
 
-    public init(server: LanguageServer, root: URL, environment: [String: String], options: LanguageServerOptions? = nil) throws {
-        guard let command = server.resolve(environment: environment) else {
-            throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey: "\(server.name) isn’t installed."])
+    /// A server started on a remote project's host instead of this Mac: the command to run
+    /// there (found by `LanguageServer.onHost`).
+    public struct Host: Sendable {
+        public var project: RemoteProject
+        public var command: [String]
+
+        public init(project: RemoteProject, command: [String]) {
+            self.project = project
+            self.command = command
         }
+    }
+
+    /// Set for a server on a host: its messages' URIs are rewritten between there and the mirror.
+    private let uriMap: LSPURIMap?
+    public var runsOnHost: Bool { uriMap != nil }
+
+    public init(server: LanguageServer, root: URL, environment: [String: String], options: LanguageServerOptions? = nil, host: Host? = nil) throws {
         self.server = server
         self.options = options
         self.root = root.standardizedFileURL
+        if let host {
+            uriMap = LSPURIMap(project: host.project)
+            process.executableURL = URL(filePath: "/usr/bin/env")
+            process.arguments = [SSH.program] + SSH.arguments(host: host.project.host, command: SSH.remoteCommand(host.command, in: host.project.path))
+            process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+        } else {
+            guard let command = server.resolve(environment: environment) else {
+                throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey: "\(server.name) isn’t installed."])
+            }
+            uriMap = nil
+            process.executableURL = command.executable
+            process.arguments = command.arguments
+            process.currentDirectoryURL = root
+        }
         let stdin = Pipe()
         let stdout = Pipe()
-        process.executableURL = command.executable
-        process.arguments = command.arguments
-        process.currentDirectoryURL = root
         process.environment = environment
         process.standardInput = stdin
         process.standardOutput = stdout
@@ -238,7 +262,8 @@ public final class LSPClient {
     private func initialize() async -> Bool {
         let rootURI = JSONValue.string(Self.uri(root))
         let result = await request("initialize", [
-            "processId": .number(Double(ProcessInfo.processInfo.processIdentifier)),
+            // A server on a host would look for this process there, not find it and quit.
+            "processId": runsOnHost ? .null : .number(Double(ProcessInfo.processInfo.processIdentifier)),
             "clientInfo": ["name": "Dante"],
             "rootUri": rootURI,
             "workspaceFolders": [["uri": rootURI, "name": .string(root.lastPathComponent)]],
@@ -296,10 +321,11 @@ public final class LSPClient {
 
     private func send(_ message: JSONValue) {
         guard process.isRunning else { return }
-        try? input.write(contentsOf: LSPFraming.encode(message))
+        try? input.write(contentsOf: LSPFraming.encode(uriMap?.toHost(message) ?? message))
     }
 
     func receive(_ message: JSONValue) {
+        let message = uriMap?.toMirror(message) ?? message
         let method = message["method"]?.string
         let id = message["id"]
         switch (method, id) {

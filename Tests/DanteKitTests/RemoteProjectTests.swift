@@ -189,6 +189,15 @@ struct RemoteSyncTests {
         #expect(FileManager.default.fileExists(atPath: project.mirrorURL.appending(path: "gen/f0.txt").path))
     }
 
+    @Test func asksTheHostForLanguageServers() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let command = SSH.remoteCommand(["sh", "-c", LanguageServer.hostProbeScript()], in: host.path)
+        let output = await Shell.run([SSH.program] + SSH.arguments(host: "devbox", command: command), in: base)
+        #expect(output.succeeded)
+        // Whatever this Mac has; each command is a full path the host can start.
+        #expect(LanguageServer.hostCommands(fromProbe: output.stdout).values.allSatisfy { FileManager.default.isExecutableFile(atPath: $0[0]) })
+    }
+
     @Test func runsCommandsForTheMirrorOnTheHost() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
         try await RemoteSync(project: project).pullAll()

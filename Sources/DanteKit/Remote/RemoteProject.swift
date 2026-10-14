@@ -176,6 +176,7 @@ public enum RemoteRegistry {
         lock.withLock {
             open[RemoteProject.trimmed(mirror)] = nil
             listeners[RemoteProject.trimmed(mirror)] = nil
+            hostServers[RemoteProject.trimmed(mirror)] = nil
         }
     }
 
@@ -188,6 +189,18 @@ public enum RemoteRegistry {
             }
             return nil
         }
+    }
+
+    nonisolated(unsafe) private static var hostServers: [String: [String: [String]]] = [:]
+
+    /// Language servers found on a project's host, by name, with the command to start each.
+    /// Nil until the host has been asked.
+    public static func hostServers(for project: RemoteProject) -> [String: [String]]? {
+        lock.withLock { hostServers[project.mirror] }
+    }
+
+    public static func setHostServers(_ servers: [String: [String]], for project: RemoteProject) {
+        lock.withLock { hostServers[project.mirror] = servers }
     }
 
     static func commandFinished(for project: RemoteProject) {
