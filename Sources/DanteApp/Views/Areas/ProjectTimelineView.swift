@@ -72,9 +72,11 @@ struct ProjectTimelineView: View {
 
     private func load() async {
         loading = true
+        if events.isEmpty, let cached = session.timelineCache { events = cached }
         let root = workspace.url
         let ci: [CIRun] = if case .success(let runs) = await CIRun.load(projectRoot: root, limit: 30) { runs } else { [] }
         events = await Timeline.load(root: root, tests: TestRecord.load(for: root), ci: ci)
+        session.timelineCache = events
         loading = false
     }
 

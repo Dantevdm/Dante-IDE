@@ -17,7 +17,7 @@ tasks:
 - id: DI-4
   title: Plan area with phases, checklists and tasks.yaml
   phase: build
-  state: review
+  state: done
   claude: true
 - id: DI-5
   title: Tree-sitter highlighting behind the Highlighter protocol
@@ -30,11 +30,11 @@ tasks:
 - id: DI-7
   title: Enforce Claude's propose, flag and never rules from project.yaml
   phase: build
-  state: review
+  state: done
 - id: DI-8
   title: Ask about unsaved changes on quit
   phase: build
-  state: review
+  state: done
 - id: DI-9
   title: Home area with the project at a glance
   phase: build
@@ -46,7 +46,7 @@ tasks:
 - id: DI-11
   title: Bundle the Geist fonts from the design
   phase: build
-  state: review
+  state: done
 - id: DI-12
   title: "Docs area: markdown rendering, outline and linked tasks"
   phase: build
@@ -126,188 +126,188 @@ tasks:
 - id: DI-31
   title: Terminal tabs
   phase: build
-  state: review
+  state: done
 - id: DI-32
   title: Back and forward navigation (mouse buttons, ⌃⌘←/→)
   phase: build
-  state: review
+  state: done
 - id: DI-33
   title: Claude asks clarifying questions first (AskUserQuestion cards, Ask first toggle)
   phase: build
-  state: review
+  state: done
 - id: DI-34
   title: Docs outline in the right column, folder names for same-named docs
   phase: build
-  state: review
+  state: done
 - id: DI-35
   title: Layouts follow wide and ultra-wide windows
   phase: build
-  state: review
+  state: done
 - id: DI-36
   title: "Data area: detect databases, browse tables, run queries, ER diagram, new-database wizard"
   phase: build
-  state: review
+  state: done
 - id: DI-37
   title: "Docs: preview, edit and side-by-side modes for markdown"
   phase: build
-  state: review
+  state: done
 - id: DI-38
   title: "Source control: Changes panel, diffs, commit (message by Claude), push, pull, branch switcher"
   phase: build
-  state: review
+  state: done
 - id: DI-39
   title: "Explorer: new file and folder, rename, duplicate, move to Trash, drag to move"
   phase: build
-  state: review
+  state: done
 - id: DI-40
   title: "Language servers: completion, find references, rename symbol, format document"
   phase: build
-  state: review
+  state: done
 - id: DI-41
   title: "Settings window (⌘,): editor, formatting, auto-save, theme, Claude"
   phase: build
-  state: review
+  state: done
 - id: DI-42
   title: Replace across the project from Search
   phase: build
-  state: review
+  state: done
 - id: DI-43
   title: Split editor (two files side by side)
   phase: build
-  state: review
+  state: done
 - id: DI-44
   title: Finish a task with a commit and PR drafted by Claude, task moves to review
   phase: release
-  state: review
+  state: done
 - id: DI-45
   title: Claude inline in the editor (select, ask, review the change as an inline diff)
   phase: build
-  state: review
+  state: done
 - id: DI-46
   title: "Home: what changed since you were last here"
   phase: build
-  state: review
+  state: done
 - id: DI-47
   title: "Data: explain a query, suggest indexes, preview what a migration touches"
   phase: build
-  state: review
+  state: done
 - id: DI-48
   title: "Timeline: commits, Claude sessions, test runs and releases in one place"
   phase: operate
-  state: review
+  state: done
 
 - id: DI-49
   title: "Problems panel: every diagnostic across open files, click to jump"
   phase: build
-  state: review
+  state: done
 - id: DI-50
   title: "Go to symbol in the file and across the project"
   phase: build
-  state: review
+  state: done
 - id: DI-51
   title: "Git blame for the current line, with the commit a click away"
   phase: build
-  state: review
+  state: done
 - id: DI-52
   title: "Tests: re-run failed tests and run a single test"
   phase: build
-  state: review
+  state: done
 - id: DI-53
   title: "Explorer: select several files; copy, paste and drop from Finder"
   phase: build
-  state: review
+  state: done
 - id: DI-54
   title: "Env: say why a service isn't up (health check, taken port, waiting dependency) and show compose output"
   phase: build
-  state: review
+  state: done
 - id: DI-55
   title: "Env: port checker before every start, with stop or move-port fixes, and a Ports card"
   phase: build
-  state: review
+  state: done
 - id: DI-56
   title: "Env: logs panel with search, level filter and all services; tidier layout"
   phase: build
-  state: review
+  state: done
 - id: DI-57
   title: "Tests: written tests by category, run history with flaky tests, untested code"
   phase: build
-  state: review
+  state: done
 - id: DI-58
   title: "File index skipped the rest of any folder holding .DS_Store"
   phase: build
-  state: review
+  state: done
 - id: DI-59
   title: "Claude: queue messages sent mid-turn instead of dropping them"
   phase: build
-  state: review
+  state: done
 - id: DI-60
   title: "Read tasks.yaml written loosely (status, notes, open/closed) and explain a bad file instead of a raw error"
   phase: build
-  state: review
+  state: done
 - id: DI-61
   title: "Map: Go projects drawn from go.mod and imports; folders otherwise"
   phase: build
-  state: review
+  state: done
 - id: DI-62
   title: "Screen review: Home since-last-visit, Run health spellings, Data folder notes, Docs toolbar"
   phase: build
-  state: review
+  state: done
 - id: DI-63
   title: "Open PDFs, images, Word, media, slides and other non-text files in viewer tabs"
   phase: build
-  state: review
+  state: done
 - id: DI-64
   title: "Env logs: hide health check requests; cards say checking until Docker answers"
   phase: build
-  state: review
+  state: done
 - id: DI-65
   title: "Claude: conversation history, plan usage estimate, context meter and compact, readable plan approvals"
   phase: build
-  state: review
+  state: done
 - id: DI-66
   title: "Claude panel: stop the transcript jumping; group runs of reads; fix the doubled cost"
   phase: build
-  state: review
+  state: done
 - id: DI-67
   title: "Tests: tick tests or run one category instead of the whole suite"
   phase: build
-  state: review
+  state: done
 - id: DI-68
   title: "Map: System view from frontend screens through API routes and backend to data and outside services"
   phase: build
-  state: review
+  state: done
 - id: DI-69
   title: "Claude area: usage, skills with suggestions and a fortnightly review, memory cost, connectors, permissions"
   phase: build
-  state: review
+  state: done
 - id: DI-70
   title: "Settings in the window: theme previews, tools and database drivers, remove a project's .dante setup"
   phase: build
-  state: review
+  state: done
 - id: DI-71
   title: "Project setup can draft Claude skills; Home nudges when a skills review is due"
   phase: build
-  state: review
+  state: done
 - id: DI-72
   title: "Claude: undo a whole turn (files put back as they were before it)"
   phase: build
-  state: review
+  state: done
 - id: DI-73
   title: "Map: screens that call the API get their own boxes and arrows"
   phase: build
-  state: review
+  state: done
 - id: DI-74
   title: "Tests: run tests for changed files, rerun failed only, Run again keeps the selection"
   phase: build
-  state: review
+  state: done
 - id: DI-75
   title: "Tests: fix a failing test with Claude"
   phase: build
-  state: review
+  state: done
 - id: DI-76
   title: "Claude panel: @file mentions and a / command menu"
   phase: build
-  state: review
+  state: done
 - id: DI-77
   title: "Claude panel: notify when Claude finishes or needs approval while Dante is in the background"
   phase: build
@@ -315,47 +315,47 @@ tasks:
 - id: DI-78
   title: "Claude panel: Apply all for several proposed edits"
   phase: build
-  state: review
+  state: done
 - id: DI-79
   title: "Tasks: a Claude conversation and a branch per task"
   phase: build
-  state: review
+  state: done
 - id: DI-80
   title: "Claude area: list installed plugins"
   phase: build
-  state: review
+  state: done
 - id: DI-81
   title: "Map: database tables in the Data lane, with arrows from the code that queries them"
   phase: build
-  state: review
+  state: done
 - id: DI-82
   title: "Map: incoming webhooks from outside services"
   phase: build
-  state: review
+  state: done
 - id: DI-83
   title: "Map: environment variables and secrets per part"
   phase: build
-  state: review
+  state: done
 - id: DI-84
   title: "Map: export the System map as Mermaid into .dante/architecture.md"
   phase: build
-  state: review
+  state: done
 - id: DI-85
   title: "Map: test coverage per part"
   phase: build
-  state: review
+  state: done
 - id: DI-86
   title: "Ship: Claude reviews the branch diff before a pull request"
   phase: build
-  state: review
+  state: done
 - id: DI-87
   title: "Settings: keyboard shortcut editor"
   phase: build
-  state: review
+  state: done
 - id: DI-88
   title: "Settings: language server options per language"
   phase: build
-  state: review
+  state: done
 - id: DI-89
   title: "Polish: try Remove .dante on a throwaway project; System map speed on a large repo"
   phase: build
@@ -363,11 +363,12 @@ tasks:
 - id: DI-90
   title: "Review sweep: every area in Dark, Light and Paper; fix layout bugs"
   phase: build
-  state: review
+  state: done
+  notes: "Swept on the Dante repo itself in Paper, Dark and Light. Fixed: Map linked Supabase and Firebase from their names alone; Data recommended Postgres on a project without a database; Timeline, usage and history crawled through a 140 MB transcript (now TranscriptScan, byte level); README HTML showed raw in Docs; Spec checks missed repo-relative spec paths; Spec overflowed the window; Timeline started from empty on every visit and Ship could show the previous folder after Open Folder."
 - id: DI-91
   title: "Commit message drafter: show a refusal or secret warning as a warning, not as the message"
   phase: build
-  state: review
+  state: done
 - id: DI-92
   title: "Check custom shortcuts reach the menus live; notifications left for a foreground check"
   phase: build
@@ -383,11 +384,11 @@ tasks:
 - id: DI-95
   title: "dante command-line tool: open a folder or files from the terminal"
   phase: build
-  state: review
+  state: done
 - id: DI-96
   title: "Merge conflicts: a three-way view in Changes"
   phase: build
-  state: review
+  state: done
 - id: DI-97
   title: "Debugger: Debug Adapter Protocol, breakpoints and stepping (Go via dlv, Python via debugpy)"
   phase: build
@@ -395,7 +396,7 @@ tasks:
 - id: DI-98
   title: "Large repos: time the file index, search and test inventory at 50k files"
   phase: build
-  state: review
+  state: done
   notes: "Release build, 50k files: index 0.6s, quick open 8ms, search 0.15-0.6s (parallel), test inventory 0.8s, untested 2.5s (background). TestGaps was 33s (quadratic test-file lookups)."
 - id: DI-99
   title: "Remote projects over SSH (scope first; may stay a plan)"
@@ -408,8 +409,3 @@ tasks:
   phase: build
   state: review
   notes: "BreakpointShift maps each edit: lines below move with added or removed newlines, a line deleted whole loses its breakpoint. Only the focused pane reports edits, so a split on one file doesn't move them twice. A running program isn't told."
-- id: DI-101
-  title: "Review sweep: every area on the Dante repo in all three themes"
-  phase: build
-  state: wip
-  notes: "Fixed so far: Map linked Supabase from its name alone; Data suggested Postgres on a project without a database; Timeline, usage and history read huge transcripts byte by byte (TranscriptScan); README HTML showed raw in Docs; Spec checks found repo-relative spec paths missing; Spec overflowed the window and clipped the rail."

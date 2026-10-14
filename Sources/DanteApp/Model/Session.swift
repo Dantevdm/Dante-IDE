@@ -217,6 +217,8 @@ final class Session {
     /// The window this session draws into, to bring forward when `dante` opens something in it.
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored var shipCache: ShipCache?
+    /// Timeline's last load, shown while it reads the history again.
+    @ObservationIgnored var timelineCache: [TimelineEvent]?
     /// Files waiting to go with the next message to Claude.
     var claudeAttachments: [Attachment] = []
     /// Recent Claude usage on this Mac and the signed-in plan, for the panel's meter.
@@ -289,6 +291,9 @@ final class Session {
         claude = makeClaude(for: workspace)
         languages = LanguageServices(root: url)
         conflicts = []
+        mapCache = nil
+        shipCache = nil
+        timelineCache = nil
         terminalTabs = [TerminalTab()]
         history = NavigationHistory()
         workspace.refreshFileIndex()
