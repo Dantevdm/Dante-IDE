@@ -69,6 +69,9 @@ public struct CodeEditorView: NSViewRepresentable {
     var onToggleBreakpoint: ((Int) -> Void)?
     /// The zero-based line the debugger is stopped on in this file.
     var executionLine: Int?
+    /// Called before each change with the text as it was, the range and its replacement,
+    /// so marks tied to lines (breakpoints) can move with the code. Nil costs nothing.
+    var onEdit: ((NSString, NSRange, String) -> Void)?
 
     public init(
         text: Binding<String>,
@@ -91,7 +94,8 @@ public struct CodeEditorView: NSViewRepresentable {
         onScroll: ((Int) -> Void)? = nil,
         breakpoints: Set<Int> = [],
         onToggleBreakpoint: ((Int) -> Void)? = nil,
-        executionLine: Int? = nil
+        executionLine: Int? = nil,
+        onEdit: ((NSString, NSRange, String) -> Void)? = nil
     ) {
         _text = text
         self.language = language
@@ -114,6 +118,7 @@ public struct CodeEditorView: NSViewRepresentable {
         self.breakpoints = breakpoints
         self.onToggleBreakpoint = onToggleBreakpoint
         self.executionLine = executionLine
+        self.onEdit = onEdit
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -431,6 +436,7 @@ public struct CodeEditorView: NSViewRepresentable {
             linesNeedRefresh = true
             isEditing = true
             typed = replacementString?.count == 1 ? replacementString?.first : nil
+            if let onEdit = parent.onEdit, let replacementString { onEdit(textView.string as NSString, range, replacementString) }
             return true
         }
 

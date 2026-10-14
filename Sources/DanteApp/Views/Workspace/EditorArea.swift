@@ -75,7 +75,10 @@ struct EditorArea: View {
             onFocus: { if let side { workspace.focusPane(right: side == .right) } },
             breakpoints: Set(session.breakpointLines(in: document.url).map { $0 - 1 }),
             onToggleBreakpoint: session.remoteSync != nil || DebugAdapter.for(file: document.url.path) == nil ? nil : { session.toggleBreakpoint(in: document.url, line: $0 + 1) },
-            executionLine: session.executionLine(in: document)
+            executionLine: session.executionLine(in: document),
+            // Only the pane being typed in, or a split on one file would move them twice.
+            onEdit: focused && !session.breakpointLines(in: document.url).isEmpty
+                ? { session.shiftBreakpoints(in: document.url, text: $0, range: $1, replacement: $2) } : nil
         )
         .id(document.id)
         .task(id: document.id) { session.languages?.opened(document) }
@@ -108,6 +111,7 @@ private struct DocumentEditor: View {
     let breakpoints: Set<Int>
     let onToggleBreakpoint: ((Int) -> Void)?
     let executionLine: Int?
+    let onEdit: ((NSString, NSRange, String) -> Void)?
     /// The file as of HEAD; nil when it isn't tracked.
     @State private var base: String?
     @State private var lineChanges: [Int: LineChange] = [:]
@@ -133,7 +137,8 @@ private struct DocumentEditor: View {
             takesFocus: isFocused,
             breakpoints: breakpoints,
             onToggleBreakpoint: onToggleBreakpoint,
-            executionLine: executionLine
+            executionLine: executionLine,
+            onEdit: onEdit
         )
         .task(id: gitRevision) {
             base = await GitGutter.headText(of: document.url, in: root)

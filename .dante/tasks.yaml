@@ -403,3 +403,8 @@ tasks:
   state: review
   spec: docs/plans/remote-ssh.md
   notes: "Built as a local mirror synced with rsync, with commands, Claude Code, the terminal and language servers on the host; Docker and Data run there too, with service ports forwarded here, and Claude history, Timeline and usage read the host's transcripts. Not tested against a real ssh host yet; password auth is out of scope."
+- id: DI-100
+  title: "Breakpoints follow edits"
+  phase: build
+  state: review
+  notes: "BreakpointShift maps each edit: lines below move with added or removed newlines, a line deleted whole loses its breakpoint. Only the focused pane reports edits, so a split on one file doesn't move them twice. A running program isn't told."

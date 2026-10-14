@@ -21,6 +21,17 @@ extension Session {
         }
     }
 
+    /// Moves a file's breakpoints with an edit, so each stays on its code. A running
+    /// program keeps the lines it was built with, so it isn't told.
+    func shiftBreakpoints(in url: URL, text: NSString, range: NSRange, replacement: String) {
+        let path = url.standardizedFileURL.path
+        guard let lines = breakpoints[path] else { return }
+        let moved = BreakpointShift.apply(lines, in: text, replacing: range, with: replacement)
+        guard moved != lines else { return }
+        breakpoints[path] = moved.isEmpty ? nil : moved
+        saveBreakpoints()
+    }
+
     /// F9: a breakpoint on the caret's line.
     func toggleBreakpointAtCursor() {
         guard let document = workspace?.activeDocument, document.kind.opensAsText else { return }
