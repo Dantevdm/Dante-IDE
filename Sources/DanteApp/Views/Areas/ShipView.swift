@@ -22,7 +22,7 @@ struct ShipView: View {
         AreaPage(
             eyebrow: "Release",
             title: draft?.version ?? "Release",
-            subtitle: "What shipping now would include. Dante drafts the version and changelog from your commits and tasks; tagging stays local until you push."
+            subtitle: nil
         ) {
             Button {
                 guard let draft else { return }
@@ -43,7 +43,7 @@ struct ShipView: View {
             .disabled(draft?.isEmpty ?? true || git?.isRepository != true)
         } content: {
             if let git, !git.isRepository {
-                EmptyState(symbol: "arrow.triangle.branch", title: "Not a git repository", message: "Ship drafts releases from git history and tags. Initialise git to use it.") {
+                EmptyState(symbol: "arrow.triangle.branch", title: "Not a git repository") {
                     Button("git init in the terminal") { session.runInTerminal("git init") }
                         .buttonStyle(DanteButtonStyle())
                 }
@@ -62,7 +62,6 @@ struct ShipView: View {
             Button("Create tag \(draft?.version ?? "")") { tag() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Creates an annotated tag at the current commit. It stays on this Mac until you push it with git push --tags.")
         }
     }
 
@@ -105,7 +104,7 @@ private struct CICard: View {
                 ProgressView().controlSize(.small)
             case .failure(.noWorkflows):
                 HStack {
-                    Text("No workflows in .github/workflows yet, so nothing checks a release before it ships.")
+                    Text("No workflows in .github/workflows")
                         .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text3.color)
                     Spacer()
@@ -115,7 +114,7 @@ private struct CICard: View {
                     .buttonStyle(DanteButtonStyle())
                 }
             case .failure(.noGitHubCLI):
-                Text("Install the GitHub CLI (brew install gh) and sign in with gh auth login to see runs here.")
+                Text("Needs the GitHub CLI, signed in (gh auth login)")
                     .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
             case .failure(.failed(let message)):
@@ -268,9 +267,6 @@ private struct ReleaseChecklist: View {
             }
             Rectangle().fill(theme.line.color).frame(height: 1)
             HStack {
-                Text("A guide, not a gate. You can tag whenever you choose.")
-                    .font(.dante(size: 12))
-                    .foregroundStyle(theme.text3.color)
                 Spacer()
                 if workspace.phaseDocs["release"] == nil {
                     LinkButton("Add release.md") { session.showPhase(workspace.lifecycle.phases.first { $0.lowercased() == "release" } ?? "Release") }

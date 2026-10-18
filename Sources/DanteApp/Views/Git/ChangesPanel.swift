@@ -22,7 +22,7 @@ struct ChangesPanel: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         if status.changes.isEmpty {
-                            Text("No changes. Edits you make show up here, ready to commit.")
+                            Text("No changes")
                                 .font(.dante(size: 12))
                                 .foregroundStyle(theme.text3.color)
                                 .padding(.horizontal, 10)

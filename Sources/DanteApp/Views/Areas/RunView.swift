@@ -16,7 +16,7 @@ struct RunView: View {
         AreaPage(
             eyebrow: "Operate",
             title: "Runtime health",
-            subtitle: "Alarms, health checks and production logs from operate: in .dante/project.yaml. Every alarm and error can become a task or go straight to Claude."
+            subtitle: nil
         ) {
             if let latestTag { Chip(text: "\(latestTag) is the latest tag", symbol: "tag") }
             if !info.checks.isEmpty {
@@ -60,8 +60,7 @@ private struct SetupCard: View {
     var body: some View {
         EmptyState(
             symbol: "waveform.path.ecg",
-            title: "Nothing to watch yet",
-            message: "Add health check URLs and a command that streams production logs (aws logs tail, fly logs, kubectl logs -f, heroku logs --tail…) under operate: in .dante/project.yaml."
+            title: "Nothing to watch yet"
         ) {
             Button("Set up with Claude") {
                 session.askClaude("Set up the Operate area for this project: add an operate: block to .dante/project.yaml with checks (name and url of each health endpoint), logs (a shell command that streams production logs, for whichever host this project deploys to) and alarms (cloudwatch with profile, region and an alarm name prefix, or a command that prints alarms as JSON). Look at the code and config to work out what exists; ask me for anything you can't find.")
@@ -230,7 +229,7 @@ private struct ErrorsCard: View {
             }
         } else {
             Card("Errors") {
-                Text("Add operate.logs to .dante/project.yaml with a command that streams production logs, and errors are grouped here as they happen.")
+                Text("No production logs set up")
                     .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)

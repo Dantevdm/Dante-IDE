@@ -25,7 +25,7 @@ struct ProblemsPanel: View {
             .padding(.bottom, 8)
 
             if files.isEmpty {
-                Text("Problems appear here as language servers check the files you open. Servers for Swift, TypeScript and others start with the first file of their language.")
+                Text("No problems")
                     .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)

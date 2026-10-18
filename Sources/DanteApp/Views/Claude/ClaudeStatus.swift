@@ -58,7 +58,6 @@ struct ClaudeFooter: View {
                 }
             }
             Divider()
-            Text("Haiku is quick and light on your plan; Opus is the most capable.")
         } label: {
             HStack(spacing: 3) {
                 Image(systemName: "cpu").font(.dante(size: 9.5))
@@ -160,7 +159,7 @@ struct UsagePopover: View {
                 tip("hare", "Pick Haiku for small jobs like renames and explanations.")
                 tip("doc.text.magnifyingglass", "Point Claude at the file, so it doesn’t search the project.")
             }
-            Text("Estimated from Claude Code’s logs on this Mac. Use on claude.ai or other machines isn’t included, and Anthropic doesn’t publish the exact allowance.")
+            Text("Estimated from this Mac’s Claude Code logs.")
                 .font(.dante(size: 10.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)

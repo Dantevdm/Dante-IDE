@@ -108,10 +108,6 @@ private struct PhaseList: View {
                 PhaseRow(index: index, phase: phase, status: status(index, phase), isSelected: phase == selected) { select(phase) }
             }
             Spacer()
-            Text("Phases organise work, docs and Claude’s context. They never lock you out: work on anything, any time.")
-                .font(.dante(size: 11))
-                .foregroundStyle(theme.text3.color)
-                .padding(10)
         }
         .padding(.vertical, 20)
         .padding(.horizontal, 10)
@@ -202,9 +198,6 @@ private struct NoSpecBanner: View {
             Image(systemName: "sparkles").foregroundStyle(theme.accent.color)
             VStack(alignment: .leading, spacing: 3) {
                 Text("This project has no .dante spec yet").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text("Dante can work out the stack, lifecycle and phase, and Claude can fill in the summary, checklists and tasks for you to review.")
-                    .font(.dante(size: 12))
-                    .foregroundStyle(theme.text2.color)
             }
             Spacer()
             Button("Set up…") { session.offerSetup(force: true) }
@@ -228,7 +221,7 @@ private struct Checklists: View {
         if let doc = workspace.phaseDocs[phase.lowercased()] {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Checklists · guidance, never gates").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                    Text("Checklists").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                     Spacer()
                     Button(".dante/phases/\(phase.lowercased()).md") { session.open(file: workspace.phaseDocURL(phase)) }
                         .buttonStyle(.plain)
@@ -243,7 +236,7 @@ private struct Checklists: View {
         } else {
             HStack(spacing: 12) {
                 Image(systemName: "checklist").foregroundStyle(theme.text3.color)
-                Text("No checklist for \(phase) yet. A phase doc says what “ready” and “done” mean here, as plain markdown in .dante/phases/.")
+                Text("No checklist for \(phase) yet")
                     .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text2.color)
                 Spacer()
@@ -358,7 +351,7 @@ private struct ClaudeRulesCard: View {
                     .disabled(!workspace.lifecycle.hasSpec)
             }
             if rules.isEmpty {
-                Text("No rules yet. Add a `claude:` block to project.yaml with `propose`, `flag` and `never` lists of folders and globs. Claude is still asked before every change.")
+                Text("No rules yet")
                     .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
             } else {
@@ -367,9 +360,6 @@ private struct ClaudeRulesCard: View {
                     column("Flag first", rules.flag, color: theme.amber.color)
                     column("Never", rules.never, color: theme.red.color)
                 }
-                Text("You apply every change. Flagged paths are called out in the diff; never-paths are refused before you see them, reads included.")
-                    .font(.dante(size: 11.5))
-                    .foregroundStyle(theme.text3.color)
             }
         }
         .padding(14)

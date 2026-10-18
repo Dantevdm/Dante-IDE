@@ -323,10 +323,6 @@ private struct EmptyConversation: View {
                 Image(systemName: "exclamationmark.triangle").font(.dante(size: 20)).foregroundStyle(theme.amber.color)
                 Text(reason).font(.dante(size: 12)).foregroundStyle(theme.text2.color).multilineTextAlignment(.center)
             } else {
-                Text("Ask about the code, or hand Claude a task. You review every change before it lands.")
-                    .font(.dante(size: 12))
-                    .foregroundStyle(theme.text3.color)
-                    .multilineTextAlignment(.center)
                 VStack(spacing: 6) {
                     ForEach(suggestions, id: \.self) { suggestion in
                         Button(suggestion) { session.askClaude(suggestion) }

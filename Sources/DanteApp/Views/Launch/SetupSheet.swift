@@ -36,9 +36,6 @@ struct SetupSheet: View {
                 Image(systemName: "sparkles").font(.dante(size: 18)).foregroundStyle(theme.accent.color)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Set up \(workspace.name) for Dante").font(.dante(size: 17, weight: .semibold)).foregroundStyle(theme.text.color)
-                    Text("This project has no .dante folder yet. Here’s what Dante found; Claude can fill in the rest.")
-                        .font(.dante(size: 12.5))
-                        .foregroundStyle(theme.text2.color)
                 }
             }
 

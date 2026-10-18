@@ -36,7 +36,7 @@ struct ClaudeAreaView: View {
         AreaPage(
             eyebrow: "Claude · \(workspace.info.name ?? workspace.name)",
             title: "Claude",
-            subtitle: "What Claude can use on this project, what it reads with every message, and how much of your plan it’s using."
+            subtitle: nil
         ) {
             Button {
                 session.showsClaude = true
@@ -130,10 +130,8 @@ struct ClaudeAreaView: View {
                 .help("Claude looks at how the project works now and suggests skills to add, update or drop.")
             }
         } content: {
-            Text("Skills are instructions Claude loads when a task matches them: how this project adds an endpoint, writes a test, cuts a release. They keep answers in the house style without repeating it in every message.")
-                .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             if skills.isEmpty {
-                Text("No skills yet, in this project or in ~/.claude/skills.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
+                Text("No skills yet").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
             }
             RowList(data: skills, padding: 9) { skill in
                 HStack(spacing: 10) {
@@ -180,8 +178,6 @@ struct ClaudeAreaView: View {
         Card("Memory") {
             EmptyView()
         } content: {
-            Text("Claude reads these files at the start of every conversation and carries them in every message, so short is cheaper.")
-                .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             RowList(data: memory, padding: 9) { file in
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -217,8 +213,6 @@ struct ClaudeAreaView: View {
                 LinkButton("settings.json") { session.open(file: workspace.url.appending(path: ".claude/settings.json")) }
             }
         } content: {
-            Text("Dante asks before every edit and command. These rules decide what Claude may do without asking, and what it may never touch.")
-                .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             let never = workspace.claudeRules.never
             if !never.isEmpty {
                 ruleList("Never (from .dante/project.yaml)", never, color: theme.red.color, symbol: "lock.fill")
@@ -227,7 +221,7 @@ struct ClaudeAreaView: View {
             if !permissions.ask.isEmpty { ruleList("Always ask", permissions.ask, color: theme.amber.color, symbol: "hand.raised") }
             if !permissions.allow.isEmpty { ruleList("Allowed without asking", permissions.allow, color: theme.green.color, symbol: "checkmark") }
             if never.isEmpty, permissions.isEmpty {
-                Text("No rules yet. Claude asks for everything, which is the safe default.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                Text("No rules yet").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
             }
         }
     }
@@ -260,11 +254,9 @@ struct ClaudeAreaView: View {
             .buttonStyle(DanteButtonStyle())
             .disabled(checkingServers || session.claude?.executable == nil)
         } content: {
-            Text("MCP servers give Claude tools beyond the project: GitHub, a browser, your docs. Checking starts each one briefly to see that it answers.")
-                .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             if let servers {
                 if servers.isEmpty {
-                    Text("None set up. Add one with claude mcp add in the terminal.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                    Text("None set up").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
                 RowList(data: servers, padding: 8) { server in
                     HStack(spacing: 8) {
@@ -299,8 +291,6 @@ struct ClaudeAreaView: View {
             .buttonStyle(DanteButtonStyle())
             .disabled(browsing || session.claude?.executable == nil)
         } content: {
-            Text("Plugins bundle skills, commands, agents and hooks from a marketplace. Dante types the command into the terminal for you to run.")
-                .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             if let plugins {
                 if plugins.isEmpty {
                     Text("None installed.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
@@ -323,7 +313,7 @@ struct ClaudeAreaView: View {
                 let fresh = available.filter { candidate in !(plugins ?? []).contains { $0.id == candidate.id } }
                 Eyebrow("Available")
                 if fresh.isEmpty {
-                    Text("Nothing more in your marketplaces. Add one with claude plugin marketplace add.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                    Text("Nothing more in your marketplaces").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
                 RowList(data: Array(fresh.prefix(12)), padding: 8) { plugin in
                     HStack(spacing: 8) {

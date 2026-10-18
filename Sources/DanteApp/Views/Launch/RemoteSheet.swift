@@ -18,10 +18,6 @@ struct RemoteSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Open a remote project")
                     .font(.dante(size: 17, weight: .semibold))
-                Text("Dante keeps a copy on this Mac in step with the host. Git, tests, Claude Code and the terminal run on the host.")
-                    .font(.dante(size: 12))
-                    .foregroundStyle(theme.text2.color)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -88,7 +84,7 @@ struct RemoteSheet: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             case .idle:
-                Text("Dante connects with your ssh keys or agent and never asks for a password. The host needs rsync.")
+                Text("Uses your ssh keys or agent; the host needs rsync.")
                     .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)

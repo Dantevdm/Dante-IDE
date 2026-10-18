@@ -44,7 +44,7 @@ struct LinkedPanel: View {
                 }
                 Eyebrow("Linked to this doc")
                 if tasks.isEmpty, files.isEmpty {
-                    Text("No tasks use this doc as their spec, and it doesn’t mention any project files.")
+                    Text("Nothing linked")
                         .font(.dante(size: 12))
                         .foregroundStyle(theme.text3.color)
                         .fixedSize(horizontal: false, vertical: true)

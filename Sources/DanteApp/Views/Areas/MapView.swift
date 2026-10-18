@@ -41,9 +41,7 @@ struct MapView: View {
             AreaPage(
                 eyebrow: "Map · \(workspace.info.name ?? workspace.name)",
                 title: showsSystem || (source == .system && !loaded) ? "System" : graph?.title ?? "Architecture",
-                subtitle: showsSystem || (source == .system && !loaded) ? "From the clients people use, through the API and backend, to the data and outside services. Read from routes, fetch calls, imports and the compose file."
-                    : graph.map { "Generated from \($0.source). Arrows point from each part to what it uses." }
-                    ?? "Dante draws the architecture from what the repo declares: Package.swift targets, docker-compose.yml services, or source folders."
+                subtitle: nil
             ) {
                 if sources.count > 1 {
                     Picker("Source", selection: $source) {
@@ -79,8 +77,7 @@ struct MapView: View {
                 } else if loaded {
                     EmptyState(
                         symbol: "point.3.connected.trianglepath.dotted",
-                        title: "Nothing to map yet",
-                        message: "Dante reads Package.swift, docker-compose.yml and folders under src/ or Sources/. Claude can describe the architecture in .dante/architecture.md instead."
+                        title: "Nothing to map yet"
                     ) {
                         Button("Ask Claude to describe it") {
                             session.askClaude("Read the code and write .dante/architecture.md: the main parts of this system, what each owns, and how they talk to each other. Keep it to one page.")
@@ -461,7 +458,7 @@ private struct DriftCard: View {
         } else {
             Card("Architecture notes") {
                 HStack(spacing: 12) {
-                    Text("Add .dante/architecture.md to describe what each part owns. Dante then flags parts of the code the notes don’t mention.")
+                    Text("No architecture notes yet")
                         .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text2.color)
                         .fixedSize(horizontal: false, vertical: true)

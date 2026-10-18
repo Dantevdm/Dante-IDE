@@ -23,7 +23,7 @@ struct ProjectTimelineView: View {
         AreaPage(
             eyebrow: "History",
             title: "Timeline",
-            subtitle: "What happened to the project, newest first: commits and tags, Claude Code sessions, test runs and CI."
+            subtitle: nil
         ) {
             IconButton(symbol: "arrow.clockwise", label: "Reload") { Task { await load() } }
         } content: {
@@ -50,8 +50,7 @@ struct ProjectTimelineView: View {
                     Text("Reading the history…").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
                 }
             } else if shown.isEmpty {
-                EmptyState(symbol: "clock.arrow.circlepath", title: "Nothing here yet",
-                           message: "Commits, Claude Code sessions in this folder, test runs from Tests and CI runs from GitHub show up here.") {}
+                EmptyState(symbol: "clock.arrow.circlepath", title: "Nothing here yet") {}
             } else {
                 let visible = Array(shown.prefix(limit))
                 ForEach(days(visible), id: \.day) { group in

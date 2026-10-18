@@ -156,7 +156,7 @@ struct EmptyState<Actions: View>: View {
     @Environment(\.theme) private var theme
     let symbol: String
     let title: String
-    let message: String
+    var message: String? = nil
     @ViewBuilder let actions: Actions
 
     var body: some View {
@@ -165,12 +165,14 @@ struct EmptyState<Actions: View>: View {
                 .font(.dante(size: 26, weight: .light))
                 .foregroundStyle(theme.text3.color)
             Text(title).font(.dante(size: 15, weight: .semibold)).foregroundStyle(theme.text.color)
-            Text(message)
-                .font(.dante(size: 12.5))
-                .foregroundStyle(theme.text2.color)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 440)
-                .fixedSize(horizontal: false, vertical: true)
+            if let message {
+                Text(message)
+                    .font(.dante(size: 12.5))
+                    .foregroundStyle(theme.text2.color)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 440)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 8) { actions }.padding(.top, 4)
         }
         .padding(.vertical, 36)

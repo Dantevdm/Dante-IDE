@@ -445,3 +445,13 @@ tasks:
   phase: build
   state: ready
   spec: docs/plans/walk-and-work.md
+- id: DI-109
+  title: "Local models: Claude delegates drafts, summaries and triage to Ollama models through Dante's tools, and checks what comes back"
+  phase: build
+  state: ready
+  spec: docs/plans/walk-and-work.md
+- id: DI-110
+  title: "Agent stats: jobs, tokens, time and pass rate per agent and model, what Claude delegated, and plan usage saved"
+  phase: build
+  state: ready
+  spec: docs/plans/walk-and-work.md

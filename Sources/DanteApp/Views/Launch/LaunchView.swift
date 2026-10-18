@@ -182,10 +182,7 @@ private struct StartAction: View {
                     .frame(width: 34, height: 34)
                     .background(RoundedRectangle(cornerRadius: 8).fill(theme.raised.color))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line2.color))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
-                    Text(subtitle).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                }
+                Text(title).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
                 Spacer()
                 Text(shortcut).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
             }
@@ -196,6 +193,7 @@ private struct StartAction: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(subtitle)
         .onHover { hovering = $0 }
     }
 }

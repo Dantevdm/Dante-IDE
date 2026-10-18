@@ -147,7 +147,7 @@ struct SearchPanel: View {
             } else if search.isInvalid {
                 Text("That regular expression doesn’t compile.").foregroundStyle(theme.red.color)
             } else if search.query.text.isEmpty {
-                Text("Searches every file in the project except ignored ones.")
+                EmptyView()
             } else if search.isSearching {
                 Text("Searching…")
             } else if result.matchCount == 0 {

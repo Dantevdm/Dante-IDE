@@ -18,7 +18,7 @@ struct HomeView: View {
         AreaPage(
             eyebrow: "Project",
             title: workspace.info.name ?? workspace.name,
-            subtitle: workspace.info.summary ?? (lifecycle.hasSpec ? nil : "No .dante/project.yaml yet. Plan can draft one, or Claude can write it from the README and code.")
+            subtitle: workspace.info.summary
         ) {
             Button {
                 session.palette = .all
@@ -410,7 +410,7 @@ private struct EnvironmentCard: View {
                     }
                 }
             } else {
-                Text("No docker-compose.yml. Env can run this project’s services once it has one, and Claude can write it.")
+                Text("No docker-compose.yml")
                     .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)
@@ -459,10 +459,6 @@ private struct ClaudeKnowsCard: View {
         Card("What Claude knows") {
             LinkButton("Manage") { session.area = .claude }
         } content: {
-            Text("Every conversation starts from the project spec, so nothing has to be re-explained.")
-                .font(.dante(size: 12.5))
-                .foregroundStyle(theme.text2.color)
-                .fixedSize(horizontal: false, vertical: true)
             RowList(data: facts, padding: 7) { fact in
                 HStack {
                     Text(fact.label).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)

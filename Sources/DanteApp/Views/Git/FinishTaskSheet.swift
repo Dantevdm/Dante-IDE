@@ -143,8 +143,6 @@ struct FinishTaskSheet: View {
                 }
             } else {
                 HStack {
-                    Text("Have Claude read the branch’s changes for bugs, security slips and missing tests first.")
-                        .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Button { Task { await model.reviewBranch() } } label: { Label("Review", systemImage: "sparkle") }
                         .buttonStyle(DanteButtonStyle())

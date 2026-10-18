@@ -195,7 +195,6 @@ struct QueryView: View {
             VStack(spacing: 8) {
                 Image(systemName: "text.cursor").font(.dante(size: 22)).foregroundStyle(theme.text3.color)
                 Text("Write SQL above and press ⌘↩").font(.dante(size: 13)).foregroundStyle(theme.text2.color)
-                Text("Several statements run in one session, so BEGIN … COMMIT works.").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(theme.ground.color)

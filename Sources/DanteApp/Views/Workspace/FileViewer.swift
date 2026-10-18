@@ -72,8 +72,7 @@ struct FileViewer: View {
         case .quickLook:
             QuickLookPreview(url: document.url)
         case .binary, .text:
-            EmptyState(symbol: "doc.zipper", title: "\(document.name) isn’t text",
-                       message: "Dante shows text, PDFs, images, documents and media. Open this one in another app, or attach it for Claude.") {
+            EmptyState(symbol: "doc.zipper", title: "\(document.name) isn’t text") {
                 EmptyView()
             }
             .padding(28)

@@ -289,9 +289,7 @@ struct DataEmptyState: View {
         AreaPage(
             eyebrow: "Data",
             title: profile.headline ?? "No database yet",
-            subtitle: profile.isEmpty
-                ? "Create a local database in Docker or as a SQLite file, or connect to one you already have. Dante browses tables, runs queries and draws the schema, and Claude can design it with you."
-                : "Dante didn’t find a database it can connect to, but the code expects one. Create it locally in a minute, or connect to the one you use."
+            subtitle: profile.isEmpty ? nil : "The code expects a database Dante can’t reach yet."
         ) {
             EmptyView()
         } content: {

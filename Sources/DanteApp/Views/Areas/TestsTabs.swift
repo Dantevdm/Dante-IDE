@@ -79,8 +79,7 @@ struct WrittenTestsView: View {
             if inventory.tests.isEmpty {
                 EmptyState(
                     symbol: "testtube.2",
-                    title: "No tests written yet",
-                    message: "Dante found no test files. The Untested tab lists the code most worth covering first."
+                    title: "No tests written yet"
                 ) {
                     HStack(spacing: 8) {
                         Button("See what’s untested", action: showUntested).buttonStyle(DanteButtonStyle())
@@ -146,7 +145,7 @@ struct WrittenTestsView: View {
         return HStack(spacing: 10) {
             Image(systemName: "checklist").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
             if chosen.isEmpty {
-                Text("Tick tests to run just those, or run what’s shown.")
+                Text("No tests ticked")
                     .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
             } else {
                 Text("\(chosen.count) test\(chosen.count == 1 ? "" : "s") ticked")
@@ -292,8 +291,7 @@ struct TestHistoryView: View {
 
     var body: some View {
         if records.isEmpty {
-            EmptyState(symbol: "clock.arrow.circlepath", title: "No runs yet",
-                       message: "Each run from here is kept on this Mac: how many passed and failed, how long it took, and which tests broke.") { EmptyView() }
+            EmptyState(symbol: "clock.arrow.circlepath", title: "No runs yet") { EmptyView() }
         } else {
             summary
             if records.contains(where: { $0.total > 0 || $0.brokeOutsideTests }) { chart }
@@ -449,8 +447,7 @@ struct UntestedView: View {
             let interface = gaps.files.filter { $0.isInterface && !$0.untested.isEmpty }
             header(gaps)
             if logic.isEmpty && interface.isEmpty {
-                EmptyState(symbol: "checkmark.seal", title: "Every function is named in a test",
-                           message: "That’s not the same as full coverage, but nothing obvious is left out.") { EmptyView() }
+                EmptyState(symbol: "checkmark.seal", title: "Every function is named in a test") { EmptyView() }
             } else {
                 Card("Logic") {
                     Text("\(logic.count) file\(logic.count == 1 ? "" : "s"), most untested first").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
@@ -464,8 +461,6 @@ struct UntestedView: View {
                         if showsInterface {
                             rows(interface)
                         } else {
-                            Text("Interface code is usually covered by UI or end-to-end tests rather than unit tests.")
-                                .font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
                         }
                     }
                 }
@@ -482,8 +477,6 @@ struct UntestedView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("\(gaps.untestedCount) of \(gaps.declarations) functions and types aren’t named in any test")
                     .font(.dante(size: 15, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text("Across \(gaps.sourceFiles) source files. A name in a test isn’t full coverage, but a name in none usually means nothing tests it directly.")
-                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
                 ProgressView(value: fraction).tint(theme.green.color).frame(maxWidth: 360)
             }
             Spacer()

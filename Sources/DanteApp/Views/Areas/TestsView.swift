@@ -20,7 +20,7 @@ struct TestsView: View {
         AreaPage(
             eyebrow: "Quality",
             title: "Tests",
-            subtitle: "Run the suite and every failure links to its line. See every test written, by category, how runs have gone over time, and the code no test reaches yet."
+            subtitle: nil
         ) {
             if let command {
                 Chip(text: command.label, symbol: "terminal", mono: true)
@@ -98,8 +98,7 @@ struct TestsView: View {
             if command == nil {
                 EmptyState(
                     symbol: "testtube.2",
-                    title: "No test runner found",
-                    message: "Dante looks for Package.swift, Cargo.toml, go.mod, a package.json test script or pytest. Set test.command in .dante/project.yaml to use something else."
+                    title: "No test runner found"
                 ) {
                     Button("Ask Claude to set up tests") {
                         session.askClaude("This project has no test setup Dante can find. Suggest a test runner that fits the stack, add it with one example test, and set test.command in .dante/project.yaml.")
@@ -127,8 +126,7 @@ struct TestsView: View {
             } else {
                 EmptyState(
                     symbol: "play.circle",
-                    title: "Run \(command?.label ?? "the tests")",
-                    message: "Results stream in as each test finishes, grouped by suite, with failures first."
+                    title: "Run \(command?.label ?? "the tests")"
                 ) {
                     VStack(spacing: 12) {
                         HStack(spacing: 8) {
@@ -549,11 +547,12 @@ private struct DraftTestsCard: View {
 
     var body: some View {
         Card("Tests Claude can draft") {
-            Text(gaps.map { "\($0.untestedCount) of \($0.declarations) functions and types aren’t named in any test. Claude can pick the ones that matter and propose tests one file at a time." }
-                 ?? "Claude looks for code that no test covers, then proposes tests one file at a time.")
-                .font(.dante(size: 12))
-                .foregroundStyle(theme.text2.color)
-                .fixedSize(horizontal: false, vertical: true)
+            if let gaps {
+                Text("\(gaps.untestedCount) of \(gaps.declarations) functions and types aren’t named in any test")
+                    .font(.dante(size: 12))
+                    .foregroundStyle(theme.text2.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 8) {
                 Button("Find untested code") {
                     showUntested()

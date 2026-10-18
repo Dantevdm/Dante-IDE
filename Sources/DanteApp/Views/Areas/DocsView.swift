@@ -84,8 +84,7 @@ struct DocsView: View {
             } else {
                 EmptyState(
                     symbol: "doc.text",
-                    title: "No docs yet",
-                    message: "Markdown files in the repo show up here: the README, .dante specs and decisions, and anything under docs/. Drop PDFs, images or Word files here to add them to docs/."
+                    title: "No docs yet"
                 ) {
                     Button("Add files…", action: pickFiles).buttonStyle(DanteButtonStyle())
                     Button("Ask Claude to draft a README") {

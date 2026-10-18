@@ -216,7 +216,7 @@ struct DebugPanel: View {
         let entries = Self.entries(session.breakpoints)
         return VStack(alignment: .leading, spacing: 0) {
             if entries.isEmpty {
-                Text("Click a line number in the editor to add one.")
+                Text("No breakpoints")
                     .font(.dante(size: 11.5))
                     .foregroundStyle(theme.text3.color)
                     .padding(.horizontal, 12)

@@ -89,10 +89,6 @@ struct SystemDiagram: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
         .overlay(alignment: .bottomLeading) {
-            Text("Arrows follow calls and imports; thicker means more of them. Select a box to trace it.")
-                .font(.dante(size: 11))
-                .foregroundStyle(theme.text3.color)
-                .padding(12)
         }
     }
 

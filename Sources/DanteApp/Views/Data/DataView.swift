@@ -491,7 +491,7 @@ private struct DataMain: View {
                 TableView(session: session, connection: connection, table: table)
                     .id(name)
             } else {
-                EmptyState(symbol: "tablecells", title: "\(name) is gone", message: "The table isn’t in the schema any more.") { EmptyView() }
+                EmptyState(symbol: "tablecells", title: "\(name) is gone") { EmptyView() }
             }
         }
     }

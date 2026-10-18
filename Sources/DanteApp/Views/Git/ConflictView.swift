@@ -47,9 +47,6 @@ struct ConflictView: View {
                     Text("No conflict markers left in this file.")
                         .font(.dante(size: 13))
                         .foregroundStyle(theme.text2.color)
-                    Text("If you resolved it in the editor, mark it resolved to stage it.")
-                        .font(.dante(size: 12))
-                        .foregroundStyle(theme.text3.color)
                     Button("Mark Resolved") { Task { await markResolvedAsIs() } }
                         .buttonStyle(DanteButtonStyle(primary: true))
                 }

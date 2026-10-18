@@ -48,8 +48,7 @@ struct EnvironmentView: View {
         AreaPage(
             eyebrow: "Environments",
             title: session.remoteSync.map { "On \($0.project.host)" } ?? "Local",
-            subtitle: compose.map { "Runs \($0.url.lastPathComponent) with Docker. Start, stop and rebuild services, read their logs, or let Claude write the Docker files the project is missing." }
-                ?? "Run the project’s services in Docker: databases, queues and the app itself, the same way every time."
+            subtitle: nil
         ) {
             if compose != nil {
                 IconButton(symbol: "arrow.clockwise", label: "Refresh") { Task { await refresh() } }
@@ -107,9 +106,7 @@ struct EnvironmentView: View {
                 EmptyState(
                     symbol: "shippingbox",
                     title: "No docker-compose.yml",
-                    message: dockerfiles.isEmpty
-                        ? "A compose file lists the services this project needs to run locally: the app, its database, cache and queues. Claude can write one from the code."
-                        : "Found \(dockerfiles.count == 1 ? "a Dockerfile" : "\(dockerfiles.count) Dockerfiles") but no compose file to run them together. Claude can write one."
+                    message: dockerfiles.isEmpty ? nil : "\(dockerfiles.count == 1 ? "1 Dockerfile" : "\(dockerfiles.count) Dockerfiles"), no compose file"
                 ) {
                     Button("Ask Claude to write it") {
                         session.askClaude("Write a docker-compose.yml for running this project locally: the app and every service the code connects to (databases, caches, queues), with ports, health checks and volumes. Add Dockerfiles where a service builds from this repo. Explain each service briefly.")
@@ -441,10 +438,6 @@ private struct DiagnoseCard: View {
             if let note {
                 Text(note).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             }
-            Text("Claude can read its logs, the compose file and the code it runs, then propose a fix as a diff.")
-                .font(.dante(size: 12.5))
-                .foregroundStyle(theme.text2.color)
-                .fixedSize(horizontal: false, vertical: true)
             Button("Find the cause") {
                 session.askClaude("The \(service) service is \(problem).\(note.map { " \($0)" } ?? "") Read its logs with `docker compose logs --tail 100 \(service)`, check docker-compose.yml and the code it runs, and tell me why. Propose a fix as a diff.")
             }

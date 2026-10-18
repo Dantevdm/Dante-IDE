@@ -37,7 +37,7 @@ struct SpecView: View {
                 AreaPage(
                     eyebrow: "Project spec",
                     title: "The .dante folder",
-                    subtitle: "Plain text in the repo, reviewed like code. It defines the lifecycle, what “done” means in each phase and what Claude may propose. Claude reads it at the start of every conversation."
+                    subtitle: nil
                 ) {
                     Button {
                         session.askClaude("Check the .dante folder against the code and git history: is project.yaml accurate, are phase definitions missing, are tasks stale? Propose fixes as diffs.")
@@ -69,8 +69,7 @@ struct SpecView: View {
                 AreaPage(eyebrow: "Project spec", title: "No .dante folder yet", subtitle: nil) {
                     EmptyState(
                         symbol: "book.closed",
-                        title: "Give the project a spec",
-                        message: "A .dante/project.yaml names the project, sets its lifecycle phase and says what Claude may change. Plan can create a starter, or Claude can draft one from the README, code and history."
+                        title: "Give the project a spec"
                     ) {
                         Button("Draft with Claude") {
                             session.askClaude("Set this project up for Dante: draft .dante/project.yaml (name, summary, lifecycle.current, and claude: propose/flag/never rules) from the README, docs, code and git history. Keep it short.")
@@ -219,7 +218,7 @@ private struct ValidationCard: View {
             }
         } content: {
             if issues.isEmpty {
-                Text("project.yaml parses, the current phase is in the lifecycle, and every task points at a real phase and spec.")
+                Text("All checks pass")
                     .font(.dante(size: 12))
                     .foregroundStyle(theme.text2.color)
                     .fixedSize(horizontal: false, vertical: true)
@@ -262,10 +261,6 @@ private struct ClaudeGetsCard: View {
         Card("What Claude gets") {
             Text("≈ \(total) tokens").font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
         } content: {
-            Text("Dante puts this in front of every conversation, then adds the open file and cursor line with each message.")
-                .font(.dante(size: 12))
-                .foregroundStyle(theme.text2.color)
-                .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 0) {
                 ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                     VStack(alignment: .leading, spacing: 6) {
