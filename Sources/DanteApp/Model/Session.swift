@@ -532,6 +532,7 @@ enum Sessions {
     static func register(_ session: Session) {
         entries.removeAll { $0.session == nil }
         entries.append(Weak(session))
+        PresenceController.shared.sessionsChanged()
     }
 
     static var all: [Session] { entries.compactMap(\.session) }

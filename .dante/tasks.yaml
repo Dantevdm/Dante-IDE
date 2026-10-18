@@ -414,3 +414,34 @@ tasks:
   phase: build
   state: ready
   spec: docs/plans/walk-and-work.md
+- id: DI-102
+  title: "Presence: an animated orb in the menu bar that shows what Claude is doing, with a panel"
+  phase: build
+  state: in_progress
+- id: DI-103
+  title: "Settings as a native macOS Settings window (Dante › Settings…, ⌘,), not an area in the window"
+  phase: build
+  state: ready
+- id: DI-104
+  title: "Remove the explanatory text under titles, in empty states and in footers across the app"
+  phase: build
+  state: ready
+- id: DI-105
+  title: "Docs: group documents (project, phases, plans, folders, images) instead of one long list"
+  phase: build
+  state: ready
+- id: DI-106
+  title: "Stage: a full-screen Jarvis-style view for a TV, with the orb and a Dante HUD"
+  phase: build
+  state: ready
+  spec: docs/plans/walk-and-work.md
+- id: DI-107
+  title: "Hands: let Claude open apps, find folders and control the Mac, with a visible kill switch"
+  phase: build
+  state: ready
+  spec: docs/plans/walk-and-work.md
+- id: DI-108
+  title: "Constellation: one orb per agent; orbs split off for sub-agents and jobs, beam to each other while they work together, and merge back when done"
+  phase: build
+  state: ready
+  spec: docs/plans/walk-and-work.md

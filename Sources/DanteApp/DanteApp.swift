@@ -38,7 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let folder = ProcessInfo.processInfo.environment["DANTE_ORB_SNAPSHOTS"] {
+            OrbView.writeSnapshots(to: URL(filePath: folder))
+            exit(0)
+        }
         MenuShortcuts.install()
+        PresenceController.shared.install()
         // Needed when running the bare executable (`swift run`) rather than the .app bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
@@ -90,9 +95,13 @@ struct RootView: View {
         .tint(theme.accent.color)
         .focusedSceneValue(\.session, session)
         .navigationTitle(session.workspace?.name ?? "Dante")
-        .onDisappear { session.shutdown() }
+        .onDisappear {
+            session.shutdown()
+            PresenceController.shared.sessionsChanged()
+        }
         .background(WindowReader { session.window = $0 })
         .onAppear {
+            PresenceController.shared.themeStore = themeStore
             let paths = AppDelegate.launchPaths
             AppDelegate.launchPaths = []
             if let folder = paths.first {

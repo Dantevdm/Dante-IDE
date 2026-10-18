@@ -55,6 +55,8 @@ public final class Preferences {
     public var notifiesOnAlarms: Bool { didSet { defaults.set(notifiesOnAlarms, forKey: Keys.notifiesOnAlarms) } }
     /// A notification when Claude finishes or waits for approval while Dante isn't in front.
     public var notifiesOnClaude: Bool { didSet { defaults.set(notifiesOnClaude, forKey: Keys.notifiesOnClaude) } }
+    /// The orb in the menu bar that shows what Claude is doing.
+    public var showsPresence: Bool { didSet { defaults.set(showsPresence, forKey: Keys.showsPresence) } }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -71,6 +73,7 @@ public final class Preferences {
         usesGeist = bool(Keys.usesGeist, true)
         notifiesOnAlarms = bool(Keys.notifiesOnAlarms, false)
         notifiesOnClaude = bool(Keys.notifiesOnClaude, false)
+        showsPresence = bool(Keys.showsPresence, true)
     }
 
     /// The indent width for a file: the chosen one, or the language's usual one.
@@ -104,6 +107,7 @@ public final class Preferences {
         static let usesGeist = "usesGeist"
         static let notifiesOnAlarms = "notifiesOnAlarms"
         static let notifiesOnClaude = "notifiesOnClaude"
+        static let showsPresence = "showsPresence"
     }
 }
 
