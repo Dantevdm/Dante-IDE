@@ -33,10 +33,11 @@ struct ClaudePanel: View {
                 Text(subtitle).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
             }
             Spacer()
+            ApprovalMenu(session: session)
             Button {
                 Preferences.shared.claudeAsksFirst.toggle()
             } label: {
-                Label("Ask first", systemImage: Preferences.shared.claudeAsksFirst ? "questionmark.bubble.fill" : "questionmark.bubble")
+                Label("Questions", systemImage: Preferences.shared.claudeAsksFirst ? "questionmark.bubble.fill" : "questionmark.bubble")
                     .font(.dante(size: 11, weight: .medium))
                     .foregroundStyle(Preferences.shared.claudeAsksFirst ? theme.accent.color : theme.text3.color)
                     .padding(.horizontal, 7)
@@ -46,8 +47,8 @@ struct ClaudePanel: View {
             }
             .buttonStyle(.plain)
             .help(Preferences.shared.claudeAsksFirst
-                  ? "On: Claude asks clarifying questions before starting anything ambiguous. Click to let it go straight ahead."
-                  : "Off: Claude goes straight ahead. Click to have it ask clarifying questions first.")
+                  ? "On: Claude asks clarifying questions before starting anything ambiguous. Click to let it go straight ahead. (Approvals are the menu beside this.)"
+                  : "Off: Claude goes straight ahead without clarifying questions. (Approvals are the menu beside this.)")
             IconButton(symbol: "clock.arrow.circlepath", label: "Earlier conversations") { session.claudeShowsHistory.toggle() }
                 .popover(isPresented: Bindable(session).claudeShowsHistory, arrowEdge: .bottom) {
                     ConversationHistory(session: session) { session.claudeShowsHistory = false }
@@ -437,6 +438,37 @@ private struct TranscriptRow: View {
                 .foregroundStyle(isError ? theme.red.color : theme.text3.color)
                 .textSelection(.enabled)
         }
+    }
+}
+
+/// How much Claude may do without asking: ask, apply edits, or don't ask.
+private struct ApprovalMenu: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+
+    var body: some View {
+        let level = Preferences.shared.approvalLevel
+        Menu {
+            Picker("Approvals", selection: Binding(get: { Preferences.shared.approvalLevel }, set: { level in
+                Preferences.shared.approvalLevel = level
+                Sessions.all.forEach { $0.applyClaudePreferences() }
+            })) {
+                ForEach(ApprovalLevel.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label(level.short, systemImage: level.symbol)
+                .font(.dante(size: 11, weight: .medium))
+                .foregroundStyle(level == .everything ? theme.amber.color : level == .edits ? theme.accent.color : theme.text3.color)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .overlay(Capsule().strokeBorder(level == .everything ? theme.amber.color.opacity(0.6) : theme.line2.color))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Approvals: \(level.title). Never-paths are always refused, flagged edits always ask, and each turn can be undone.")
     }
 }
 

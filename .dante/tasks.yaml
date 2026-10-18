@@ -458,7 +458,7 @@ tasks:
 - id: DI-111
   title: "Approvals: an approval level beside Ask first (reads only, edits, edits and commands; never paths still refused), Always allow on a command, and Ask first renamed so it doesn't read as approvals"
   phase: build
-  state: ready
+  state: review
 - id: DI-112
   title: "Orb energy follows the work: intensity from tool rate, parallel sessions and sub-agents; tired (dimmer, slower, heavy-lidded) as the five-hour or weekly usage runs low; asleep when the limit is hit, waking as it resets"
   phase: build

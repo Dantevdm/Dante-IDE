@@ -123,6 +123,12 @@ private struct ApprovalBar: View {
                 .disabled(tool.change?.applies == false)
             Button(declineTitle) { claude.decline(tool.id) }
                 .buttonStyle(DanteButtonStyle())
+            let rules = claude.alwaysAllowRules(tool.id)
+            if !rules.isEmpty, tool.ruleNote == nil {
+                Button("Always allow") { claude.alwaysAllow(tool.id) }
+                    .buttonStyle(DanteButtonStyle())
+                    .help("Run it, and don’t ask again in this project for:\n" + rules.joined(separator: "\n") + "\n\nSaved in .claude/settings.local.json.")
+            }
             Spacer(minLength: 0)
             if tool.change?.applies == false {
                 Text("No longer matches the file").font(.dante(size: 11)).foregroundStyle(theme.amber.color)

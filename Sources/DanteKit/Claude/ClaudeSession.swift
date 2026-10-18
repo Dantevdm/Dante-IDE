@@ -162,6 +162,11 @@ public final class ClaudeSession {
     /// delegate jobs to local models. Nil turns delegation off. Takes effect on the next message.
     public var delegateCommand: String?
     private var startedDelegate: String?
+    /// How much Claude may do without asking (on top of Claude Code's own read-only rule).
+    public var approvalLevel: ApprovalLevel = .ask
+    /// The project's allow rules (`.claude/settings*.json`), read when Claude starts and
+    /// added to by `alwaysAllow`.
+    public private(set) var allowRules: [String] = []
     /// When Claude Code last said a usage limit was hit; cleared by the next turn that works.
     public private(set) var limitReachedAt: Date?
     /// Where each turn and sub-agent is recorded for the Agents stats; nil records nothing.
@@ -306,6 +311,33 @@ public final class ClaudeSession {
         }
     }
 
+    /// Approves a waiting call and saves rules so calls like it never ask again in this
+    /// project (`.claude/settings.local.json`, which Claude Code reads too). Other waiting
+    /// calls the new rules cover go ahead as well.
+    public func alwaysAllow(_ toolID: String) {
+        guard let tool = activity(toolID) else { return }
+        let rules = ApprovalPolicy.rules(for: tool.name, input: tool.input)
+        guard !rules.isEmpty else { return approve(toolID) }
+        let url = root.appending(path: ".claude/settings.local.json")
+        let updated = ApprovalPolicy.settings(adding: rules, to: try? String(contentsOf: url, encoding: .utf8))
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try updated.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            note("Couldn’t save the rule to .claude/settings.local.json: \(error.localizedDescription)", isError: true)
+        }
+        for rule in rules where !allowRules.contains(rule) { allowRules.append(rule) }
+        approve(toolID)
+        for waiting in pendingApprovals where ApprovalPolicy.allowed(waiting.name, input: waiting.input, by: allowRules) && waiting.ruleNote == nil {
+            approve(waiting.id)
+        }
+    }
+
+    /// The rules `alwaysAllow` would save for a waiting call, to show on its button.
+    public func alwaysAllowRules(_ toolID: String) -> [String] {
+        activity(toolID).map { ApprovalPolicy.rules(for: $0.name, input: $0.input) } ?? []
+    }
+
     public func decline(_ toolID: String, message: String = "The user declined this. Ask what they’d like instead.") {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status else { return }
         write(ClaudeInput.deny(requestID: requestID, message: message))
@@ -407,6 +439,7 @@ public final class ClaudeSession {
         }
         startedRules = rules
         startedAsksFirst = asksFirst
+        allowRules = ClaudePermissions.load(root: root).allow
         startedDelegate = delegateCommand
         startedModel = requestedModel
         process.environment = Self.environment()
@@ -613,10 +646,13 @@ public final class ClaudeSession {
             let id = request.toolUseID ?? "request-\(request.requestID)"
             defer {
                 if case .awaitingApproval = activity(id)?.status {
-                    if appliesRestOfTurn, Self.editTools.contains(request.toolName), activity(id)?.ruleNote == nil {
+                    let hasNote = activity(id)?.ruleNote != nil
+                    if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
                     } else if request.toolName.hasPrefix("mcp__dante__") {
                         // Dante's own local-model tools: nothing to review before they run.
+                        approve(id)
+                    } else if ApprovalPolicy.approves(request.toolName, input: request.input, level: approvalLevel, allow: allowRules, hasRuleNote: hasNote) {
                         approve(id)
                     } else {
                         onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input)))

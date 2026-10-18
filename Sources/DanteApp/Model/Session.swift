@@ -447,6 +447,7 @@ final class Session {
         claude.requestedModel = Preferences.shared.claudeModel.argument
         claude.delegateCommand = Preferences.shared.delegatesToLocalModels ? Self.danteCommand : nil
         claude.ledger = .standard
+        claude.approvalLevel = Preferences.shared.approvalLevel
     }
 
     /// The bundled `dante` command, which also serves local models to Claude Code. Missing

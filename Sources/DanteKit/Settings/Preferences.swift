@@ -51,6 +51,8 @@ public final class Preferences {
     public var claudeModel: ClaudeModel { didSet { defaults.set(claudeModel.rawValue, forKey: Keys.claudeModel) } }
     /// Let Claude hand small jobs to models in Ollama on this Mac (the `delegate` tool).
     public var delegatesToLocalModels: Bool { didSet { defaults.set(delegatesToLocalModels, forKey: Keys.delegatesToLocalModels) } }
+    /// How much Claude may do without asking.
+    public var approvalLevel: ApprovalLevel { didSet { defaults.set(approvalLevel.rawValue, forKey: Keys.approvalLevel) } }
     /// Read Claude's replies out after you speak to it.
     public var speaksReplies: Bool { didSet { defaults.set(speaksReplies, forKey: Keys.speaksReplies) } }
     /// Geist and Geist Mono, as in the design; off uses the system fonts.
@@ -75,6 +77,7 @@ public final class Preferences {
         claudeAsksFirst = bool(Keys.claudeAsksFirst, true)
         delegatesToLocalModels = bool(Keys.delegatesToLocalModels, true)
         speaksReplies = bool(Keys.speaksReplies, true)
+        approvalLevel = defaults.string(forKey: Keys.approvalLevel).flatMap(ApprovalLevel.init(rawValue:)) ?? .ask
         claudeModel = defaults.string(forKey: Keys.claudeModel).flatMap(ClaudeModel.init(rawValue:)) ?? .default
         usesGeist = bool(Keys.usesGeist, true)
         notifiesOnAlarms = bool(Keys.notifiesOnAlarms, false)
@@ -111,6 +114,7 @@ public final class Preferences {
         static let claudeAsksFirst = "claudeAsksFirst"
         static let delegatesToLocalModels = "delegatesToLocalModels"
         static let speaksReplies = "speaksReplies"
+        static let approvalLevel = "approvalLevel"
         static let claudeModel = "claudeModel"
         static let usesGeist = "usesGeist"
         static let notifiesOnAlarms = "notifiesOnAlarms"
