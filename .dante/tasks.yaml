@@ -501,3 +501,8 @@ tasks:
   phase: build
   state: review
   notes: "SemanticIndex cuts files at top-level declarations (Chunker), embeds them with an embedding model in Ollama (qwen3-embedding first), keeps vectors per Mac in Application Support and re-embeds only changed pieces. The first index of Dante's 330 files takes about 3.5 minutes (the model's speed), later updates half a second; it saves progress as it goes, main code first. dante search for the terminal."
+- id: DI-122
+  title: "Looker: a local vision model reads screenshots and images for Claude and Codex (look tool) and from the image viewer"
+  phase: build
+  state: review
+  notes: "Only models that read UI reliably are used (Qwen-VL, Gemma 3, Mistral Small 3, MiniCPM-V) and only if they fit in 60% of memory; llava, granite-vision and llama3.2-vision invent details or no longer load, so they're skipped with a reason. Needs ollama pull qwen3-vl:8b (about 6 GB) on this Mac, which the user hasn't approved yet."

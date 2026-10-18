@@ -71,6 +71,8 @@ public final class Preferences {
     public var checksDependenciesOnline: Bool { didSet { defaults.set(checksDependenciesOnline, forKey: Keys.checksDependenciesOnline) } }
     /// The Grok model `ask_grok` uses; empty picks the best the key has.
     public var grokModel: String { didSet { defaults.set(grokModel, forKey: Keys.grokModel) } }
+    /// Looker's vision model; empty for the best installed.
+    public var lookerModel: String { didSet { defaults.set(lookerModel, forKey: Keys.lookerModel) } }
     /// How much Claude may do without asking.
     public var approvalLevel: ApprovalLevel { didSet { defaults.set(approvalLevel.rawValue, forKey: Keys.approvalLevel) } }
     /// Read Claude's replies out after you speak to it.
@@ -98,6 +100,7 @@ public final class Preferences {
         delegatesToLocalModels = bool(Keys.delegatesToLocalModels, true)
         speaksReplies = bool(Keys.speaksReplies, true)
         grokModel = defaults.string(forKey: Keys.grokModel) ?? ""
+        lookerModel = defaults.string(forKey: Keys.lookerModel) ?? ""
         asksCodex = bool(Keys.asksCodex, true)
         codexModel = defaults.string(forKey: Keys.codexModel) ?? ""
         codexEffort = defaults.string(forKey: Keys.codexEffort) ?? ""
@@ -145,6 +148,7 @@ public final class Preferences {
         static let delegatesToLocalModels = "delegatesToLocalModels"
         static let speaksReplies = "speaksReplies"
         static let grokModel = "grokModel"
+        static let lookerModel = "lookerModel"
         static let asksCodex = "asksCodex"
         static let codexModel = "codexModel"
         static let codexEffort = "codexEffort"

@@ -163,6 +163,7 @@ public struct AgentDigest: Equatable, Sendable {
         case .decided: return "decisions"
         case .helped: return "sub-agent work"
         case .delegated, .dante:
+            if step.job.kind == Looker.kind { return "reading screenshots" }
             return DelegateKind(rawValue: step.job.kind)?.title.lowercased() ?? step.job.kind
         }
     }

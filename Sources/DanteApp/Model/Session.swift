@@ -395,6 +395,7 @@ final class Session {
             environment[DelegateEnvironment.codex] = codex
             if !Preferences.shared.codexModel.isEmpty { environment[DelegateEnvironment.codexModel] = Preferences.shared.codexModel }
         }
+        if !Preferences.shared.lookerModel.isEmpty { environment[DelegateEnvironment.lookerModel] = Preferences.shared.lookerModel }
         if !environment.isEmpty {
             if !local { environment[DelegateEnvironment.local] = "0" }
             if !Preferences.shared.grokModel.isEmpty { environment[DelegateEnvironment.grokModel] = Preferences.shared.grokModel }

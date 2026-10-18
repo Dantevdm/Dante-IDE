@@ -140,6 +140,8 @@ struct AgentsView: View {
             result.append(AgentSummary(name: kind.agent, role: kind.title, model: ModelRouting.model(for: kind, installed: installed) ?? "No model",
                                        jobs: byAgent[kind.agent] ?? [], color: palette[index % palette.count], isClaude: false))
         }
+        result.append(AgentSummary(name: Looker.agent, role: "Reads screenshots and images", model: Looker.model(installed: installed) ?? "No model",
+                                   jobs: byAgent[Looker.agent] ?? [], color: theme.amber.color, isClaude: false))
         for agent in CloudAgent.allCases {
             let jobs = byAgent[agent.title] ?? []
             guard cloud.contains(agent) || !jobs.isEmpty else { continue }
@@ -162,13 +164,15 @@ struct AgentsView: View {
                 }
                 VStack(spacing: 0) {
                     ForEach(usable) { model in
-                        let roles = DelegateKind.allCases.filter { ModelRouting.model(for: $0, installed: models) == model.name }
+                        let roles = DelegateKind.allCases.filter { ModelRouting.model(for: $0, installed: models) == model.name }.map(\.agent)
+                            + (Looker.model(installed: models) == model.name ? [Looker.agent] : [])
+                            + (ModelRouting.embeddingModel(installed: models) == model.name ? ["Search by meaning"] : [])
                         HStack(spacing: 10) {
                             Circle().fill(roles.isEmpty ? theme.track.color : theme.green.color).frame(width: 7, height: 7)
                             Text(model.name).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
                             Text(model.parameterSize).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                             Spacer(minLength: 8)
-                            Text(roles.isEmpty ? (model.isVision ? "images" : model.isEmbedding ? "search" : "spare") : roles.map { $0.agent }.joined(separator: ", "))
+                            Text(roles.isEmpty ? (model.isVision ? "images, not used" : "spare") : roles.joined(separator: ", "))
                                 .font(.dante(size: 11.5))
                                 .foregroundStyle(roles.isEmpty ? theme.text3.color : theme.text2.color)
                                 .lineLimit(1)
@@ -179,6 +183,19 @@ struct AgentsView: View {
                         }
                         .padding(.vertical, 6)
                     }
+                }
+                if Looker.model(installed: models) == nil {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(Looker.missingReason(installed: models))
+                            .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                        LinkButton("Type the command in the terminal") {
+                            session.showsTerminal = true
+                            session.typeInTerminal("ollama pull \(Looker.suggestedModel)")
+                        }
+                        .help("Types it for you to run. Dante never downloads models itself.")
+                    }
+                    .padding(.top, 8)
                 }
             } else {
                 Text("Ollama isn’t running. Start it to give Claude local helpers.")

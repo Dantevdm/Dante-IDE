@@ -38,6 +38,8 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
                 let kind = tool.input["kind"]?.string ?? "draft"
                 let agent = DelegateKind(rawValue: kind)?.agent ?? "Local model"
                 return OrbSatellite(id: tool.id, kind: .local(kind), color: color(local: kind), title: agent)
+            case "mcp__dante__look":
+                return OrbSatellite(id: tool.id, kind: .local(Looker.kind), color: RGBA(0xFFD740), title: Looker.agent)
             case "mcp__dante__ask_grok":
                 return OrbSatellite(id: tool.id, kind: .cloud(.grok), color: color(cloud: .grok), title: "Grok")
             case "mcp__dante__ask_codex":

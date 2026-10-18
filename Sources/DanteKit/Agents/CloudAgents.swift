@@ -165,4 +165,6 @@ public enum DelegateEnvironment {
     public static let claudeModel = "DANTE_CLAUDE_MODEL"
     /// Who calls the tools, "claude" or "codex", so the ledger says who asked.
     public static let requester = "DANTE_REQUESTER"
+    /// Looker's vision model chosen in Settings; unset for the best installed.
+    public static let lookerModel = "DANTE_LOOKER_MODEL"
 }

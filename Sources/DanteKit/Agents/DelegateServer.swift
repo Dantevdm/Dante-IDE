@@ -27,6 +27,10 @@ public struct DelegateServer: Sendable {
     public var requester = "claude"
     /// Searches the project by meaning: the question and how many pieces, as text for the agent.
     public var searchCode: (@Sendable (_ question: String, _ limit: Int) async throws -> String)?
+    /// Looker's vision model, when a capable one is installed.
+    public var lookerModel: (@Sendable () async -> String?)?
+    /// Reads an image file (a path in the project or absolute) and answers about it with a model.
+    public var look: (@Sendable (_ model: String, _ path: String, _ question: String) async throws -> OllamaReply)?
 
     public static let protocolVersion = "2025-06-18"
 
@@ -68,6 +72,20 @@ public struct DelegateServer: Sendable {
             }
         }
         server.requester = environment[DelegateEnvironment.requester] ?? "claude"
+        if server.offersLocal {
+            let chosenVision = environment[DelegateEnvironment.lookerModel]
+            server.lookerModel = { Looker.model(installed: await ollama.models() ?? [], chosen: chosenVision) }
+            let rules = ClaudeRules.load(projectRoot: URL(filePath: root, directoryHint: .isDirectory))
+            server.look = { model, path, question in
+                let url = URL(filePath: path, relativeTo: URL(filePath: root, directoryHint: .isDirectory)).standardizedFileURL
+                let relative = ProposedChange.relativePath(of: url, in: URL(filePath: root, directoryHint: .isDirectory))
+                if rules.never.contains(where: { ClaudeRules.path(relative, matches: $0) }) {
+                    throw Ollama.Failure(message: "This project’s rules don’t allow reading \(relative).")
+                }
+                let image = try Looker.prepare(try Data(contentsOf: url))
+                return try await ollama.look(model: model, images: [image], question: question)
+            }
+        }
         if server.offersLocal {
             let rootURL = URL(filePath: root, directoryHint: .isDirectory)
             let search = SemanticSearch(ollama: ollama)
@@ -112,7 +130,9 @@ public struct DelegateServer: Sendable {
         case "ping":
             result = [:]
         case "tools/list":
-            result = ["tools": .array(tools)]
+            var list = tools
+            if look != nil, await lookerModel?() != nil { list.append(Self.askingWhy(Self.lookTool)) }
+            result = ["tools": .array(list)]
         case "tools/call":
             result = await call(message["params"]?["name"]?.string ?? "", arguments: message["params"]?["arguments"] ?? [:])
         default:
@@ -125,6 +145,7 @@ public struct DelegateServer: Sendable {
         var parts: [String] = []
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
         if searchCode != nil { parts.append("search_code finds code by what it does, for questions grep can't answer.") }
+        if look != nil { parts.append("look (Looker) reads screenshots and images on this Mac when a vision model is installed.") }
         if decide != nil { parts.append("Jev answers typed questions (pick one, rate, yes or no) about some material in well under a second.") }
         if askGrok != nil { parts.append("Grok (xAI) gives an independent second opinion or draft.") }
         if askCodex != nil { parts.append("Codex (OpenAI) reads the project itself, read-only, for a second opinion.") }
@@ -221,6 +242,20 @@ public struct DelegateServer: Sendable {
         ],
     ]
 
+    static let lookTool: JSONValue = [
+        "name": "look",
+        "description": "Ask Looker, a vision model on the user's Mac, about an image file: a screenshot of the app, a design mockup, a diagram, or a picture of an error. It quotes visible text and describes layout; it can miss small details, so check anything that matters. Saves the user's plan usage and keeps the image on their Mac.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "image": ["type": "string", "description": "Path to a PNG, JPEG, HEIC or similar image, relative to the project or absolute."],
+                "question": ["type": "string", "description": "What to look for or read out."],
+                "title": ["type": "string", "description": "A few words saying what you asked, for the user's stats."],
+            ],
+            "required": ["image", "question"],
+        ],
+    ]
+
     static let searchTool: JSONValue = [
         "name": "search_code",
         "description": "Search this project by meaning with a local embedding model: describe what the code does (\"where failed payments are retried\", \"how the session token is refreshed\") and get the best matching pieces with their lines. Use it when you don't know the names to grep for; use grep when you do. Fast and free: it runs on the user's Mac.",
@@ -286,6 +321,8 @@ public struct DelegateServer: Sendable {
             return await callCodex(arguments)
         case "ask_claude":
             return await callClaude(arguments)
+        case "look":
+            return await callLook(arguments)
         case "search_code":
             guard let searchCode, let question = arguments["question"]?.string, !question.isEmpty else {
                 return Self.text("search_code needs a question.", isError: true)
@@ -306,6 +343,28 @@ public struct DelegateServer: Sendable {
             return Self.text(lines.isEmpty ? "No models installed." : lines.joined(separator: "\n"))
         default:
             return Self.text("Unknown tool \(name).", isError: true)
+        }
+    }
+
+    func callLook(_ arguments: JSONValue) async -> JSONValue {
+        guard let look, let path = arguments["image"]?.string, !path.isEmpty, let question = arguments["question"]?.string, !question.isEmpty else {
+            return Self.text("look needs an image path and a question.", isError: true)
+        }
+        let title = arguments["title"]?.string ?? String(question.prefix(60))
+        guard let model = await lookerModel?() else {
+            return Self.text(Looker.missingReason(installed: await models() ?? []) + " Look at the image yourself.", isError: true)
+        }
+        do {
+            let reply = try await look(model, path, question)
+            ledger?.append(AgentJob(kind: Looker.kind, provider: .local, model: model, project: project,
+                                    promptTokens: reply.promptTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
+                                    requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: reply.text)))
+            let header = "[\(Looker.agent) · \(model) · \(String(format: "%.1f", reply.seconds))s] Check anything that matters."
+            return Self.text(header + "\n\n" + reply.text)
+        } catch {
+            ledger?.append(AgentJob(kind: Looker.kind, provider: .local, model: model, project: project, outcome: .failed,
+                                    requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: error.localizedDescription)))
+            return Self.text("Looker couldn’t read it: \(error.localizedDescription) Look at the image yourself.", isError: true)
         }
     }
 

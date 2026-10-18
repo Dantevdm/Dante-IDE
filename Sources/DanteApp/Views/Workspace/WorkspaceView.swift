@@ -51,10 +51,14 @@ struct WorkspaceView: View {
 
                     StatusBar(session: session, workspace: workspace)
                 }
+                // Takes the width that's left, so wide rows adapt instead of running under the panel.
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .clipped()
                 if session.showsClaude, let claude = session.claude {
                     ResizeHandle(axis: .horizontal, value: Bindable(session).claudeWidth, range: 300...1400, inverted: true)
                     ClaudePanel(session: session, workspace: workspace, claude: claude)
-                        .frame(width: session.claudeWidth)
+                        .frame(width: session.claudeWidth, alignment: .leading)
+                        .clipped()
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }

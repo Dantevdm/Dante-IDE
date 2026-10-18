@@ -67,6 +67,7 @@ public struct ToolActivity: Equatable, Sendable {
         case "mcp__dante__ask_claude": return resolved ? "Asked Claude" : "Asking Claude"
         case "mcp__dante__local_models": return "Checked local models"
         case "mcp__dante__search_code": return resolved ? "Searched the code by meaning" : "Searching the code by meaning"
+        case "mcp__dante__look": return resolved ? "Looker read an image" : "Looker is reading an image"
         default:
             if let tool = Self.mcpTool(name) { return tool.action }
             return name
@@ -979,7 +980,7 @@ public final class ClaudeSession {
                     let hasNote = activity(id)?.ruleNote != nil || activity(id)?.securityBlocks == true
                     if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
-                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code"].contains(request.toolName) {
+                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look"].contains(request.toolName) {
                         // Dante's own local-model tools: nothing leaves the Mac. Grok and Jev
                         // send material away, so they follow the approval level.
                         approve(id)

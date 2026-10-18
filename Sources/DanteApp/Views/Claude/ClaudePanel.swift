@@ -39,6 +39,18 @@ struct ClaudePanel: View {
             }
             .layoutPriority(-1)
             Spacer(minLength: 4)
+            // Icons only when the panel is too narrow for the labels.
+            ViewThatFits(in: .horizontal) {
+                controls
+                controls.labelStyle(.iconOnly)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 48)
+    }
+
+    private var controls: some View {
+        HStack(spacing: 8) {
             ApprovalMenu(session: session)
             Button {
                 Preferences.shared.claudeAsksFirst.toggle()
@@ -69,8 +81,6 @@ struct ClaudePanel: View {
                 withAnimation(.snappy(duration: 0.22)) { session.showsClaude = false }
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 48)
     }
 
     /// Only while there's something to say; at rest the approval menu says how Claude works.

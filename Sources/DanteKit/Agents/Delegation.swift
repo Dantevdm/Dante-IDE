@@ -355,6 +355,7 @@ extension AgentStats {
         if job.provider == .jev { return CloudAgent.jev.title }
         if job.provider == .codex { return "Codex" }
         if let kind = DelegateKind(rawValue: job.kind), job.provider == .local { return kind.agent }
+        if job.kind == Looker.kind { return Looker.agent }
         return job.kind == "subagent" ? "Sub-agents" : "Claude"
     }
 }
