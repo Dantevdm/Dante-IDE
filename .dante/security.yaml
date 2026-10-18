@@ -1,0 +1,8 @@
+# Security findings accepted on purpose. Dante's Security area writes this file.
+ignore:
+  - path: "Sources/DanteKit/Security/"
+    reason: "The scanner's own rules describe the patterns they look for."
+  - path: "Tests/DanteKitTests/SecurityScannerTests.swift"
+    reason: "Planted problems for the scanner's tests; the keys, ID and card numbers are made up."
+  - path: "Tests/DanteKitTests/PullRequestTests.swift"
+    reason: "Made-up secrets that test the commit box's secret warning."

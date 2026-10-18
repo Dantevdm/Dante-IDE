@@ -38,6 +38,41 @@ if CommandLine.arguments.dropFirst().first == "mcp" {
     exit(0)
 }
 
+// `dante scan [folder] [--json] [--online] [--fail-on high]`: the Security area's scan, for a
+// terminal or CI. Exits 2 when a finding is at least as bad as --fail-on.
+if CommandLine.arguments.dropFirst().first == "scan" {
+    var arguments = Array(CommandLine.arguments.dropFirst(2))
+    func flag(_ name: String) -> Bool {
+        guard let index = arguments.firstIndex(of: name) else { return false }
+        arguments.remove(at: index)
+        return true
+    }
+    func value(_ name: String) -> String? {
+        guard let index = arguments.firstIndex(of: name), index + 1 < arguments.count else { return nil }
+        defer { arguments.removeSubrange(index...index + 1) }
+        return arguments[index + 1]
+    }
+    let json = flag("--json")
+    let online = flag("--online")
+    let noTools = flag("--no-tools")
+    let threshold = value("--fail-on").map { SecurityFinding.Severity(rawValue: $0.lowercased()) }
+    if case .some(nil) = threshold { fail("--fail-on takes critical, high, medium, low or info") }
+    let root = URL(filePath: arguments.first ?? ".", directoryHint: .isDirectory,
+                   relativeTo: URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory)).standardizedFileURL
+    guard FileManager.default.fileExists(atPath: root.path) else { fail("no folder at \(root.path)") }
+    let report = await ProjectSecurity.scan(root: root, options: .init(externalTools: !noTools, onlineAdvisories: online, save: false))
+    if json {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .iso8601
+        print(String(decoding: (try? encoder.encode(report)) ?? Data(), as: UTF8.self))
+    } else {
+        print(ProjectSecurity.summary(report, root: root))
+    }
+    if let threshold = threshold ?? nil, report.findings.contains(where: { $0.severity >= threshold }) { exit(2) }
+    exit(0)
+}
+
 let command: OpenRequest.Command
 do {
     command = try OpenRequest.parse(

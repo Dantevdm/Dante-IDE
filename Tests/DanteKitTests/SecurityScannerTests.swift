@@ -1,0 +1,185 @@
+import Foundation
+import Testing
+@testable import DanteKit
+
+@Suite struct SecurityScannerTests {
+    private func rules(_ text: String, _ path: String) -> [String] {
+        SecurityScanner.scan(text: text, path: path).map(\.rule)
+    }
+
+    @Test func findsSecretsAndMasksThem() {
+        let key = "AKIA" + "Q7ZK3M9WX2PLR4TN"
+        let token = "ghp_" + String(repeating: "a1B2", count: 9)
+        let found = SecurityScanner.scan(text: "aws = \"\(key)\"\nlet t = \"\(token)\"\n", path: "src/config.ts")
+        #expect(found.map(\.rule) == ["secret.aws", "secret.github"])
+        #expect(found[0].evidence.contains("AKIA") && !found[0].evidence.contains(key))
+        #expect(found[0].severity == .critical && found[0].line == 1)
+    }
+
+    @Test func placeholdersAndExamplesAreNotSecrets() {
+        #expect(rules(#"password = "changeme123""#, "app.py").isEmpty)
+        #expect(rules(#"api_key: "your_api_key_here""#, "config.yml").isEmpty)
+        #expect(rules(#"password = "s3cr3tP4ssw0rd""#, ".env.example").isEmpty)
+        #expect(rules(#"password = "s3cr3tP4ssw0rd""#, "settings.py") == ["secret.password"])
+        #expect(rules(#"db = "postgres://app:hunter22@db:5432/app""#, "main.go") == ["secret.connection"])
+    }
+
+    @Test func findsInjection() {
+        #expect(rules("db.query(`SELECT * FROM users WHERE id = ${id}`)", "api/users.ts") == ["js.sql"])
+        #expect(rules(#"cur.execute(f"SELECT * FROM users WHERE id = {uid}")"#, "app/db.py") == ["py.sql"])
+        #expect(rules(#"rows, err := db.Query(fmt.Sprintf("SELECT * FROM t WHERE id = %s", id))"#, "store.go") == ["go.sql"])
+        #expect(rules(#"stmt.executeQuery("SELECT * FROM users WHERE name = '" + name + "'");"#, "Users.java") == ["sql.concat"])
+        #expect(rules(#"subprocess.run(cmd, shell=True)"#, "tool.py") == ["py.shell"])
+        #expect(rules("el.innerHTML = html", "view.js") == ["js.html"])
+        // Parameterised queries are fine.
+        #expect(rules("db.query('SELECT * FROM users WHERE id = $1', [id])", "api/users.ts").isEmpty)
+        #expect(rules(#"cur.execute("SELECT * FROM users WHERE id = %s", (uid,))"#, "app/db.py").isEmpty)
+    }
+
+    @Test func findsWeakEncryption() {
+        #expect(rules("const c = crypto.createCipher('aes192', key)", "enc.js") == ["crypto.weak-cipher"])
+        #expect(rules("requests.get(url, verify=False)", "client.py") == ["py.tls"])
+        #expect(rules(#"const api = "http://api.payments.co.za/v1""#, "client.ts") == ["crypto.http"])
+        #expect(rules(#"const api = "http://localhost:3000""#, "client.ts").isEmpty)
+        #expect(rules("hash = hashlib.md5(password.encode())", "auth.py").contains("crypto.password-hash"))
+    }
+
+    @Test func findsPersonalInformation() {
+        #expect(rules("console.log('user', user.idNumber, user.id_number)", "api/users.ts") == ["pii.log"])
+        #expect(rules("logger.info(request.json)", "app.py") == ["pii.request-log"])
+        #expect(rules("  id_number VARCHAR(13) NOT NULL,", "db/schema.sql") == ["pii.plain-column"])
+        #expect(rules("  id_number_encrypted BYTEA,", "db/schema.sql").isEmpty)
+        #expect(rules("  password TEXT NOT NULL,", "migrations/001.sql") == ["pii.password-column"])
+        #expect(rules("localStorage.setItem('authToken', token)", "web/auth.ts") == ["pii.local-storage"])
+    }
+
+    @Test func checksIdentityNumbers() {
+        #expect(SecurityScanner.isSouthAfricanID("8001015009087"))
+        #expect(!SecurityScanner.isSouthAfricanID("8001015009088"))
+        #expect(!SecurityScanner.isSouthAfricanID("8013015009087"))
+        let found = SecurityScanner.scan(text: "const customer = { id: \"8001015009087\" }", path: "src/seed.ts")
+        #expect(found.map(\.rule) == ["pii.sa-id"])
+        #expect(found.first?.severity == .high && found.first?.evidence.contains("8001015009087") == false)
+        #expect(SecurityScanner.scan(text: "id: 8001015009087", path: "tests/fixtures/people.yml").first?.severity == .medium)
+        #expect(rules("card = '4532 0151 1283 0366'", "billing.py") == ["pii.card"])
+        #expect(rules("card = '4242424242424242'", "billing.py").isEmpty)
+        #expect(rules("let timestamp = 1700000000000", "a.ts").isEmpty)
+        #expect(rules(#"key = "AKIA" + "ABCDEFGHIJKLMNOP""#, "a.ts").isEmpty)
+    }
+
+    @Test func checksContainersAndPipelines() {
+        let dockerfile = "FROM node:latest AS build\nRUN npm ci\nFROM build\nENV API_TOKEN=abc123\nCMD [\"node\", \"server.js\"]\n"
+        let found = rules(dockerfile, "Dockerfile")
+        #expect(found.contains("docker.latest") && found.contains("docker.secret") && found.contains("docker.root"))
+        #expect(found.filter { $0 == "docker.latest" }.count == 1)
+        #expect(!rules("FROM node:22-alpine\nUSER node\n", "Dockerfile").contains("docker.root"))
+        let compose = "services:\n  db:\n    image: postgres:16\n    ports:\n      - \"5432:5432\"\n    environment:\n      POSTGRES_PASSWORD: postgres\n"
+        #expect(rules(compose, "docker-compose.yml") == ["compose.db-port", "compose.default-password"])
+        #expect(rules("    ports:\n      - \"127.0.0.1:5432:5432\"\n", "compose.yaml").isEmpty)
+        let workflow = "on: pull_request_target\njobs:\n  b:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: echo \"${{ github.event.pull_request.title }}\"\n      - uses: someone/deploy@v1\n"
+        let ci = rules(workflow, ".github/workflows/ci.yml")
+        #expect(ci.contains("gha.pwn-request") && ci.contains("gha.injection") && ci.contains("gha.unpinned"))
+        #expect(rules(#"  cidr_blocks = ["0.0.0.0/0"]"#, "infra/main.tf") == ["tf.open"])
+    }
+
+    @Test func testsAreMilderAndCommentsAndSuppressionsAreSkipped() {
+        #expect(SecurityScanner.scan(text: "eval(code)", path: "src/run.js").first?.severity == .high)
+        #expect(SecurityScanner.scan(text: "eval(code)", path: "src/run.test.js").first?.severity == .medium)
+        #expect(rules("// eval(code) would be wrong here", "src/run.js").isEmpty)
+        #expect(rules("eval(code) // nosec: input is a constant", "src/run.js").isEmpty)
+        #expect(rules("eval(code) # dante:ignore", "src/run.py").isEmpty)
+    }
+
+    @Test func checksTheRepository() {
+        let files = [".env", ".env.example", "certs/server.key", "web/package.json", "api/package.json", "api/package-lock.json"]
+        let git = SecurityScanner.GitView(tracked: [".env", "certs/server.key", "web/package.json"], ignored: [])
+        let found = SecurityScanner.scan(files: files, read: { _ in "" }, git: git).map(\.rule)
+        #expect(found.contains("repo.env-committed") && found.contains("repo.key-file") && found.contains("deps.unlocked"))
+        #expect(!found.contains("repo.env-unignored"))
+        let ignored = SecurityScanner.scan(files: [".env"], read: { _ in "" }, git: SecurityScanner.GitView(tracked: [], ignored: [".env"]))
+        #expect(ignored.isEmpty)
+    }
+
+    @Test func neverPathsAndDataAreNotRead() {
+        var read: [String] = []
+        _ = SecurityScanner.scan(files: ["data/app.db", "src/a.ts", "private/notes.txt", "node_modules/x/index.js", "dist/app.min.js"],
+                                 read: { read.append($0); return "" }, never: { $0.hasPrefix("private/") })
+        #expect(read == ["src/a.ts"])
+    }
+
+    @Test func idsSurviveMovedLines() {
+        let one = SecurityScanner.scan(text: "eval(code)", path: "a.js")
+        let two = SecurityScanner.scan(text: "\n\n// moved\neval(code)", path: "a.js")
+        #expect(one.first?.id == two.first?.id)
+    }
+}
+
+@Suite struct SecurityReportTests {
+    private func finding(_ rule: String, _ severity: SecurityFinding.Severity, file: String = "a.ts", line: Int = 1, source: String = "Dante",
+                         reference: String? = nil) -> SecurityFinding {
+        SecurityFinding(rule: rule, category: .code, severity: severity, title: rule, why: "", fix: "", file: file, line: line,
+                        evidence: "\(rule)\(line)", reference: reference, source: source)
+    }
+
+    @Test func gradesTheProject() {
+        #expect(SecurityReport(findings: []).grade == "A")
+        #expect(SecurityReport(findings: [finding("a", .medium), finding("b", .low, line: 2)]).score == 94)
+        #expect(SecurityReport(findings: [finding("a", .critical)]).grade == "D")
+        #expect(SecurityReport(findings: (1...30).map { finding("a", .medium, line: $0) }).score > 40)
+    }
+
+    @Test func mergesTheSameProblemFromTwoScanners() {
+        let report = SecurityReport(findings: [finding("js.sql", .high, reference: "CWE-89"),
+                                               finding("semgrep.sqli", .critical, source: "Semgrep", reference: "CWE-89")])
+        #expect(report.findings.count == 1)
+        #expect(report.findings[0].severity == .critical)
+        #expect(report.findings[0].source == "Dante + Semgrep")
+    }
+
+    @Test func saysWhatChanged() {
+        let before = SecurityReport(findings: [finding("a", .high), finding("b", .low, line: 2)])
+        let after = SecurityReport(findings: [finding("b", .low, line: 2), finding("c", .medium, line: 3)])
+        let changes = after.changes(since: before)
+        #expect(changes.new.map(\.rule) == ["c"])
+        #expect(changes.fixed.map(\.rule) == ["a"])
+    }
+
+    @Test func savesPerProject() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "dante-security-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let root = URL(filePath: "/home/me/app")
+        SecurityReport(findings: [finding("a", .high)], files: 3).save(for: root, in: folder)
+        #expect(SecurityReport.load(for: root, in: folder)?.findings.first?.rule == "a")
+        #expect(SecurityReport.load(for: URL(filePath: "/home/me/other"), in: folder) == nil)
+    }
+
+    @Test func ignoresByIdRuleOrPath() {
+        let yaml = """
+        # accepted
+        ignore:
+          - id: "js.html:src/view.ts:abc"
+            reason: Sanitised
+          - rule: gha.unpinned
+          - path: examples/
+        """
+        let ignores = SecurityIgnores.parse(yaml)
+        #expect(ignores.entries.count == 3)
+        let a = SecurityFinding(id: "js.html:src/view.ts:abc", rule: "js.html", category: .code, severity: .medium, title: "", why: "", fix: "", file: "src/view.ts", line: 3)
+        let b = finding("gha.unpinned", .low, file: ".github/workflows/ci.yml")
+        let c = finding("js.eval", .high, file: "examples/demo.js")
+        let d = finding("js.eval", .high, file: "examplesX/demo.js")
+        let split = ignores.apply([a, b, c, d])
+        #expect(split.open == [d])
+        #expect(ignores.reason(for: a) == .some("Sanitised"))
+    }
+
+    @Test func addsIgnoresWithoutLosingComments() {
+        let first = SecurityIgnores.adding(.init(id: "x:y:1", reason: "Fine \"here\""), to: nil)
+        #expect(SecurityIgnores.parse(first).entries.first?.reason == "Fine \"here\"")
+        let second = SecurityIgnores.adding(.init(rule: "gha.unpinned"), to: "# keep me\nignore: []\n")
+        #expect(second.hasPrefix("# keep me\n"))
+        #expect(SecurityIgnores.parse(second).entries.map(\.rule) == ["gha.unpinned"])
+        let third = SecurityIgnores.adding(.init(path: "docs/"), to: second)
+        #expect(SecurityIgnores.parse(third).entries.count == 2)
+    }
+}
