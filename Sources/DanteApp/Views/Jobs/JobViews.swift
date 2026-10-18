@@ -193,6 +193,7 @@ struct JobBanner: View {
             }
             .layoutPriority(-1)
             Spacer(minLength: 4)
+            AwayChip(job: job, now: jobs.now)
             if busy {
                 ProgressView().controlSize(.small)
             } else {
@@ -200,6 +201,8 @@ struct JobBanner: View {
                     .disabled(changes.isEmpty || session.jobs.sessions[job.id]?.state == .working)
                     .help("Commit what’s left and merge \(job.branch) into the branch checked out here")
                 Menu {
+                    AwayMenu(session: session, job: job)
+                    Divider()
                     Button("Show on the Jobs board") { session.area = .jobs }
                     Button("Show the worktree in Finder") { NSWorkspace.shared.activateFileViewerSelecting([job.worktreeURL]) }
                     Divider()
@@ -246,6 +249,8 @@ struct NewJobForm: View {
     var onStart: () -> Void = {}
     @State private var brief = ""
     @State private var engine = Preferences.shared.agentEngine
+    @State private var away = false
+    @State private var awayMinutes = 30
     @FocusState private var focused: Bool
 
     private var canStart: Bool {
@@ -282,11 +287,27 @@ struct NewJobForm: View {
                     .labelsHidden()
                     .fixedSize()
                 }
+                Toggle(isOn: $away.animation(.snappy)) {
+                    Text("Away").font(.dante(size: 11.5, weight: .medium))
+                }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .fixedSize()
+                .help("Lets the job go ahead without asking: edits in its worktree and building, testing and committing, within this project’s rules. Flagged files, other commands and questions still wait for you, and pushing, merging and deploying are never allowed.")
+                if away {
+                    Picker("For", selection: $awayMinutes) {
+                        ForEach(AwayMenu.choices, id: \.self) { Text(AwayMenu.label($0)).tag($0) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .controlSize(.small)
+                    .transition(.scale(scale: 0.8, anchor: .leading).combined(with: .opacity))
+                }
                 Text(startsFrom).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 4)
                 Button {
-                    session.startJob(brief, engine: engine)
+                    session.startJob(brief, engine: engine, awayMinutes: away ? awayMinutes : nil)
                     brief = ""
                     onStart()
                 } label: {
@@ -428,5 +449,69 @@ private struct InboxRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Away mode's choices for a job: go ahead on its own for a while, or ask for each step.
+struct AwayMenu: View {
+    let session: Session
+    let job: JobRecord
+
+    static let choices = [15, 30, 60, 120]
+
+    static func label(_ minutes: Int) -> String {
+        minutes < 60 ? "\(minutes) min" : minutes == 60 ? "1 hour" : "\(minutes / 60) hours"
+    }
+
+    var body: some View {
+        Menu(job.isAway ? (job.outOfTime() ? "Away time’s up: give it more" : "Away for longer") : "Go ahead without asking") {
+            ForEach(Self.choices, id: \.self) { minutes in
+                Button("For \(Self.label(minutes))") { session.jobs.setAway(job.id, minutes: minutes) }
+            }
+        }
+        if job.isAway {
+            Button("Ask before each step") { session.jobs.setAway(job.id, minutes: nil) }
+        }
+    }
+}
+
+/// A job's away time: a ring that empties as it runs, and what's left.
+struct AwayChip: View {
+    @Environment(\.theme) private var theme
+    let job: JobRecord
+    let now: Date
+
+    var body: some View {
+        if let until = job.awayUntil, let minutes = job.awayMinutes {
+            let left = max(0, until.timeIntervalSince(now))
+            let fraction = left / Double(minutes * 60)
+            let color = left > 0 ? theme.accent.color : theme.amber.color
+            HStack(spacing: 5) {
+                ZStack {
+                    Circle().stroke(color.opacity(0.2), lineWidth: 2)
+                    Circle().trim(from: 0, to: fraction)
+                        .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.smooth(duration: 0.8), value: fraction)
+                }
+                .frame(width: 11, height: 11)
+                Text(left > 0 ? "Away · \(Self.remaining(left))" : "Away time’s up")
+                    .font(.dante(size: 11, weight: .medium))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(countsDown: true))
+            }
+            .foregroundStyle(color)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(Capsule().fill(color.opacity(0.1)))
+            .fixedSize()
+            .help(left > 0 ? "Going ahead without asking until \(until.formatted(date: .omitted, time: .shortened)), within this project’s rules"
+                           : "Each step now waits for you. Give it more time from the job’s menu.")
+            .transition(.scale(scale: 0.7).combined(with: .opacity))
+        }
+    }
+
+    static func remaining(_ seconds: TimeInterval) -> String {
+        let minutes = Int((seconds / 60).rounded(.up))
+        return minutes < 60 ? "\(minutes) min left" : "\(minutes / 60) h \(minutes % 60) min left"
     }
 }

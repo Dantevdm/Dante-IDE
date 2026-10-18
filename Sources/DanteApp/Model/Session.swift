@@ -292,6 +292,9 @@ final class Session {
             guard let self, let workspace else { return ClaudeSession(root: job.worktreeURL, executable: nil, systemPrompt: { "" }) }
             return self.makeJobClaude(for: job, in: workspace)
         }
+        jobs.onAwayTimeUp = { [weak self] job in
+            self?.notifyClaude(.needsApproval("Its away time is up; from here on each step waits for you."), job: job.title)
+        }
         jobs.load(root: url, remote: RemoteRegistry.project(containing: url) != nil)
         languages = LanguageServices(root: url)
         conflicts = []
@@ -416,6 +419,11 @@ final class Session {
         claude.onAttention = { [weak self] attention in
             self?.notifyClaude(attention, job: job.title)
             Task { await self?.jobs.refreshChanges(of: job.id) }
+        }
+        // Every job stays on its branch; away mode and its time decide the rest.
+        claude.guardCall = { [weak self] tool, input, flagged in
+            guard let record = self?.jobs.record(job.id) else { return nil }
+            return JobGuard.verdict(for: record, toolName: tool, input: input, hasNote: flagged)
         }
         claude.engine = job.engine == .codex && Self.codexPath != nil ? .codex : .claude
         applyClaudePreferences(to: claude)

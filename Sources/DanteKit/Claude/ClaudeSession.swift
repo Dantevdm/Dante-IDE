@@ -211,6 +211,10 @@ public final class ClaudeSession {
     private var mcpConfigFile: URL?
     /// How much Claude may do without asking (on top of Claude Code's own read-only rule).
     public var approvalLevel: ApprovalLevel = .ask
+    /// A job's limits, checked before the approval level: refuse, go ahead, wait, or nil to
+    /// leave it to the level. Given the tool, its input, and whether rules or the security
+    /// review flagged it.
+    public var guardCall: ((String, JSONValue, Bool) -> JobGuard.Verdict?)?
     /// The project's allow rules (`.claude/settings*.json`), read when Claude starts and
     /// added to by `alwaysAllow`.
     public private(set) var allowRules: [String] = []
@@ -981,12 +985,23 @@ public final class ClaudeSession {
             defer {
                 if case .awaitingApproval = activity(id)?.status {
                     let hasNote = activity(id)?.ruleNote != nil || activity(id)?.securityBlocks == true
-                    if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
+                    let guarded = guardCall?(request.toolName, request.input, hasNote)
+                    if case .refuse(let message)? = guarded {
+                        decline(id, message: message)
+                        updateTool(id) {
+                            $0.ruleNote = message
+                            $0.blockedByRule = true
+                        }
+                    } else if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
                     } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look"].contains(request.toolName) {
                         // Dante's own local-model tools: nothing leaves the Mac. Grok and Jev
                         // send material away, so they follow the approval level.
                         approve(id)
+                    } else if guarded == .approve {
+                        approve(id)
+                    } else if guarded == .ask {
+                        onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input)))
                     } else if ApprovalPolicy.approves(request.toolName, input: request.input, level: approvalLevel, allow: allowRules, hasRuleNote: hasNote) {
                         approve(id)
                     } else {

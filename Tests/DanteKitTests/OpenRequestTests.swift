@@ -91,3 +91,51 @@ struct CommandLineToolTests {
         #expect(CommandLineTool.state(found: "/usr/local/bin/dante", resolved: "/old/Dante.app/Contents/Resources/bin/dante", bundled: bundled) == .elsewhere("/usr/local/bin/dante"))
     }
 }
+
+@Suite struct JobRequestTests {
+    private let folders: Set<String> = ["/home/me/shop", "/home/me/other"]
+
+    @Test func readsTheCommandLine() throws {
+        let request = try JobRequest.parse(arguments: ["Fix", "the", "login", "redirect", "--away", "30", "--codex"], in: "/home/me/shop") { folders.contains($0) }
+        #expect(request == JobRequest(folder: "/home/me/shop", brief: "Fix the login redirect", awayMinutes: 30, agent: "codex"))
+        let elsewhere = try JobRequest.parse(arguments: ["--in", "../other", "Add tests"], in: "/home/me/shop") { folders.contains($0) }
+        #expect(elsewhere.folder == "/home/me/other" && elsewhere.awayMinutes == nil && elsewhere.agent == nil)
+    }
+
+    @Test func refusesWhatItCantDo() {
+        #expect(throws: OpenRequest.ArgumentError.self) { try JobRequest.parse(arguments: [], in: "/home/me/shop") { folders.contains($0) } }
+        #expect(throws: OpenRequest.ArgumentError.self) { try JobRequest.parse(arguments: ["x", "--away", "soon"], in: "/home/me/shop") { folders.contains($0) } }
+        #expect(throws: OpenRequest.ArgumentError.self) { try JobRequest.parse(arguments: ["x", "--in", "/home/me/missing"], in: "/home/me/shop") { folders.contains($0) } }
+        #expect(throws: OpenRequest.ArgumentError.self) { try JobRequest.parse(arguments: ["x", "--fast"], in: "/home/me/shop") { folders.contains($0) } }
+    }
+
+    @Test func roundTripsThroughItsURL() throws {
+        let request = JobRequest(folder: "/home/me/shop", brief: "Fix it & ship? 100% = done", awayMinutes: 60, agent: "claude")
+        #expect(request.url.absoluteString.hasPrefix("dante://job?"))
+        #expect(JobRequest(url: request.url) == request)
+        #expect(OpenRequest(url: request.url) == nil)
+        // Nonsense in a URL from elsewhere is dropped, not trusted.
+        let odd = URL(string: "dante://job?path=/home/me/shop&brief=x&away=-5&agent=someone")!
+        #expect(JobRequest(url: odd) == JobRequest(folder: "/home/me/shop", brief: "x"))
+        #expect(JobRequest(url: URL(string: "dante://job?path=relative&brief=x")!) == nil)
+        #expect(JobRequest(url: URL(string: "dante://job?path=/home/me/shop&brief=%20")!) == nil)
+    }
+
+    @Test func trustsOnlyThisMacsKey() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "job-key-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(JobRequest.localKey(in: folder, create: false) == nil)
+        let key = try #require(JobRequest.localKey(in: folder))
+        #expect(key.count == 64)
+        #expect(JobRequest.localKey(in: folder) == key)
+        let mode = try FileManager.default.attributesOfItem(atPath: folder.appending(path: "cli-key").path)[.posixPermissions] as? Int
+        #expect(mode == 0o600)
+
+        let signed = JobRequest(folder: "/home/me/shop", brief: "x", awayMinutes: 30, key: key)
+        let read = try #require(JobRequest(url: signed.url))
+        #expect(read.isTrusted(by: key))
+        #expect(!read.isTrusted(by: nil))
+        #expect(!JobRequest(folder: "/home/me/shop", brief: "x").isTrusted(by: key))
+        #expect(!JobRequest(folder: "/home/me/shop", brief: "x", key: "guess").isTrusted(by: key))
+    }
+}

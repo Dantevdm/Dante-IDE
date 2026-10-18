@@ -107,6 +107,43 @@ if CommandLine.arguments.dropFirst().first == "search" {
     exit(0)
 }
 
+/// Hands a dante:// URL to the app this command belongs to.
+func send(_ url: URL, background: Bool = false) -> Never {
+    guard let app = danteApp() else { fail("can't find Dante.app") }
+    let open = Process()
+    open.executableURL = URL(filePath: "/usr/bin/open")
+    open.arguments = (background ? ["-g"] : []) + ["-a", app.path, url.absoluteString]
+    do {
+        try open.run()
+        open.waitUntilExit()
+    } catch {
+        fail("couldn't open Dante: \(error.localizedDescription)")
+    }
+    exit(open.terminationStatus)
+}
+
+// `dante job <what to do> [--in folder] [--away minutes] [--codex]`: hands a job to an agent
+// that works on its own branch in its own worktree, without bringing Dante forward.
+if CommandLine.arguments.dropFirst().first == "job" {
+    let arguments = Array(CommandLine.arguments.dropFirst(2))
+    if arguments.isEmpty || arguments.contains("--help") || arguments.contains("-h") {
+        print(JobRequest.usage)
+        exit(0)
+    }
+    do {
+        var request = try JobRequest.parse(arguments: arguments, in: FileManager.default.currentDirectoryPath) { path in
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
+        }
+        // Proves the job came from this Mac's user, so Dante starts it without asking.
+        request.key = JobRequest.localKey()
+        print("Handed to Dante: \(request.brief)\(request.awayMinutes.map { " (away for \($0) min)" } ?? "")")
+        send(request.url, background: true)
+    } catch {
+        fail("\(error)")
+    }
+}
+
 let command: OpenRequest.Command
 do {
     command = try OpenRequest.parse(
@@ -125,15 +162,5 @@ case .version:
     let info = danteApp().flatMap { Bundle(url: $0)?.infoDictionary }
     print("Dante \(info?["CFBundleShortVersionString"] as? String ?? "(not found)")")
 case .open(let request):
-    guard let app = danteApp() else { fail("can't find Dante.app") }
-    let open = Process()
-    open.executableURL = URL(filePath: "/usr/bin/open")
-    open.arguments = ["-a", app.path, request.url.absoluteString]
-    do {
-        try open.run()
-        open.waitUntilExit()
-    } catch {
-        fail("couldn't open Dante: \(error.localizedDescription)")
-    }
-    exit(open.terminationStatus)
+    send(request.url)
 }

@@ -30,6 +30,10 @@ public struct JobRecord: Codable, Identifiable, Equatable, Sendable {
     public var conversationID: String?
     public var outcome: Outcome
     public var closed: Date?
+    /// Away mode: how long the job may go ahead without asking, from `awaySince`. nil asks
+    /// as the window's approval level says.
+    public var awayMinutes: Int?
+    public var awaySince: Date?
 
     public init(id: String = JobRecord.newID(), title: String, brief: String, branch: String, worktree: String, base: String,
                 baseBranch: String?, engine: AgentEngine, created: Date = Date(), conversationID: String? = nil,
@@ -49,6 +53,25 @@ public struct JobRecord: Codable, Identifiable, Equatable, Sendable {
     }
 
     public var worktreeURL: URL { URL(filePath: worktree, directoryHint: .isDirectory) }
+
+    public var isAway: Bool { awayMinutes != nil }
+
+    /// When away mode's time runs out.
+    public var awayUntil: Date? {
+        guard let awayMinutes, let awaySince else { return nil }
+        return awaySince.addingTimeInterval(TimeInterval(awayMinutes * 60))
+    }
+
+    /// Away time is up: from here on every step waits for the person.
+    public func outOfTime(at now: Date = Date()) -> Bool {
+        awayUntil.map { now >= $0 } ?? false
+    }
+
+    /// Goes away for `minutes` from now; nil comes back to asking.
+    public mutating func setAway(_ minutes: Int?, now: Date = Date()) {
+        awayMinutes = minutes
+        awaySince = minutes == nil ? nil : now
+    }
 
     public static func newID() -> String {
         String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()

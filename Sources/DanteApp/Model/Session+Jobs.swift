@@ -34,9 +34,15 @@ extension Session {
         showsClaude = true
     }
 
-    func startJob(_ brief: String, engine: AgentEngine) {
+    /// `reportsFailure` says why in an alert, for jobs that didn't come from the form.
+    func startJob(_ brief: String, engine: AgentEngine, awayMinutes: Int? = nil, reportsFailure: Bool = false) {
         Task {
-            if let job = await jobs.start(brief: brief, engine: engine) { showJob(job.id) }
+            if let job = await jobs.start(brief: brief, engine: engine, awayMinutes: awayMinutes) {
+                showJob(job.id)
+            } else if reportsFailure {
+                errorMessage = jobs.startFailure ?? jobs.unavailable ?? "The job couldn’t start."
+                jobs.clearStartFailure()
+            }
         }
     }
 

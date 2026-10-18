@@ -1,4 +1,5 @@
 import AppKit
+import DanteKit
 import DanteOpen
 import SwiftUI
 
@@ -15,7 +16,25 @@ enum Opener {
         pending.isEmpty ? nil : pending.removeFirst()
     }
 
+    /// Jobs from `dante job`, waiting for their project's window, by folder.
+    private static var pendingJobs: [String: [JobRequest]] = [:]
+
+    static func takeJobs(for folder: String) -> [JobRequest] {
+        pendingJobs.removeValue(forKey: resolved(folder)) ?? []
+    }
+
     static func handle(_ url: URL, from receiver: Session, openWindow: OpenWindowAction) {
+        // A job opens its project like `dante <folder>` would; the window starts it.
+        if var job = JobRequest(url: url) {
+            // Without this Mac's key, the link came from a web page or another app: the
+            // person confirms it, and it never goes ahead without asking.
+            if !job.isTrusted(by: JobRequest.localKey()) {
+                guard confirm(job) else { return }
+                job.awayMinutes = nil
+            }
+            pendingJobs[resolved(job.folder), default: []].append(job)
+            return handle(OpenRequest(items: [.init(path: job.folder)]).url, from: receiver, openWindow: openWindow)
+        }
         guard var request = OpenRequest(url: url) else { return }
         for index in request.items.indices {
             request.items[index].path = resolved(request.items[index].path)
@@ -54,6 +73,16 @@ enum Opener {
         shown?.window?.makeKeyAndOrderFront(nil)
     }
 
+    private static func confirm(_ job: JobRequest) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Start a job in \((job.folder as NSString).lastPathComponent)?"
+        alert.informativeText = "A link asked Dante to hand this to an agent:\n\n“\(job.brief.prefix(600))”\n\nIt didn’t come from the dante command, so check you expected it. The job works on its own branch and asks before each step."
+        alert.addButton(withTitle: "Start Job")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     /// Symlinks resolved, so /tmp and /private/tmp are the same folder.
     private static func resolved(_ path: String) -> String {
         URL(filePath: path).resolvingSymlinksInPath().standardizedFileURL.path
@@ -70,6 +99,10 @@ extension Session {
         for file in target.files {
             let url = URL(filePath: file.path)
             if let line = file.line { open(file: url, line: line) } else { open(file: url) }
+        }
+        for job in Opener.takeJobs(for: target.folder) {
+            let engine = job.agent.flatMap(AgentEngine.init(rawValue:)) ?? Preferences.shared.agentEngine
+            startJob(job.brief, engine: engine, awayMinutes: job.awayMinutes, reportsFailure: true)
         }
     }
 }

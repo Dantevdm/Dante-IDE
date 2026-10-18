@@ -125,6 +125,7 @@ public struct OpenRequest: Equatable, Sendable {
 
     public static let usage = """
         Usage: dante [options] [folder] [file[:line] …]
+               dante job <what to do> [--in folder] [--away minutes]
 
         Opens folders and files in Dante. With no paths, opens the current folder.
         A file opens in the window that has its project open, or with the project

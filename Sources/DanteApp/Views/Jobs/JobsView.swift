@@ -122,13 +122,16 @@ private struct JobCard: View {
                     .foregroundStyle(theme.text3.color)
                 }
                 Spacer(minLength: 6)
-                Text(phase.label)
-                    .font(.dante(size: 11, weight: .semibold))
-                    .foregroundStyle(phase.color(theme))
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Capsule().fill(phase.color(theme).opacity(0.13)))
-                    .contentTransition(.interpolate)
-                    .animation(.snappy, value: phase.label)
+                VStack(alignment: .trailing, spacing: 5) {
+                    Text(phase.label)
+                        .font(.dante(size: 11, weight: .semibold))
+                        .foregroundStyle(phase.color(theme))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(phase.color(theme).opacity(0.13)))
+                        .contentTransition(.interpolate)
+                        .animation(.snappy, value: phase.label)
+                    AwayChip(job: job, now: jobs.now)
+                }
             }
             VStack(alignment: .leading, spacing: 6) {
                 if let activity = jobs.activity(of: job.id), phase.isActive {
@@ -164,6 +167,10 @@ private struct JobCard: View {
                         .buttonStyle(DanteButtonStyle(primary: phase == .ready))
                         .disabled(changes.isEmpty || phase.isActive)
                         .help(phase.isActive ? "Wait for the job to finish its turn" : "Commit what’s left and merge \(job.branch) into \(session.branch ?? "the checked-out branch")")
+                    Menu("Away") { AwayMenu(session: session, job: job) }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help("Let the job go ahead without asking for a while, or ask before each step")
                     Spacer(minLength: 0)
                     Button("Discard…", role: .destructive) { confirmsDiscard = true }
                         .buttonStyle(.borderless)

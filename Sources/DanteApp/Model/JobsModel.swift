@@ -22,6 +22,13 @@ final class JobsModel {
 
     /// Makes a job's conversation; set by the window, which knows the project's brief and rules.
     @ObservationIgnored var makeSession: ((JobRecord) -> ClaudeSession)?
+    /// A job's away time ran out; the window tells the person.
+    @ObservationIgnored var onAwayTimeUp: ((JobRecord) -> Void)?
+    /// Jobs whose away time was already reported as up.
+    @ObservationIgnored private var reportedTimeUp: Set<String> = []
+    @ObservationIgnored private var clock: Task<Void, Never>?
+    /// Ticks while any job is away, so the board's countdowns and time-up states move.
+    private(set) var now = Date()
 
     var open: [JobRecord] { records.filter { $0.outcome == .open } }
     /// Finished jobs, newest first, for the board's history.
@@ -44,6 +51,9 @@ final class JobsModel {
             : "Jobs need a git repository: each one works on its own branch."
         // Keep only jobs whose worktree is still there; a missing one was removed by hand.
         records = JobStore.load(for: root).filter { $0.outcome != .open || FileManager.default.fileExists(atPath: $0.worktree) }
+        // Time already up when the project opened isn't news.
+        reportedTimeUp = Set(open.filter { $0.outOfTime() }.map(\.id))
+        if open.contains(where: \.isAway) { watchTime() }
         Task { await refreshChanges() }
     }
 
@@ -51,13 +61,21 @@ final class JobsModel {
 
     /// Makes the worktree and starts the agent on the brief.
     @discardableResult
-    func start(brief: String, engine: AgentEngine) async -> JobRecord? {
-        guard let root, unavailable == nil, starting == nil else { return nil }
+    func start(brief: String, engine: AgentEngine, awayMinutes: Int? = nil) async -> JobRecord? {
+        guard let root else { return nil }
+        if let unavailable {
+            failures["new"] = unavailable
+            return nil
+        }
+        // One worktree at a time; a second job (from `dante job`, say) waits its turn.
+        while starting != nil { try? await Task.sleep(for: .milliseconds(200)) }
         let title = JobPlan.title(from: brief)
         starting = title
         defer { starting = nil }
         do {
-            let job = try await JobWorktree.create(title: title, brief: brief, engine: engine, repo: root)
+            var job = try await JobWorktree.create(title: title, brief: brief, engine: engine, repo: root)
+            job.setAway(awayMinutes)
+            if awayMinutes != nil { watchTime() }
             Self.seedSearchIndex(from: root, to: job.worktreeURL)
             records.append(job)
             save()
@@ -100,6 +118,36 @@ final class JobsModel {
         guard let index = records.firstIndex(where: { $0.id == id }), records[index].conversationID != conversation else { return }
         records[index].conversationID = conversation
         save()
+    }
+
+    // MARK: Away mode
+
+    /// Lets the job go ahead on its own for `minutes` from now, or (nil) back to asking.
+    func setAway(_ id: String, minutes: Int?) {
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+        records[index].setAway(minutes)
+        reportedTimeUp.remove(id)
+        save()
+        if minutes != nil { watchTime() }
+    }
+
+    /// Checks away jobs' time every few seconds while any are away, and reports each one
+    /// whose time is up once.
+    private func watchTime() {
+        guard clock == nil else { return }
+        clock = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                self.now = Date()
+                let away = self.open.filter(\.isAway)
+                for job in away where job.outOfTime(at: self.now) && !self.reportedTimeUp.contains(job.id) {
+                    self.reportedTimeUp.insert(job.id)
+                    self.onAwayTimeUp?(job)
+                }
+                if away.isEmpty { self.clock = nil; return }
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
     }
 
     func phase(of id: String) -> JobPhase {
@@ -208,6 +256,8 @@ final class JobsModel {
 
     func stopAll() {
         for claude in sessions.values { claude.stop() }
+        clock?.cancel()
+        clock = nil
     }
 
     private func save() {
