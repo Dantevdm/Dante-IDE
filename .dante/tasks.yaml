@@ -409,3 +409,8 @@ tasks:
   phase: build
   state: review
   notes: "BreakpointShift maps each edit: lines below move with added or removed newlines, a line deleted whole loses its breakpoint. Only the focused pane reports edits, so a split on one file doesn't move them twice. A running program isn't told."
+- id: DI-101
+  title: "Walk and work: jobs on the Mac, away mode, and an iPhone and iPad companion"
+  phase: build
+  state: ready
+  spec: docs/plans/walk-and-work.md
