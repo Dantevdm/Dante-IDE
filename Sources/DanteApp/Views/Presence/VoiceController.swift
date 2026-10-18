@@ -156,7 +156,7 @@ final class VoiceController {
         afterWake = false
         generation += 1
         let current = generation
-        task = recognizer.recognitionTask(with: request) { result, error in
+        task = recognizer.recognitionTask(with: request) { @Sendable result, error in
             let text = result?.bestTranscription.formattedString
             let final = result?.isFinal ?? false
             let failed = error != nil
@@ -522,11 +522,16 @@ final class VoiceController {
     // MARK: Permissions
 
     private static func authorised() async -> Bool {
-        let speech: Bool = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
-        }
-        guard speech else { return false }
+        guard await speechAuthorised() else { return false }
         return await AVCaptureDevice.requestAccess(for: .audio)
+    }
+
+    /// Nonisolated, because macOS answers on a background queue: a closure that inherited the
+    /// main actor would trap there when Swift checks its isolation.
+    private nonisolated static func speechAuthorised() async -> Bool {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            SFSpeechRecognizer.requestAuthorization { @Sendable status in continuation.resume(returning: status == .authorized) }
+        }
     }
 }
 
