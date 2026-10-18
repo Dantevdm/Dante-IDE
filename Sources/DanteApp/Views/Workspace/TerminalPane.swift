@@ -35,6 +35,9 @@ struct TerminalPane: View {
                         $0.generation += 1
                     }
                 }
+                IconButton(symbol: "chevron.down", label: Shortcuts.label("Hide terminal", "toggleTerminal"), size: 11) {
+                    withAnimation(.snappy(duration: 0.22)) { session.showsTerminal = false }
+                }
             }
             .padding(.horizontal, 10)
             .frame(height: 34)

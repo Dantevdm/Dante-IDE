@@ -81,7 +81,7 @@ extension OrbStyle {
         style.glow *= 1 - 0.45 * f
         style.aura *= 1 - 0.55 * f
         style.lightning *= 1 - 0.75 * f
-        style.lids = max(lids, 0.5 * f)
+        style.drowse = max(drowse, 0.5 * f)
         return style
     }
 }

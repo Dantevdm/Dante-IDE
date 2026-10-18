@@ -4,11 +4,11 @@ import MetalKit
 import simd
 
 /// The orb at any size: the menu bar's 22 points, the presence panel, or a TV.
-/// It eases towards each new mood's colours and pace, blinks, glances about when the
-/// pointer is still, and follows the pointer when it moves. Drawing stops while it can't be seen.
+/// It eases towards each new mood's colours and pace, and dims as it dozes off when tired.
+/// Drawing stops while it can't be seen.
 final class OrbView: MTKView, MTKViewDelegate {
     enum Size {
-        /// The menu bar: fewer octaves of noise, a bigger eye, a lower frame rate.
+        /// The menu bar: fewer octaves of noise and a lower frame rate.
         case menuBar
         /// The panel and full screen: full detail at 60 fps.
         case large
@@ -55,14 +55,12 @@ final class OrbView: MTKView, MTKViewDelegate {
         var lightning: Float
         var pulseDepth: Float
         var pulseRate: Float
-        var lids: Float
+        var drowse: Float
         /// Drains the colours as usage runs low.
         var fatigue: Float = 0
-        var gaze = SIMD2<Float>(0, 0)
-        var dilation: Float = 0.3
 
         init(_ style: OrbStyle, fatigue: Double = 0) {
-            lids = Float(style.lids)
+            drowse = Float(style.drowse)
             self.fatigue = Float(fatigue)
             colors = style.colors.map { SIMD3(Float($0.red), Float($0.green), Float($0.blue)) }
             energy = Float(style.energy)
@@ -118,13 +116,6 @@ final class OrbView: MTKView, MTKViewDelegate {
     }
     private var constellation = Constellation()
 
-    /// Whether to draw the eye (the panel's orb can look away while you read).
-    var showsEye = true
-    /// Where the pointer is, in screen coordinates; the eye follows it.
-    var pointer: CGPoint? {
-        didSet { pointerMoved = now }
-    }
-
     private static let shared: (device: MTLDevice, pipeline: MTLRenderPipelineState, queue: MTLCommandQueue)? = {
         guard let device = MTLCreateSystemDefaultDevice(),
               let library = try? device.makeLibrary(source: OrbShader.source, options: nil),
@@ -148,14 +139,8 @@ final class OrbView: MTKView, MTKViewDelegate {
     private var form = 0
     private var formStarted: Double = 0
     private var wakeStarted: Double?
-    private var nextBlink: Double
-    private var blinkStarted: Double?
-    private var doubleBlink = false
     private var nodStarted: Double?
     private var nextNod: Double = 12
-    private var pointerMoved: Double = 0
-    private var glance = SIMD2<Float>(0, 0)
-    private var nextGlance: Double = 0
     private var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     private var occluded = false
 
@@ -168,7 +153,6 @@ final class OrbView: MTKView, MTKViewDelegate {
         self.mood = mood
         current = Animated(OrbStyle.of(mood))
         target = current
-        nextBlink = Double.random(in: 1.5...4)
         super.init(frame: .zero, device: Self.shared?.device)
         delegate = self
         colorPixelFormat = .bgra8Unorm
@@ -228,7 +212,7 @@ final class OrbView: MTKView, MTKViewDelegate {
 
     /// The orb in one mood as a still image, drawn offscreen: for checking the look of every
     /// mood at once (`DANTE_ORB_SNAPSHOTS=<folder>`) and for screenshots.
-    static func snapshot(mood: PresenceMood, pixels: Int, size: Size, time: Float = 14, gaze: SIMD2<Float> = SIMD2(-0.3, -0.2), burst: Float = 1,
+    static func snapshot(mood: PresenceMood, pixels: Int, size: Size, time: Float = 14, burst: Float = 1,
                          satellites: [Constellation.Frame] = []) -> CGImage? {
         guard let shared else { return nil }
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: pixels, height: pixels, mipmapped: false)
@@ -246,9 +230,9 @@ final class OrbView: MTKView, MTKViewDelegate {
         let colors = style.colors.map { SIMD4<Float>($0, 1) }
         var uniforms = Uniforms(
             p0: SIMD4(Float(pixels), Float(pixels), time, style.energy),
-            p1: SIMD4(gaze.x, gaze.y, mood == .needsYou ? 0.6 : 0.3, 0),
+            p1: SIMD4(style.drowse, 0, 0, 0),
             p2: SIMD4(style.pulseDepth * 0.5, 0, style.glow, size == .large ? 1 : 0),
-            p3: SIMD4(1, time * 0.01, style.ring, 1),
+            p3: SIMD4(1, time * 0.01, style.ring, 0),
             p4: SIMD4(style.aura, style.lightning, burst, burst < 1 ? 1 : 0),
             c0: colors[0], c1: colors[1], c2: colors[2], c3: colors[3]
         )
@@ -328,7 +312,7 @@ final class OrbView: MTKView, MTKViewDelegate {
         current.ring += (target.ring - current.ring) * ease(2)
         current.aura += (target.aura - current.aura) * ease(2.5)
         current.lightning += (target.lightning - current.lightning) * ease(4)
-        current.lids += (target.lids - current.lids) * ease(2)
+        current.drowse += (target.drowse - current.drowse) * ease(2)
         current.fatigue += (target.fatigue - current.fatigue) * ease(0.8)
 
         // At rest it cycles through forms.
@@ -352,34 +336,14 @@ final class OrbView: MTKView, MTKViewDelegate {
         let wave = Float(0.5 + 0.5 * sin(phase * 2 * .pi))
         let pulse = min(1, current.pulseDepth * wave * wave + kick * 0.8)
 
-        updateGaze(at: t, dt: dt)
-
-        // Blinks every few seconds, now and then twice.
-        var blink: Float = 0
-        if let started = blinkStarted {
-            let elapsed = t - started
-            let length = 0.17
-            if elapsed < length {
-                blink = Float(sin(elapsed / length * .pi))
-            } else if doubleBlink, elapsed < length * 2.3 {
-                blink = elapsed > length * 1.3 ? Float(sin((elapsed - length * 1.3) / length * .pi)) : 0
-            } else {
-                blinkStarted = nil
-                nextBlink = t + Double.random(in: mood == .trouble ? 0.8...2 : 2.5...6.5)
-            }
-        } else if t >= nextBlink, showsEye {
-            blinkStarted = t
-            doubleBlink = Double.random(in: 0...1) < 0.2
-        }
-
-        // Tired: the lids hang and sway, and now and then it nods off for a moment.
-        var lids = current.lids
+        // Tired: it dims and sways, and now and then nods off for a moment.
+        var drowse = current.drowse
         if current.fatigue > 0.05, mood != .asleep {
-            lids += Float(0.06 * sin(t * 0.9)) * current.fatigue
+            drowse += Float(0.06 * sin(t * 0.9)) * current.fatigue
             if let started = nodStarted {
                 let elapsed = t - started
                 if elapsed < 1.8 {
-                    lids = max(lids, Float(sin(elapsed / 1.8 * .pi)) * 0.95)
+                    drowse = max(drowse, Float(sin(elapsed / 1.8 * .pi)) * 0.95)
                 } else {
                     nodStarted = nil
                     nextNod = t + Double.random(in: 9...22) / Double(max(0.3, current.fatigue))
@@ -388,7 +352,7 @@ final class OrbView: MTKView, MTKViewDelegate {
                 nodStarted = t
             }
         }
-        blink = min(1, max(blink, lids))
+        drowse = min(1, max(0, drowse))
 
         var wake: Float = 1
         if let started = wakeStarted {
@@ -407,9 +371,9 @@ final class OrbView: MTKView, MTKViewDelegate {
         }
         var uniforms = Uniforms(
             p0: SIMD4(Float(drawableSize.width), Float(drawableSize.height), Float(clock), current.energy * pace),
-            p1: SIMD4(current.gaze.x, current.gaze.y, current.dilation, blink),
+            p1: SIMD4(drowse, 0, 0, 0),
             p2: SIMD4(pulse * (reduceMotion ? 0.3 : 1), current.flicker * (reduceMotion ? 0.2 : 1), current.glow, size == .large ? 1 : 0),
-            p3: SIMD4(wake, Float(t * 0.01), current.ring, showsEye ? 1 : 0),
+            p3: SIMD4(wake, Float(t * 0.01), current.ring, 0),
             p4: SIMD4(current.aura * (reduceMotion ? 0.5 : 1), reduceMotion ? 0 : current.lightning, burst, burst < 1 && !reduceMotion ? 1 : 0),
             c0: colors[0], c1: colors[1], c2: colors[2], c3: colors[3]
         )
@@ -422,31 +386,5 @@ final class OrbView: MTKView, MTKViewDelegate {
             uniforms.place(frames, beams: reduceMotion ? 0.4 : 0.7 + 0.3 * current.energy)
         }
         return uniforms
-    }
-
-    /// Looks at the pointer while it moves; once it's been still a while, glances about.
-    /// The pupil widens when the pointer comes close, and with a start.
-    private func updateGaze(at t: Double, dt: Float) {
-        var aim = SIMD2<Float>(0, 0)
-        var dilation: Float = mood == .needsYou ? 0.6 : 0.3
-        if let pointer, let window {
-            let centre = window.convertPoint(toScreen: convert(NSPoint(x: bounds.midX, y: bounds.midY), to: nil))
-            let delta = SIMD2(Float(pointer.x - centre.x), Float(pointer.y - centre.y))
-            let distance = simd_length(delta)
-            let reach: Float = size == .large ? 600 : 260
-            if distance > 0.5 { aim = delta / distance * min(1, distance / reach) }
-            dilation += max(0, 1 - distance / 90) * 0.6
-        }
-        if t - pointerMoved > 5 {
-            if t >= nextGlance {
-                glance = SIMD2(Float.random(in: -0.8...0.8), Float.random(in: -0.6...0.6))
-                nextGlance = t + Double.random(in: 1.2...3.5)
-            }
-            aim = glance
-        }
-        dilation = min(1, dilation + kick * 0.5)
-        // Eyes move in quick saccades, not slow drifts.
-        current.gaze += (aim - current.gaze) * (1 - exp(-dt * 14))
-        current.dilation += (dilation - current.dilation) * (1 - exp(-dt * 6))
     }
 }

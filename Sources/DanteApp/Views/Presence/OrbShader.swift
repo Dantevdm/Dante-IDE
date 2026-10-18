@@ -1,6 +1,6 @@
 /// The orb, drawn per pixel: a sphere of plasma whose surface breathes, an aura of flames
 /// rising off it, lightning crackling through the aura, a halo, an orbital ring of sparks,
-/// a shockwave when it powers up, and an eye that looks where it's told. Compiled at runtime
+/// and a shockwave when it powers up. Compiled at runtime
 /// from source, since SwiftPM doesn't build .metal files.
 enum OrbShader {
     static let source = """
@@ -9,9 +9,9 @@ enum OrbShader {
 
     struct Uniforms {
         float4 p0;   // resolution.xy, time, energy
-        float4 p1;   // gaze.xy, dilation, blink
+        float4 p1;   // drowse, 0, 0, 0
         float4 p2;   // pulse, flicker, glow, detail
-        float4 p3;   // wake, hue, ring, eye
+        float4 p3;   // wake, hue, ring, 0
         float4 p4;   // aura, lightning, burst (0…1 after a power-up), flash
         float4 c0, c1, c2, c3;
         float4 p5;   // satellites, beam strength, 0, 0
@@ -118,9 +118,7 @@ enum OrbShader {
         float2 res = u.p0.xy;
         float time = u.p0.z;
         float energy = u.p0.w;
-        float2 gaze = u.p1.xy;
-        float dilation = u.p1.z;
-        float blink = u.p1.w;
+        float drowse = u.p1.x;
         float pulse = u.p2.x;
         float flicker = u.p2.y;
         float glowStrength = u.p2.z;
@@ -128,7 +126,6 @@ enum OrbShader {
         float wake = u.p3.x;
         float hue = u.p3.y;
         float ringStrength = u.p3.z;
-        float eyeStrength = u.p3.w;
         float aura = u.p4.x;
         float lightning = u.p4.y;
         float burst = u.p4.z;
@@ -251,35 +248,8 @@ enum OrbShader {
             body += mix(palette(hue + time * 0.05 + angle / 6.2831853, u), float3(1.0), 0.25) * rim * 1.5;
             body += palette(hue + 0.25, u) * exp(-edge * edge * 4.0) * 0.3 * (0.5 + energy);
 
-            // The eye: an iris that glows, a pupil that dilates, lids that blink.
-            if (eyeStrength > 0.01) {
-                float irisRadius = radius * (large ? 0.3 : 0.42);
-                float2 eyeCentre = gaze * radius * 0.34;
-                float2 e = uv - eyeCentre;
-                e /= float2(1.0 - abs(gaze.x) * 0.22, 1.0 - abs(gaze.y) * 0.22);
-                float r = length(e);
-                float open = 1.0 - blink;
-                float lid = smoothstep(irisRadius * open + pixel, irisRadius * open - pixel, abs(e.y));
-                float irisMask = smoothstep(irisRadius + pixel, irisRadius - pixel, r) * lid * eyeStrength;
-
-                float around = atan2(e.y, e.x);
-                float streaks = noise3(float3(around * 7.0, r / irisRadius * 6.0, time * 0.3));
-                float3 iris = palette(hue + 0.6 + streaks * 0.2, u);
-                iris = mix(iris, float3(1.0), 0.18);
-                iris *= 0.55 + 0.9 * streaks * smoothstep(irisRadius, irisRadius * 0.3, r);
-                iris *= smoothstep(irisRadius * 1.02, irisRadius * 0.78, r) * 0.6 + 0.4;
-
-                float pupilRadius = irisRadius * (0.3 + 0.38 * dilation);
-                float pupilMask = smoothstep(pupilRadius + pixel, pupilRadius - pixel, r) * lid * eyeStrength;
-                float3 pupil = palette(hue + 0.1, u) * 0.06 * (1.0 - r / pupilRadius);
-
-                body = mix(body, iris * 1.25, irisMask);
-                body = mix(body, pupil, pupilMask);
-
-                float2 glint = e - float2(-0.35, 0.38) * irisRadius;
-                float catchlight = smoothstep(irisRadius * 0.16, irisRadius * 0.05, length(glint)) * lid * eyeStrength;
-                body += float3(catchlight * 0.9);
-            }
+            // Dozing dims it, as if it were nodding off.
+            body *= 1.0 - 0.4 * drowse;
 
             // A power-up flashes the sphere white for a moment.
             if (flash > 0.0 && burst < 1.0) {

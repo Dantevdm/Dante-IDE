@@ -32,7 +32,6 @@ final class PresenceController: NSObject {
     private var recheck: Timer?
     private var observing = false
     private var pending = false
-    private var monitors: [Any] = []
     private var sessions: [String: Session] = [:]
     private var workRate = WorkRate()
     /// The five-hour window's tiredness, refreshed every couple of minutes and after turns.
@@ -41,7 +40,7 @@ final class PresenceController: NSObject {
     private var usageLoaded: Date = .distantPast
     private var loadingUsage = false
     private var vitalityTimer: Timer?
-    /// Orbs that follow the pointer: the menu bar's, the panel's and the Stage's.
+    /// Orbs showing the mood: the menu bar's, the panel's and the Stage's.
     private let watchers = NSHashTable<OrbView>.weakObjects()
     weak var themeStore: ThemeStore?
 
@@ -50,18 +49,6 @@ final class PresenceController: NSObject {
         guard !observing else { return }
         observing = true
         update()
-        let handler: (NSEvent) -> Void = { [weak self] _ in
-            MainActor.assumeIsolated { self?.pointerMoved() }
-        }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: handler) {
-            monitors.append(global)
-        }
-        if let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: { event in
-            handler(event)
-            return event
-        }) {
-            monitors.append(local)
-        }
     }
 
     /// A window opened, closed, or changed project.
@@ -70,18 +57,12 @@ final class PresenceController: NSObject {
     /// The voice controller started or stopped listening, or the voice got louder.
     func voiceChanged() { scheduleUpdate() }
 
-    /// Registers an orb to follow the pointer and show the current mood.
+    /// Registers an orb to show the current mood.
     func attach(_ orb: OrbView) {
         watchers.add(orb)
         orb.mood = model.mood
         orb.vitality = model.vitality
         orb.satellites = model.satellites
-        orb.pointer = NSEvent.mouseLocation
-    }
-
-    private func pointerMoved() {
-        let location = NSEvent.mouseLocation
-        for orb in watchers.allObjects where !orb.isPaused { orb.pointer = location }
     }
 
     // MARK: Observing the sessions

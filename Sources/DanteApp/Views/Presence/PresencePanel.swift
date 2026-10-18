@@ -148,20 +148,16 @@ private struct TalkButton: View {
     }
 }
 
-/// An `OrbView` in SwiftUI, following the presence's mood and the pointer.
+/// An `OrbView` in SwiftUI, following the presence's mood.
 struct OrbRepresentable: NSViewRepresentable {
     var size: OrbView.Size
-    var showsEye = true
 
     func makeNSView(context: Context) -> OrbView {
         let view = OrbView(size: size)
-        view.showsEye = showsEye
         PresenceController.shared.attach(view)
         view.wake()
         return view
     }
 
-    func updateNSView(_ view: OrbView, context: Context) {
-        view.showsEye = showsEye
-    }
+    func updateNSView(_ view: OrbView, context: Context) {}
 }

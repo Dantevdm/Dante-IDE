@@ -178,6 +178,7 @@ public struct Jev: Sendable {
     static func errorMessage(_ root: JSONValue) -> String? {
         if let message = root["error"]?.string { return message }
         if let message = root["error"]?["message"]?.string { return message }
+        if root["status"]?.string == "error", let message = root["message"]?.string { return message }
         return nil
     }
 
@@ -188,6 +189,7 @@ public struct Jev: Sendable {
         case 401: "Jev didn’t accept the API key"
         case 402: "The Jev account is out of credit"
         case 403: "The Jev account isn’t active"
+        case 404: "Jev’s service isn’t answering right now"
         case 413: "That’s too much material for Jev at once"
         case 415: "Jev couldn’t read the encoding"
         default: "Jev answered \(status)"

@@ -54,6 +54,13 @@ public struct ToolActivity: Equatable, Sendable {
         case "ExitPlanMode": return isAwaitingApproval ? "Plan ready" : (status == .declined ? "Kept planning" : "Started on the plan")
         case "Skill": return "Used skill"
         case "ToolSearch": return "Looked up tools"
+        case "mcp__dante__delegate":
+            let agent = input["kind"]?.string.flatMap(DelegateKind.init(rawValue:))?.agent ?? "a local model"
+            return resolved ? "Handed to \(agent)" : "Handing to \(agent)"
+        case "mcp__dante__ask_grok": return resolved ? "Asked Grok" : "Asking Grok"
+        case "mcp__dante__decide": return resolved ? "Asked Jev" : "Asking Jev"
+        case "mcp__dante__ask_codex": return resolved ? "Asked Codex" : "Asking Codex"
+        case "mcp__dante__local_models": return "Checked local models"
         default:
             if let tool = Self.mcpTool(name) { return tool.action }
             return name
@@ -83,6 +90,9 @@ public struct ToolActivity: Equatable, Sendable {
         }
         if name == "AskUserQuestion" {
             return ClarifyingQuestion.parse(input).map { $0.header.isEmpty ? $0.question : $0.header }.joined(separator: ", ")
+        }
+        if name.hasPrefix("mcp__dante__") {
+            return input["title"]?.string ?? input["prompt"]?.string.map { String($0.prefix(60)) } ?? ""
         }
         if name == "Skill", let skill = input["skill"]?.string ?? input["command"]?.string { return skill }
         let detail = input["pattern"]?.string ?? input["url"]?.string ?? input["query"]?.string ?? input["description"]?.string ?? ""
@@ -438,7 +448,8 @@ public final class ClaudeSession {
             let environment = delegateEnvironment
             if let brief = ClaudeBrief.delegation(local: environment[DelegateEnvironment.local] != "0",
                                                   jev: environment[CloudAgent.jev.environmentVariable] != nil,
-                                                  grok: environment[CloudAgent.grok.environmentVariable] != nil) {
+                                                  grok: environment[CloudAgent.grok.environmentVariable] != nil,
+                                                  codex: environment[DelegateEnvironment.codex] != nil) {
                 prompt += "\n\n" + brief
             }
             let json = MCPConfigFile.json(command: delegate, environment: environment)

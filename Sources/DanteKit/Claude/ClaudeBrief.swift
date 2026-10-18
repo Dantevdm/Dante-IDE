@@ -23,17 +23,23 @@ public enum ClaudeBrief {
     """
 
     /// What Claude is told about the dante MCP server's tools, or nil when it has none.
-    public nonisolated static func delegation(local: Bool, jev: Bool, grok: Bool) -> String? {
+    public nonisolated static func delegation(local: Bool, jev: Bool, grok: Bool, codex: Bool = false) -> String? {
         var parts: [String] = []
         if local { parts.append(delegation) }
         if jev { parts.append(jevDecisions) }
         if grok { parts.append(grokOpinions) }
+        if codex { parts.append(codexOpinions) }
         return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 
     public nonisolated static let jevDecisions = """
     # Quick decisions with Jev
     The `decide` tool asks Jev, a fast decision model, typed questions about material you pass: pick one of several labelled options, rate on a scale, or yes/no. It answers in under a second for a fraction of a cent. Use it when many small judgements would otherwise cost a turn each: routing failures or log lines to the area they belong to, rating how risky a command or diff is, deciding whether output is worth reading. Its answers come with confidence; check low-confidence ones yourself. It runs on Jev's servers, so never send secrets.
+    """
+
+    public nonisolated static let codexOpinions = """
+    # Second opinions from Codex
+    The `ask_codex` tool asks OpenAI's Codex, on the user's ChatGPT plan, for an independent view. It can read the project itself (read-only), so point it at the files or diff rather than pasting them. Use it when a second opinion is worth a minute or two: reviewing a risky change, a bug you can't pin down, a design choice, or when the user asks for Codex. Weigh its answer against your own and tell the user where it agreed or differed.
     """
 
     public nonisolated static let grokOpinions = """

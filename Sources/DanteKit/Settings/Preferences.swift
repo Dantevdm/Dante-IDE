@@ -59,6 +59,10 @@ public final class Preferences {
     public var voiceIdentifier: String { didSet { defaults.set(voiceIdentifier, forKey: Keys.voiceIdentifier) } }
     /// How fast replies are read, 0.4 (slow) … 0.62 (fast).
     public var speechRate: Double { didSet { defaults.set(speechRate, forKey: Keys.speechRate) } }
+    /// Let Claude ask OpenAI's Codex (when installed) for second opinions.
+    public var asksCodex: Bool { didSet { defaults.set(asksCodex, forKey: Keys.asksCodex) } }
+    /// The model Codex uses; empty for Codex's default.
+    public var codexModel: String { didSet { defaults.set(codexModel, forKey: Keys.codexModel) } }
     /// The Grok model `ask_grok` uses; empty picks the best the key has.
     public var grokModel: String { didSet { defaults.set(grokModel, forKey: Keys.grokModel) } }
     /// How much Claude may do without asking.
@@ -88,6 +92,8 @@ public final class Preferences {
         delegatesToLocalModels = bool(Keys.delegatesToLocalModels, true)
         speaksReplies = bool(Keys.speaksReplies, true)
         grokModel = defaults.string(forKey: Keys.grokModel) ?? ""
+        asksCodex = bool(Keys.asksCodex, true)
+        codexModel = defaults.string(forKey: Keys.codexModel) ?? ""
         keepsConversation = bool(Keys.keepsConversation, true)
         listensForWakeWord = bool(Keys.listensForWakeWord, false)
         voiceIdentifier = defaults.string(forKey: Keys.voiceIdentifier) ?? ""
@@ -130,6 +136,8 @@ public final class Preferences {
         static let delegatesToLocalModels = "delegatesToLocalModels"
         static let speaksReplies = "speaksReplies"
         static let grokModel = "grokModel"
+        static let asksCodex = "asksCodex"
+        static let codexModel = "codexModel"
         static let keepsConversation = "keepsConversation"
         static let listensForWakeWord = "listensForWakeWord"
         static let voiceIdentifier = "voiceIdentifier"

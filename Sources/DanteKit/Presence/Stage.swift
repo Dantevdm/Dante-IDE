@@ -43,7 +43,7 @@ public struct StageTally: Equatable, Sendable {
                 models[job.model, default: 0] += 1
             case .claude:
                 claudeJobs += 1
-            case .grok, .jev:
+            case .grok, .jev, .codex:
                 cloudJobs += 1
             }
         }

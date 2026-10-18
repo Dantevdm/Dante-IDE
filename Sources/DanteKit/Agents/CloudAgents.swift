@@ -155,4 +155,8 @@ public enum DelegateEnvironment {
     public static let local = "DANTE_LOCAL"
     /// The Grok model chosen in Settings.
     public static let grokModel = "DANTE_GROK_MODEL"
+    /// The Codex CLI to ask, when the user lets Claude ask Codex.
+    public static let codex = "DANTE_CODEX"
+    /// The model Codex uses; unset for its default.
+    public static let codexModel = "DANTE_CODEX_MODEL"
 }

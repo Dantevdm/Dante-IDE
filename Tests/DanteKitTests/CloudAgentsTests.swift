@@ -28,6 +28,7 @@ import Testing
         #expect(decision.inputTokens == 62 && decision.costUSD == 0.000026 && decision.creditsRemainingUSD == 4.99)
         #expect(decision.summary(questions) == "route: billing (99% sure)\nurgency: high (3.0 on 0–4)\nescalate: yes (94% yes)")
         #expect(throws: Jev.Failure.self) { try JevDecision.parse(Data(#"{"error":{"message":"bad key"}}"#.utf8)) }
+        #expect(Jev.explain(status: 404, body: Data(#"{"status":"error","code":404,"message":"Application not found"}"#.utf8)) == "Jev’s service isn’t answering right now: Application not found")
         #expect(Jev.explain(status: 402, body: Data(#"{"error":"insufficient_credits"}"#.utf8)) == "The Jev account is out of credit: insufficient_credits")
     }
 
@@ -116,7 +117,18 @@ import Testing
         #expect(cloud.contains("`decide`") && cloud.contains("`ask_grok`") && !cloud.contains("`delegate`"))
     }
 
-    @Test func cloudAgentsCircleTheOrb() {
+    @Test func toolRowsNameTheAgent() {
+        let root = URL(filePath: "/home/me/shop")
+        let running = ToolActivity(id: "a", name: "mcp__dante__delegate", input: ["kind": "summary", "title": "Sum NOTES.md", "prompt": "x"], status: .running)
+        #expect(running.verb == "Handing to Reader" && running.target(in: root) == "Sum NOTES.md")
+        var done = running
+        done.status = .done
+        #expect(done.verb == "Handed to Reader")
+        let grok = ToolActivity(id: "b", name: "mcp__dante__ask_grok", input: ["prompt": "Is this plan sound?"], status: .running)
+        #expect(grok.verb == "Asking Grok" && grok.target(in: root) == "Is this plan sound?")
+    }
+
+        @Test func cloudAgentsCircleTheOrb() {
         let tools = [
             ToolActivity(id: "a", name: "mcp__dante__ask_grok", input: ["prompt": "x"], status: .running),
             ToolActivity(id: "b", name: "mcp__dante__decide", input: [:], status: .running),

@@ -9,6 +9,7 @@ public struct DelegateServer: Sendable {
     public typealias Runner = @Sendable (DelegateKind, _ prompt: String) async throws -> (model: String, reply: OllamaReply)
     public typealias Decider = @Sendable (_ state: JSONValue, _ questions: [(name: String, question: JevQuestion)]) async throws -> JevDecision
     public typealias Asker = @Sendable (_ system: String?, _ prompt: String) async throws -> GrokReply
+    public typealias CodexAsker = @Sendable (_ prompt: String) async throws -> CodexReply
 
     public var project: String
     public var ledger: AgentLedger?
@@ -18,6 +19,7 @@ public struct DelegateServer: Sendable {
     public var offersLocal = true
     public var decide: Decider?
     public var askGrok: Asker?
+    public var askCodex: CodexAsker?
 
     public static let protocolVersion = "2025-06-18"
 
@@ -30,7 +32,8 @@ public struct DelegateServer: Sendable {
 
     /// The server Dante ships: Ollama on this Mac, the standard ledger, and models chosen
     /// per job in Settings (`DANTE_MODEL_<KIND>` from the app, else the best installed).
-    public static func live(project: String, environment: [String: String] = ProcessInfo.processInfo.environment) -> DelegateServer {
+    public static func live(project: String, root: String = FileManager.default.currentDirectoryPath,
+                            environment: [String: String] = ProcessInfo.processInfo.environment) -> DelegateServer {
         let ollama = Ollama(base: environment["OLLAMA_HOST"].flatMap { URL(string: $0.hasPrefix("http") ? $0 : "http://\($0)") } ?? Ollama().base)
         var server = DelegateServer(project: project, ledger: .standard, models: { await ollama.models() }) { kind, prompt in
             let installed = await ollama.models() ?? []
@@ -49,12 +52,18 @@ public struct DelegateServer: Sendable {
             let grok = Grok(key: key)
             let chosen = environment[DelegateEnvironment.grokModel]
             server.askGrok = { system, prompt in
-                let available = (try? await grok.models()) ?? []
+                // A chosen model is used as is; listing first would only cost a round trip.
+                let available = chosen?.isEmpty == false ? [] : try await grok.models()
                 guard let model = Grok.model(chosen: chosen, available: available) else {
                     throw Grok.Failure(message: "The xAI key has no chat models.")
                 }
                 return try await grok.chat(model: model, system: system, prompt: prompt)
             }
+        }
+        if let path = environment[DelegateEnvironment.codex], !path.isEmpty {
+            let codex = Codex(executable: path)
+            let model = environment[DelegateEnvironment.codexModel]
+            server.askCodex = { prompt in try await codex.ask(prompt, in: root, model: model) }
         }
         return server
     }
@@ -95,6 +104,7 @@ public struct DelegateServer: Sendable {
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
         if decide != nil { parts.append("Jev answers typed questions (pick one, rate, yes or no) about some material in well under a second.") }
         if askGrok != nil { parts.append("Grok (xAI) gives an independent second opinion or draft.") }
+        if askCodex != nil { parts.append("Codex (OpenAI) reads the project itself, read-only, for a second opinion.") }
         return parts.joined(separator: " ")
     }
 
@@ -103,6 +113,7 @@ public struct DelegateServer: Sendable {
         if offersLocal { tools += Self.localTools }
         if decide != nil { tools.append(Self.decideTool) }
         if askGrok != nil { tools.append(Self.grokTool) }
+        if askCodex != nil { tools.append(Self.codexTool) }
         return tools
     }
 
@@ -142,6 +153,19 @@ public struct DelegateServer: Sendable {
             "properties": [
                 "prompt": ["type": "string", "description": "The question and all the material it needs."],
                 "system": ["type": "string", "description": "Optional instructions on how to answer."],
+                "title": ["type": "string", "description": "A few words saying what you asked, for the user's stats."],
+            ],
+            "required": ["prompt"],
+        ],
+    ]
+
+    static let codexTool: JSONValue = [
+        "name": "ask_codex",
+        "description": "Ask OpenAI's Codex, signed in with the user's ChatGPT plan, for an independent take. Unlike ask_grok it can read this project itself (read-only: it can look around and run read-only commands, never edit), so give it the question and where to look rather than pasting files. Good for a second review of a diff or design, a bug you're stuck on, or checking an assumption about the codebase. It takes a minute or two and counts against the user's ChatGPT usage: use it when a second view is worth that, weigh its answer, and tell the user where it agreed or differed.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "prompt": ["type": "string", "description": "The question, with the files, functions or diff to look at."],
                 "title": ["type": "string", "description": "A few words saying what you asked, for the user's stats."],
             ],
             "required": ["prompt"],
@@ -196,6 +220,8 @@ public struct DelegateServer: Sendable {
             return await callDecide(arguments)
         case "ask_grok":
             return await callGrok(arguments)
+        case "ask_codex":
+            return await callCodex(arguments)
         case "local_models":
             guard let installed = await models() else { return Self.text("Ollama isn’t running on this Mac.", isError: true) }
             let lines = installed.map { model -> String in
@@ -254,6 +280,28 @@ public struct DelegateServer: Sendable {
             ledger?.append(AgentJob(kind: "opinion", provider: .grok, model: "grok", project: project,
                                     seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: "claude", title: title))
             return Self.text("Grok couldn’t answer: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    func callCodex(_ arguments: JSONValue) async -> JSONValue {
+        guard let askCodex else { return Self.text("Codex isn’t set up: the user can turn it on in Dante’s Settings.", isError: true) }
+        guard let prompt = arguments["prompt"]?.string, !prompt.isEmpty else {
+            return Self.text("ask_codex needs a prompt.", isError: true)
+        }
+        let title = arguments["title"]?.string ?? String(prompt.prefix(60))
+        let started = Date()
+        do {
+            let reply = try await askCodex(prompt)
+            ledger?.append(AgentJob(kind: "opinion", provider: .codex, model: "codex", project: project,
+                                    promptTokens: reply.inputTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
+                                    requestedBy: "claude", title: title))
+            let looked = reply.commands.isEmpty ? "" : " · looked with \(reply.commands.count) command\(reply.commands.count == 1 ? "" : "s")"
+            let header = "[Codex · \(reply.inputTokens)→\(reply.outputTokens) tokens · \(String(format: "%.0f", reply.seconds))s\(looked)] A second opinion: weigh it, don’t just adopt it."
+            return Self.text(header + "\n\n" + reply.text)
+        } catch {
+            ledger?.append(AgentJob(kind: "opinion", provider: .codex, model: "codex", project: project,
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: "claude", title: title))
+            return Self.text("Codex couldn’t answer: \(error.localizedDescription)", isError: true)
         }
     }
 

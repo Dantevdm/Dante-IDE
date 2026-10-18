@@ -178,8 +178,8 @@ public struct OrbStyle: Sendable, Equatable {
     public var lightning: Double
     /// Frames per second the menu bar orb needs to look smooth at this pace.
     public var framesPerSecond: Int
-    /// How far the eyelids are down, 0 open to 1 shut: asleep, or tired.
-    public var lids: Double = 0
+    /// How far it has dozed off, 0 awake to 1 asleep: dims the orb.
+    public var drowse: Double = 0
 
     /// The palettes idle cycles through, one every `formDuration` seconds.
     public static let idleForms: [[RGBA]] = [
@@ -194,7 +194,7 @@ public struct OrbStyle: Sendable, Equatable {
         switch mood {
         case .asleep:
             OrbStyle(colors: [RGBA(0x2B2F6B), RGBA(0x1E3A5F), RGBA(0x3B2A6B), RGBA(0x24406E)],
-                     energy: 0.05, pulseRate: 0.1, pulseDepth: 0.3, glow: 0.25, flicker: 0, ring: 0, aura: 0, lightning: 0, framesPerSecond: 15, lids: 1)
+                     energy: 0.05, pulseRate: 0.1, pulseDepth: 0.3, glow: 0.25, flicker: 0, ring: 0, aura: 0, lightning: 0, framesPerSecond: 15, drowse: 1)
         case .idle:
             OrbStyle(colors: idleForms[0],
                      energy: 0.25, pulseRate: 0.18, pulseDepth: 0.5, glow: 0.55, flicker: 0, ring: 0.1, aura: 0.25, lightning: 0, framesPerSecond: 24)

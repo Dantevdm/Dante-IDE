@@ -429,7 +429,7 @@ tasks:
 - id: DI-105
   title: "Docs: group documents (project, phases, plans, folders, images) instead of one long list"
   phase: build
-  state: ready
+  state: review
 - id: DI-106
   title: "Stage: a full-screen Jarvis-style view for a TV, with the orb and a Dante HUD"
   phase: build
@@ -448,21 +448,21 @@ tasks:
 - id: DI-109
   title: "Local models: Claude delegates drafts, summaries and triage to Ollama models through Dante's tools, and checks what comes back"
   phase: build
-  state: ready
+  state: review
   spec: docs/plans/walk-and-work.md
 - id: DI-110
   title: "Agent stats: jobs, tokens, time and pass rate per agent and model, what Claude delegated, and plan usage saved"
   phase: build
-  state: ready
+  state: review
   spec: docs/plans/walk-and-work.md
 - id: DI-111
   title: "Approvals: an approval level beside Ask first (reads only, edits, edits and commands; never paths still refused), Always allow on a command, and Ask first renamed so it doesn't read as approvals"
   phase: build
   state: review
 - id: DI-112
-  title: "Orb energy follows the work: intensity from tool rate, parallel sessions and sub-agents; tired (dimmer, slower, heavy-lidded) as the five-hour or weekly usage runs low; asleep when the limit is hit, waking as it resets"
+  title: "Orb energy follows the work: intensity from tool rate, parallel sessions and sub-agents; tired (dimmer, slower, nodding off) as the five-hour or weekly usage runs low; asleep when the limit is hit, waking as it resets"
   phase: build
-  state: ready
+  state: review
 - id: DI-113
   title: "Take planning out of the app for now: Plan and Spec areas, phase ribbon, setup sheet, task board, Finish Task and task links"
   phase: build
@@ -473,5 +473,17 @@ tasks:
   state: review
 - id: DI-115
   title: "Full voice: replies spoken as they stream, hands-free follow-ups, opt-in “Hey Dante” wake word (on-device only), spoken status and usage, voice and speed in Settings, orb and Stage react to Dante speaking"
+  phase: build
+  state: review
+- id: DI-116
+  title: "Codex as an agent: Claude asks OpenAI's Codex (the user's ChatGPT sign-in) for read-only second opinions through ask_codex; a switch and model in Settings, a card in Agents, a satellite on the orb"
+  phase: build
+  state: review
+- id: DI-117
+  title: "Orb without the eye: no iris, blinking or pointer following; tiredness dims it instead"
+  phase: build
+  state: review
+- id: DI-118
+  title: "Minimise the terminal from its own header, and remember it across windows"
   phase: build
   state: review

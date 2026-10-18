@@ -105,7 +105,10 @@ final class Session {
     var conflicts: Set<URL> = []
 
     var area: Area = .code
-    var showsTerminal = true
+    /// Remembered across windows and launches, so a minimised terminal stays minimised.
+    var showsTerminal = UserDefaults.standard.object(forKey: "showsTerminal") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showsTerminal, forKey: "showsTerminal") }
+    }
     var terminalHeight: Double = 240
     var showsClaude = true
     /// The command palette, when it's open.
@@ -378,6 +381,10 @@ final class Session {
         // The dante MCP server carries local models, and Grok and Jev when they have keys.
         var environment = AgentKeys.environment()
         let local = Preferences.shared.delegatesToLocalModels
+        if Preferences.shared.asksCodex, let codex = Self.codexPath {
+            environment[DelegateEnvironment.codex] = codex
+            if !Preferences.shared.codexModel.isEmpty { environment[DelegateEnvironment.codexModel] = Preferences.shared.codexModel }
+        }
         if !environment.isEmpty {
             if !local { environment[DelegateEnvironment.local] = "0" }
             if !Preferences.shared.grokModel.isEmpty { environment[DelegateEnvironment.grokModel] = Preferences.shared.grokModel }
@@ -387,6 +394,9 @@ final class Session {
         claude.ledger = .standard
         claude.approvalLevel = Preferences.shared.approvalLevel
     }
+
+    /// The Codex CLI on this Mac, looked for once.
+    static let codexPath: String? = Codex.locate()
 
     /// The bundled `dante` command, which also serves local models to Claude Code. Missing
     /// when running outside the app bundle.

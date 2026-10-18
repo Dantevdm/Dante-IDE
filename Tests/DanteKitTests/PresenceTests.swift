@@ -98,8 +98,8 @@ import Testing
         let tired = acting.adjusted(for: Vitality(intensity: 1, fatigue: 1))
         #expect(flatOut.energy > acting.adjusted(for: Vitality(intensity: 0)).energy)
         #expect(tired.energy < flatOut.energy && tired.lightning < flatOut.lightning)
-        #expect(tired.lids == 0.5)
-        #expect(OrbStyle.of(.asleep).lids == 1)
+        #expect(tired.drowse == 0.5)
+        #expect(OrbStyle.of(.asleep).drowse == 1)
     }
 }
 

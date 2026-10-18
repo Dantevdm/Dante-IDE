@@ -77,10 +77,10 @@ public enum ModelRouting {
 /// turn, for the stats.
 public struct AgentJob: Codable, Equatable, Sendable, Identifiable {
     public enum Provider: String, Codable, Sendable {
-        case local, claude, grok, jev
+        case local, claude, grok, jev, codex
 
-        /// Runs on someone else's servers with the user's own key (not Claude).
-        public var isCloudAgent: Bool { self == .grok || self == .jev }
+        /// Another company's agent: Grok and Jev with the user's keys, Codex with their ChatGPT plan.
+        public var isCloudAgent: Bool { self == .grok || self == .jev || self == .codex }
     }
     public enum Outcome: String, Codable, Sendable { case done, failed }
 
@@ -280,7 +280,7 @@ extension AgentStats {
             switch job.provider {
             case .local: result[index].local += 1
             case .claude: result[index].claude += 1
-            case .grok, .jev: result[index].cloud += 1
+            case .grok, .jev, .codex: result[index].cloud += 1
             }
         }
         return result
@@ -291,6 +291,7 @@ extension AgentStats {
     public static func agent(of job: AgentJob) -> String {
         if job.provider == .grok { return CloudAgent.grok.title }
         if job.provider == .jev { return CloudAgent.jev.title }
+        if job.provider == .codex { return "Codex" }
         if let kind = DelegateKind(rawValue: job.kind), job.provider == .local { return kind.agent }
         return job.kind == "subagent" ? "Sub-agents" : "Claude"
     }

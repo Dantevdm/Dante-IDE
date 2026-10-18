@@ -100,7 +100,7 @@ struct AgentsView: View {
                     if stats.cloudJobs > 0 {
                         Chip(text: "\(stats.cloudJobs) cloud job\(stats.cloudJobs == 1 ? "" : "s")\(stats.costUSD > 0 ? String(format: " · $%.4f", stats.costUSD) : "")",
                              symbol: "cloud", color: theme.syntax.type.color)
-                            .help("Grok and Jev, with your keys. Cost is what Jev reports; xAI bills Grok to your account.")
+                            .help("Codex on your ChatGPT plan, and Grok and Jev with your keys. Cost is what Jev reports.")
                     }
                 }
             }
@@ -129,6 +129,12 @@ struct AgentsView: View {
         for (index, kind) in DelegateKind.allCases.enumerated() {
             result.append(AgentSummary(name: kind.agent, role: kind.title, model: ModelRouting.model(for: kind, installed: installed) ?? "No model",
                                        jobs: byAgent[kind.agent] ?? [], color: palette[index % palette.count], isClaude: false))
+        }
+        let codexJobs = byAgent["Codex"] ?? []
+        if Session.codexPath != nil && Preferences.shared.asksCodex || !codexJobs.isEmpty {
+            result.append(AgentSummary(name: "Codex", role: "Second opinions · OpenAI",
+                                       model: Preferences.shared.codexModel.isEmpty ? "Codex default" : Preferences.shared.codexModel,
+                                       jobs: codexJobs, color: theme.syntax.function.color, isClaude: false))
         }
         for agent in CloudAgent.allCases {
             let jobs = byAgent[agent.title] ?? []

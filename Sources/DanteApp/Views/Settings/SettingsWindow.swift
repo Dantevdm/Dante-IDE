@@ -165,6 +165,7 @@ private struct ClaudePreferencesPane: View {
             }
             VoicePreferencesSection()
             SwiftUI.Section {
+                CodexRow()
                 ForEach(CloudAgent.allCases) { agent in CloudAgentKeyRow(agent: agent) }
             } header: {
                 Text("Cloud agents")
@@ -225,6 +226,53 @@ private struct VoicePreferencesSection: View {
         }
         let region = Locale.current.localizedString(forRegionCode: String(voice.language.split(separator: "-").last ?? "")) ?? voice.language
         return "\(voice.name) (\(region))\(quality)"
+    }
+}
+
+/// Codex: found on this Mac (often inside the ChatGPT app) and signed in with ChatGPT, so it
+/// needs no key. Claude asks it read-only.
+private struct CodexRow: View {
+    @Environment(\.theme) private var theme
+    @Bindable private var preferences = Preferences.shared
+    @State private var signedIn: Bool?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Codex").font(.dante(size: 13, weight: .medium))
+                    Text("OpenAI · Second opinions that read the project").font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
+                }
+                .fixedSize()
+                Spacer(minLength: 12)
+                if let path = Session.codexPath {
+                    if signedIn == false {
+                        Label("Not signed in", systemImage: "exclamationmark.triangle.fill")
+                            .font(.dante(size: 11.5)).foregroundStyle(theme.amber.color)
+                            .help("Run codex login in the terminal, or sign in from the ChatGPT app.")
+                    }
+                    Toggle("Let Claude ask Codex", isOn: $preferences.asksCodex)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .help("Claude gets an ask_codex tool. Codex runs read-only at \(path), on your ChatGPT plan, and asks before each use unless approvals are off.")
+                        .onChange(of: preferences.asksCodex) { Sessions.all.forEach { $0.applyClaudePreferences() } }
+                } else {
+                    Text("Not installed").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                    Link("Get Codex", destination: URL(string: "https://developers.openai.com/codex/cli")!).font(.dante(size: 12))
+                }
+            }
+            if Session.codexPath != nil, preferences.asksCodex {
+                TextField("Model", text: $preferences.codexModel, prompt: Text("Codex default"))
+                    .onSubmit { Sessions.all.forEach { $0.applyClaudePreferences() } }
+                    .help("Leave empty for Codex’s default. Dante ignores your Codex config.toml, since its model may not work with a ChatGPT sign-in.")
+            }
+        }
+        .padding(.vertical, 2)
+        .task {
+            guard let path = Session.codexPath else { return }
+            let status = await Shell.run([path, "login", "status"], in: FileManager.default.homeDirectoryForCurrentUser)
+            signedIn = status.succeeded && (status.stdout + status.stderr).localizedCaseInsensitiveContains("logged in")
+        }
     }
 }
 

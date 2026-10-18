@@ -8,6 +8,7 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
         case subagent(String)
         case local(String)
         case cloud(CloudAgent)
+        case codex
     }
 
     public var id: String
@@ -38,6 +39,8 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
                 return OrbSatellite(id: tool.id, kind: .local(kind), color: color(local: kind), title: agent)
             case "mcp__dante__ask_grok":
                 return OrbSatellite(id: tool.id, kind: .cloud(.grok), color: color(cloud: .grok), title: "Grok")
+            case "mcp__dante__ask_codex":
+                return OrbSatellite(id: tool.id, kind: .codex, color: RGBA(0x8C9EFF), title: "Codex")
             case "mcp__dante__decide":
                 return OrbSatellite(id: tool.id, kind: .cloud(.jev), color: color(cloud: .jev), title: "Jev")
             default:
