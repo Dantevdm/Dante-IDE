@@ -12,6 +12,7 @@ struct StatusBar: View {
             if let branch = session.git.status?.branch ?? session.branch {
                 Label(branch, systemImage: "arrow.triangle.branch")
             }
+            SecurityStatus(session: session, workspace: workspace)
             Spacer()
             if let document = workspace.activeDocument, document.kind.opensAsText {
                 LanguageStatus(session: session, document: document)
@@ -29,6 +30,34 @@ struct StatusBar: View {
         .frame(height: 26)
         .background(theme.panel.color)
         .overlay(alignment: .top) { Rectangle().fill(theme.line.color).frame(height: 1) }
+    }
+}
+
+/// The last scan's grade, coloured by its worst finding; a click opens Security.
+private struct SecurityStatus: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if let report = session.security.report {
+                let serious = report.count(.critical) + report.count(.high)
+                let color = report.findings.first.map { Severity.color($0.severity, theme: theme) } ?? theme.green.color
+                Button { session.area = .security } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: session.security.scanning ? "shield.lefthalf.filled.badge.checkmark" : "shield.lefthalf.filled")
+                            .foregroundStyle(color)
+                            .symbolEffect(.pulse, isActive: session.security.scanning)
+                        Text(report.grade).font(.dante(size: 11.5, weight: .semibold)).foregroundStyle(color)
+                        if serious > 0 { Text("\(serious) serious") }
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Security \(report.grade), \(report.score)/100: \(report.findings.count) finding\(report.findings.count == 1 ? "" : "s"), scanned \(report.date.relative)")
+            }
+        }
+        .task(id: workspace.url) { session.security.loadSaved(root: workspace.url) }
     }
 }
 

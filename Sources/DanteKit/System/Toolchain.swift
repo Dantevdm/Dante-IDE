@@ -8,6 +8,7 @@ public struct Tool: Identifiable, Equatable, Sendable {
         case databases = "Database clients"
         case languageServers = "Language servers"
         case runtimes = "Languages"
+        case security = "Security scanners"
     }
 
     public var id: String
@@ -60,6 +61,18 @@ public struct Tool: Identifiable, Equatable, Sendable {
              executables: ["node"], versionArguments: ["--version"], extraPaths: [], install: "brew install node", languages: ["JavaScript", "TypeScript"]),
         Tool(id: "python3", name: "Python", group: .runtimes, purpose: "Running Python code and tests",
              executables: ["python3"], versionArguments: ["--version"], extraPaths: [], install: "brew install python", languages: ["Python"]),
+        // Security adds what these find to its own scan when they're installed.
+        Tool(id: "semgrep", name: "Semgrep", group: .security, purpose: "Security: code rules with data-flow checks",
+             executables: ["semgrep"], versionArguments: ["--version"], extraPaths: [], install: "brew install semgrep", languages: []),
+        Tool(id: "gitleaks", name: "Gitleaks", group: .security, purpose: "Security: hundreds of secret formats",
+             executables: ["gitleaks"], versionArguments: ["version"], extraPaths: [], install: "brew install gitleaks", languages: []),
+        Tool(id: "osv-scanner", name: "OSV-Scanner", group: .security, purpose: "Security: known vulnerabilities in lockfiles (when checking online)",
+             executables: ["osv-scanner"], versionArguments: ["--version"], extraPaths: [], install: "brew install osv-scanner", languages: []),
+        Tool(id: "govulncheck", name: "govulncheck", group: .security, purpose: "Security: Go vulnerabilities your code calls (when checking online)",
+             executables: ["govulncheck"], versionArguments: ["-version"], extraPaths: ["~/go/bin"],
+             install: "go install golang.org/x/vuln/cmd/govulncheck@latest", languages: ["Go"]),
+        Tool(id: "pip-audit", name: "pip-audit", group: .security, purpose: "Security: advisories for Python requirements (when checking online)",
+             executables: ["pip-audit"], versionArguments: ["--version"], extraPaths: [], install: "brew install pip-audit", languages: ["Python"]),
     ]
 
     /// Essentials and database clients always; language tools when the project uses the language.
