@@ -30,6 +30,28 @@ struct PresencePanel: View {
                     .help("This five-hour window is close to your busiest one")
             }
 
+            if !model.satellites.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(model.satellites) { satellite in
+                        HStack(spacing: 7) {
+                            Circle()
+                                .fill(satellite.color.color)
+                                .frame(width: 7, height: 7)
+                            Text(satellite.title)
+                                .font(.dante(size: 11.5))
+                                .foregroundStyle(theme.text2.color)
+                                .lineLimit(1)
+                            if case .local = satellite.kind {
+                                Text("on this Mac")
+                                    .font(.dante(size: 10.5))
+                                    .foregroundStyle(theme.text3.color)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 8)
+            }
+
             TalkButton().padding(.top, 12)
 
             if !model.presence.sources.isEmpty {

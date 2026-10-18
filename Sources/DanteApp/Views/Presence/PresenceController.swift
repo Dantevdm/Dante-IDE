@@ -10,6 +10,8 @@ final class PresenceModel {
     var presence = Presence.combine([])
     var mood: PresenceMood = .asleep
     var vitality = Vitality()
+    /// Sub-agents and local models working now, circling the orb.
+    var satellites: [OrbSatellite] = []
 }
 
 /// Claude's presence in the menu bar: an orb that shows, across every window, whether Claude
@@ -70,6 +72,7 @@ final class PresenceController: NSObject {
         watchers.add(orb)
         orb.mood = model.mood
         orb.vitality = model.vitality
+        orb.satellites = model.satellites
         orb.pointer = NSEvent.mouseLocation
     }
 
@@ -104,6 +107,10 @@ final class PresenceController: NSObject {
         let vitality = Vitality(intensity: workRate.intensity(at: now, running: work.running), fatigue: fatigue,
                                 exhaustedUntil: work.limitAt.map { usageResets.flatMap { $0 > now ? $0 : nil } ?? $0.addingTimeInterval(3600) })
         apply(vitality.isExhausted(at: now) ? Self.sleeping(presence, until: vitality.exhaustedUntil) : presence, vitality: vitality)
+        if model.satellites != work.satellites {
+            model.satellites = work.satellites
+            for orb in watchers.allObjects { orb.satellites = work.satellites }
+        }
         refreshUsageIfDue(now: now)
     }
 
@@ -113,10 +120,12 @@ final class PresenceController: NSObject {
         return Presence(mood: .asleep, line: "Out of Claude usage" + time, sources: presence.sources)
     }
 
-    /// Tool calls made so far, what's running now (sub-agents count double) and any usage limit hit.
-    private func currentWork() -> (tools: Int, running: Int, limitAt: Date?) {
+    /// Tool calls made so far, what's running now (sub-agents count double), any usage limit
+    /// hit, and the sub-agents and local models at work.
+    private func currentWork() -> (tools: Int, running: Int, limitAt: Date?, satellites: [OrbSatellite]) {
         var tools = 0, running = 0
         var limitAt: Date?
+        var satellites: [OrbSatellite] = []
         for session in Sessions.all {
             guard let claude = session.claude else { continue }
             if let at = claude.limitReachedAt { limitAt = max(limitAt ?? at, at) }
@@ -125,8 +134,11 @@ final class PresenceController: NSObject {
                 tools += 1
                 if tool.status == .running { running += tool.name == "Task" || tool.name == "Agent" ? 2 : 1 }
             }
+            if claude.state == .working {
+                satellites += OrbSatellite.running(in: claude.items.compactMap { item -> ToolActivity? in if case .tool(let tool) = item.content { tool } else { nil } })
+            }
         }
-        return (tools, running, limitAt)
+        return (tools, running, limitAt, satellites)
     }
 
     private func refreshUsageIfDue(now: Date) {

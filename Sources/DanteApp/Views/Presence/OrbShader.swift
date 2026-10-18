@@ -14,6 +14,9 @@ enum OrbShader {
         float4 p3;   // wake, hue, ring, eye
         float4 p4;   // aura, lightning, burst (0…1 after a power-up), flash
         float4 c0, c1, c2, c3;
+        float4 p5;   // satellites, beam strength, 0, 0
+        float4 s[6]; // per satellite: centre.xy, radius, depth (-1 behind … 1 in front)
+        float4 k[6]; // per satellite: colour, how far out (0 inside the orb … 1 free)
     };
 
     struct VOut { float4 position [[position]]; };
@@ -67,6 +70,50 @@ enum OrbShader {
         alpha += layerAlpha * (1.0 - alpha);
     }
 
+    // A satellite orb (an agent at work): its plasma sphere, the neck joining it to the
+    // orb while it splits off or merges back, and its glow. Premultiplied colour and alpha.
+    static float4 satellite(float2 uv, float4 s, float4 k, float mainRadius, float time, float pixel, float index, bool large) {
+        float2 c = s.xy;
+        float r = s.z;
+        float2 local = (uv - c) / max(r, 0.0001);
+        float e = length(local);
+        float d = length(uv);
+        float3 tint = k.rgb;
+        float3 color = float3(0.0);
+        float alpha = 0.0;
+
+        // Sphere.
+        if (e < 1.0 + pixel / r) {
+            float z = sqrt(max(0.0, 1.0 - e * e));
+            float n = fbm(float3(local * 1.7, time * 0.7 + index * 3.1), large ? 4 : 2);
+            float m = fbm(float3(local * 3.1 + n, time * 0.4 - index), 2);
+            float3 body = mix(tint * 0.35, tint * 1.25, n) * (0.45 + 0.55 * pow(z, 0.6));
+            body += mix(tint, float3(1.0), 0.45) * pow(1.0 - z, 2.4) * 1.4;
+            body = mix(body, float3(1.0), smoothstep(0.62, 0.85, m) * 0.35);
+            body += float3(1.0) * exp(-e * e * 7.0) * 0.45;
+            float a = smoothstep(1.0 + pixel / r, 1.0 - pixel / r, e);
+            color += body * a;
+            alpha += a;
+        }
+
+        // The neck: where the two fields together cross the surface, outside both spheres.
+        float field = pow(mainRadius / max(d, 0.0001), 2.0) + pow(r / max(length(uv - c), 0.0001), 2.0);
+        if (d > mainRadius && e > 1.0 && k.w < 0.999) {
+            float neck = smoothstep(1.0, 1.25, field) * (1.0 - smoothstep(0.55, 1.0, k.w));
+            float along = clamp(dot(uv, c) / max(dot(c, c), 0.0001), 0.0, 1.0);
+            float3 neckColor = mix(tint * 1.1, mix(tint, float3(1.0), 0.6), along) * (0.9 + 0.5 * fbm(float3(uv * 9.0, time), 2));
+            color += neckColor * neck * (1.0 - alpha);
+            alpha += neck * (1.0 - alpha);
+        }
+
+        // Glow.
+        float outside = max(e - 1.0, 0.0) * r;
+        float glow = exp(-outside * (large ? 16.0 : 24.0)) * 0.55 * smoothstep(0.9, 1.02, e);
+        color += tint * glow * (1.0 - alpha);
+        alpha += glow * (1.0 - alpha);
+        return float4(color, clamp(alpha, 0.0, 1.0));
+    }
+
     fragment float4 orbFragment(VOut in [[stage_in]], constant Uniforms& u [[buffer(0)]]) {
         float2 res = u.p0.xy;
         float time = u.p0.z;
@@ -110,6 +157,33 @@ enum OrbShader {
         float alpha = 0.0;
 
         // MARK: Front layers, drawn first and composited from the front back.
+
+        // Satellites passing in front of the orb.
+        int satellites = int(u.p5.x);
+        for (int i = 0; i < satellites; i++) {
+            if (u.s[i].w <= 0.0) { continue; }
+            float4 sat = satellite(uv, u.s[i], u.k[i], radius, time, pixel, float(i), large);
+            under(color, alpha, sat.rgb / max(sat.a, 0.0001), sat.a);
+        }
+
+        // Beams to each satellite: energy pulsing out along the link while they work together.
+        // Drawn before the flames and halo, so they aren't lost in them.
+        float beamStrength = u.p5.y;
+        for (int i = 0; i < satellites; i++) {
+            float2 c = u.s[i].xy;
+            float len2 = max(dot(c, c), 0.0001);
+            float t = clamp(dot(uv, c) / len2, 0.0, 1.0);
+            float2 nearest = c * t;
+            float h = length(uv - nearest);
+            float clear = smoothstep(radius * 0.98, radius * 1.1, d) * smoothstep(u.s[i].z * 0.95, u.s[i].z * 1.25, length(uv - c));
+            float wiggle = (noise3(float3(t * 9.0, time * 3.0, float(i))) - 0.5) * 0.02;
+            float core = exp(-pow(h + wiggle, 2.0) * (large ? 6000.0 : 1800.0));
+            float sheath = exp(-pow(h + wiggle, 2.0) * (large ? 500.0 : 260.0)) * 0.35;
+            float flow = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * 26.0 - time * 9.0 + float(i) * 1.7), 6.0);
+            float gate = clear * beamStrength * smoothstep(0.35, 0.9, u.k[i].w);
+            under(color, alpha, mix(u.k[i].rgb, float3(1.0), 0.6) * 1.3, clamp(core * flow * gate, 0.0, 1.0));
+            under(color, alpha, u.k[i].rgb, clamp(sheath * (0.5 + 0.5 * flow) * gate, 0.0, 1.0));
+        }
 
         // Shockwave from a power-up.
         if (flash > 0.0 && burst < 1.0) {
@@ -240,6 +314,13 @@ enum OrbShader {
         float halo = exp(-outside * (large ? 4.0 : 6.5)) * glowStrength * (0.55 + 0.45 * pulse) * wake;
         halo *= smoothstep(radius * 0.9, radius * 1.02, d);
         under(color, alpha, palette(hue + time * 0.03 + angle / 6.2831853, u), clamp(halo, 0.0, 1.0));
+
+        // Satellites behind the orb.
+        for (int i = 0; i < satellites; i++) {
+            if (u.s[i].w > 0.0) { continue; }
+            float4 sat = satellite(uv, u.s[i], u.k[i], radius, time, pixel, float(i), large);
+            under(color, alpha, sat.rgb / max(sat.a, 0.0001), sat.a * (0.75 + 0.25 * (1.0 + u.s[i].w)));
+        }
 
         // Nothing reaches the edge of the frame: a hard cut there would show the view's square.
         float frame = smoothstep(1.0, 0.82, max(abs(uv.x), abs(uv.y - (large ? 0.16 : 0.0))));

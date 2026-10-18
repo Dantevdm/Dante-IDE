@@ -24,6 +24,24 @@ final class OrbView: MTKView, MTKViewDelegate {
         var c1: SIMD4<Float>
         var c2: SIMD4<Float>
         var c3: SIMD4<Float>
+        var p5 = SIMD4<Float>(0, 0, 0, 0)
+        var s0 = SIMD4<Float>(0, 0, 0, 0), s1 = SIMD4<Float>(0, 0, 0, 0), s2 = SIMD4<Float>(0, 0, 0, 0)
+        var s3 = SIMD4<Float>(0, 0, 0, 0), s4 = SIMD4<Float>(0, 0, 0, 0), s5 = SIMD4<Float>(0, 0, 0, 0)
+        var k0 = SIMD4<Float>(0, 0, 0, 0), k1 = SIMD4<Float>(0, 0, 0, 0), k2 = SIMD4<Float>(0, 0, 0, 0)
+        var k3 = SIMD4<Float>(0, 0, 0, 0), k4 = SIMD4<Float>(0, 0, 0, 0), k5 = SIMD4<Float>(0, 0, 0, 0)
+
+        /// Fills the satellite slots (the shader takes six) and the beams' strength.
+        mutating func place(_ frames: [Constellation.Frame], beams: Float) {
+            let packed = frames.prefix(Constellation.limit).map { frame in
+                (SIMD4(Float(frame.x), Float(frame.y), Float(frame.radius), Float(frame.depth)),
+                 SIMD4(Float(frame.color.red), Float(frame.color.green), Float(frame.color.blue), Float(frame.out)))
+            }
+            p5 = SIMD4(Float(packed.count), beams, 0, 0)
+            let empty = (SIMD4<Float>(0, 0, 0, 0), SIMD4<Float>(0, 0, 0, 0))
+            let all = packed + Array(repeating: empty, count: Constellation.limit - packed.count)
+            (s0, k0) = all[0]; (s1, k1) = all[1]; (s2, k2) = all[2]
+            (s3, k3) = all[3]; (s4, k4) = all[4]; (s5, k5) = all[5]
+        }
     }
 
     /// Eased values: each frame moves the current ones towards the targets.
@@ -88,6 +106,18 @@ final class OrbView: MTKView, MTKViewDelegate {
         target = Animated(OrbStyle.of(mood).adjusted(for: vitality), fatigue: vitality.fatigue)
     }
 
+    /// Sub-agents and local models at work: each buds off the orb, circles it and merges back
+    /// when it's done. Large orbs only; at menu bar size they'd be a few pixels of noise.
+    var satellites: [OrbSatellite] = [] {
+        didSet {
+            guard size == .large, satellites != oldValue else { return }
+            constellation.update(satellites, at: satelliteClock)
+            // A split is a small effort: the orb tenses.
+            if satellites.count > oldValue.count { kick = max(kick, 0.45) }
+        }
+    }
+    private var constellation = Constellation()
+
     /// Whether to draw the eye (the panel's orb can look away while you read).
     var showsEye = true
     /// Where the pointer is, in screen coordinates; the eye follows it.
@@ -130,6 +160,8 @@ final class OrbView: MTKView, MTKViewDelegate {
     private var occluded = false
 
     private var now: Double { CACurrentMediaTime() - start }
+    /// The constellation's time: seconds of drawing, slowed with Reduce Motion.
+    private var satelliteClock: Double = 0
 
     init(size: Size, mood: PresenceMood = .asleep) {
         self.size = size
@@ -196,7 +228,8 @@ final class OrbView: MTKView, MTKViewDelegate {
 
     /// The orb in one mood as a still image, drawn offscreen: for checking the look of every
     /// mood at once (`DANTE_ORB_SNAPSHOTS=<folder>`) and for screenshots.
-    static func snapshot(mood: PresenceMood, pixels: Int, size: Size, time: Float = 14, gaze: SIMD2<Float> = SIMD2(-0.3, -0.2), burst: Float = 1) -> CGImage? {
+    static func snapshot(mood: PresenceMood, pixels: Int, size: Size, time: Float = 14, gaze: SIMD2<Float> = SIMD2(-0.3, -0.2), burst: Float = 1,
+                         satellites: [Constellation.Frame] = []) -> CGImage? {
         guard let shared else { return nil }
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: pixels, height: pixels, mipmapped: false)
         descriptor.usage = [.renderTarget, .shaderRead]
@@ -219,6 +252,7 @@ final class OrbView: MTKView, MTKViewDelegate {
             p4: SIMD4(style.aura, style.lightning, burst, burst < 1 ? 1 : 0),
             c0: colors[0], c1: colors[1], c2: colors[2], c3: colors[3]
         )
+        uniforms.place(satellites, beams: 1)
         encoder.setRenderPipelineState(shared.pipeline)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
@@ -247,6 +281,18 @@ final class OrbView: MTKView, MTKViewDelegate {
         for (index, burst) in [Float(0.15), 0.4, 0.7].enumerated() {
             guard let image = snapshot(mood: .acting, pixels: 640, size: .large, burst: burst) else { continue }
             try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appending(path: "burst-\(index).png"))
+        }
+        // Agents splitting off, circling and merging back.
+        var constellation = Constellation()
+        let agents = ["Explore", "summary", "Plan"].map { name in
+            OrbSatellite(id: name, kind: name == "summary" ? .local(name) : .subagent(name),
+                         color: name == "summary" ? RGBA(0x1DE9B6) : name == "Plan" ? RGBA(0xB388FF) : RGBA(0x40C4FF), title: name)
+        }
+        constellation.update(agents, at: 0)
+        for (index, t) in [0.4, 0.9, 3.0, 6.0].enumerated() {
+            let frames = constellation.frames(at: t, mainRadius: 0.46, satelliteRadius: 0.1).frames
+            guard let image = snapshot(mood: .acting, pixels: 640, size: .large, time: Float(14 + t), satellites: frames) else { continue }
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appending(path: "constellation-\(index).png"))
         }
     }
 
@@ -359,7 +405,7 @@ final class OrbView: MTKView, MTKViewDelegate {
             let grey = SIMD3<Float>(repeating: simd_dot(color, SIMD3(0.3, 0.59, 0.11)) * 0.6)
             return SIMD4(color + (grey - color) * current.fatigue * 0.7, 1)
         }
-        return Uniforms(
+        var uniforms = Uniforms(
             p0: SIMD4(Float(drawableSize.width), Float(drawableSize.height), Float(clock), current.energy * pace),
             p1: SIMD4(current.gaze.x, current.gaze.y, current.dilation, blink),
             p2: SIMD4(pulse * (reduceMotion ? 0.3 : 1), current.flicker * (reduceMotion ? 0.2 : 1), current.glow, size == .large ? 1 : 0),
@@ -367,6 +413,15 @@ final class OrbView: MTKView, MTKViewDelegate {
             p4: SIMD4(current.aura * (reduceMotion ? 0.5 : 1), reduceMotion ? 0 : current.lightning, burst, burst < 1 && !reduceMotion ? 1 : 0),
             c0: colors[0], c1: colors[1], c2: colors[2], c3: colors[3]
         )
+        if !constellation.isEmpty {
+            // Satellites keep their own clock, slowed like everything else for Reduce Motion.
+            satelliteClock += Double(dt * pace)
+            let (frames, merged) = constellation.frames(at: satelliteClock, mainRadius: 0.46 * Double(wake), satelliteRadius: 0.1)
+            // Each one merging back lands with a pulse.
+            if merged > 0 { kick = min(1, kick + 0.6 * Float(merged)) }
+            uniforms.place(frames, beams: reduceMotion ? 0.4 : 0.7 + 0.3 * current.energy)
+        }
+        return uniforms
     }
 
     /// Looks at the pointer while it moves; once it's been still a while, glances about.

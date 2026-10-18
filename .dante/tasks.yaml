@@ -443,7 +443,7 @@ tasks:
 - id: DI-108
   title: "Constellation: one orb per agent; orbs split off for sub-agents and jobs, beam to each other while they work together, and merge back when done"
   phase: build
-  state: ready
+  state: review
   spec: docs/plans/walk-and-work.md
 - id: DI-109
   title: "Local models: Claude delegates drafts, summaries and triage to Ollama models through Dante's tools, and checks what comes back"
