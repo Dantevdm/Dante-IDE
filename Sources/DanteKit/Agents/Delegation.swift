@@ -73,9 +73,15 @@ public enum ModelRouting {
     }
 }
 
-/// One job an agent did: a local model's delegated task or a Claude turn, for the stats.
+/// One job an agent did: a local model's delegated task, a cloud agent's answer or a Claude
+/// turn, for the stats.
 public struct AgentJob: Codable, Equatable, Sendable, Identifiable {
-    public enum Provider: String, Codable, Sendable { case local, claude }
+    public enum Provider: String, Codable, Sendable {
+        case local, claude, grok, jev
+
+        /// Runs on someone else's servers with the user's own key (not Claude).
+        public var isCloudAgent: Bool { self == .grok || self == .jev }
+    }
     public enum Outcome: String, Codable, Sendable { case done, failed }
 
     public var id: UUID
@@ -92,10 +98,12 @@ public struct AgentJob: Codable, Equatable, Sendable, Identifiable {
     public var requestedBy: String
     /// A few words about the job.
     public var title: String
+    /// What the provider charged, when it says (Jev does).
+    public var costUSD: Double?
 
     public init(id: UUID = UUID(), date: Date = Date(), kind: String, provider: Provider, model: String, project: String,
                 promptTokens: Int = 0, outputTokens: Int = 0, seconds: Double = 0, outcome: Outcome = .done,
-                requestedBy: String = "dante", title: String = "") {
+                requestedBy: String = "dante", title: String = "", costUSD: Double? = nil) {
         self.id = id
         self.date = date
         self.kind = kind
@@ -108,6 +116,7 @@ public struct AgentJob: Codable, Equatable, Sendable, Identifiable {
         self.outcome = outcome
         self.requestedBy = requestedBy
         self.title = title
+        self.costUSD = costUSD
     }
 
     public var tokens: Int { promptTokens + outputTokens }
@@ -172,6 +181,10 @@ public struct AgentStats: Equatable, Sendable {
     public var rows: [Row]
     public var localJobs: Int
     public var claudeJobs: Int
+    /// Jobs Grok and Jev did.
+    public var cloudJobs: Int
+    /// What cloud agents charged, as far as they say.
+    public var costUSD: Double
     /// Tokens local models handled instead of Claude.
     public var tokensKeptLocal: Int
     /// Of the jobs Claude could have delegated, the share it did.
@@ -201,6 +214,8 @@ public struct AgentStats: Equatable, Sendable {
         self.rows = rows.values.sorted { $0.jobs != $1.jobs ? $0.jobs > $1.jobs : $0.model < $1.model }
         localJobs = jobs.filter { $0.provider == .local }.count
         claudeJobs = jobs.filter { $0.provider == .claude }.count
+        cloudJobs = jobs.filter { $0.provider.isCloudAgent }.count
+        costUSD = jobs.reduce(0) { $0 + ($1.costUSD ?? 0) }
         tokensKeptLocal = jobs.filter { $0.provider == .local && $0.outcome == .done }.reduce(0) { $0 + $1.tokens }
         delegatedByClaude = jobs.filter { $0.provider == .local && $0.requestedBy == "claude" }.count
         self.byHour = byHour
@@ -249,6 +264,7 @@ extension AgentStats {
         public var date: Date
         public var local: Int
         public var claude: Int
+        public var cloud: Int = 0
         public var id: Date { date }
     }
 
@@ -261,13 +277,20 @@ extension AgentStats {
         for job in jobs {
             let day = calendar.startOfDay(for: job.date)
             guard let index = result.firstIndex(where: { $0.date == day }) else { continue }
-            if job.provider == .local { result[index].local += 1 } else { result[index].claude += 1 }
+            switch job.provider {
+            case .local: result[index].local += 1
+            case .claude: result[index].claude += 1
+            case .grok, .jev: result[index].cloud += 1
+            }
         }
         return result
     }
 
-    /// The agent a job belongs to, by name: the local agents by kind, else Claude or a sub-agent.
+    /// The agent a job belongs to, by name: the local agents by kind, Grok or Jev, else Claude
+    /// or a sub-agent.
     public static func agent(of job: AgentJob) -> String {
+        if job.provider == .grok { return CloudAgent.grok.title }
+        if job.provider == .jev { return CloudAgent.jev.title }
         if let kind = DelegateKind(rawValue: job.kind), job.provider == .local { return kind.agent }
         return job.kind == "subagent" ? "Sub-agents" : "Claude"
     }

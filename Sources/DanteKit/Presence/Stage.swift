@@ -25,6 +25,8 @@ public enum StageCaption {
 public struct StageTally: Equatable, Sendable {
     public var localJobs = 0
     public var claudeJobs = 0
+    /// Jobs Grok and Jev did.
+    public var cloudJobs = 0
     public var tokensKeptLocal = 0
     /// The busiest local model today, if any.
     public var topLocalModel: String?
@@ -41,6 +43,8 @@ public struct StageTally: Equatable, Sendable {
                 models[job.model, default: 0] += 1
             case .claude:
                 claudeJobs += 1
+            case .grok, .jev:
+                cloudJobs += 1
             }
         }
         topLocalModel = models.max { $0.value == $1.value ? $0.key > $1.key : $0.value < $1.value }?.key

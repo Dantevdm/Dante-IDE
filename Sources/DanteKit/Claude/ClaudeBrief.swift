@@ -22,8 +22,27 @@ public enum ClaudeBrief {
     When you end a turn by asking the user to pick between options (which skills to write, which fix to apply, which approach to take), ask with the AskUserQuestion tool instead of a numbered list in prose: Dante shows its options as buttons, so the user doesn't have to type. Use multiSelect when several can be picked, keep labels short and put the detail in each option's description. Up to four options per question; split longer lists into two questions or keep only the strongest four.
     """
 
+    /// What Claude is told about the dante MCP server's tools, or nil when it has none.
+    public nonisolated static func delegation(local: Bool, jev: Bool, grok: Bool) -> String? {
+        var parts: [String] = []
+        if local { parts.append(delegation) }
+        if jev { parts.append(jevDecisions) }
+        if grok { parts.append(grokOpinions) }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+    }
+
+    public nonisolated static let jevDecisions = """
+    # Quick decisions with Jev
+    The `decide` tool asks Jev, a fast decision model, typed questions about material you pass: pick one of several labelled options, rate on a scale, or yes/no. It answers in under a second for a fraction of a cent. Use it when many small judgements would otherwise cost a turn each: routing failures or log lines to the area they belong to, rating how risky a command or diff is, deciding whether output is worth reading. Its answers come with confidence; check low-confidence ones yourself. It runs on Jev's servers, so never send secrets.
+    """
+
+    public nonisolated static let grokOpinions = """
+    # Second opinions from Grok
+    The `ask_grok` tool asks xAI's Grok, which the user pays for, for an independent view. Use it sparingly, when a second opinion is worth it: a risky design choice, a bug you can't pin down, or when the user asks. Put everything it needs in the prompt (it can't see files), weigh its answer against your own, and tell the user where it agreed or differed. Never send secrets.
+    """
+
     /// Added when local models are on: Claude orchestrates, delegates and checks.
-    public static let delegation = """
+    public nonisolated static let delegation = """
     # Delegating to local models
     You're the orchestrator. The `delegate` tool (from the dante MCP server) hands a self-contained job to a model running on the user's Mac, which saves their Claude usage. Use it for work a smaller model does well: condensing long logs, diffs or files you only need the gist of (summary), sorting many failures or errors (triage), first drafts of boilerplate, fixtures or repetitive tests (draft), and prose (writing). Put everything the job needs in the prompt; the local model can't read files or run tools. Always check what comes back, fix it or redo it yourself if it's wrong, and say briefly when you delegated. Don't delegate design decisions, subtle bugs, security-sensitive code or anything needing the whole codebase in mind.
     """

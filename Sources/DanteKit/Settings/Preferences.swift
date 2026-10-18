@@ -51,6 +51,8 @@ public final class Preferences {
     public var claudeModel: ClaudeModel { didSet { defaults.set(claudeModel.rawValue, forKey: Keys.claudeModel) } }
     /// Let Claude hand small jobs to models in Ollama on this Mac (the `delegate` tool).
     public var delegatesToLocalModels: Bool { didSet { defaults.set(delegatesToLocalModels, forKey: Keys.delegatesToLocalModels) } }
+    /// The Grok model `ask_grok` uses; empty picks the best the key has.
+    public var grokModel: String { didSet { defaults.set(grokModel, forKey: Keys.grokModel) } }
     /// How much Claude may do without asking.
     public var approvalLevel: ApprovalLevel { didSet { defaults.set(approvalLevel.rawValue, forKey: Keys.approvalLevel) } }
     /// Read Claude's replies out after you speak to it.
@@ -77,6 +79,7 @@ public final class Preferences {
         claudeAsksFirst = bool(Keys.claudeAsksFirst, true)
         delegatesToLocalModels = bool(Keys.delegatesToLocalModels, true)
         speaksReplies = bool(Keys.speaksReplies, true)
+        grokModel = defaults.string(forKey: Keys.grokModel) ?? ""
         approvalLevel = defaults.string(forKey: Keys.approvalLevel).flatMap(ApprovalLevel.init(rawValue:)) ?? .ask
         claudeModel = defaults.string(forKey: Keys.claudeModel).flatMap(ClaudeModel.init(rawValue:)) ?? .default
         usesGeist = bool(Keys.usesGeist, true)
@@ -114,6 +117,7 @@ public final class Preferences {
         static let claudeAsksFirst = "claudeAsksFirst"
         static let delegatesToLocalModels = "delegatesToLocalModels"
         static let speaksReplies = "speaksReplies"
+        static let grokModel = "grokModel"
         static let approvalLevel = "approvalLevel"
         static let claudeModel = "claudeModel"
         static let usesGeist = "usesGeist"

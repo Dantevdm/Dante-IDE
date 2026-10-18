@@ -162,6 +162,12 @@ public final class ClaudeSession {
     /// delegate jobs to local models. Nil turns delegation off. Takes effect on the next message.
     public var delegateCommand: String?
     private var startedDelegate: String?
+    /// The `dante mcp` server's environment: cloud agents' keys and settings
+    /// (`DelegateEnvironment`). With keys in it, the config goes in a private file
+    /// (`MCPConfigFile`) that's removed when Claude Code stops.
+    public var delegateEnvironment: [String: String] = [:]
+    private var startedDelegateEnvironment: [String: String] = [:]
+    private var mcpConfigFile: URL?
     /// How much Claude may do without asking (on top of Claude Code's own read-only rule).
     public var approvalLevel: ApprovalLevel = .ask
     /// The project's allow rules (`.claude/settings*.json`), read when Claude starts and
@@ -258,7 +264,8 @@ public final class ClaudeSession {
             return
         }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
-        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || delegateCommand != startedDelegate {
+        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || delegateCommand != startedDelegate
+            || delegateEnvironment != startedDelegateEnvironment {
             stop()
         }
         if process == nil {
@@ -426,8 +433,23 @@ public final class ClaudeSession {
         let delegate = remote == nil ? delegateCommand : nil
         var prompt = systemPrompt() + "\n\n" + ClaudeBrief.offeringChoices
         if asksFirst { prompt += "\n\n" + ClaudeBrief.clarifyingQuestions }
-        if delegate != nil { prompt += "\n\n" + ClaudeBrief.delegation }
-        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel, delegate: delegate)
+        var mcpConfig: String?
+        if let delegate {
+            let environment = delegateEnvironment
+            if let brief = ClaudeBrief.delegation(local: environment[DelegateEnvironment.local] != "0",
+                                                  jev: environment[CloudAgent.jev.environmentVariable] != nil,
+                                                  grok: environment[CloudAgent.grok.environmentVariable] != nil) {
+                prompt += "\n\n" + brief
+            }
+            let json = MCPConfigFile.json(command: delegate, environment: environment)
+            if environment.isEmpty {
+                mcpConfig = json
+            } else if let file = try? MCPConfigFile.write(json) {
+                mcpConfigFile = file
+                mcpConfig = file.path
+            }
+        }
+        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel, mcpConfig: mcpConfig)
         if let remote {
             process.executableURL = URL(filePath: "/usr/bin/env")
             process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
@@ -441,6 +463,7 @@ public final class ClaudeSession {
         startedAsksFirst = asksFirst
         allowRules = ClaudePermissions.load(root: root).allow
         startedDelegate = delegateCommand
+        startedDelegateEnvironment = delegateEnvironment
         startedModel = requestedModel
         process.environment = Self.environment()
 
@@ -508,7 +531,10 @@ public final class ClaudeSession {
         }
     }
 
-    nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?, model: String? = nil, delegate: String? = nil) -> [String] {
+    /// `mcpConfig` is JSON or the path of a file holding it; `delegate` makes the plain config
+    /// for the `dante` command when there's none.
+    nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?, model: String? = nil,
+                                      delegate: String? = nil, mcpConfig: String? = nil) -> [String] {
         var arguments = [
             "--output-format", "stream-json",
             "--input-format", "stream-json",
@@ -521,14 +547,15 @@ public final class ClaudeSession {
         if let settings = rules.settingsJSON { arguments += ["--settings", settings] }
         if let sessionID { arguments += ["--resume", sessionID] }
         if let model { arguments += ["--model", model] }
-        if let delegate {
-            let config: JSONValue = ["mcpServers": ["dante": ["type": "stdio", "command": .string(delegate), "args": ["mcp"]]]]
-            arguments += ["--mcp-config", config.jsonLine]
+        if let config = mcpConfig ?? delegate.map({ MCPConfigFile.json(command: $0, environment: [:]) }) {
+            arguments += ["--mcp-config", config]
         }
         return arguments
     }
 
     private func processEnded(status: Int32) {
+        if let mcpConfigFile { try? FileManager.default.removeItem(at: mcpConfigFile) }
+        mcpConfigFile = nil
         costBeforeThisProcess = totalCostUSD
         process = nil
         stdin = nil
@@ -649,8 +676,9 @@ public final class ClaudeSession {
                     let hasNote = activity(id)?.ruleNote != nil
                     if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
-                    } else if request.toolName.hasPrefix("mcp__dante__") {
-                        // Dante's own local-model tools: nothing to review before they run.
+                    } else if ["mcp__dante__delegate", "mcp__dante__local_models"].contains(request.toolName) {
+                        // Dante's own local-model tools: nothing leaves the Mac. Grok and Jev
+                        // send material away, so they follow the approval level.
                         approve(id)
                     } else if ApprovalPolicy.approves(request.toolName, input: request.input, level: approvalLevel, allow: allowRules, hasRuleNote: hasNote) {
                         approve(id)

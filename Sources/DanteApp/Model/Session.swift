@@ -375,7 +375,15 @@ final class Session {
         guard let claude = claude ?? self.claude else { return }
         claude.asksFirst = Preferences.shared.claudeAsksFirst
         claude.requestedModel = Preferences.shared.claudeModel.argument
-        claude.delegateCommand = Preferences.shared.delegatesToLocalModels ? Self.danteCommand : nil
+        // The dante MCP server carries local models, and Grok and Jev when they have keys.
+        var environment = AgentKeys.environment()
+        let local = Preferences.shared.delegatesToLocalModels
+        if !environment.isEmpty {
+            if !local { environment[DelegateEnvironment.local] = "0" }
+            if !Preferences.shared.grokModel.isEmpty { environment[DelegateEnvironment.grokModel] = Preferences.shared.grokModel }
+        }
+        claude.delegateCommand = local || !environment.isEmpty ? Self.danteCommand : nil
+        claude.delegateEnvironment = environment
         claude.ledger = .standard
         claude.approvalLevel = Preferences.shared.approvalLevel
     }

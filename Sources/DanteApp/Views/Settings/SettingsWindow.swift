@@ -163,6 +163,101 @@ private struct ClaudePreferencesPane: View {
                     .onChange(of: preferences.delegatesToLocalModels) { Sessions.all.forEach { $0.applyClaudePreferences() } }
                 Toggle("Read replies aloud after you speak (\(VoiceController.keyLabel))", isOn: $preferences.speaksReplies)
             }
+            SwiftUI.Section {
+                ForEach(CloudAgent.allCases) { agent in CloudAgentKeyRow(agent: agent) }
+            } header: {
+                Text("Cloud agents")
+                    .help("Claude can ask Grok for a second opinion and Jev for quick typed decisions, using your own keys. Keys stay in your Keychain; Claude asks before sending anything to them unless approvals are off.")
+            }
+        }
+    }
+}
+
+/// A cloud agent's key: pasted once, kept in the Keychain, shown masked, checked on request.
+private struct CloudAgentKeyRow: View {
+    @Environment(\.theme) private var theme
+    @Bindable private var preferences = Preferences.shared
+    let agent: CloudAgent
+    @State private var entered = ""
+    @State private var saved: String?
+    @State private var status: (text: String, ok: Bool)?
+    @State private var checking = false
+    @State private var models: [String] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(agent.title).font(.dante(size: 13, weight: .medium))
+                    Text("\(agent.company) · \(agent.role)").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                        .lineLimit(1)
+                }
+                .fixedSize()
+                if let saved {
+                    Text(saved).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
+                    Spacer()
+                    Button(checking ? "Checking…" : "Check") { Task { await check() } }
+                        .disabled(checking)
+                        .help(agent == .jev ? "Asks Jev one tiny question (a fraction of a cent)." : "Lists the models your key can use.")
+                    Button("Remove") { store(nil) }
+                } else {
+                    Spacer(minLength: 12)
+                    SecureField("\(agent.title) API key", text: $entered, prompt: Text(agent.keyHint))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 220)
+                        .onSubmit { store(entered) }
+                    Button("Save") { store(entered) }
+                        .disabled(entered.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Link("Get a key", destination: agent.keysPage).font(.dante(size: 12))
+                }
+            }
+            if let status {
+                Label(status.text, systemImage: status.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.dante(size: 11.5))
+                    .foregroundStyle(status.ok ? theme.green.color : theme.amber.color)
+                    .lineLimit(2)
+            }
+            if agent == .grok, saved != nil {
+                Picker("Model", selection: $preferences.grokModel) {
+                    Text("Best available").tag("")
+                    ForEach(models.contains(preferences.grokModel) || preferences.grokModel.isEmpty ? models : [preferences.grokModel] + models, id: \.self) {
+                        Text($0).tag($0)
+                    }
+                }
+                .onChange(of: preferences.grokModel) { Sessions.all.forEach { $0.applyClaudePreferences() } }
+                .help("Check lists the models your key can use.")
+            }
+        }
+        .padding(.vertical, 2)
+        .onAppear { saved = AgentKeys.key(for: agent).map(AgentKeys.masked) }
+    }
+
+    private func store(_ key: String?) {
+        let ok = AgentKeys.set(key, for: agent)
+        entered = ""
+        saved = AgentKeys.key(for: agent).map(AgentKeys.masked)
+        status = ok ? nil : ("Couldn’t save to the Keychain.", false)
+        if key == nil { models = [] }
+        Sessions.all.forEach { $0.applyClaudePreferences() }
+    }
+
+    private func check() async {
+        guard let key = AgentKeys.key(for: agent) else { return }
+        checking = true
+        defer { checking = false }
+        do {
+            switch agent {
+            case .grok:
+                models = try await Grok(key: key).models()
+                status = models.isEmpty ? ("The key works but has no chat models.", false) : ("Works: \(models.count) model\(models.count == 1 ? "" : "s").", true)
+            case .jev:
+                let decision = try await Jev(key: key).check()
+                let credit = decision.creditsRemainingUSD.map { String(format: " $%.2f credit left.", $0) } ?? ""
+                status = ("Works: \(decision.model).\(credit)", true)
+            }
+        } catch {
+            status = (error.localizedDescription, false)
         }
     }
 }

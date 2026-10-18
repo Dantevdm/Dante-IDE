@@ -467,3 +467,7 @@ tasks:
   title: "Take planning out of the app for now: Plan and Spec areas, phase ribbon, setup sheet, task board, Finish Task and task links"
   phase: build
   state: review
+- id: DI-114
+  title: "Cloud agents with the user's own keys: Grok (xAI) as ask_grok for second opinions, Jev as decide for fast typed decisions; keys in the Keychain, passed to dante mcp in a private config file, shown in Settings and the Agents area"
+  phase: build
+  state: review

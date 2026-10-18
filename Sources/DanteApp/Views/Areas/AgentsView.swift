@@ -3,7 +3,7 @@ import DanteKit
 import SwiftUI
 
 /// Agents: who did the work. Claude orchestrates; local models in Ollama take the jobs it
-/// (and Dante) hands them. Live numbers from the `AgentLedger`, which the `dante mcp` server
+/// (and Dante) hands them, and Grok and Jev answer when the user has added their keys. Live numbers from the `AgentLedger`, which the `dante mcp` server
 /// Claude Code runs writes to as well.
 struct AgentsView: View {
     @Environment(\.theme) private var theme
@@ -13,6 +13,8 @@ struct AgentsView: View {
     @State private var jobs: [AgentJob] = []
     @State private var models: [OllamaModel]?
     @State private var range: Range = .week
+    /// Cloud agents with a key in the Keychain.
+    @State private var cloud: Set<CloudAgent> = []
 
     enum Range: String, CaseIterable, Identifiable {
         case today = "Today", week = "7 days", month = "30 days"
@@ -76,7 +78,7 @@ struct AgentsView: View {
                 .frame(width: 210, height: 180)
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 28) {
-                    BigNumber(value: "\(stats.localJobs + stats.claudeJobs)", label: "Jobs")
+                    BigNumber(value: "\(stats.localJobs + stats.claudeJobs + stats.cloudJobs)", label: "Jobs")
                     BigNumber(value: ClaudeUsage.short(stats.tokensKeptLocal), label: "Tokens kept local", color: theme.green.color)
                     BigNumber(value: "\(stats.delegatedByClaude)", label: "Delegated by Claude", color: theme.claude.color)
                     BigNumber(value: stats.localJobs + stats.claudeJobs == 0 ? "–" : "\(Int((stats.delegationShare * 100).rounded()))%",
@@ -94,6 +96,11 @@ struct AgentsView: View {
                         Chip(text: "Ollama isn’t running", symbol: "exclamationmark.triangle", color: theme.amber.color)
                     } else if Session.danteCommand == nil {
                         Chip(text: "Delegation needs the app bundle", symbol: "info.circle")
+                    }
+                    if stats.cloudJobs > 0 {
+                        Chip(text: "\(stats.cloudJobs) cloud job\(stats.cloudJobs == 1 ? "" : "s")\(stats.costUSD > 0 ? String(format: " · $%.4f", stats.costUSD) : "")",
+                             symbol: "cloud", color: theme.syntax.type.color)
+                            .help("Grok and Jev, with your keys. Cost is what Jev reports; xAI bills Grok to your account.")
                     }
                 }
             }
@@ -122,6 +129,14 @@ struct AgentsView: View {
         for (index, kind) in DelegateKind.allCases.enumerated() {
             result.append(AgentSummary(name: kind.agent, role: kind.title, model: ModelRouting.model(for: kind, installed: installed) ?? "No model",
                                        jobs: byAgent[kind.agent] ?? [], color: palette[index % palette.count], isClaude: false))
+        }
+        for agent in CloudAgent.allCases {
+            let jobs = byAgent[agent.title] ?? []
+            guard cloud.contains(agent) || !jobs.isEmpty else { continue }
+            let model = agent == .grok ? (Preferences.shared.grokModel.isEmpty ? jobs.last?.model ?? "Best available" : Preferences.shared.grokModel)
+                                       : jobs.last?.model ?? Jev.defaultModel
+            result.append(AgentSummary(name: agent.title, role: "\(agent.role) · \(agent.company)", model: cloud.contains(agent) ? model : "No key",
+                                       jobs: jobs, color: agent == .grok ? theme.text2.color : theme.syntax.type.color, isClaude: false))
         }
         return result
     }
@@ -173,9 +188,10 @@ struct AgentsView: View {
             VStack(spacing: 0) {
                 ForEach(Array(recent)) { job in
                     HStack(spacing: 10) {
-                        Image(systemName: job.outcome == .failed ? "xmark.circle.fill" : job.provider == .local ? "cpu" : "cloud")
+                        Image(systemName: job.outcome == .failed ? "xmark.circle.fill" : job.provider == .local ? "cpu" : job.provider == .jev ? "arrow.triangle.branch" : "cloud")
                             .font(.dante(size: 11))
-                            .foregroundStyle(job.outcome == .failed ? theme.red.color : job.provider == .local ? theme.green.color : theme.claude.color)
+                            .foregroundStyle(job.outcome == .failed ? theme.red.color : job.provider == .local ? theme.green.color
+                                             : job.provider.isCloudAgent ? theme.syntax.type.color : theme.claude.color)
                             .frame(width: 14)
                         Text(AgentStats.agent(of: job)).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text.color).frame(width: 74, alignment: .leading)
                         Text(job.title.isEmpty ? job.kind : job.title).font(.dante(size: 12)).foregroundStyle(theme.text2.color).lineLimit(1)
@@ -200,6 +216,8 @@ struct AgentsView: View {
         if loaded != jobs { jobs = loaded }
         let found = await Ollama().models()
         if found != models { models = found }
+        let keyed = Set(CloudAgent.allCases.filter { AgentKeys.key(for: $0) != nil })
+        if keyed != cloud { cloud = keyed }
     }
 }
 
@@ -341,9 +359,11 @@ private struct DailyChart: View {
                     .foregroundStyle(by: .value("Who", "Local"))
                 BarMark(x: .value("Day", day.date, unit: .day), y: .value("Jobs", day.claude))
                     .foregroundStyle(by: .value("Who", "Claude"))
+                BarMark(x: .value("Day", day.date, unit: .day), y: .value("Jobs", day.cloud))
+                    .foregroundStyle(by: .value("Who", "Cloud agents"))
             }
         }
-        .chartForegroundStyleScale(["Local": theme.green.color, "Claude": theme.claude.color])
+        .chartForegroundStyleScale(["Local": theme.green.color, "Claude": theme.claude.color, "Cloud agents": theme.syntax.type.color])
         .chartLegend(position: .top, alignment: .leading)
         .chartXAxis {
             AxisMarks(values: .stride(by: .day, count: days.count > 10 ? 5 : 1)) { _ in

@@ -1,11 +1,13 @@
 import Foundation
 
 /// A helper working beside Claude, drawn as a small orb circling the big one: a sub-agent
-/// (Task/Agent) or a job Claude handed to a local model (`mcp__dante__delegate`).
+/// (Task/Agent), a job Claude handed to a local model (`mcp__dante__delegate`), or a question
+/// for a cloud agent (`decide`, `ask_grok`).
 public struct OrbSatellite: Sendable, Equatable, Identifiable {
     public enum Kind: Sendable, Equatable {
         case subagent(String)
         case local(String)
+        case cloud(CloudAgent)
     }
 
     public var id: String
@@ -34,6 +36,10 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
                 let kind = tool.input["kind"]?.string ?? "draft"
                 let agent = DelegateKind(rawValue: kind)?.agent ?? "Local model"
                 return OrbSatellite(id: tool.id, kind: .local(kind), color: color(local: kind), title: agent)
+            case "mcp__dante__ask_grok":
+                return OrbSatellite(id: tool.id, kind: .cloud(.grok), color: color(cloud: .grok), title: "Grok")
+            case "mcp__dante__decide":
+                return OrbSatellite(id: tool.id, kind: .cloud(.jev), color: color(cloud: .jev), title: "Jev")
             default:
                 return nil
             }
@@ -57,6 +63,14 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
         case "triage": RGBA(0xC6FF00)
         case "commitMessage": RGBA(0x69F0AE)
         default: RGBA(0x64FFDA)
+        }
+    }
+
+    /// Cloud agents in their own colours: Grok a cold silver, Jev a hot pink.
+    static func color(cloud agent: CloudAgent) -> RGBA {
+        switch agent {
+        case .grok: RGBA(0xCFD8DC)
+        case .jev: RGBA(0xFF4081)
         }
     }
 
