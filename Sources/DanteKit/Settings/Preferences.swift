@@ -63,6 +63,10 @@ public final class Preferences {
     public var asksCodex: Bool { didSet { defaults.set(asksCodex, forKey: Keys.asksCodex) } }
     /// The model Codex uses; empty for Codex's default.
     public var codexModel: String { didSet { defaults.set(codexModel, forKey: Keys.codexModel) } }
+    /// How hard Codex thinks (its reasoning effort); empty for the model's default.
+    public var codexEffort: String { didSet { defaults.set(codexEffort, forKey: Keys.codexEffort) } }
+    /// Who new windows' conversations start with: Claude or Codex.
+    public var agentEngine: AgentEngine { didSet { defaults.set(agentEngine.rawValue, forKey: Keys.agentEngine) } }
     /// The Grok model `ask_grok` uses; empty picks the best the key has.
     public var grokModel: String { didSet { defaults.set(grokModel, forKey: Keys.grokModel) } }
     /// How much Claude may do without asking.
@@ -94,6 +98,8 @@ public final class Preferences {
         grokModel = defaults.string(forKey: Keys.grokModel) ?? ""
         asksCodex = bool(Keys.asksCodex, true)
         codexModel = defaults.string(forKey: Keys.codexModel) ?? ""
+        codexEffort = defaults.string(forKey: Keys.codexEffort) ?? ""
+        agentEngine = defaults.string(forKey: Keys.agentEngine).flatMap(AgentEngine.init(rawValue:)) ?? .claude
         keepsConversation = bool(Keys.keepsConversation, true)
         listensForWakeWord = bool(Keys.listensForWakeWord, false)
         voiceIdentifier = defaults.string(forKey: Keys.voiceIdentifier) ?? ""
@@ -138,6 +144,8 @@ public final class Preferences {
         static let grokModel = "grokModel"
         static let asksCodex = "asksCodex"
         static let codexModel = "codexModel"
+        static let codexEffort = "codexEffort"
+        static let agentEngine = "agentEngine"
         static let keepsConversation = "keepsConversation"
         static let listensForWakeWord = "listensForWakeWord"
         static let voiceIdentifier = "voiceIdentifier"

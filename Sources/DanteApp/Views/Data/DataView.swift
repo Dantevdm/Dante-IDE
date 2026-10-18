@@ -375,7 +375,7 @@ private struct DataMain: View {
                 Button("Write a Seed Script") { ask("Write a script that seeds this database with realistic development data, in the project's language and ORM if it has one.") }
                 Button("Draft a Migration…") { ask("I want to change the schema. Ask me what I need, then write the migration in this project's migration tool.") }
             } label: {
-                Label("Ask Claude", systemImage: "sparkles")
+                Label("Ask \(session.agentName)", systemImage: "sparkles")
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -416,7 +416,7 @@ private struct DataMain: View {
             }
         case .failed(let message):
             DataBanner(symbol: "exclamationmark.triangle.fill", color: theme.red.color, title: "Couldn’t connect to \(connection.name)", detail: message) {
-                Button("Ask Claude") {
+                Button("Ask \(session.agentName)") {
                     session.askClaude("Dante couldn't connect to the \(connection.engine.name) database \(connection.displayURL). The error was:\n\n\(message)\n\nWork out why from the project's config and tell me how to fix it.")
                 }
                 .buttonStyle(DanteButtonStyle())

@@ -2,7 +2,11 @@ import Foundation
 
 /// One row of a line diff.
 public struct DiffLine: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case context, added, removed, gap }
+    public enum Kind: Equatable, Sendable {
+        case context, added, removed, gap
+        /// A file's name, heading its lines in a change to several files.
+        case file
+    }
 
     public var kind: Kind
     public var text: String
@@ -94,10 +98,11 @@ public struct ProposedChange: Equatable, Sendable {
     public var added: Int { lines.count { $0.kind == .added } }
     public var removed: Int { lines.count { $0.kind == .removed } }
 
-    public static let toolNames: Set<String> = ["Edit", "MultiEdit", "Write"]
+    public static let toolNames: Set<String> = ["Edit", "MultiEdit", "Write", CodexTranslator.patchTool]
 
     /// Builds the diff for a tool call, reading the current file from disk.
     public static func make(toolName: String, input: JSONValue, root: URL) -> ProposedChange? {
+        if toolName == CodexTranslator.patchTool { return patch(input, root: root) }
         guard toolNames.contains(toolName), let path = input["file_path"]?.string else { return nil }
         let url = URL(filePath: path, relativeTo: root).standardizedFileURL
         let existing = try? String(contentsOf: url, encoding: .utf8)
@@ -125,6 +130,65 @@ public struct ProposedChange: Equatable, Sendable {
             lines: LineDiff.lines(old: old, new: new),
             applies: applies
         )
+    }
+
+    /// A Codex patch: each file's unified diff, with the file named above its lines when
+    /// there are several. Codex checks a patch applies before asking, so it's taken as applying.
+    static func patch(_ input: JSONValue, root: URL) -> ProposedChange? {
+        let changes = input["changes"]?.array ?? []
+        guard let first = changes.first?["path"]?.string else { return nil }
+        var lines: [DiffLine] = []
+        for change in changes {
+            let kind = change["kind"]?.string ?? "update"
+            if changes.count > 1 {
+                let path = relativePath(of: URL(filePath: change["path"]?.string ?? "", relativeTo: root), in: root)
+                lines.append(DiffLine(kind: .file, text: path + (kind == "add" ? " (new)" : kind == "delete" ? " (deleted)" : "")))
+            }
+            lines += unifiedLines(change["diff"]?.string ?? "", kind: kind)
+        }
+        let url = URL(filePath: first, relativeTo: root).standardizedFileURL
+        let more = changes.count > 1 ? " and \(changes.count - 1) more" : ""
+        return ProposedChange(url: url, displayPath: relativePath(of: url, in: root) + more,
+                              isNewFile: changes.first?["kind"]?.string == "add", lines: lines, applies: true)
+    }
+
+    /// The rows of a unified diff's hunks. A new or deleted file may come as plain content.
+    static func unifiedLines(_ diff: String, kind: String) -> [DiffLine] {
+        var lines: [DiffLine] = []
+        var old = 0, new = 0
+        var inHunk = false
+        var raw = diff.components(separatedBy: "\n")
+        if raw.last == "" { raw.removeLast() }
+        for line in raw {
+            if line.hasPrefix("@@") {
+                let numbers = line.split(separator: " ").dropFirst().prefix(2).map { part in
+                    Int(part.dropFirst().split(separator: ",").first ?? "") ?? 1
+                }
+                if inHunk { lines.append(DiffLine(kind: .gap, text: "")) }
+                old = numbers.first ?? 1
+                new = numbers.count > 1 ? numbers[1] : 1
+                inHunk = true
+                continue
+            }
+            guard inHunk else { continue }
+            if line.hasPrefix("+") {
+                lines.append(DiffLine(kind: .added, text: String(line.dropFirst()), newNumber: new))
+                new += 1
+            } else if line.hasPrefix("-") {
+                lines.append(DiffLine(kind: .removed, text: String(line.dropFirst()), oldNumber: old))
+                old += 1
+            } else if !line.hasPrefix("\\") {
+                lines.append(DiffLine(kind: .context, text: String(line.dropFirst()), oldNumber: old, newNumber: new))
+                old += 1
+                new += 1
+            }
+        }
+        if !inHunk, kind == "add" || kind == "delete" {
+            return raw.enumerated().map { index, text in
+                kind == "add" ? DiffLine(kind: .added, text: text, newNumber: index + 1) : DiffLine(kind: .removed, text: text, oldNumber: index + 1)
+            }
+        }
+        return lines
     }
 
     private static func apply(edit: JSONValue, to text: inout String) -> Bool {

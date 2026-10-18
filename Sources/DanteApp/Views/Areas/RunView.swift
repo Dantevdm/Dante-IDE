@@ -210,7 +210,7 @@ private struct ErrorsCard: View {
                         }
                         Spacer(minLength: 8)
                         Text("×\(issue.count)").font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
-                        Button("Ask Claude") {
+                        Button("Ask \(session.agentName)") {
                             session.askClaude("This error shows up \(issue.count) times in production logs:\n\n\(issue.example)\n\nFind where it comes from in the code and propose a fix.")
                         }
                         .buttonStyle(DanteButtonStyle())

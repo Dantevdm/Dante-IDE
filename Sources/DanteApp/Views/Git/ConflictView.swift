@@ -92,7 +92,7 @@ struct ConflictView: View {
                 .fixedSize()
                 .font(.dante(size: 12))
             }
-            Button("Ask Claude") { askClaude() }
+            Button("Ask \(session.agentName)") { askClaude() }
                 .buttonStyle(DanteButtonStyle())
                 .help("Claude resolves the conflicts in this file; you review the edit")
             Button("Open in Editor") {

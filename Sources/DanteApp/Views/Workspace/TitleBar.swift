@@ -155,7 +155,7 @@ private struct ClaudeToggle: View {
     var body: some View {
         IconButton(
             symbol: "sparkle",
-            label: Shortcuts.label(session.showsClaude ? "Hide Claude" : "Show Claude", "toggleClaude")
+            label: Shortcuts.label(session.showsClaude ? "Hide \(session.agentName)" : "Show \(session.agentName)", "toggleClaude")
         ) {
             withAnimation(.snappy(duration: 0.22)) { session.showsClaude.toggle() }
         }

@@ -2,7 +2,7 @@ import Charts
 import DanteKit
 import SwiftUI
 
-/// Agents: who did the work. Claude orchestrates; local models in Ollama take the jobs it
+/// Agents: who did the work. Claude or Codex is in charge and the other reviews; local models in Ollama take the jobs it
 /// (and Dante) hands them, and Grok and Jev answer when the user has added their keys. Live numbers from the `AgentLedger`, which the `dante mcp` server
 /// Claude Code runs writes to as well.
 struct AgentsView: View {
@@ -120,8 +120,17 @@ struct AgentsView: View {
         var byAgent: [String: [AgentJob]] = [:]
         for job in shown { byAgent[AgentStats.agent(of: job), default: []].append(job) }
         let installed = models ?? []
-        var result: [AgentSummary] = [AgentSummary(name: "Claude", role: "Orchestrates, decides, checks", model: Preferences.shared.claudeModel.argument ?? "Claude",
+        let lead = session.claude?.engine ?? .claude
+        let claudeRole = lead == .claude ? "In charge: writes, decides, checks" : "Reviews Codex’s work · Anthropic"
+        var result: [AgentSummary] = [AgentSummary(name: "Claude", role: claudeRole, model: Preferences.shared.claudeModel.argument ?? "Claude",
                                                    jobs: byAgent["Claude"] ?? [], color: theme.claude.color, isClaude: true)]
+        let codexJobs = byAgent["Codex"] ?? []
+        if Session.codexPath != nil && (Preferences.shared.asksCodex || lead == .codex) || !codexJobs.isEmpty {
+            let codex = AgentSummary(name: "Codex", role: lead == .codex ? "In charge: writes, decides, checks" : "Reviews Claude’s work · OpenAI",
+                                     model: Preferences.shared.codexModel.isEmpty ? "Codex default" : Preferences.shared.codexModel,
+                                     jobs: codexJobs, color: theme.syntax.function.color, isClaude: false, isCodex: true)
+            if lead == .codex { result.insert(codex, at: 0) } else { result.append(codex) }
+        }
         if let sub = byAgent["Sub-agents"], !sub.isEmpty {
             result.append(AgentSummary(name: "Sub-agents", role: "Claude’s own helpers", model: "Claude", jobs: sub, color: theme.syntax.keyword.color, isClaude: true))
         }
@@ -129,12 +138,6 @@ struct AgentsView: View {
         for (index, kind) in DelegateKind.allCases.enumerated() {
             result.append(AgentSummary(name: kind.agent, role: kind.title, model: ModelRouting.model(for: kind, installed: installed) ?? "No model",
                                        jobs: byAgent[kind.agent] ?? [], color: palette[index % palette.count], isClaude: false))
-        }
-        let codexJobs = byAgent["Codex"] ?? []
-        if Session.codexPath != nil && Preferences.shared.asksCodex || !codexJobs.isEmpty {
-            result.append(AgentSummary(name: "Codex", role: "Second opinions · OpenAI",
-                                       model: Preferences.shared.codexModel.isEmpty ? "Codex default" : Preferences.shared.codexModel,
-                                       jobs: codexJobs, color: theme.syntax.function.color, isClaude: false))
         }
         for agent in CloudAgent.allCases {
             let jobs = byAgent[agent.title] ?? []
@@ -235,6 +238,7 @@ struct AgentSummary: Identifiable {
     var jobs: [AgentJob]
     var color: Color
     var isClaude: Bool
+    var isCodex = false
     var id: String { name }
 
     var failed: Int { jobs.filter { $0.outcome == .failed }.count }
@@ -250,7 +254,7 @@ private struct AgentCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                AgentAvatar(color: agent.color, busy: agent.jobs.last.map { Date().timeIntervalSince($0.date) < 60 } ?? false, isClaude: agent.isClaude)
+                AgentAvatar(color: agent.color, busy: agent.jobs.last.map { Date().timeIntervalSince($0.date) < 60 } ?? false, isClaude: agent.isClaude, isCodex: agent.isCodex)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(agent.name).font(.dante(size: 13.5, weight: .semibold)).foregroundStyle(theme.text.color)
                     Text(agent.role).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
@@ -297,6 +301,7 @@ private struct AgentAvatar: View {
     let color: Color
     let busy: Bool
     let isClaude: Bool
+    var isCodex = false
 
     var body: some View {
         TimelineView(.animation(paused: !busy || reduceMotion)) { context in
@@ -308,6 +313,8 @@ private struct AgentAvatar: View {
                     .frame(width: 22, height: 22)
                 if isClaude {
                     Image.symbol("sparkle", side: 11).foregroundStyle(theme.onAccent.color)
+                } else if isCodex {
+                    CodexGlyph().fill(theme.onAccent.color).frame(width: 11, height: 11)
                 }
             }
             .frame(width: 34, height: 34)

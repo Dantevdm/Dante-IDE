@@ -64,6 +64,12 @@ public struct ClaudeRules: Equatable, Sendable {
             return .allowed
         }
 
+        // A Codex patch can touch several files: the strictest verdict wins.
+        if let changes = input["changes"]?.array, changes.count > 1 {
+            let verdicts = changes.compactMap { $0["path"]?.string }.map { verdict(toolName: toolName, input: ["file_path": .string($0)], root: root) }
+            if let blocked = verdicts.first(where: { if case .blocked = $0 { true } else { false } }) { return blocked }
+            return verdicts.first { $0 != .allowed } ?? .allowed
+        }
         guard let path = Self.path(in: input) else { return .allowed }
         let relative = ProposedChange.relativePath(of: URL(filePath: path, relativeTo: root), in: root)
         if let pattern = never.first(where: { Self.path(relative, matches: $0) }) {

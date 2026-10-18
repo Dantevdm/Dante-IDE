@@ -132,8 +132,8 @@ struct ClaudeSessionTranscriptTests {
 
     @Test func permissionRequestAttachesToTheToolCall() {
         let session = session()
-        session.handle(.assistant(messageID: "m1", blocks: [.toolUse(id: "t1", name: "Bash", input: ["command": "ls"])]))
-        session.handle(.permissionRequest(.init(requestID: "r1", toolName: "Bash", input: ["command": "ls"], toolUseID: "t1")))
+        session.handle(.assistant(messageID: "m1", blocks: [.toolUse(id: "t1", name: "Bash", input: ["command": "make"])]))
+        session.handle(.permissionRequest(.init(requestID: "r1", toolName: "Bash", input: ["command": "make"], toolUseID: "t1")))
         #expect(session.items.count == 1)
         #expect(session.pendingApprovals.map(\.id) == ["t1"])
 

@@ -22,7 +22,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .ship: "Ship"
         case .run: "Run"
         case .timeline: "Timeline"
-        case .claude: "Claude"
+        case .claude: "Setup"
         case .agents: "Agents"
         case .docs: "Docs"
         }
@@ -39,7 +39,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .ship: "paperplane"
         case .run: "waveform.path.ecg"
         case .timeline: "clock.arrow.circlepath"
-        case .claude: "sparkle"
+        case .claude: "slider.horizontal.3"
         case .agents: "circle.hexagongrid"
         case .docs: "doc.text"
         }
@@ -57,7 +57,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .ship: "A release checklist, a changelog drafted from commits, and the CI pipeline."
         case .run: "Production metrics, errors and alarms."
         case .timeline: "Commits, releases, Claude sessions, test runs and CI in one stream, newest first."
-        case .claude: "How Claude works on this project: usage, skills, memory, connectors and permissions."
+        case .claude: "How the agents work on this project: usage, skills, memory, connectors and permissions."
         case .agents: "Claude and the local models it delegates to: jobs, tokens kept local and how each agent is doing."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
         }
@@ -369,6 +369,7 @@ final class Session {
             self?.notifyClaude(attention)
             self?.pullRemoteTranscripts()
         }
+        claude.engine = Preferences.shared.agentEngine == .codex && Self.codexPath != nil && claude.remote == nil ? .codex : .claude
         applyClaudePreferences(to: claude)
         return claude
     }
@@ -378,6 +379,9 @@ final class Session {
         guard let claude = claude ?? self.claude else { return }
         claude.asksFirst = Preferences.shared.claudeAsksFirst
         claude.requestedModel = Preferences.shared.claudeModel.argument
+        claude.codexExecutable = Self.codexPath
+        claude.codexModel = Preferences.shared.codexModel.isEmpty ? nil : Preferences.shared.codexModel
+        claude.codexEffort = Preferences.shared.codexEffort.isEmpty ? nil : Preferences.shared.codexEffort
         // The dante MCP server carries local models, and Grok and Jev when they have keys.
         var environment = AgentKeys.environment()
         let local = Preferences.shared.delegatesToLocalModels
@@ -389,7 +393,8 @@ final class Session {
             if !local { environment[DelegateEnvironment.local] = "0" }
             if !Preferences.shared.grokModel.isEmpty { environment[DelegateEnvironment.grokModel] = Preferences.shared.grokModel }
         }
-        claude.delegateCommand = local || !environment.isEmpty ? Self.danteCommand : nil
+        // With Codex in charge, the server also carries Claude for second opinions.
+        claude.delegateCommand = local || !environment.isEmpty || claude.engine == .codex ? Self.danteCommand : nil
         claude.delegateEnvironment = environment
         claude.ledger = .standard
         claude.approvalLevel = Preferences.shared.approvalLevel
@@ -397,6 +402,9 @@ final class Session {
 
     /// The Codex CLI on this Mac, looked for once.
     static let codexPath: String? = Codex.locate()
+
+    /// Whoever is in charge of this window's conversation, for labels: "Ask Codex".
+    var agentName: String { claude?.engine.title ?? "Claude" }
 
     /// The bundled `dante` command, which also serves local models to Claude Code. Missing
     /// when running outside the app bundle.

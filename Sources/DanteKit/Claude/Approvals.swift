@@ -42,13 +42,15 @@ public enum ApprovalLevel: String, Sendable, CaseIterable, Identifiable {
 /// commands starting `git log`, `Bash(make test)` that exact command, `Edit` every edit,
 /// `WebFetch(domain:example.com)` one site, and an MCP tool by its name.
 public enum ApprovalPolicy {
-    static let editTools: Set<String> = ["Edit", "MultiEdit", "Write", "NotebookEdit"]
+    static let editTools: Set<String> = ["Edit", "MultiEdit", "Write", "NotebookEdit", CodexTranslator.patchTool]
     /// Tools that need your answer, not your permission.
     static let questionTools: Set<String> = ["AskUserQuestion", "ExitPlanMode"]
 
     public static func approves(_ toolName: String, input: JSONValue, level: ApprovalLevel, allow: [String], hasRuleNote: Bool) -> Bool {
         guard !questionTools.contains(toolName), !hasRuleNote else { return false }
         if allowed(toolName, input: input, by: allow) { return true }
+        // Looking is as safe as Claude's Read tool; Codex looks through the shell.
+        if toolName == "Bash", let command = input["command"]?.string, readsOnly(command) { return true }
         switch level {
         case .ask: return false
         case .edits: return editTools.contains(toolName)
@@ -66,6 +68,8 @@ public enum ApprovalPolicy {
         }
         return rules.contains { rule in
             if rule == toolName { return true }
+            // Codex's patches count as edits, so "Always allow" edits covers both agents.
+            if toolName == CodexTranslator.patchTool, rule == "Edit" { return true }
             if toolName == "WebFetch", rule.hasPrefix("WebFetch(domain:"), let url = input["url"]?.string.flatMap(URL.init(string:)), let host = url.host() {
                 let domain = String(rule.dropFirst("WebFetch(domain:".count).dropLast())
                 return host == domain || host.hasSuffix("." + domain)
@@ -101,7 +105,7 @@ public enum ApprovalPolicy {
             guard let host = input["url"]?.string.flatMap(URL.init(string:))?.host() else { return [] }
             return ["WebFetch(domain:\(host))"]
         case _ where editTools.contains(toolName):
-            return [toolName == "MultiEdit" ? "Edit" : toolName]
+            return [toolName == "MultiEdit" || toolName == CodexTranslator.patchTool ? "Edit" : toolName]
         case _ where questionTools.contains(toolName):
             return []
         default:
@@ -130,6 +134,40 @@ public enum ApprovalPolicy {
             return words[...index].joined(separator: " ")
         }
         return String(first)
+    }
+
+    /// Programs that only read and print, whatever their arguments.
+    static let readers: Set<String> = [
+        "ls", "cat", "head", "tail", "wc", "pwd", "echo", "rg", "grep", "egrep", "fgrep", "file", "stat", "which", "tree",
+        "du", "basename", "dirname", "realpath", "readlink", "nl", "sort", "uniq", "cut", "tr", "column", "jq", "diff",
+        "cmp", "true", "test", "date", "uname", "cd", "fd", "less", "printf", "sw_vers",
+    ]
+    /// Git subcommands that only read the repository.
+    static let gitReaders: Set<String> = ["status", "log", "diff", "show", "rev-parse", "ls-files", "blame", "grep", "describe", "shortlog"]
+
+    /// Whether every part of a command only reads: known readers, `sed -n` without `-i`,
+    /// `find` without actions, and reading git commands. Never with substitution or writes.
+    public static func readsOnly(_ command: String) -> Bool {
+        guard let parts = commandParts(command), !parts.isEmpty else { return false }
+        return parts.allSatisfy { part in
+            let words = part.split(whereSeparator: \.isWhitespace).map(String.init)
+            guard let program = words.first.map({ ($0 as NSString).lastPathComponent }) else { return false }
+            switch program {
+            case _ where readers.contains(program):
+                return true
+            case "sed":
+                return words.contains("-n") && !words.contains { $0.hasPrefix("-i") || $0.hasPrefix("--in-place") }
+                    && !part.contains("w ") && !part.contains("/e")
+            case "find":
+                return !words.contains { ["-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].contains($0) }
+            case "git":
+                let rest = words.dropFirst().filter { !$0.hasPrefix("-") }
+                guard let sub = rest.first, gitReaders.contains(sub) else { return false }
+                return !words.contains("--output") && !words.contains { $0.hasPrefix("--output=") }
+            default:
+                return false
+            }
+        }
     }
 
     /// The simple commands in a command line, or nil when it does something rules shouldn't

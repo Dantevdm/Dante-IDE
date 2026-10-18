@@ -26,10 +26,11 @@ struct ClaudePanel: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            ClaudeSparkIcon(size: 22, isWorking: claude.state == .working)
+            AgentIcon(engine: claude.engine, size: 22, isWorking: claude.state == .working)
                 .frame(width: 26, height: 26)
+                .animation(.snappy(duration: 0.25), value: claude.engine)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Claude").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                EngineSwitch(session: session, claude: claude)
                 if let subtitle {
                     Text(subtitle).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                         .lineLimit(1)
@@ -56,13 +57,15 @@ struct ClaudePanel: View {
             .help(Preferences.shared.claudeAsksFirst
                   ? "On: Claude asks clarifying questions before starting anything ambiguous. Click to let it go straight ahead. (Approvals are the menu beside this.)"
                   : "Off: Claude goes straight ahead without clarifying questions. (Approvals are the menu beside this.)")
-            IconButton(symbol: "clock.arrow.circlepath", label: "Earlier conversations") { session.claudeShowsHistory.toggle() }
-                .popover(isPresented: Bindable(session).claudeShowsHistory, arrowEdge: .bottom) {
-                    ConversationHistory(session: session) { session.claudeShowsHistory = false }
-                }
+            if claude.engine == .claude {
+                IconButton(symbol: "clock.arrow.circlepath", label: "Earlier conversations") { session.claudeShowsHistory.toggle() }
+                    .popover(isPresented: Bindable(session).claudeShowsHistory, arrowEdge: .bottom) {
+                        ConversationHistory(session: session) { session.claudeShowsHistory = false }
+                    }
+            }
             IconButton(symbol: "square.and.pencil", label: "New conversation (the current one stays in Earlier conversations)") { claude.reset() }
                 .disabled(claude.items.isEmpty)
-            IconButton(symbol: "sidebar.right", label: Shortcuts.label("Hide Claude", "toggleClaude")) {
+            IconButton(symbol: "sidebar.right", label: Shortcuts.label("Hide \(session.agentName)", "toggleClaude")) {
                 withAnimation(.snappy(duration: 0.22)) { session.showsClaude = false }
             }
         }
@@ -78,6 +81,59 @@ struct ClaudePanel: View {
         case .working: "Working…"
         case .idle: nil
         }
+    }
+}
+
+/// Who's in charge of this window's conversation: Claude or Codex. Switching hands the
+/// conversation over with a summary; the choice is also the default for new windows.
+private struct EngineSwitch: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let claude: ClaudeSession
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(AgentEngine.allCases) { engine in
+                let selected = claude.engine == engine
+                Button {
+                    choose(engine)
+                } label: {
+                    Text(engine.title)
+                        .font(.dante(size: 12, weight: selected ? .semibold : .medium))
+                        .foregroundStyle(selected ? theme.text.color : theme.text3.color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(selected ? theme.raised.color : .clear))
+                        .overlay(Capsule().strokeBorder(selected ? theme.line2.color : .clear))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!available(engine) || claude.state == .working)
+                .help(help(engine))
+            }
+        }
+        .padding(1)
+        .background(Capsule().fill(theme.line.color.opacity(0.5)))
+        .fixedSize()
+        .animation(.snappy(duration: 0.2), value: claude.engine)
+    }
+
+    private func available(_ engine: AgentEngine) -> Bool {
+        engine == .claude || (Session.codexPath != nil && claude.remote == nil)
+    }
+
+    private func help(_ engine: AgentEngine) -> String {
+        if engine == .codex, Session.codexPath == nil { return "Codex isn’t installed: get the Codex CLI or the ChatGPT app." }
+        if engine == .codex, claude.remote != nil { return "Codex runs on this Mac only for now." }
+        if claude.engine == engine { return "\(engine.title) is in charge; it can ask \(engine.partner.title) for a second opinion." }
+        return "Put \(engine.title) in charge. It picks up this conversation from a summary."
+    }
+
+    private func choose(_ engine: AgentEngine) {
+        guard engine != claude.engine else { return }
+        claude.engine = engine
+        Preferences.shared.agentEngine = engine
+        session.applyClaudePreferences()
     }
 }
 
@@ -363,7 +419,7 @@ private struct ThinkingDots: View {
                 }
             }
         }
-        .accessibilityLabel("Claude is working")
+        .accessibilityLabel("Working")
     }
 }
 

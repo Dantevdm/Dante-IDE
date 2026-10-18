@@ -152,7 +152,7 @@ struct Composer: View {
 
     private var placeholder: String {
         if !session.claudeAttachments.isEmpty { return "Say what to do with \(session.claudeAttachments.count == 1 ? "it" : "them")…" }
-        return claude.items.isEmpty ? "Ask Claude…" : "Reply to Claude…"
+        return claude.items.isEmpty ? "Ask \(claude.engine.title)…" : "Reply to \(claude.engine.title)…"
     }
 
     private func send() {

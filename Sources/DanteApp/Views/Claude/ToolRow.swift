@@ -220,7 +220,15 @@ struct DiffLineRow: View {
     let line: DiffLine
 
     var body: some View {
-        if line.kind == .gap {
+        if line.kind == .file {
+            Text(line.text)
+                .font(.dante(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(theme.text2.color)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
+        } else if line.kind == .gap {
             Text("⋯")
                 .font(.dante(size: 11, design: .monospaced))
                 .foregroundStyle(theme.text3.color)

@@ -158,10 +158,10 @@ struct DanteCommands: Commands {
                 .shortcut("newTerminal")
                 .disabled(session?.workspace == nil)
 
-            Button("Ask Claude") { session?.focusClaude() }
+            Button("Ask \(session?.agentName ?? "Claude")") { session?.focusClaude() }
                 .shortcut("askClaude")
                 .disabled(session?.claude == nil)
-            Button(session?.showsClaude == true ? "Hide Claude" : "Show Claude") {
+            Button(session?.showsClaude == true ? "Hide \(session?.agentName ?? "Claude")" : "Show \(session?.agentName ?? "Claude")") {
                 session?.showsClaude.toggle()
             }
             .shortcut("toggleClaude")

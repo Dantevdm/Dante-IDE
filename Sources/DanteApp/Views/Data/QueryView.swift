@@ -260,7 +260,7 @@ struct QueryView: View {
                 session.askClaude("Here are the results of this query:\n\n```sql\n\(result.statement)\n```\n\n\(result.markdown(limit: 40))\n\nWhat do they tell us?",
                                   instructions: DataContext.describe(connection, schema: model.schema))
             } label: {
-                Label("Ask Claude", systemImage: "sparkles")
+                Label("Ask \(session.agentName)", systemImage: "sparkles")
             }
             .buttonStyle(.plain)
             .font(.dante(size: 12))

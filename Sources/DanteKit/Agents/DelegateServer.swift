@@ -10,6 +10,7 @@ public struct DelegateServer: Sendable {
     public typealias Decider = @Sendable (_ state: JSONValue, _ questions: [(name: String, question: JevQuestion)]) async throws -> JevDecision
     public typealias Asker = @Sendable (_ system: String?, _ prompt: String) async throws -> GrokReply
     public typealias CodexAsker = @Sendable (_ prompt: String) async throws -> CodexReply
+    public typealias ClaudeAsker = @Sendable (_ prompt: String) async throws -> ClaudeReply
 
     public var project: String
     public var ledger: AgentLedger?
@@ -20,6 +21,10 @@ public struct DelegateServer: Sendable {
     public var decide: Decider?
     public var askGrok: Asker?
     public var askCodex: CodexAsker?
+    /// Claude for Codex's second opinions, when Codex is the one in charge.
+    public var askClaude: ClaudeAsker?
+    /// Who's in charge and calling these tools: "claude" or "codex", for the ledger.
+    public var requester = "claude"
 
     public static let protocolVersion = "2025-06-18"
 
@@ -59,6 +64,12 @@ public struct DelegateServer: Sendable {
                 }
                 return try await grok.chat(model: model, system: system, prompt: prompt)
             }
+        }
+        server.requester = environment[DelegateEnvironment.requester] ?? "claude"
+        if let path = environment[DelegateEnvironment.claude], !path.isEmpty {
+            let claude = ClaudeOpinion(executable: path)
+            let model = environment[DelegateEnvironment.claudeModel]
+            server.askClaude = { prompt in try await claude.ask(prompt, in: root, model: model) }
         }
         if let path = environment[DelegateEnvironment.codex], !path.isEmpty {
             let codex = Codex(executable: path)
@@ -105,6 +116,7 @@ public struct DelegateServer: Sendable {
         if decide != nil { parts.append("Jev answers typed questions (pick one, rate, yes or no) about some material in well under a second.") }
         if askGrok != nil { parts.append("Grok (xAI) gives an independent second opinion or draft.") }
         if askCodex != nil { parts.append("Codex (OpenAI) reads the project itself, read-only, for a second opinion.") }
+        if askClaude != nil { parts.append("Claude (Anthropic) reads the project itself, read-only, for a second opinion.") }
         return parts.joined(separator: " ")
     }
 
@@ -114,6 +126,7 @@ public struct DelegateServer: Sendable {
         if decide != nil { tools.append(Self.decideTool) }
         if askGrok != nil { tools.append(Self.grokTool) }
         if askCodex != nil { tools.append(Self.codexTool) }
+        if askClaude != nil { tools.append(Self.claudeTool) }
         return tools
     }
 
@@ -172,6 +185,19 @@ public struct DelegateServer: Sendable {
         ],
     ]
 
+    static let claudeTool: JSONValue = [
+        "name": "ask_claude",
+        "description": "Ask Anthropic's Claude, signed in with the user's Claude plan, for an independent take. It can read and search this project itself (read-only: it never edits or runs commands), so give it the question and where to look rather than pasting files. Good for a second review of a diff or design, a bug you're stuck on, or checking an assumption about the codebase. It takes a minute or two and counts against the user's Claude usage: use it when a second view is worth that, weigh its answer, and tell the user where it agreed or differed.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "prompt": ["type": "string", "description": "The question, with the files, functions or diff to look at."],
+                "title": ["type": "string", "description": "A few words saying what you asked, for the user's stats."],
+            ],
+            "required": ["prompt"],
+        ],
+    ]
+
     static var localTools: [JSONValue] {
         let kinds = DelegateKind.allCases.map { "\($0.rawValue): \($0.guidance)" }.joined(separator: "; ")
         return [
@@ -208,12 +234,12 @@ public struct DelegateServer: Sendable {
                 let (model, reply) = try await run(kind, prompt)
                 ledger?.append(AgentJob(kind: kind.rawValue, provider: .local, model: model, project: project,
                                         promptTokens: reply.promptTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
-                                        requestedBy: "claude", title: title))
+                                        requestedBy: requester, title: title))
                 let header = "[\(kind.agent) · \(model) · \(reply.promptTokens)→\(reply.outputTokens) tokens · \(String(format: "%.1f", reply.seconds))s] Check this before relying on it."
                 return Self.text(header + "\n\n" + reply.text)
             } catch {
                 ledger?.append(AgentJob(kind: kind.rawValue, provider: .local, model: "unavailable", project: project,
-                                        outcome: .failed, requestedBy: "claude", title: title))
+                                        outcome: .failed, requestedBy: requester, title: title))
                 return Self.text("The local model couldn’t do this: \(error.localizedDescription) Do it yourself.", isError: true)
             }
         case "decide":
@@ -222,6 +248,8 @@ public struct DelegateServer: Sendable {
             return await callGrok(arguments)
         case "ask_codex":
             return await callCodex(arguments)
+        case "ask_claude":
+            return await callClaude(arguments)
         case "local_models":
             guard let installed = await models() else { return Self.text("Ollama isn’t running on this Mac.", isError: true) }
             let lines = installed.map { model -> String in
@@ -251,13 +279,13 @@ public struct DelegateServer: Sendable {
             let decision = try await decide(material, questions)
             let seconds = Date().timeIntervalSince(started)
             ledger?.append(AgentJob(kind: "decision", provider: .jev, model: decision.model, project: project,
-                                    promptTokens: decision.inputTokens, seconds: seconds, requestedBy: "claude",
+                                    promptTokens: decision.inputTokens, seconds: seconds, requestedBy: requester,
                                     title: title, costUSD: decision.costUSD))
             let header = "[Jev · \(decision.model) · \(decision.inputTokens) tokens · $\(String(format: "%.6f", decision.costUSD)) · \(String(format: "%.2f", seconds))s]"
             return Self.text(header + "\n\n" + decision.summary(questions))
         } catch {
             ledger?.append(AgentJob(kind: "decision", provider: .jev, model: "jev", project: project,
-                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: "claude", title: title))
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title))
             return Self.text("Jev couldn’t decide: \(error.localizedDescription) Decide yourself.", isError: true)
         }
     }
@@ -273,12 +301,12 @@ public struct DelegateServer: Sendable {
             let reply = try await askGrok(arguments["system"]?.string, prompt)
             ledger?.append(AgentJob(kind: "opinion", provider: .grok, model: reply.model, project: project,
                                     promptTokens: reply.promptTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
-                                    requestedBy: "claude", title: title))
+                                    requestedBy: requester, title: title))
             let header = "[Grok · \(reply.model) · \(reply.promptTokens)→\(reply.outputTokens) tokens · \(String(format: "%.1f", reply.seconds))s] A second opinion: weigh it, don’t just adopt it."
             return Self.text(header + "\n\n" + reply.text)
         } catch {
             ledger?.append(AgentJob(kind: "opinion", provider: .grok, model: "grok", project: project,
-                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: "claude", title: title))
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title))
             return Self.text("Grok couldn’t answer: \(error.localizedDescription)", isError: true)
         }
     }
@@ -294,14 +322,35 @@ public struct DelegateServer: Sendable {
             let reply = try await askCodex(prompt)
             ledger?.append(AgentJob(kind: "opinion", provider: .codex, model: "codex", project: project,
                                     promptTokens: reply.inputTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
-                                    requestedBy: "claude", title: title))
+                                    requestedBy: requester, title: title))
             let looked = reply.commands.isEmpty ? "" : " · looked with \(reply.commands.count) command\(reply.commands.count == 1 ? "" : "s")"
             let header = "[Codex · \(reply.inputTokens)→\(reply.outputTokens) tokens · \(String(format: "%.0f", reply.seconds))s\(looked)] A second opinion: weigh it, don’t just adopt it."
             return Self.text(header + "\n\n" + reply.text)
         } catch {
             ledger?.append(AgentJob(kind: "opinion", provider: .codex, model: "codex", project: project,
-                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: "claude", title: title))
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title))
             return Self.text("Codex couldn’t answer: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    func callClaude(_ arguments: JSONValue) async -> JSONValue {
+        guard let askClaude else { return Self.text("Claude isn’t set up for second opinions here.", isError: true) }
+        guard let prompt = arguments["prompt"]?.string, !prompt.isEmpty else {
+            return Self.text("ask_claude needs a prompt.", isError: true)
+        }
+        let title = arguments["title"]?.string ?? String(prompt.prefix(60))
+        let started = Date()
+        do {
+            let reply = try await askClaude(prompt)
+            ledger?.append(AgentJob(kind: "opinion", provider: .claude, model: "claude", project: project,
+                                    promptTokens: reply.inputTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
+                                    requestedBy: requester, title: title))
+            let header = "[Claude · \(reply.inputTokens)→\(reply.outputTokens) tokens · \(String(format: "%.0f", reply.seconds))s] A second opinion: weigh it, don’t just adopt it."
+            return Self.text(header + "\n\n" + reply.text)
+        } catch {
+            ledger?.append(AgentJob(kind: "opinion", provider: .claude, model: "claude", project: project,
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title))
+            return Self.text("Claude couldn’t answer: \(error.localizedDescription)", isError: true)
         }
     }
 

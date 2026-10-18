@@ -31,9 +31,19 @@ struct DanteApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Paths passed on the command line (`Dante path/to/project [file …]`): the first window
     /// opens the folder, then any files after it.
-    @MainActor static var launchPaths: [URL] = CommandLine.arguments.dropFirst()
-        .filter { !$0.hasPrefix("-") }
-        .map { URL(filePath: $0, relativeTo: URL(filePath: FileManager.default.currentDirectoryPath)).standardizedFileURL }
+    /// `-key value` pairs are user-defaults overrides (Xcode passes some), so both are skipped.
+    @MainActor static var launchPaths: [URL] = {
+        var paths: [URL] = []
+        var arguments = CommandLine.arguments.dropFirst()[...]
+        while let argument = arguments.popFirst() {
+            if argument.hasPrefix("-") {
+                if let value = arguments.first, !value.hasPrefix("-") { arguments.removeFirst() }
+                continue
+            }
+            paths.append(URL(filePath: argument, relativeTo: URL(filePath: FileManager.default.currentDirectoryPath)).standardizedFileURL)
+        }
+        return paths
+    }()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // `launchPaths` handles the folder argument. Left to AppKit, it becomes an open-file

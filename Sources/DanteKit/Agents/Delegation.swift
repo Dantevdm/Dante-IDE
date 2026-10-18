@@ -94,7 +94,8 @@ public struct AgentJob: Codable, Equatable, Sendable, Identifiable {
     public var outputTokens: Int
     public var seconds: Double
     public var outcome: Outcome
-    /// Who asked: "claude" when Claude delegated it, "dante" for Dante's own jobs.
+    /// Who asked: "claude" or "codex" when the agent in charge delegated it, "you" for your own
+    /// turns, "dante" for Dante's own jobs.
     public var requestedBy: String
     /// A few words about the job.
     public var title: String
@@ -217,7 +218,7 @@ public struct AgentStats: Equatable, Sendable {
         cloudJobs = jobs.filter { $0.provider.isCloudAgent }.count
         costUSD = jobs.reduce(0) { $0 + ($1.costUSD ?? 0) }
         tokensKeptLocal = jobs.filter { $0.provider == .local && $0.outcome == .done }.reduce(0) { $0 + $1.tokens }
-        delegatedByClaude = jobs.filter { $0.provider == .local && $0.requestedBy == "claude" }.count
+        delegatedByClaude = jobs.filter { $0.provider == .local && ($0.requestedBy == "claude" || $0.requestedBy == "codex") }.count
         self.byHour = byHour
     }
 }

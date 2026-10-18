@@ -23,12 +23,13 @@ public enum ClaudeBrief {
     """
 
     /// What Claude is told about the dante MCP server's tools, or nil when it has none.
-    public nonisolated static func delegation(local: Bool, jev: Bool, grok: Bool, codex: Bool = false) -> String? {
+    public nonisolated static func delegation(local: Bool, jev: Bool, grok: Bool, codex: Bool = false, claude: Bool = false) -> String? {
         var parts: [String] = []
         if local { parts.append(delegation) }
         if jev { parts.append(jevDecisions) }
         if grok { parts.append(grokOpinions) }
         if codex { parts.append(codexOpinions) }
+        if claude { parts.append(claudeOpinions) }
         return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 
@@ -42,6 +43,24 @@ public enum ClaudeBrief {
     The `ask_codex` tool asks OpenAI's Codex, on the user's ChatGPT plan, for an independent view. It can read the project itself (read-only), so point it at the files or diff rather than pasting them. Use it when a second opinion is worth a minute or two: reviewing a risky change, a bug you can't pin down, a design choice, or when the user asks for Codex. Weigh its answer against your own and tell the user where it agreed or differed.
     """
 
+    public nonisolated static let claudeOpinions = """
+    # Second opinions from Claude
+    The `ask_claude` tool asks Anthropic's Claude, on the user's Claude plan, for an independent view. It can read the project itself (read-only), so point it at the files or diff rather than pasting them. Use it when a second opinion is worth a minute or two: reviewing a risky change, a bug you can't pin down, a design choice, or when the user asks for Claude. Weigh its answer against your own and tell the user where it agreed or differed.
+    """
+
+    /// For Codex when it's in charge: how Dante reviews its work, and how to offer choices.
+    public nonisolated static let codexPairing = """
+    # Working in Dante
+    Make every file change with apply_patch, never with shell redirection, sed -i or scripts that write files: Dante shows each patch to the user as a diff to approve and can undo a whole turn's patches, which it can't do for commands. Read and search freely; Dante lets read-only commands run without asking. Keep each patch focused and say briefly what it changes and why.
+    When you end a turn by offering the user a choice, finish with a short numbered list of the options (best first) and one question: Dante turns the list into buttons.
+    """
+
+    /// "Ask questions first" for Codex, which has no question tool.
+    public nonisolated static let codexClarifying = """
+    # Clarifying questions
+    Get it right the first time. Before starting a request that is ambiguous, underspecified or has several reasonable readings, ask the user and stop there: everything you need in one go, each question with 2–4 numbered options, the one you recommend first. Don't ask what you can find out from the code, the .dante folder or git history; look first. For small, clear requests, just do them.
+    """
+
     public nonisolated static let grokOpinions = """
     # Second opinions from Grok
     The `ask_grok` tool asks xAI's Grok, which the user pays for, for an independent view. Use it sparingly, when a second opinion is worth it: a risky design choice, a bug you can't pin down, or when the user asks. Put everything it needs in the prompt (it can't see files), weigh its answer against your own, and tell the user where it agreed or differed. Never send secrets.
@@ -50,7 +69,7 @@ public enum ClaudeBrief {
     /// Added when local models are on: Claude orchestrates, delegates and checks.
     public nonisolated static let delegation = """
     # Delegating to local models
-    You're the orchestrator. The `delegate` tool (from the dante MCP server) hands a self-contained job to a model running on the user's Mac, which saves their Claude usage. Use it for work a smaller model does well: condensing long logs, diffs or files you only need the gist of (summary), sorting many failures or errors (triage), first drafts of boilerplate, fixtures or repetitive tests (draft), and prose (writing). Put everything the job needs in the prompt; the local model can't read files or run tools. Always check what comes back, fix it or redo it yourself if it's wrong, and say briefly when you delegated. Don't delegate design decisions, subtle bugs, security-sensitive code or anything needing the whole codebase in mind.
+    You're the orchestrator. The `delegate` tool (from the dante MCP server) hands a self-contained job to a model running on the user's Mac, which saves their plan's usage. Use it for work a smaller model does well: condensing long logs, diffs or files you only need the gist of (summary), sorting many failures or errors (triage), first drafts of boilerplate, fixtures or repetitive tests (draft), and prose (writing). Put everything the job needs in the prompt; the local model can't read files or run tools. Always check what comes back, fix it or redo it yourself if it's wrong, and say briefly when you delegated. Don't delegate design decisions, subtle bugs, security-sensitive code or anything needing the whole codebase in mind.
     """
 
     /// Added to the system prompt while "Ask questions first" is on.

@@ -487,3 +487,11 @@ tasks:
   title: "Minimise the terminal from its own header, and remember it across windows"
   phase: build
   state: review
+- id: DI-119
+  title: "Codex or Claude in charge: a Claude/Codex switch in the panel; Codex runs through its app server with the same transcript, approvals, undo, orb and stats; each can ask the other (ask_codex, ask_claude); the Claude area becomes Setup"
+  phase: build
+  state: review
+- id: DI-120
+  title: "Security layer: scan the project (secrets, dependencies, code, config, containers, infra), explain and rank findings, suggest and apply fixes through Claude or Codex, and keep watching on every change"
+  phase: build
+  state: ready

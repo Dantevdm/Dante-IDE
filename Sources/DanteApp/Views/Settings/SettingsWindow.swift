@@ -241,7 +241,7 @@ private struct CodexRow: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Codex").font(.dante(size: 13, weight: .medium))
-                    Text("OpenAI · Second opinions that read the project").font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
+                    Text("OpenAI · Codes in charge, or reviews Claude’s work").font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
                 }
                 .fixedSize()
                 Spacer(minLength: 12)
@@ -261,7 +261,22 @@ private struct CodexRow: View {
                     Link("Get Codex", destination: URL(string: "https://developers.openai.com/codex/cli")!).font(.dante(size: 12))
                 }
             }
-            if Session.codexPath != nil, preferences.asksCodex {
+            if Session.codexPath != nil {
+                Picker("In charge", selection: $preferences.agentEngine) {
+                    ForEach(AgentEngine.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .help("Who leads new conversations; the other reviews when asked. Each window’s panel can switch too.")
+                .onChange(of: preferences.agentEngine) { _, engine in
+                    for session in Sessions.all {
+                        guard let claude = session.claude, claude.state != .working, claude.remote == nil else { continue }
+                        claude.engine = engine
+                        session.applyClaudePreferences()
+                    }
+                }
+            }
+            if Session.codexPath != nil, preferences.asksCodex || preferences.agentEngine == .codex {
                 TextField("Model", text: $preferences.codexModel, prompt: Text("Codex default"))
                     .onSubmit { Sessions.all.forEach { $0.applyClaudePreferences() } }
                     .help("Leave empty for Codex’s default. Dante ignores your Codex config.toml, since its model may not work with a ChatGPT sign-in.")

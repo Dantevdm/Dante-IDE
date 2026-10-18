@@ -35,7 +35,7 @@ struct ClaudeAreaView: View {
     var body: some View {
         AreaPage(
             eyebrow: nil,
-            title: "Claude",
+            title: "Setup",
             subtitle: nil
         ) {
             Button {

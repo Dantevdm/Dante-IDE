@@ -10,7 +10,7 @@ struct ClaudeFooter: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            modelMenu
+            if claude.engine == .codex { CodexModelMenu(session: session, claude: claude) } else { modelMenu }
             if let context = claude.context {
                 ContextMeter(used: context.context, window: claude.contextWindow)
                 if fraction(context) >= 0.4, claude.state == .idle {
@@ -18,16 +18,15 @@ struct ClaudeFooter: View {
                         .buttonStyle(.plain)
                         .font(.dante(size: 10.5, weight: .medium))
                         .foregroundStyle(theme.accent.color)
-                        .help("Have Claude summarise the conversation so far. Every message re-reads the whole conversation, so a shorter one uses less of your plan.")
+                        .help("Have \(claude.engine.title) summarise the conversation so far. Every message re-reads the whole conversation, so a shorter one uses less of your plan.")
                 }
             }
             Spacer(minLength: 4)
-            Button { session.claudeShowsUsage.toggle() } label: { usageLabel }
-                .buttonStyle(.plain)
-                .help("Your Claude usage on this Mac")
-                .popover(isPresented: Bindable(session).claudeShowsUsage, arrowEdge: .top) {
-                    UsagePopover(session: session, claude: claude)
-                }
+            if claude.engine == .codex {
+                CodexUsageLabel(limits: claude.codexLimits)
+            } else {
+                claudeUsageButton
+            }
         }
         .font(.dante(size: 10.5))
         .foregroundStyle(theme.text3.color)
@@ -40,6 +39,17 @@ struct ClaudeFooter: View {
         }
         .onChange(of: claude.state) { _, state in
             if state == .idle { Task { await session.refreshClaudeUsage() } }
+        }
+    }
+
+    private var claudeUsageButton: some View {
+        HStack {
+            Button { session.claudeShowsUsage.toggle() } label: { usageLabel }
+                .buttonStyle(.plain)
+                .help("Your Claude usage on this Mac")
+                .popover(isPresented: Bindable(session).claudeShowsUsage, arrowEdge: .top) {
+                    UsagePopover(session: session, claude: claude)
+                }
         }
     }
 
@@ -91,6 +101,111 @@ struct ClaudeFooter: View {
                 Text(session.claudeUsage == nil ? "Usage" : "Fresh window")
             }
         }
+    }
+}
+
+/// Codex's models, read once from its app-server, with an effort for each.
+private struct CodexModelMenu: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let claude: ClaudeSession
+    @State private var models: [CodexModel] = CodexModelMenu.cache
+
+    @MainActor private static var cache: [CodexModel] = []
+
+    var body: some View {
+        Menu {
+            Button { choose(model: "") } label: { checked("Default", Preferences.shared.codexModel.isEmpty) }
+            if !models.isEmpty { Divider() }
+            ForEach(models) { model in
+                Button { choose(model: model.id) } label: { checked(model.name, Preferences.shared.codexModel == model.id) }
+                    .help(model.summary)
+            }
+            if !efforts.isEmpty {
+                Divider()
+                Menu("Reasoning") {
+                    Button { choose(effort: "") } label: { checked("Default", Preferences.shared.codexEffort.isEmpty) }
+                    ForEach(efforts, id: \.self) { effort in
+                        Button { choose(effort: effort) } label: { checked(effort.capitalized, Preferences.shared.codexEffort == effort) }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "cpu").font(.dante(size: 9.5))
+                Text(label)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Codex’s model and how hard it thinks, for the next message")
+        .task {
+            guard models.isEmpty, let path = Session.codexPath else { return }
+            let found = await Codex(executable: path).models()
+            Self.cache = found
+            models = found
+        }
+    }
+
+    private var current: CodexModel? {
+        let id = Preferences.shared.codexModel.isEmpty ? (claude.model ?? "") : Preferences.shared.codexModel
+        return models.first { $0.id == id } ?? (Preferences.shared.codexModel.isEmpty ? models.first(where: \.isDefault) : nil)
+    }
+
+    private var efforts: [String] { current?.efforts ?? models.first(where: \.isDefault)?.efforts ?? [] }
+
+    private var label: String {
+        let name = current?.name ?? (Preferences.shared.codexModel.isEmpty ? "Default model" : Preferences.shared.codexModel)
+        let effort = Preferences.shared.codexEffort
+        return effort.isEmpty ? name : "\(name) · \(effort)"
+    }
+
+    @ViewBuilder
+    private func checked(_ title: String, _ on: Bool) -> some View {
+        if on { Label(title, systemImage: "checkmark") } else { Text(title) }
+    }
+
+    private func choose(model: String? = nil, effort: String? = nil) {
+        if let model { Preferences.shared.codexModel = model }
+        if let effort { Preferences.shared.codexEffort = effort }
+        session.applyClaudePreferences()
+    }
+}
+
+/// Codex's plan limits as its app-server reports them: the five-hour window and the week.
+private struct CodexUsageLabel: View {
+    let limits: CodexLimits?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol).font(.dante(size: 9.5))
+            Text(text).monospacedDigit()
+        }
+        .help(help)
+    }
+
+    private var used: Double { limits?.primary?.usedPercent ?? 0 }
+
+    private var symbol: String {
+        used >= 66 ? "gauge.with.dots.needle.67percent" : used >= 33 ? "gauge.with.dots.needle.33percent" : "gauge.with.dots.needle.0percent"
+    }
+
+    private var text: String {
+        guard let limits else { return "Usage after the first reply" }
+        var parts: [String] = []
+        if let primary = limits.primary {
+            var part = "\(Int(primary.usedPercent.rounded()))% of 5 h"
+            if let resets = primary.resetsAt { part += " · resets \(resets.formatted(date: .omitted, time: .shortened))" }
+            parts.append(part)
+        }
+        if let week = limits.secondary { parts.append("\(Int(week.usedPercent.rounded()))% week") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var help: String {
+        let plan = limits?.plan.map { " on the \($0.capitalized) plan" } ?? ""
+        return "How much of Codex’s limits you’ve used\(plan), as ChatGPT reports them."
     }
 }
 

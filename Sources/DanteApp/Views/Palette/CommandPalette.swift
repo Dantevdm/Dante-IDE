@@ -321,7 +321,7 @@ struct CommandPalette: View {
         }
         var list = [
             action(session.showsTerminal ? "Hide terminal" : "Show terminal", "terminal", "⌃`") { session.showsTerminal.toggle() },
-            action(session.showsClaude ? "Hide Claude" : "Show Claude", "sparkle", "⌥⌘L") { session.showsClaude.toggle() },
+            action(session.showsClaude ? "Hide \(session.agentName)" : "Show \(session.agentName)", "sparkle", "⌥⌘L") { session.showsClaude.toggle() },
             action("Save all", "square.and.arrow.down.on.square", "⌥⌘S") { session.saveAll() },
             action("Open folder…", "folder", "⌘O") { session.openFolderPanel() },
             action("Clone repository…", "arrow.down.circle") { session.isCloning = true },

@@ -34,7 +34,7 @@ public enum GitGutter {
                 // The first unchanged line after a change is where a pure deletion shows.
                 nextLine = (line.newNumber ?? 1) - 1
                 flush()
-            case .gap:
+            case .gap, .file:
                 break
             }
         }

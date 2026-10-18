@@ -40,7 +40,7 @@ public struct ToolActivity: Equatable, Sendable {
         if blockedByRule { return "Blocked" }
         switch name {
         case "Read": return "Read"
-        case "Edit", "MultiEdit": return status == .declined ? "Declined edit" : (resolved ? "Edited" : "Edit")
+        case "Edit", "MultiEdit", CodexTranslator.patchTool: return status == .declined ? "Declined edit" : (resolved ? "Edited" : "Edit")
         case "Write": return status == .declined ? "Declined" : (change?.isNewFile == true ? (resolved ? "Created" : "Create") : (resolved ? "Wrote" : "Write"))
         case "Bash": return status == .declined ? "Didn’t run" : (resolved ? "Ran" : "Run")
         case "Grep": return "Searched for"
@@ -60,6 +60,7 @@ public struct ToolActivity: Equatable, Sendable {
         case "mcp__dante__ask_grok": return resolved ? "Asked Grok" : "Asking Grok"
         case "mcp__dante__decide": return resolved ? "Asked Jev" : "Asking Jev"
         case "mcp__dante__ask_codex": return resolved ? "Asked Codex" : "Asking Codex"
+        case "mcp__dante__ask_claude": return resolved ? "Asked Claude" : "Asking Claude"
         case "mcp__dante__local_models": return "Checked local models"
         default:
             if let tool = Self.mcpTool(name) { return tool.action }
@@ -114,8 +115,9 @@ public struct TranscriptItem: Identifiable, Equatable, Sendable {
     public var content: Content
 }
 
-/// A conversation with Claude Code, run headless (`claude --input-format stream-json`)
-/// in the project folder. Claude proposes; every edit and command waits for approval.
+/// A conversation with the agent in charge, run headless in the project folder: Claude Code
+/// (`claude --input-format stream-json`) or Codex (`codex app-server`, translated into the same
+/// events by `CodexTranslator`). The agent proposes; every edit and command waits for approval.
 @MainActor
 @Observable
 public final class ClaudeSession {
@@ -139,7 +141,7 @@ public final class ClaudeSession {
     /// The model's context window; Claude Code reports it at the end of each turn.
     public private(set) var contextWindow = 200_000
     /// The Claude Code session this conversation continues, for the history list.
-    public var conversationID: String? { sessionID }
+    public var conversationID: String? { engine == .claude ? sessionID : codexThread }
     /// Claude Code replied that it isn't signed in.
     public private(set) var needsLogin = false
 
@@ -159,6 +161,29 @@ public final class ClaudeSession {
 
     public let root: URL
     public let executable: String?
+    /// Who runs the conversation. A change takes effect on the next message, and the new agent
+    /// gets a summary of the conversation so far.
+    public var engine: AgentEngine = .claude
+    private var startedEngine: AgentEngine = .claude
+    /// The engine of the conversation's last turn, to spot a hand-over.
+    private var lastTurnEngine: AgentEngine?
+    /// The Codex CLI; nil when it isn't installed.
+    public var codexExecutable: String?
+    /// The Codex model and reasoning effort; nil leaves them to Codex.
+    public var codexModel: String?
+    public var codexEffort: String?
+    private var startedCodexModel: String?
+    /// The ChatGPT plan's Codex limits, as of Codex's latest update.
+    public private(set) var codexLimits: CodexLimits?
+    private var codexThread: String?
+    private var codexTurn: String?
+    private var translator = CodexTranslator()
+    /// Replies Codex owes Dante, by request id.
+    private var codexWaiting: [Int: @MainActor (JSONValue?, String?) -> Void] = [:]
+    /// The first message, held until Codex's thread is ready.
+    private var codexHeldTurn: (text: String, images: [String])?
+    /// Tells the newly-in-charge agent what was said before it took over.
+    private var handover: String?
     /// Set when `root` is a remote project's mirror: Claude Code runs on the host, and file
     /// paths in its tool calls are read as the mirror's while Dante shows and checks them.
     public let remote: RemoteProject?
@@ -222,6 +247,14 @@ public final class ClaudeSession {
         }
     }
 
+    /// Whether the chosen engine can run here.
+    public var engineAvailable: Bool {
+        switch engine {
+        case .claude: executable != nil || remote != nil
+        case .codex: codexExecutable != nil && remote == nil
+        }
+    }
+
     /// A message sent while Claude was working, sent when the turn ends.
     public struct QueuedMessage: Identifiable, Equatable {
         public let id = UUID()
@@ -253,7 +286,7 @@ public final class ClaudeSession {
 
     public func stopApplyingRestOfTurn() { autoAppliedTurn = nil }
 
-    static let editTools: Set<String> = ["Edit", "MultiEdit", "Write", "NotebookEdit"]
+    static let editTools: Set<String> = ["Edit", "MultiEdit", "Write", "NotebookEdit", CodexTranslator.patchTool]
 
     public var pendingApprovals: [ToolActivity] {
         items.compactMap { item in
@@ -275,35 +308,85 @@ public final class ClaudeSession {
         }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
         if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || delegateCommand != startedDelegate
-            || delegateEnvironment != startedDelegateEnvironment {
+            || delegateEnvironment != startedDelegateEnvironment || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
             stop()
+        }
+        // A different agent takes over: it starts afresh, with a summary of what was said.
+        if let last = lastTurnEngine, last != engine {
+            handover = Self.handover(items, from: last)
+            sessionID = nil
+            codexThread = nil
+            note("\(engine.title) is in charge from here, with a summary of the conversation so far.", isError: false)
+        }
+        guard engineAvailable else {
+            note(engine == .codex ? (remote != nil ? "Codex runs on this Mac only for now; switch to Claude for remote projects." : "Codex isn’t installed. Install the Codex CLI or the ChatGPT app, then try again.")
+                 : "Claude Code isn’t installed.", isError: true)
+            return
         }
         if process == nil {
             guard start() else { return }
         }
         let turn = "user-\(UUID().uuidString)"
         currentTurn = turn
+        lastTurnEngine = engine
         append(TranscriptItem(id: turn, content: .user(trimmed, attachments: attachments.map(\.name))))
         if trimmed.isEmpty { trimmed = "Take a look at \(attachments.count == 1 ? "this file" : "these files")." }
-        let notes = [pendingNotice, context].compactMap { $0 }.joined(separator: "\n\n")
+        let notes = [handover, pendingNotice, context].compactMap { $0 }.joined(separator: "\n\n")
         pendingNotice = nil
+        handover = nil
         let message = notes.isEmpty ? trimmed : "\(trimmed)\n\n<dante-context>\n\(notes)\n</dante-context>"
-        write(ClaudeInput.userMessage(message, attachments: attachments))
+        if engine == .codex {
+            sendCodexTurn(message, attachments: attachments)
+        } else {
+            write(ClaudeInput.userMessage(message, attachments: attachments))
+        }
         state = .working
+    }
+
+    /// The conversation so far, for an agent taking over: the last messages, newest last,
+    /// within about 6,000 characters.
+    nonisolated static func handover(_ items: [TranscriptItem], from previous: AgentEngine) -> String? {
+        var lines: [String] = []
+        var size = 0
+        for item in items.reversed() {
+            let line: String
+            switch item.content {
+            case .user(let text, _): line = "User: \(text)"
+            case .assistant(let text): line = "\(previous.title): \(text)"
+            case .tool(let tool) where ProposedChange.toolNames.contains(tool.name) && tool.status == .done:
+                line = "(\(previous.title) edited \(tool.input["file_path"]?.string.map { ($0 as NSString).lastPathComponent } ?? "a file"))"
+            default: continue
+            }
+            let clipped = line.count > 1500 ? String(line.prefix(1500)) + "…" : line
+            if size + clipped.count > 6000 { break }
+            size += clipped.count
+            lines.append(clipped)
+        }
+        guard !lines.isEmpty else { return nil }
+        return "You're taking over this conversation from \(previous.title), which the user was working with until now. What was said, oldest first:\n\n" + lines.reversed().joined(separator: "\n\n")
     }
 
     /// Stops the current turn. Pending approvals are declined.
     public func interrupt() {
         guard state == .working else { return }
         for tool in pendingApprovals { decline(tool.id, message: "The user stopped this turn.") }
-        write(ClaudeInput.interrupt(requestID: requestID()))
+        if startedEngine == .codex {
+            if let thread = codexThread, let turn = codexTurn { codexRequest { CodexRequest.interrupt(id: $0, thread: thread, turn: turn) } }
+        } else {
+            write(ClaudeInput.interrupt(requestID: requestID()))
+        }
     }
 
     public func approve(_ toolID: String) {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status else { return }
         if let turn = currentTurn {
             var checkpoint = checkpoints[turn] ?? TurnCheckpoint()
-            if Self.editTools.contains(tool.name),
+            if tool.name == CodexTranslator.patchTool {
+                for path in (tool.input["changes"]?.array ?? []).compactMap({ $0["path"]?.string }) {
+                    let absolute = URL(filePath: path, relativeTo: root).standardizedFileURL.path
+                    checkpoint.record(absolute) { try? String(contentsOf: URL(filePath: $0), encoding: .utf8) }
+                }
+            } else if Self.editTools.contains(tool.name),
                let path = tool.input["file_path"]?.string ?? tool.input["notebook_path"]?.string {
                 checkpoint.record(path) { try? String(contentsOf: URL(filePath: $0), encoding: .utf8) }
             } else if tool.name == "Bash" {
@@ -311,8 +394,19 @@ public final class ClaudeSession {
             }
             checkpoints[turn] = checkpoint
         }
-        write(ClaudeInput.allow(requestID: requestID, input: hostPaths(tool.input)))
+        respond(requestID, allow: true, input: tool.input)
         updateTool(toolID) { $0.status = .running }
+    }
+
+    /// Answers a permission request in the running engine's terms.
+    private func respond(_ requestID: String, allow: Bool, input: JSONValue = [:], message: String = "", answers: [String: String] = [:]) {
+        if startedEngine == .codex {
+            if let reply = translator.reply(to: requestID, accept: allow, answers: answers) { write(reply) }
+        } else if allow {
+            write(ClaudeInput.allow(requestID: requestID, input: hostPaths(input)))
+        } else {
+            write(ClaudeInput.deny(requestID: requestID, message: message))
+        }
     }
 
     /// Answers an AskUserQuestion call: Claude gets its input back with `answers` filled in,
@@ -321,7 +415,7 @@ public final class ClaudeSession {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status,
               case .object(var input) = tool.input else { return }
         input["answers"] = .object(answers.mapValues { .string($0) })
-        write(ClaudeInput.allow(requestID: requestID, input: hostPaths(.object(input))))
+        respond(requestID, allow: true, input: .object(input), answers: answers)
         updateTool(toolID) {
             $0.input = .object(input)
             $0.status = .running
@@ -357,7 +451,7 @@ public final class ClaudeSession {
 
     public func decline(_ toolID: String, message: String = "The user declined this. Ask what they’d like instead.") {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status else { return }
-        write(ClaudeInput.deny(requestID: requestID, message: message))
+        respond(requestID, allow: false, message: message)
         updateTool(toolID) { $0.status = .declined }
     }
 
@@ -400,7 +494,10 @@ public final class ClaudeSession {
         totalCostUSD = 0
         needsLogin = false
         sessionID = nil
-        if executable != nil { state = .idle }
+        codexThread = nil
+        lastTurnEngine = nil
+        handover = nil
+        if executable != nil || codexExecutable != nil { state = .idle }
     }
 
     /// Picks up an earlier conversation: its transcript is shown, and the next message
@@ -415,7 +512,13 @@ public final class ClaudeSession {
     /// Has Claude Code summarise the conversation so far, freeing context. Long conversations
     /// cost more per message, because every message re-reads everything before it.
     public func compact() {
-        guard state == .idle, !items.isEmpty, executable != nil else { return }
+        guard state == .idle, !items.isEmpty, engineAvailable else { return }
+        if engine == .codex {
+            guard process != nil, let thread = codexThread else { return }
+            note("Compacting the conversation: Codex keeps a summary and drops the rest.", isError: false)
+            codexRequest { CodexRequest.compact(id: $0, thread: thread) }
+            return
+        }
         if process == nil {
             guard start() else { return }
         }
@@ -430,12 +533,16 @@ public final class ClaudeSession {
         if process?.isRunning == true { process?.terminate() }
         process = nil
         stdin = nil
+        codexWaiting = [:]
+        codexHeldTurn = nil
+        codexTurn = nil
         if state == .working { state = .idle }
     }
 
     // MARK: Process
 
     private func start() -> Bool {
+        if engine == .codex { return startCodex() }
         guard executable != nil || remote != nil else { return false }
         let process = Process()
         let rules = rules()
@@ -476,6 +583,7 @@ public final class ClaudeSession {
         startedDelegate = delegateCommand
         startedDelegateEnvironment = delegateEnvironment
         startedModel = requestedModel
+        startedEngine = .claude
         process.environment = Self.environment()
 
         let input = Pipe(), output = Pipe(), errors = Pipe()
@@ -510,6 +618,168 @@ public final class ClaudeSession {
             for await line in stderrLines { await self?.noteStderr(line) }
         }
         return true
+    }
+
+    // MARK: Codex
+
+    private var nextCodexID = 0
+
+    /// Starts `codex app-server`: initialize, pick a model when none is chosen (the user's own
+    /// Codex config may name one their sign-in can't use), then open or resume the thread.
+    private func startCodex() -> Bool {
+        guard let codexExecutable, remote == nil else { return false }
+        let process = Process()
+        process.executableURL = URL(filePath: codexExecutable)
+        process.arguments = ["app-server"]
+        process.currentDirectoryURL = root
+        process.environment = Self.environment()
+        let input = Pipe(), output = Pipe(), errors = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = errors
+        process.terminationHandler = { [weak self] finished in
+            let status = finished.terminationStatus
+            Task { @MainActor in self?.processEnded(status: status) }
+        }
+        do {
+            try process.run()
+        } catch {
+            note("Couldn’t start Codex: \(error.localizedDescription)", isError: true)
+            return false
+        }
+        self.process = process
+        stdin = input.fileHandleForWriting
+        stderrTail = ""
+        startedEngine = .codex
+        startedCodexModel = codexModel
+        startedRules = rules()
+        startedAsksFirst = asksFirst
+        startedDelegate = delegateCommand
+        startedDelegateEnvironment = delegateEnvironment
+        startedModel = requestedModel
+        allowRules = ClaudePermissions.load(root: root).allow
+        translator = CodexTranslator()
+        codexTurn = nil
+
+        let stdoutLines = Self.lines(from: output.fileHandleForReading)
+        let stderrLines = Self.lines(from: errors.fileHandleForReading)
+        Task.detached { [weak self] in
+            for await line in stdoutLines { await self?.receiveCodex(line) }
+        }
+        Task.detached { [weak self] in
+            for await line in stderrLines { await self?.noteStderr(line) }
+        }
+
+        let (instructions, mcp) = codexSetup()
+        let chosen = codexModel
+        codexRequest({ CodexRequest.initialize(id: $0) }) { [weak self] _, error in
+            guard let self else { return }
+            if let error { return self.codexFailed("Codex didn’t start: \(error)") }
+            self.write(CodexRequest.initialized)
+            if let chosen, !chosen.isEmpty {
+                self.openThread(model: chosen, instructions: instructions, mcp: mcp)
+            } else {
+                self.codexRequest({ CodexRequest.models(id: $0) }) { [weak self] result, _ in
+                    let models = CodexModel.parse(result)
+                    self?.openThread(model: (models.first(where: \.isDefault) ?? models.first)?.id, instructions: instructions, mcp: mcp)
+                }
+            }
+        }
+        return true
+    }
+
+    /// The developer instructions and Dante's MCP server for Codex: local models, and Claude
+    /// for second opinions. Cloud agents' keys stay out, since Codex saves its thread settings.
+    private func codexSetup() -> (String, JSONValue?) {
+        var prompt = systemPrompt() + "\n\n" + ClaudeBrief.codexPairing
+        if asksFirst { prompt += "\n\n" + ClaudeBrief.codexClarifying }
+        guard let delegate = delegateCommand else { return (prompt, nil) }
+        var environment = delegateEnvironment.filter { key, _ in !CloudAgent.allCases.map(\.environmentVariable).contains(key) }
+        environment[DelegateEnvironment.codex] = nil
+        environment[DelegateEnvironment.codexModel] = nil
+        environment[DelegateEnvironment.requester] = "codex"
+        if let executable {
+            environment[DelegateEnvironment.claude] = executable
+            if let requestedModel { environment[DelegateEnvironment.claudeModel] = requestedModel }
+        }
+        if let brief = ClaudeBrief.delegation(local: environment[DelegateEnvironment.local] != "0", jev: false, grok: false,
+                                              claude: environment[DelegateEnvironment.claude] != nil) {
+            prompt += "\n\n" + brief
+        }
+        return (prompt, CodexRequest.mcpServer(command: delegate, environment: environment))
+    }
+
+    private func openThread(model: String?, instructions: String, mcp: JSONValue?) {
+        let resume = codexThread
+        codexRequest({ CodexRequest.thread(id: $0, resume: resume, cwd: self.root.path, model: model, instructions: instructions, mcp: mcp) }) { [weak self] result, error in
+            guard let self else { return }
+            if let error {
+                // A thread that can't be picked up starts afresh.
+                if resume != nil {
+                    self.codexThread = nil
+                    return self.openThread(model: model, instructions: instructions, mcp: mcp)
+                }
+                return self.codexFailed("Codex couldn’t start a conversation: \(error)")
+            }
+            guard let thread = result?["thread"]?["id"]?.string else { return self.codexFailed("Codex didn’t open a conversation.") }
+            self.codexThread = thread
+            self.model = result?["model"]?.string ?? model
+            if let held = self.codexHeldTurn {
+                self.codexHeldTurn = nil
+                self.writeCodexTurn(held.text, images: held.images)
+            }
+        }
+    }
+
+    /// A message for Codex: images by path, other attachments as text or a path to open.
+    private func sendCodexTurn(_ message: String, attachments: [Attachment]) {
+        var images: [String] = []
+        var parts: [String] = []
+        for attachment in attachments {
+            switch attachment.kind {
+            case .image: images.append(attachment.url.path)
+            case .text: parts.append(attachment.contentBlock["text"]?.string ?? "")
+            case .pdf, .reference: parts.append("<attachment name=\"\(attachment.name)\" path=\"\(attachment.url.path)\">Open it from that path if you need its contents.</attachment>")
+            }
+        }
+        let text = (parts + [message]).joined(separator: "\n\n")
+        if codexThread == nil {
+            codexHeldTurn = (text, images)
+        } else {
+            writeCodexTurn(text, images: images)
+        }
+    }
+
+    private func writeCodexTurn(_ text: String, images: [String]) {
+        guard let thread = codexThread else { return }
+        codexRequest({ CodexRequest.turn(id: $0, thread: thread, text: text, images: images, model: self.codexModel, effort: self.codexEffort) }) { [weak self] _, error in
+            if let error { self?.codexFailed(error) }
+        }
+    }
+
+    private func codexRequest(_ build: (Int) -> JSONValue, then: (@MainActor (JSONValue?, String?) -> Void)? = nil) {
+        nextCodexID += 1
+        if let then { codexWaiting[nextCodexID] = then }
+        write(build(nextCodexID))
+    }
+
+    private func codexFailed(_ message: String) {
+        note(message, isError: true)
+        codexHeldTurn = nil
+        if state == .working { state = .idle }
+    }
+
+    func receiveCodex(_ line: String) {
+        if let window = CodexTranslator.contextWindow(line), window > 0 { contextWindow = window }
+        for incoming in translator.translate(line) {
+            switch incoming {
+            case .event(let event): handle(event)
+            case .response(let id, let result, let error): codexWaiting.removeValue(forKey: id)?(result, error)
+            case .turnStarted(let id): codexTurn = id
+            case .limits(let limits): codexLimits = limits
+            case .reply(let message): write(message)
+            }
+        }
     }
 
     /// Lines from a pipe as they arrive. (`FileHandle.bytes` buffers pipes, which stalls
@@ -573,7 +843,8 @@ public final class ClaudeSession {
         for tool in pendingApprovals { updateTool(tool.id) { $0.status = .declined } }
         if state == .working { state = .idle }
         let detail = stderrTail.trimmingCharacters(in: .whitespacesAndNewlines)
-        note(detail.isEmpty ? "Claude Code stopped (exit \(status)). Send a message to start again." : "Claude Code stopped: \(detail)", isError: status != 0)
+        let name = startedEngine == .codex ? "Codex" : "Claude Code"
+        note(detail.isEmpty ? "\(name) stopped (exit \(status)). Send a message to start again." : "\(name) stopped: \(detail)", isError: status != 0)
     }
 
     private func noteStderr(_ line: String) {
@@ -585,7 +856,7 @@ public final class ClaudeSession {
         do {
             try stdin.write(contentsOf: Data((message.jsonLine + "\n").utf8))
         } catch {
-            note("Lost the connection to Claude Code.", isError: true)
+            note("Lost the connection to \(startedEngine == .codex ? "Codex" : "Claude Code").", isError: true)
             stop()
         }
     }
@@ -704,7 +975,7 @@ public final class ClaudeSession {
             }
             switch rules().verdict(toolName: request.toolName, input: request.input, root: root) {
             case .blocked(let message):
-                write(ClaudeInput.deny(requestID: request.requestID, message: message))
+                respond(request.requestID, allow: false, message: message)
                 updateTool(id) {
                     $0.input = request.input
                     $0.change = change
@@ -729,7 +1000,8 @@ public final class ClaudeSession {
 
         case .result(let result):
             state = .idle
-            ledger?.append(AgentJob(kind: "turn", provider: .claude, model: requestedModel ?? "claude", project: root.lastPathComponent,
+            ledger?.append(AgentJob(kind: "turn", provider: startedEngine == .codex ? .codex : .claude,
+                                    model: startedEngine == .codex ? (model ?? "codex") : (requestedModel ?? "claude"), project: root.lastPathComponent,
                                     promptTokens: turnUsage.input, outputTokens: turnUsage.output.values.reduce(0, +),
                                     seconds: Double(result.durationMS ?? 0) / 1000, outcome: result.isError ? .failed : .done,
                                     requestedBy: "you", title: turnUsage.title))

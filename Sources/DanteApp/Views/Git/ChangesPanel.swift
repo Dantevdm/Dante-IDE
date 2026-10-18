@@ -199,7 +199,7 @@ struct ChangesPanel: View {
                     }
                     .buttonStyle(DanteButtonStyle())
                 }
-                Button("Ask Claude") {
+                Button("Ask \(session.agentName)") {
                     session.askClaude("Git said this when I tried to work with the repository. Explain what happened and how to fix it; don't run anything that changes history without asking.\n\n\(error.message)")
                 }
                 .buttonStyle(DanteButtonStyle())

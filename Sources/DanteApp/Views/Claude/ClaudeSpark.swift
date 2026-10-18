@@ -95,3 +95,62 @@ struct ClaudeLabel: View {
         Label { Text(title) } icon: { Image.symbol("sparkle", side: side) }
     }
 }
+
+/// Codex's mark in Dante: a hexagon with a prompt chevron, drawn rather than borrowed, since
+/// OpenAI's logo isn't ours to use.
+struct CodexGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        let size = min(rect.width, rect.height)
+        let centre = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = size / 2
+        var path = Path()
+        for index in 0..<6 {
+            let angle = Double(index) * .pi / 3 - .pi / 2
+            let point = CGPoint(x: centre.x + radius * cos(angle), y: centre.y + radius * sin(angle))
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.closeSubpath()
+        // The chevron and cursor, cut out of the hexagon.
+        let unit = size / 10
+        var mark = Path()
+        mark.move(to: CGPoint(x: centre.x - 2.6 * unit, y: centre.y - 2 * unit))
+        mark.addLine(to: CGPoint(x: centre.x - 0.4 * unit, y: centre.y))
+        mark.addLine(to: CGPoint(x: centre.x - 2.6 * unit, y: centre.y + 2 * unit))
+        mark.move(to: CGPoint(x: centre.x + 0.6 * unit, y: centre.y + 2.1 * unit))
+        mark.addLine(to: CGPoint(x: centre.x + 2.8 * unit, y: centre.y + 2.1 * unit))
+        let stroked = mark.strokedPath(StrokeStyle(lineWidth: 1.15 * unit, lineCap: .round, lineJoin: .round))
+        return path.subtracting(stroked)
+    }
+}
+
+/// The mark of whichever agent is in charge, turning while it works.
+struct AgentIcon: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let engine: AgentEngine
+    var size: CGFloat = 13
+    var isWorking = false
+
+    var body: some View {
+        switch engine {
+        case .claude:
+            ClaudeSparkIcon(size: size, isWorking: isWorking)
+        case .codex:
+            if isWorking && !reduceMotion {
+                TimelineView(.animation) { context in
+                    let t = context.date.timeIntervalSinceReferenceDate
+                    glyph.rotationEffect(.degrees(sin(t * 2) * 12)).scaleEffect(1 + 0.07 * sin(t * 3.1))
+                }
+            } else {
+                glyph
+            }
+        }
+    }
+
+    private var glyph: some View {
+        CodexGlyph()
+            .fill(theme.syntax.function.color)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}

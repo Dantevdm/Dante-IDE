@@ -39,10 +39,10 @@ extension Session {
         content.subtitle = workspace.url.lastPathComponent
         switch attention {
         case .finished(let reply):
-            content.title = "Claude is done"
+            content.title = "\(agentName) is done"
             content.body = reply
         case .needsApproval(let what):
-            content.title = "Claude is waiting for you"
+            content.title = "\(agentName) is waiting for you"
             content.body = what
             content.sound = .default
         }

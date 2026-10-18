@@ -159,4 +159,10 @@ public enum DelegateEnvironment {
     public static let codex = "DANTE_CODEX"
     /// The model Codex uses; unset for its default.
     public static let codexModel = "DANTE_CODEX_MODEL"
+    /// Claude Code, for Codex's second opinions when Codex is in charge.
+    public static let claude = "DANTE_CLAUDE"
+    /// The model Claude answers with; unset for the user's default.
+    public static let claudeModel = "DANTE_CLAUDE_MODEL"
+    /// Who calls the tools, "claude" or "codex", so the ledger says who asked.
+    public static let requester = "DANTE_REQUESTER"
 }
