@@ -482,7 +482,7 @@ struct UntestedView: View {
             Spacer()
             Button {
                 session.askClaude(gaps.prompt())
-            } label: { Label("Ask Claude what matters most", systemImage: "sparkle") }
+            } label: { ClaudeLabel("Ask Claude what matters most") }
                 .buttonStyle(DanteButtonStyle(primary: true))
                 .disabled(gaps.untestedCount == 0)
         }

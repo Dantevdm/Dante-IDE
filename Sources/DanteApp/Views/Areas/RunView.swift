@@ -158,7 +158,7 @@ private struct DownCard: View {
     var body: some View {
         Card(accent: true) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkle").foregroundStyle(theme.accent.color)
+                ClaudeSparkIcon()
                 Text("\(check.name) is failing its health check").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
             }
             Text(sample?.error ?? sample?.status.map { "Last response: HTTP \($0)" } ?? "No response")

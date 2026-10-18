@@ -16,6 +16,18 @@ public enum ClaudeBrief {
         public var estimatedTokens: Int { max(1, text.count / 4) }
     }
 
+    /// Always added: choices go through AskUserQuestion, which Dante shows as options to click.
+    public static let offeringChoices = """
+    # Offering choices
+    When you end a turn by asking the user to pick between options (which skills to write, which fix to apply, which approach to take), ask with the AskUserQuestion tool instead of a numbered list in prose: Dante shows its options as buttons, so the user doesn't have to type. Use multiSelect when several can be picked, keep labels short and put the detail in each option's description. Up to four options per question; split longer lists into two questions or keep only the strongest four.
+    """
+
+    /// Added when local models are on: Claude orchestrates, delegates and checks.
+    public static let delegation = """
+    # Delegating to local models
+    You're the orchestrator. The `delegate` tool (from the dante MCP server) hands a self-contained job to a model running on the user's Mac, which saves their Claude usage. Use it for work a smaller model does well: condensing long logs, diffs or files you only need the gist of (summary), sorting many failures or errors (triage), first drafts of boilerplate, fixtures or repetitive tests (draft), and prose (writing). Put everything the job needs in the prompt; the local model can't read files or run tools. Always check what comes back, fix it or redo it yourself if it's wrong, and say briefly when you delegated. Don't delegate design decisions, subtle bugs, security-sensitive code or anything needing the whole codebase in mind.
+    """
+
     /// Added to the system prompt while "Ask questions first" is on.
     public static let clarifyingQuestions = """
     # Clarifying questions

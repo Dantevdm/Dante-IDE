@@ -144,7 +144,7 @@ struct FinishTaskSheet: View {
             } else {
                 HStack {
                     Spacer()
-                    Button { Task { await model.reviewBranch() } } label: { Label("Review", systemImage: "sparkle") }
+                    Button { Task { await model.reviewBranch() } } label: { ClaudeLabel("Review") }
                         .buttonStyle(DanteButtonStyle())
                 }
             }
@@ -224,7 +224,7 @@ struct FinishTaskSheet: View {
                     Text("Claude is drafting…").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                 } else if let redraft {
                     Button(action: redraft) {
-                        Label("Redraft", systemImage: "sparkle").font(.dante(size: 11))
+                        ClaudeLabel("Redraft").font(.dante(size: 11))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(theme.accent.color)

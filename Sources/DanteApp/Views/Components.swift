@@ -61,7 +61,7 @@ struct IconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
+            Image.symbol(symbol, side: size + 1)
                 .font(.dante(size: size, weight: .medium))
                 .frame(width: 26, height: 26)
                 .foregroundStyle(hovering ? theme.text.color : theme.text3.color)

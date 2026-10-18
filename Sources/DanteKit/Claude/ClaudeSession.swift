@@ -158,6 +158,16 @@ public final class ClaudeSession {
     /// Ask clarifying questions before starting ambiguous work. Takes effect on the next message.
     public var asksFirst = true
     private var startedAsksFirst = true
+    /// The `dante` command, which Claude Code starts as an MCP server (`dante mcp`) so it can
+    /// delegate jobs to local models. Nil turns delegation off. Takes effect on the next message.
+    public var delegateCommand: String?
+    private var startedDelegate: String?
+    /// When Claude Code last said a usage limit was hit; cleared by the next turn that works.
+    public private(set) var limitReachedAt: Date?
+    /// Where each turn and sub-agent is recorded for the Agents stats; nil records nothing.
+    public var ledger: AgentLedger?
+    /// This turn's tokens so far, for the ledger: the largest context, and output per message.
+    private var turnUsage = (input: 0, output: [String: Int](), title: "")
     /// The `--model` to start with; nil leaves it to Claude Code. Takes effect on the next message.
     public var requestedModel: String?
     private var startedModel: String?
@@ -236,13 +246,14 @@ public final class ClaudeSession {
     public func send(_ text: String, context: String? = nil, attachments: [Attachment] = []) {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
+        if state != .working { turnUsage = (0, [:], String(trimmed.prefix(80))) }
         // Mid-turn, a button such as "Find untested code" waits its turn rather than vanishing.
         if state == .working {
             queued.append(QueuedMessage(text: text, context: context, attachments: attachments))
             return
         }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
-        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel {
+        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || delegateCommand != startedDelegate {
             stop()
         }
         if process == nil {
@@ -379,8 +390,12 @@ public final class ClaudeSession {
         guard executable != nil || remote != nil else { return false }
         let process = Process()
         let rules = rules()
-        let prompt = asksFirst ? systemPrompt() + "\n\n" + ClaudeBrief.clarifyingQuestions : systemPrompt()
-        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel)
+        // On a remote host there's no `dante` to start.
+        let delegate = remote == nil ? delegateCommand : nil
+        var prompt = systemPrompt() + "\n\n" + ClaudeBrief.offeringChoices
+        if asksFirst { prompt += "\n\n" + ClaudeBrief.clarifyingQuestions }
+        if delegate != nil { prompt += "\n\n" + ClaudeBrief.delegation }
+        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel, delegate: delegate)
         if let remote {
             process.executableURL = URL(filePath: "/usr/bin/env")
             process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
@@ -392,6 +407,7 @@ public final class ClaudeSession {
         }
         startedRules = rules
         startedAsksFirst = asksFirst
+        startedDelegate = delegateCommand
         startedModel = requestedModel
         process.environment = Self.environment()
 
@@ -459,7 +475,7 @@ public final class ClaudeSession {
         }
     }
 
-    nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?, model: String? = nil) -> [String] {
+    nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?, model: String? = nil, delegate: String? = nil) -> [String] {
         var arguments = [
             "--output-format", "stream-json",
             "--input-format", "stream-json",
@@ -472,6 +488,10 @@ public final class ClaudeSession {
         if let settings = rules.settingsJSON { arguments += ["--settings", settings] }
         if let sessionID { arguments += ["--resume", sessionID] }
         if let model { arguments += ["--model", model] }
+        if let delegate {
+            let config: JSONValue = ["mcpServers": ["dante": ["type": "stdio", "command": .string(delegate), "args": ["mcp"]]]]
+            arguments += ["--mcp-config", config.jsonLine]
+        }
         return arguments
     }
 
@@ -548,7 +568,11 @@ public final class ClaudeSession {
             items[position].content = .assistant(current + text)
 
         case .assistant(let messageID, let blocks, let usage):
-            if let usage, usage.context > 0 { context = usage }
+            if let usage, usage.context > 0 {
+                context = usage
+                turnUsage.input = max(turnUsage.input, usage.context)
+                turnUsage.output[messageID] = usage.output
+            }
             for block in blocks {
                 switch block {
                 case .text(let text):
@@ -572,6 +596,11 @@ public final class ClaudeSession {
                     }
                 } else {
                     updateTool(tool.id) { $0.status = .done }
+                    if tool.name == "Task" || tool.name == "Agent" {
+                        ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: tool.input["subagent_type"]?.string ?? "general-purpose",
+                                                project: root.lastPathComponent, requestedBy: "claude",
+                                                title: tool.input["description"]?.string ?? "Sub-agent"))
+                    }
                     if let change = tool.change ?? ProposedChange.make(toolName: tool.name, input: tool.input, root: root) {
                         onFileChanged(change.url)
                     }
@@ -585,6 +614,9 @@ public final class ClaudeSession {
             defer {
                 if case .awaitingApproval = activity(id)?.status {
                     if appliesRestOfTurn, Self.editTools.contains(request.toolName), activity(id)?.ruleNote == nil {
+                        approve(id)
+                    } else if request.toolName.hasPrefix("mcp__dante__") {
+                        // Dante's own local-model tools: nothing to review before they run.
                         approve(id)
                     } else {
                         onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input)))
@@ -622,6 +654,16 @@ public final class ClaudeSession {
 
         case .result(let result):
             state = .idle
+            ledger?.append(AgentJob(kind: "turn", provider: .claude, model: requestedModel ?? "claude", project: root.lastPathComponent,
+                                    promptTokens: turnUsage.input, outputTokens: turnUsage.output.values.reduce(0, +),
+                                    seconds: Double(result.durationMS ?? 0) / 1000, outcome: result.isError ? .failed : .done,
+                                    requestedBy: "you", title: turnUsage.title))
+            turnUsage = (0, [:], "")
+            if result.isError, Vitality.isLimitMessage(result.text) {
+                limitReachedAt = Date()
+            } else if !result.isError {
+                limitReachedAt = nil
+            }
             streamingTextItemID = nil
             if let cost = result.costUSD { totalCostUSD = costBeforeThisProcess + cost }
             if let window = result.contextWindow, window > 0 { contextWindow = window }

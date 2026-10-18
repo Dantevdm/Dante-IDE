@@ -74,6 +74,9 @@ public struct Theme: Sendable, Equatable {
     public let syntax: SyntaxPalette
 
     public var colorScheme: ColorScheme { isDark ? .dark : .light }
+
+    /// Claude's own colour (Clay), the same in every theme, for the Claude mark.
+    public var claude: RGBA { RGBA(0xD97757) }
 }
 
 public extension Theme {

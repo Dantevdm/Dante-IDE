@@ -56,6 +56,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSMicrophoneUsageDescription</key><string>Dante listens while you hold the talk key, so you can speak to Claude.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Dante turns what you say to Claude into text, on this Mac.</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

@@ -26,7 +26,7 @@ let package = Package(
     targets: [
         // What the `dante` command asks the app to open, and which window each part goes to.
         .target(name: "DanteOpen"),
-        .executableTarget(name: "DanteCLI", dependencies: ["DanteOpen"]),
+        .executableTarget(name: "DanteCLI", dependencies: ["DanteOpen", "DanteKit"]),
         // Models with no UI: themes, workspace, documents, lifecycle, tasks, Claude.
         .target(name: "DanteKit", dependencies: [.product(name: "Yams", package: "Yams")]),
         // The TextKit 2 code editor and syntax highlighting.

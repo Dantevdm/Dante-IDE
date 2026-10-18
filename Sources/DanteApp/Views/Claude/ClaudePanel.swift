@@ -26,7 +26,8 @@ struct ClaudePanel: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            ClaudeMark(isWorking: claude.state == .working)
+            ClaudeSparkIcon(size: 22, isWorking: claude.state == .working)
+                .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Claude").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
                 Text(subtitle).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
@@ -123,36 +124,6 @@ private struct ApplyAllBar: View {
     }
 }
 
-/// A small mark that breathes while Claude works.
-private struct ClaudeMark: View {
-    @Environment(\.theme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let isWorking: Bool
-    @State private var pulse = false
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(theme.accentTint.color)
-            .overlay(
-                Image(systemName: "sparkle")
-                    .font(.dante(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.accent.color)
-                    .scaleEffect(isWorking && pulse && !reduceMotion ? 1.18 : 1)
-                    .rotationEffect(.degrees(isWorking && pulse && !reduceMotion ? 20 : 0))
-            )
-            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(theme.accentLine.color))
-            .frame(width: 26, height: 26)
-            .onChange(of: isWorking, initial: true) { _, working in
-                if working {
-                    withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
-                } else {
-                    withAnimation(.easeOut(duration: 0.2)) { pulse = false }
-                }
-            }
-            .accessibilityHidden(true)
-    }
-}
-
 /// What Claude can see: the phase and the open file.
 private struct ContextChips: View {
     @Environment(\.theme) private var theme
@@ -211,6 +182,11 @@ private struct Transcript: View {
                     }
                     if claude.state == .working, claude.pendingApprovals.isEmpty {
                         ThinkingDots().padding(.leading, 2)
+                    }
+                    if claude.state == .idle, claude.queued.isEmpty, case .assistant(let text)? = claude.items.last?.content,
+                       let choices = ReplyChoices.parse(text) {
+                        ChoiceChips(choices: choices) { session.askClaude($0) }
+                            .id(claude.items.last?.id)
                     }
                     ForEach(claude.queued) { message in
                         QueuedRow(message: message) { claude.cancelQueued(message.id) }
@@ -461,6 +437,60 @@ private struct TranscriptRow: View {
                 .foregroundStyle(isError ? theme.red.color : theme.text3.color)
                 .textSelection(.enabled)
         }
+    }
+}
+
+/// The options of a reply that ended by asking which one, as chips: tick one or more and send.
+private struct ChoiceChips: View {
+    @Environment(\.theme) private var theme
+    let choices: ReplyChoices
+    let send: (String) -> Void
+    @State private var picked: [Int] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            FlowLayout(spacing: 6) {
+                ForEach(choices.options) { option in
+                    let on = picked.contains(option.number)
+                    Button {
+                        if on { picked.removeAll { $0 == option.number } } else { picked.append(option.number) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("\(option.number)")
+                                .font(.dante(size: 10.5, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(on ? theme.onAccent.color : theme.text3.color)
+                                .frame(width: 17, height: 17)
+                                .background(Circle().fill(on ? theme.accent.color : theme.raised.color))
+                            Text(option.title)
+                                .font(.dante(size: 12, weight: on ? .medium : .regular))
+                                .foregroundStyle(on ? theme.text.color : theme.text2.color)
+                                .lineLimit(1)
+                        }
+                        .padding(.leading, 4)
+                        .padding(.trailing, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(on ? theme.accentTint.color : theme.card.color))
+                        .overlay(Capsule().strokeBorder(on ? theme.accentLine.color : theme.line.color))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Click to pick; pick several if you like, then Send")
+                }
+            }
+            if !picked.isEmpty {
+                HStack(spacing: 8) {
+                    Button(picked.count == 1 ? "Send" : "Send \(picked.count)") {
+                        send(choices.reply(choosing: picked.sorted()))
+                        picked = []
+                    }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+                    .keyboardShortcut(.return, modifiers: .command)
+                    Button("Clear") { picked = [] }.buttonStyle(DanteButtonStyle())
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.snappy(duration: 0.18), value: picked)
     }
 }
 

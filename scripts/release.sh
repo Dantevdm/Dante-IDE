@@ -31,7 +31,7 @@ if [[ -n "${DEVELOPER_ID:-}" ]]; then
   echo "Signing with the Developer ID and the hardened runtime…"
   # --deep doesn't reach the `dante` command in Resources/bin, so sign it first.
   codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID" "$app/Contents/Resources/bin/dante"
-  codesign --force --deep --options runtime --timestamp --sign "$DEVELOPER_ID" "$app"
+  codesign --force --deep --options runtime --timestamp --entitlements "$(dirname "$0")/Dante.entitlements" --sign "$DEVELOPER_ID" "$app"
   codesign --verify --strict --verbose=1 "$app"
 else
   echo "No DEVELOPER_ID set: the app is ad-hoc signed and Gatekeeper will warn on other Macs."

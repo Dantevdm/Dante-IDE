@@ -9,6 +9,7 @@ import SwiftUI
 final class PresenceModel {
     var presence = Presence.combine([])
     var mood: PresenceMood = .asleep
+    var vitality = Vitality()
 }
 
 /// Claude's presence in the menu bar: an orb that shows, across every window, whether Claude
@@ -28,6 +29,13 @@ final class PresenceController: NSObject {
     private var pending = false
     private var monitors: [Any] = []
     private var sessions: [String: Session] = [:]
+    private var workRate = WorkRate()
+    /// The five-hour window's tiredness, refreshed every couple of minutes and after turns.
+    private var fatigue: Double = 0
+    private var usageResets: Date?
+    private var usageLoaded: Date = .distantPast
+    private var loadingUsage = false
+    private var vitalityTimer: Timer?
     /// Orbs that follow the pointer: the menu bar's, the panel's and the Stage's.
     private let watchers = NSHashTable<OrbView>.weakObjects()
     weak var themeStore: ThemeStore?
@@ -54,10 +62,14 @@ final class PresenceController: NSObject {
     /// A window opened, closed, or changed project.
     func sessionsChanged() { scheduleUpdate() }
 
+    /// The voice controller started or stopped listening, or the voice got louder.
+    func voiceChanged() { scheduleUpdate() }
+
     /// Registers an orb to follow the pointer and show the current mood.
     func attach(_ orb: OrbView) {
         watchers.add(orb)
         orb.mood = model.mood
+        orb.vitality = model.vitality
         orb.pointer = NSEvent.mouseLocation
     }
 
@@ -81,13 +93,55 @@ final class PresenceController: NSObject {
     }
 
     private func update() {
-        let (presence, shows) = withObservationTracking {
-            (Presence.combine(currentSources()), Preferences.shared.showsPresence)
+        let (presence, shows, work) = withObservationTracking {
+            (Presence.combine(currentSources()), Preferences.shared.showsPresence, currentWork())
         } onChange: { [weak self] in
             Task { @MainActor in self?.scheduleUpdate() }
         }
         setVisible(shows)
-        apply(presence)
+        let now = Date()
+        workRate.record(total: work.tools, at: now)
+        let vitality = Vitality(intensity: workRate.intensity(at: now, running: work.running), fatigue: fatigue,
+                                exhaustedUntil: work.limitAt.map { usageResets.flatMap { $0 > now ? $0 : nil } ?? $0.addingTimeInterval(3600) })
+        apply(vitality.isExhausted(at: now) ? Self.sleeping(presence, until: vitality.exhaustedUntil) : presence, vitality: vitality)
+        refreshUsageIfDue(now: now)
+    }
+
+    /// Out of usage: asleep, saying when it wakes.
+    private static func sleeping(_ presence: Presence, until: Date?) -> Presence {
+        let time = until.map { " · back at \($0.formatted(date: .omitted, time: .shortened))" } ?? ""
+        return Presence(mood: .asleep, line: "Out of Claude usage" + time, sources: presence.sources)
+    }
+
+    /// Tool calls made so far, what's running now (sub-agents count double) and any usage limit hit.
+    private func currentWork() -> (tools: Int, running: Int, limitAt: Date?) {
+        var tools = 0, running = 0
+        var limitAt: Date?
+        for session in Sessions.all {
+            guard let claude = session.claude else { continue }
+            if let at = claude.limitReachedAt { limitAt = max(limitAt ?? at, at) }
+            for item in claude.items {
+                guard case .tool(let tool) = item.content else { continue }
+                tools += 1
+                if tool.status == .running { running += tool.name == "Task" || tool.name == "Agent" ? 2 : 1 }
+            }
+        }
+        return (tools, running, limitAt)
+    }
+
+    private func refreshUsageIfDue(now: Date) {
+        let due = now.timeIntervalSince(usageLoaded) > 120 || model.mood == .done && now.timeIntervalSince(usageLoaded) > 20
+        guard due, !loadingUsage else { return }
+        loadingUsage = true
+        Task { [weak self] in
+            let usage = await Task.detached(priority: .utility) { ClaudeUsage.load() }.value
+            guard let self else { return }
+            self.loadingUsage = false
+            self.usageLoaded = Date()
+            self.fatigue = Vitality.fatigue(current: usage.current?.usage.weighted ?? 0, busiest: usage.busiestWindow?.weighted)
+            self.usageResets = usage.current?.resets
+            self.scheduleUpdate()
+        }
     }
 
     private func currentSources() -> [PresenceSource] {
@@ -102,8 +156,24 @@ final class PresenceController: NSObject {
         return sources
     }
 
-    private func apply(_ presence: Presence) {
+    private func apply(_ presence: Presence, vitality: Vitality) {
+        var presence = presence
+        var vitality = vitality
+        // While you speak, the orb listens: it brightens and swells with your voice.
+        let voice = VoiceController.shared
+        if voice.state == .listening {
+            presence = Presence(mood: .listening, line: voice.heard.isEmpty ? "Go ahead" : "“\(voice.heard)”", sources: presence.sources)
+            vitality.intensity = voice.level
+            vitality.fatigue = 0
+        }
         model.presence = presence
+        if model.vitality != vitality { model.vitality = vitality }
+        for orb in watchers.allObjects { orb.vitality = vitality }
+        // Intensity fades as the last minute's work ages, so look again while there's any.
+        vitalityTimer?.invalidate()
+        vitalityTimer = vitality.intensity > 0 ? Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.update() }
+        } : nil
         let (mood, until) = tracker.mood(for: presence, at: Date())
         if model.mood != mood { model.mood = mood }
         for orb in watchers.allObjects { orb.mood = mood }
@@ -157,6 +227,9 @@ final class PresenceController: NSObject {
         let show = NSMenuItem(title: "Show Dante", action: #selector(showDante), keyEquivalent: "")
         show.target = self
         menu.addItem(show)
+        let talk = NSMenuItem(title: "Talk to Claude  \(VoiceController.keyLabel)", action: #selector(talk), keyEquivalent: "")
+        talk.target = self
+        menu.addItem(talk)
         menu.addItem(.separator())
         let hide = NSMenuItem(title: "Hide from Menu Bar", action: #selector(hide), keyEquivalent: "")
         hide.target = self
@@ -168,6 +241,8 @@ final class PresenceController: NSObject {
     }
 
     @objc private func hide() { Preferences.shared.showsPresence = false }
+
+    @objc private func talk() { VoiceController.shared.toggle() }
 
     @objc private func showDante() {
         NSApp.activate()

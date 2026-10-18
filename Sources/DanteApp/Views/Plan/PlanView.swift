@@ -339,7 +339,7 @@ private struct ClaudeRulesCard: View {
         let rules = workspace.claudeRules
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("What Claude may propose", systemImage: "sparkle")
+                ClaudeLabel("What Claude may propose")
                     .labelStyle(.titleAndIcon)
                     .font(.dante(size: 12.5, weight: .semibold))
                     .foregroundStyle(theme.text.color)

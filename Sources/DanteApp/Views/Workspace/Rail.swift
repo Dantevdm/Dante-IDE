@@ -34,7 +34,7 @@ private struct RailItem: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: area.symbol)
+                Image.symbol(area.symbol, side: 17)
                     .font(.dante(size: 16, weight: .regular))
                     .frame(height: 20)
                 Text(area.title)

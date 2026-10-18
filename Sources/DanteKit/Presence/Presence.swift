@@ -16,6 +16,8 @@ public enum PresenceMood: String, Sendable, CaseIterable {
     case done
     /// Claude Code can't start or stopped with an error.
     case trouble
+    /// Hearing you speak (set by the voice controller, not by sessions).
+    case listening
 
     public var title: String {
         switch self {
@@ -26,6 +28,7 @@ public enum PresenceMood: String, Sendable, CaseIterable {
         case .needsYou: "Waiting for you"
         case .done: "Done"
         case .trouble: "Something’s wrong"
+        case .listening: "Listening"
         }
     }
 }
@@ -76,7 +79,7 @@ public struct PresenceSource: Sendable, Equatable, Identifiable {
         case .thinking: return "Thinking"
         case .trouble: if case .unavailable(let reason) = claude { return reason }; return "Stopped"
         case .idle: return last.map { "Last: \($0)" } ?? "Ready"
-        case .asleep, .done: return "Claude not started"
+        case .asleep, .done, .listening: return "Claude not started"
         }
     }
 }
@@ -113,7 +116,7 @@ public struct Presence: Sendable, Equatable {
             line = matching.count == 1 ? "\(matching[0].project): \(matching[0].status)" : "\(names(matching))"
         case .idle:
             line = sources.count == 1 ? sources[0].project : "\(sources.count) projects open"
-        case .asleep, .done:
+        case .asleep, .done, .listening:
             line = sources.count == 1 ? sources[0].project : "\(sources.count) projects open"
         }
         return Presence(mood: mood, line: line, sources: sources)
@@ -175,6 +178,8 @@ public struct OrbStyle: Sendable, Equatable {
     public var lightning: Double
     /// Frames per second the menu bar orb needs to look smooth at this pace.
     public var framesPerSecond: Int
+    /// How far the eyelids are down, 0 open to 1 shut: asleep, or tired.
+    public var lids: Double = 0
 
     /// The palettes idle cycles through, one every `formDuration` seconds.
     public static let idleForms: [[RGBA]] = [
@@ -189,7 +194,7 @@ public struct OrbStyle: Sendable, Equatable {
         switch mood {
         case .asleep:
             OrbStyle(colors: [RGBA(0x2B2F6B), RGBA(0x1E3A5F), RGBA(0x3B2A6B), RGBA(0x24406E)],
-                     energy: 0.05, pulseRate: 0.1, pulseDepth: 0.3, glow: 0.25, flicker: 0, ring: 0, aura: 0, lightning: 0, framesPerSecond: 15)
+                     energy: 0.05, pulseRate: 0.1, pulseDepth: 0.3, glow: 0.25, flicker: 0, ring: 0, aura: 0, lightning: 0, framesPerSecond: 15, lids: 1)
         case .idle:
             OrbStyle(colors: idleForms[0],
                      energy: 0.25, pulseRate: 0.18, pulseDepth: 0.5, glow: 0.55, flicker: 0, ring: 0.1, aura: 0.25, lightning: 0, framesPerSecond: 24)
@@ -205,6 +210,9 @@ public struct OrbStyle: Sendable, Equatable {
         case .done:
             OrbStyle(colors: [RGBA(0x39FF88), RGBA(0x00E676), RGBA(0xB2FF59), RGBA(0x1DE9B6)],
                      energy: 0.5, pulseRate: 0.8, pulseDepth: 0.7, glow: 0.9, flicker: 0, ring: 0.5, aura: 0.7, lightning: 0.2, framesPerSecond: 30)
+        case .listening:
+            OrbStyle(colors: [RGBA(0xE0F7FA), RGBA(0x4DD0E1), RGBA(0xFFFFFF), RGBA(0x18FFFF)],
+                     energy: 0.45, pulseRate: 0.5, pulseDepth: 0.4, glow: 1, flicker: 0, ring: 0.8, aura: 0.5, lightning: 0, framesPerSecond: 30)
         case .trouble:
             OrbStyle(colors: [RGBA(0xFF1744), RGBA(0xB0002A), RGBA(0xFF5252), RGBA(0x6A0019)],
                      energy: 0.7, pulseRate: 2, pulseDepth: 0.8, glow: 1, flicker: 0.7, ring: 0, aura: 0.5, lightning: 0.6, framesPerSecond: 30)

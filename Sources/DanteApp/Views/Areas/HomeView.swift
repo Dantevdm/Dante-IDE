@@ -470,8 +470,7 @@ private struct ClaudeKnowsCard: View {
             }
             if reviewDue, workspace.files.count > 20 {
                 Button { session.area = .claude } label: {
-                    Label(skillCount == 0 ? "Claude could use skills for this project’s repeated work. See suggestions" : "Time to check the skills still fit the project",
-                          systemImage: "sparkle")
+                    ClaudeLabel(skillCount == 0 ? "Claude could use skills for this project’s repeated work. See suggestions" : "Time to check the skills still fit the project")
                         .font(.dante(size: 12))
                         .foregroundStyle(theme.accent.color)
                 }

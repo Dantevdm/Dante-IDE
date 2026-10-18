@@ -124,7 +124,7 @@ struct ClaudeAreaView: View {
                     lastReview = .now
                     session.askClaude(ClaudeSkills.reviewPrompt(existing: skills))
                 } label: {
-                    Label("Review with Claude", systemImage: "sparkle")
+                    ClaudeLabel("Review with Claude")
                 }
                 .buttonStyle(DanteButtonStyle(primary: due))
                 .help("Claude looks at how the project works now and suggests skills to add, update or drop.")

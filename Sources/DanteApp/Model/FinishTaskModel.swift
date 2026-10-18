@@ -102,7 +102,7 @@ final class FinishTaskModel {
         commitWarning = found
         let prompt = CommitMessage.prompt(diff: changes, recentSubjects: await subjects, tasks: [], finishing: "\(task.id): \(task.title)")
         do {
-            let draft = CommitMessage.read(try await ClaudeQuick.text(prompt, system: CommitMessage.system, in: root))
+            let draft = CommitMessage.read(try await QuickModel.text(prompt, system: CommitMessage.system, kind: .commitMessage, in: root, local: Preferences.shared.delegatesToLocalModels))
             commitMessage = draft.message.isEmpty ? (commitMessage.isEmpty ? task.title : commitMessage) : draft.message
             commitWarning = found ?? draft.warning
         } catch {
@@ -136,8 +136,9 @@ final class FinishTaskModel {
         defer { draftingPull = false }
         let diff = await fullDiff()
         do {
-            let answer = try await ClaudeQuick.text(PullRequestDraft.prompt(task: task, diff: diff, commits: branchCommits),
-                                                    system: PullRequestDraft.system, in: root)
+            let answer = try await QuickModel.text(PullRequestDraft.prompt(task: task, diff: diff, commits: branchCommits),
+                                                   system: PullRequestDraft.system, kind: .writing, in: root,
+                                                   local: Preferences.shared.delegatesToLocalModels)
             let draft = PullRequestDraft.parse(answer)
             pullTitle = draft.title.isEmpty ? task.title : draft.title
             pullBody = draft.body

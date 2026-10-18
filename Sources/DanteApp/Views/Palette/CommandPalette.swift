@@ -370,7 +370,7 @@ private struct PaletteRowView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: row.symbol)
+            Image.symbol(row.symbol)
                 .font(.dante(size: 12.5))
                 .foregroundStyle(isSelected ? theme.accent.color : theme.text3.color)
                 .frame(width: 18)

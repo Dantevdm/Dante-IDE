@@ -42,7 +42,7 @@ struct SpecView: View {
                     Button {
                         session.askClaude("Check the .dante folder against the code and git history: is project.yaml accurate, are phase definitions missing, are tasks stale? Propose fixes as diffs.")
                     } label: {
-                        Label("Review with Claude", systemImage: "sparkle")
+                        ClaudeLabel("Review with Claude")
                     }
                     .buttonStyle(DanteButtonStyle())
                 } content: {

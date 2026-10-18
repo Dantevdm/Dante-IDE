@@ -7,7 +7,8 @@ import PDFKit
 extension Session {
     /// The markdown doc Docs is showing, exported as a Paper-theme PDF to save or print.
     func exportDoc(printing: Bool = false) {
-        guard let workspace, let doc = DocLibrary(paths: workspace.files).doc(preferring: docPath), doc.kind == .markdown else { return }
+        guard let workspace, let docPath, docPath != DocLibrary.libraryPath,
+              let doc = DocLibrary(paths: workspace.files).doc(preferring: docPath), doc.kind == .markdown else { return }
         let url = workspace.url.appending(path: doc.path)
         // Unsaved edits are what's on screen, so they're what gets exported.
         let open = workspace.documents.first { $0.url.standardizedFileURL == url.standardizedFileURL }?.text

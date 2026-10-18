@@ -308,7 +308,7 @@ private struct FailuresCard: View {
             Button {
                 session.askClaude(prompt(for: failures))
             } label: {
-                Label(failures.count == 1 ? "Ask Claude to fix it" : "Ask Claude to fix these", systemImage: "sparkle")
+                ClaudeLabel(failures.count == 1 ? "Ask Claude to fix it" : "Ask Claude to fix these")
             }
             .buttonStyle(DanteButtonStyle(primary: true))
         } content: {

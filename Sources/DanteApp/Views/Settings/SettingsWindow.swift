@@ -32,7 +32,7 @@ struct SettingsWindow: View {
             FileSettings(preferences: Preferences.shared)
                 .tabItem { Label("Files", systemImage: "doc") }.tag(Pane.files)
             ClaudePreferencesPane()
-                .tabItem { Label("Claude", systemImage: "sparkle") }.tag(Pane.claude)
+                .tabItem { ClaudeLabel("Claude", side: 20) }.tag(Pane.claude)
             ToolsPane(session: session)
                 .id(session.map(ObjectIdentifier.init))
                 .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }.tag(Pane.tools)
@@ -156,6 +156,12 @@ private struct ClaudePreferencesPane: View {
                     .onChange(of: preferences.notifiesOnClaude) { _, on in
                         if on { Task { if await !Session.requestNotificationPermission() { preferences.notifiesOnClaude = false } } }
                     }
+            }
+            SwiftUI.Section {
+                Toggle("Let Claude delegate small jobs to local models", isOn: $preferences.delegatesToLocalModels)
+                    .help("Claude gets a delegate tool backed by Ollama on this Mac, for summaries, triage, drafts and commit messages. It checks what comes back.")
+                    .onChange(of: preferences.delegatesToLocalModels) { Sessions.all.forEach { $0.applyClaudePreferences() } }
+                Toggle("Read replies aloud after you speak (\(VoiceController.keyLabel))", isOn: $preferences.speaksReplies)
             }
         }
     }

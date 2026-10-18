@@ -221,6 +221,10 @@ struct ClaudeRulesTests {
         let withModel = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, model: "sonnet")
         #expect(withModel.suffix(2) == ["--model", "sonnet"])
         #expect(!ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil).contains("--model"))
+        let delegating = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, delegate: "/Apps/Dante.app/bin/dante")
+        #expect(delegating.suffix(2).first == "--mcp-config")
+        #expect(delegating.last?.contains(#""command":"/Apps/Dante.app/bin/dante""#) == true)
+        #expect(!ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil).contains("--mcp-config"))
     }
 }
 

@@ -22,6 +22,15 @@ struct PresencePanel: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
                 .padding(.top, 3)
+            if model.vitality.fatigue > 0.3, !model.vitality.isExhausted(at: .now) {
+                Label("Running low on usage", systemImage: "battery.25percent")
+                    .font(.dante(size: 11.5))
+                    .foregroundStyle(theme.amber.color)
+                    .padding(.top, 6)
+                    .help("This five-hour window is close to your busiest one")
+            }
+
+            TalkButton().padding(.top, 12)
 
             if !model.presence.sources.isEmpty {
                 VStack(spacing: 2) {
@@ -72,10 +81,35 @@ struct PresencePanel: View {
     private func color(_ mood: PresenceMood) -> Color {
         switch mood {
         case .needsYou: theme.amber.color
-        case .acting, .thinking: theme.accent.color
+        case .acting, .thinking, .listening: theme.accent.color
         case .done: theme.green.color
         case .trouble: theme.red.color
         case .idle, .asleep: theme.text3.color
+        }
+    }
+}
+
+/// Starts and stops listening, and says why it can't.
+private struct TalkButton: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        let voice = VoiceController.shared
+        VStack(spacing: 6) {
+            Button {
+                voice.toggle()
+            } label: {
+                Label(voice.state == .listening ? "Send" : "Talk", systemImage: voice.state == .listening ? "arrow.up.circle.fill" : "mic.fill")
+            }
+            .buttonStyle(DanteButtonStyle(primary: voice.state == .listening))
+            .help("Talk to Claude (\(VoiceController.keyLabel) from anywhere). It sends when you pause.")
+            if case .unavailable(let reason) = voice.state {
+                Text(reason)
+                    .font(.dante(size: 11.5))
+                    .foregroundStyle(theme.amber.color)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
         }
     }
 }

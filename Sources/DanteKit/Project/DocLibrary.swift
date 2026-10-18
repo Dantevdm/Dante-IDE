@@ -42,6 +42,41 @@ public struct DocLibrary: Equatable, Sendable {
         public var title: String
         public var docs: [Doc]
         public var id: String { title }
+
+        /// The group's docs by folder: its own folder's first, then each subfolder's.
+        /// Under `docs/`, `docs/plans/x.md` is in "plans"; elsewhere a doc's folder is its path.
+        public var sections: [Section] {
+            var order: [String] = []
+            var byFolder: [String: [Doc]] = [:]
+            for doc in docs {
+                let folder = DocLibrary.folder(of: doc.path, in: title)
+                if byFolder[folder] == nil { order.append(folder) }
+                byFolder[folder, default: []].append(doc)
+            }
+            return order
+                .sorted { a, b in a.isEmpty != b.isEmpty ? a.isEmpty : a.localizedStandardCompare(b) == .orderedAscending }
+                .map { Section(group: title, folder: $0, docs: byFolder[$0]!) }
+        }
+    }
+
+    /// Docs in one folder of a group.
+    public struct Section: Equatable, Sendable, Identifiable {
+        public var group: String
+        /// Relative to the group's folder; empty for the group's own.
+        public var folder: String
+        public var docs: [Doc]
+        public var id: String { "\(group)/\(folder)" }
+
+        /// "plans" reads "Plans"; nested folders and names with capitals stay as they are.
+        public var title: String {
+            guard !folder.contains("/"), folder.lowercased() == folder else { return folder }
+            let spaced = folder.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
+            return spaced.prefix(1).uppercased() + spaced.dropFirst()
+        }
+
+        /// Images, shown as thumbnails rather than rows.
+        public var images: [Doc] { docs.filter { $0.kind == .image } }
+        public var others: [Doc] { docs.filter { $0.kind != .image } }
     }
 
     public var groups: [Group]
@@ -63,6 +98,38 @@ public struct DocLibrary: Equatable, Sendable {
         return folder.isEmpty ? "root" : folder
     }
     public var isEmpty: Bool { groups.isEmpty }
+
+    /// What Docs shows instead of a document: every group at a glance.
+    public static let libraryPath = "#library"
+
+    /// The docs whose title or path has every word of `query`, in their groups.
+    public func filtered(_ query: String) -> DocLibrary {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return self }
+        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        var copy = self
+        copy.groups = groups.compactMap { group in
+            let docs = group.docs.filter { doc in
+                words.allSatisfy { doc.title.range(of: $0, options: options) != nil || doc.path.range(of: $0, options: options) != nil }
+            }
+            return docs.isEmpty ? nil : Group(title: group.title, docs: docs)
+        }
+        return copy
+    }
+
+    /// A doc's folder within its group: see `Group.sections`.
+    static func folder(of path: String, in group: String) -> String {
+        let directory = (path as NSString).deletingLastPathComponent
+        let root: String
+        switch group {
+        case "Project", "Elsewhere": return directory
+        case "Docs": root = directory.split(separator: "/").first.map(String.init) ?? ""
+        case "Plan": root = ".dante"
+        default: root = directory.split(separator: "/").prefix(2).joined(separator: "/")
+        }
+        guard directory.count > root.count, directory.hasPrefix(root + "/") else { return "" }
+        return String(directory.dropFirst(root.count + 1))
+    }
 
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdx"]
     static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "tiff"]

@@ -459,7 +459,7 @@ struct SystemInspector: View {
                 Button {
                     session.askClaude(prompt)
                 } label: {
-                    Label("Ask Claude to walk through it", systemImage: "sparkle").frame(maxWidth: .infinity)
+                    ClaudeLabel("Ask Claude to walk through it").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(DanteButtonStyle(primary: true))
             }

@@ -147,7 +147,7 @@ private struct LanguageStatus: View {
                         .frame(maxWidth: 420, alignment: .trailing)
                     if here.severity <= .warning {
                         Button { session.fixWithClaude(here, in: document) } label: {
-                            Label("Fix", systemImage: "sparkle")
+                            ClaudeLabel("Fix")
                         }
                         .accessibilityLabel("Fix with Claude")
                         .buttonStyle(.plain)
@@ -230,7 +230,7 @@ private struct ProblemsList: View {
                                     fix(diagnostic)
                                     dismiss()
                                 } label: {
-                                    Image(systemName: "sparkle").font(.dante(size: 11))
+                                    ClaudeSparkIcon(size: 12)
                                 }
                                 .buttonStyle(.plain)
                                 .foregroundStyle(theme.accent.color)

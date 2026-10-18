@@ -48,11 +48,14 @@ struct DocsView: View {
 
     private var library: DocLibrary { DocLibrary(paths: workspace.files) }
 
-    private var selected: DocLibrary.Doc? { library.doc(preferring: session.docPath) }
+    /// The library shows until a doc is picked, and whenever it's picked again.
+    private var showsLibrary: Bool { session.docPath == nil || session.docPath == DocLibrary.libraryPath }
+
+    private var selected: DocLibrary.Doc? { showsLibrary ? nil : library.doc(preferring: session.docPath) }
 
     var body: some View {
         HStack(spacing: 0) {
-            DocsSidebar(session: session, library: library, selected: selected, markdown: markdown, addFiles: pickFiles)
+            DocsSidebar(session: session, library: library, root: workspace.url, selected: selected, addFiles: pickFiles)
                 .frame(width: 236)
             Rectangle().fill(theme.line.color).frame(width: 1)
             if let selected {
@@ -81,6 +84,8 @@ struct DocsView: View {
                     }
                 }
                 .environment(\.openURL, OpenURLAction { url in open(url, from: selected) })
+            } else if !library.isEmpty {
+                DocsLibraryView(session: session, workspace: workspace, library: library, addFiles: pickFiles)
             } else {
                 EmptyState(
                     symbol: "doc.text",
@@ -247,7 +252,10 @@ struct DocsView: View {
     private func toolbar(for doc: DocLibrary.Doc) -> some View {
         HStack(spacing: 8) {
             let parts = doc.path.split(separator: "/").map(String.init)
-            Text("Docs").foregroundStyle(theme.text3.color)
+            Button("Docs") { session.showDoc(DocLibrary.libraryPath) }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.text3.color)
+                .help("Back to the library")
             ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
                 Image(systemName: "chevron.right").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
                 Text(part).foregroundStyle(index == parts.count - 1 ? theme.text.color : theme.text3.color)
@@ -279,7 +287,7 @@ struct DocsView: View {
                 Button {
                     session.askClaude("Read \(doc.path) and tell me what's out of date or missing compared with the code. Don't change anything yet.")
                 } label: {
-                    Label("Check", systemImage: "sparkle")
+                    ClaudeLabel("Check")
                 }
                 .buttonStyle(DanteButtonStyle())
                 .fixedSize()
@@ -316,7 +324,7 @@ struct DocsView: View {
                     let target = ((doc.path as NSString).deletingPathExtension) + ".md"
                     session.askClaude("Write up the attached \(doc.path) as a markdown doc at \(target), so it can be read in Docs and used as a spec. Keep its structure and every requirement, decision and number; turn diagrams into mermaid code blocks where you can, and tables into markdown tables. Link the original near the top. Then tell me anything in it the code doesn't do yet.", about: url)
                 } label: {
-                    Label("Write it up as markdown", systemImage: "sparkle")
+                    ClaudeLabel("Write it up as markdown")
                 }
                 .buttonStyle(DanteButtonStyle(primary: true))
                 Button {

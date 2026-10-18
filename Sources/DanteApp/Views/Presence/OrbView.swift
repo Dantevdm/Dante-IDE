@@ -37,10 +37,15 @@ final class OrbView: MTKView, MTKViewDelegate {
         var lightning: Float
         var pulseDepth: Float
         var pulseRate: Float
+        var lids: Float
+        /// Drains the colours as usage runs low.
+        var fatigue: Float = 0
         var gaze = SIMD2<Float>(0, 0)
         var dilation: Float = 0.3
 
-        init(_ style: OrbStyle) {
+        init(_ style: OrbStyle, fatigue: Double = 0) {
+            lids = Float(style.lids)
+            self.fatigue = Float(fatigue)
             colors = style.colors.map { SIMD3(Float($0.red), Float($0.green), Float($0.blue)) }
             energy = Float(style.energy)
             glow = Float(style.glow)
@@ -59,7 +64,7 @@ final class OrbView: MTKView, MTKViewDelegate {
     var mood: PresenceMood = .asleep {
         didSet {
             guard mood != oldValue else { return }
-            target = Animated(OrbStyle.of(mood))
+            retarget()
             if mood == .needsYou || mood == .trouble || mood == .done { kick = 1 }
             // Every change of mood is a power-up: a flash and a shockwave.
             burstStarted = now
@@ -68,6 +73,21 @@ final class OrbView: MTKView, MTKViewDelegate {
             updateFrameRate()
         }
     }
+    /// How hard Claude is working and how tired it is; eased like the mood.
+    var vitality = Vitality() {
+        didSet {
+            guard vitality != oldValue else { return }
+            let colors = target.colors
+            retarget()
+            // Keep the idle form's colours; fatigue drains them as they're drawn.
+            if mood == .idle { target.colors = colors }
+        }
+    }
+
+    private func retarget() {
+        target = Animated(OrbStyle.of(mood).adjusted(for: vitality), fatigue: vitality.fatigue)
+    }
+
     /// Whether to draw the eye (the panel's orb can look away while you read).
     var showsEye = true
     /// Where the pointer is, in screen coordinates; the eye follows it.
@@ -101,6 +121,8 @@ final class OrbView: MTKView, MTKViewDelegate {
     private var nextBlink: Double
     private var blinkStarted: Double?
     private var doubleBlink = false
+    private var nodStarted: Double?
+    private var nextNod: Double = 12
     private var pointerMoved: Double = 0
     private var glance = SIMD2<Float>(0, 0)
     private var nextGlance: Double = 0
@@ -260,6 +282,8 @@ final class OrbView: MTKView, MTKViewDelegate {
         current.ring += (target.ring - current.ring) * ease(2)
         current.aura += (target.aura - current.aura) * ease(2.5)
         current.lightning += (target.lightning - current.lightning) * ease(4)
+        current.lids += (target.lids - current.lids) * ease(2)
+        current.fatigue += (target.fatigue - current.fatigue) * ease(0.8)
 
         // At rest it cycles through forms.
         if mood == .idle, t - formStarted > OrbStyle.formDuration {
@@ -302,6 +326,24 @@ final class OrbView: MTKView, MTKViewDelegate {
             doubleBlink = Double.random(in: 0...1) < 0.2
         }
 
+        // Tired: the lids hang and sway, and now and then it nods off for a moment.
+        var lids = current.lids
+        if current.fatigue > 0.05, mood != .asleep {
+            lids += Float(0.06 * sin(t * 0.9)) * current.fatigue
+            if let started = nodStarted {
+                let elapsed = t - started
+                if elapsed < 1.8 {
+                    lids = max(lids, Float(sin(elapsed / 1.8 * .pi)) * 0.95)
+                } else {
+                    nodStarted = nil
+                    nextNod = t + Double.random(in: 9...22) / Double(max(0.3, current.fatigue))
+                }
+            } else if current.fatigue > 0.35, t >= nextNod, !reduceMotion {
+                nodStarted = t
+            }
+        }
+        blink = min(1, max(blink, lids))
+
         var wake: Float = 1
         if let started = wakeStarted {
             let w = t - started
@@ -312,7 +354,11 @@ final class OrbView: MTKView, MTKViewDelegate {
             }
         }
 
-        let colors = current.colors.map { SIMD4<Float>($0, 1) }
+        // Fatigue drains the colour towards a dim grey.
+        let colors = current.colors.map { color -> SIMD4<Float> in
+            let grey = SIMD3<Float>(repeating: simd_dot(color, SIMD3(0.3, 0.59, 0.11)) * 0.6)
+            return SIMD4(color + (grey - color) * current.fatigue * 0.7, 1)
+        }
         return Uniforms(
             p0: SIMD4(Float(drawableSize.width), Float(drawableSize.height), Float(clock), current.energy * pace),
             p1: SIMD4(current.gaze.x, current.gaze.y, current.dilation, blink),

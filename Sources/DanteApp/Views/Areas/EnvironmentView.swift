@@ -432,7 +432,7 @@ private struct DiagnoseCard: View {
     var body: some View {
         Card(accent: true) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkle").foregroundStyle(theme.accent.color)
+                ClaudeSparkIcon()
                 Text("\(service) is \(problem)").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
             }
             if let note {

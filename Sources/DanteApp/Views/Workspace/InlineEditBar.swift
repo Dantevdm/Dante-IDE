@@ -11,7 +11,7 @@ struct InlineEditBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "sparkle").font(.dante(size: 11, weight: .semibold)).foregroundStyle(theme.accent.color)
+                ClaudeSparkIcon(size: 12)
                 Text(model.range.length == 0 ? "Claude writes code at \(model.lineSpan)" : "Claude edits \(model.lineSpan)")
                     .font(.dante(size: 11.5, weight: .medium))
                     .foregroundStyle(theme.text2.color)

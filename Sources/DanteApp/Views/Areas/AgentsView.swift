@@ -1,0 +1,387 @@
+import Charts
+import DanteKit
+import SwiftUI
+
+/// Agents: who did the work. Claude orchestrates; local models in Ollama take the jobs it
+/// (and Dante) hands them. Live numbers from the `AgentLedger`, which the `dante mcp` server
+/// Claude Code runs writes to as well.
+struct AgentsView: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+
+    @State private var jobs: [AgentJob] = []
+    @State private var models: [OllamaModel]?
+    @State private var range: Range = .week
+
+    enum Range: String, CaseIterable, Identifiable {
+        case today = "Today", week = "7 days", month = "30 days"
+        var id: Self { self }
+        var days: Int {
+            switch self {
+            case .today: 1
+            case .week: 7
+            case .month: 30
+            }
+        }
+    }
+
+    private var since: Date {
+        Calendar.current.date(byAdding: .day, value: -(range.days - 1), to: Calendar.current.startOfDay(for: .now)) ?? .distantPast
+    }
+
+    private var shown: [AgentJob] { jobs.filter { $0.date >= since } }
+
+    var body: some View {
+        let stats = AgentStats(shown)
+        AreaPage(eyebrow: "Agents", title: "Agents", subtitle: nil) {
+            Picker("Range", selection: $range) {
+                ForEach(Range.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        } content: {
+            hero(stats)
+            CardGrid(minimum: 220) {
+                ForEach(agents(stats)) { agent in AgentCard(agent: agent) }
+            }
+            CardGrid(minimum: 420) {
+                Card("Who did the work") {
+                    DailyChart(days: AgentStats.daily(jobs, days: max(range.days, 7)))
+                }
+                Card("When") {
+                    HourStrip(byHour: stats.byHour)
+                }
+            }
+            CardGrid(minimum: 420) {
+                modelsCard
+                recentCard
+            }
+        }
+        .task {
+            // The ledger is written by other processes too, so look again every few seconds.
+            while !Task.isCancelled {
+                await load()
+                try? await Task.sleep(for: .seconds(4))
+            }
+        }
+    }
+
+    // MARK: Hero
+
+    private func hero(_ stats: AgentStats) -> some View {
+        HStack(alignment: .center, spacing: 24) {
+            OrbRepresentable(size: .large)
+                .frame(width: 210, height: 180)
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 28) {
+                    BigNumber(value: "\(stats.localJobs + stats.claudeJobs)", label: "Jobs")
+                    BigNumber(value: ClaudeUsage.short(stats.tokensKeptLocal), label: "Tokens kept local", color: theme.green.color)
+                    BigNumber(value: "\(stats.delegatedByClaude)", label: "Delegated by Claude", color: theme.claude.color)
+                    BigNumber(value: stats.localJobs + stats.claudeJobs == 0 ? "–" : "\(Int((stats.delegationShare * 100).rounded()))%",
+                              label: "Done locally", color: theme.accent.color)
+                }
+                ShareBar(local: stats.localJobs, claude: stats.claudeJobs)
+                HStack(spacing: 10) {
+                    Toggle(isOn: Binding(get: { Preferences.shared.delegatesToLocalModels },
+                                         set: { Preferences.shared.delegatesToLocalModels = $0; session.applyClaudePreferences() })) {
+                        Text("Let Claude delegate to local models").font(.dante(size: 12.5))
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    if models == nil {
+                        Chip(text: "Ollama isn’t running", symbol: "exclamationmark.triangle", color: theme.amber.color)
+                    } else if Session.danteCommand == nil {
+                        Chip(text: "Delegation needs the app bundle", symbol: "info.circle")
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(LinearGradient(colors: [theme.accentTint.color, theme.card.color], startPoint: .topLeading, endPoint: .bottomTrailing))
+        )
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.accentLine.color))
+    }
+
+    // MARK: Agents
+
+    private func agents(_ stats: AgentStats) -> [AgentSummary] {
+        var byAgent: [String: [AgentJob]] = [:]
+        for job in shown { byAgent[AgentStats.agent(of: job), default: []].append(job) }
+        let installed = models ?? []
+        var result: [AgentSummary] = [AgentSummary(name: "Claude", role: "Orchestrates, decides, checks", model: Preferences.shared.claudeModel.argument ?? "Claude",
+                                                   jobs: byAgent["Claude"] ?? [], color: theme.claude.color, isClaude: true)]
+        if let sub = byAgent["Sub-agents"], !sub.isEmpty {
+            result.append(AgentSummary(name: "Sub-agents", role: "Claude’s own helpers", model: "Claude", jobs: sub, color: theme.syntax.keyword.color, isClaude: true))
+        }
+        let palette = [theme.accent.color, theme.green.color, theme.amber.color, theme.syntax.type.color, theme.syntax.string.color]
+        for (index, kind) in DelegateKind.allCases.enumerated() {
+            result.append(AgentSummary(name: kind.agent, role: kind.title, model: ModelRouting.model(for: kind, installed: installed) ?? "No model",
+                                       jobs: byAgent[kind.agent] ?? [], color: palette[index % palette.count], isClaude: false))
+        }
+        return result
+    }
+
+    // MARK: Models
+
+    private var modelsCard: some View {
+        Card("Models on this Mac") {
+            if let models {
+                let usable = models.filter { !$0.isCloud }
+                if usable.isEmpty {
+                    Text("No local models yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
+                }
+                VStack(spacing: 0) {
+                    ForEach(usable) { model in
+                        let roles = DelegateKind.allCases.filter { ModelRouting.model(for: $0, installed: models) == model.name }
+                        HStack(spacing: 10) {
+                            Circle().fill(roles.isEmpty ? theme.track.color : theme.green.color).frame(width: 7, height: 7)
+                            Text(model.name).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(theme.text.color)
+                            Text(model.parameterSize).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                            Spacer(minLength: 8)
+                            Text(roles.isEmpty ? (model.isVision ? "images" : model.isEmbedding ? "search" : "spare") : roles.map { $0.agent }.joined(separator: ", "))
+                                .font(.dante(size: 11.5))
+                                .foregroundStyle(roles.isEmpty ? theme.text3.color : theme.text2.color)
+                                .lineLimit(1)
+                            Text(ByteCountFormatter.string(fromByteCount: model.size, countStyle: .file))
+                                .font(.dante(size: 11.5, design: .monospaced))
+                                .foregroundStyle(theme.text3.color)
+                                .frame(width: 64, alignment: .trailing)
+                        }
+                        .padding(.vertical, 6)
+                    }
+                }
+            } else {
+                Text("Ollama isn’t running. Start it to give Claude local helpers.")
+                    .font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
+            }
+        }
+    }
+
+    // MARK: Recent
+
+    private var recentCard: some View {
+        Card("Latest jobs") {
+            let recent = shown.suffix(12).reversed()
+            if recent.isEmpty {
+                Text("Nothing yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(recent)) { job in
+                    HStack(spacing: 10) {
+                        Image(systemName: job.outcome == .failed ? "xmark.circle.fill" : job.provider == .local ? "cpu" : "cloud")
+                            .font(.dante(size: 11))
+                            .foregroundStyle(job.outcome == .failed ? theme.red.color : job.provider == .local ? theme.green.color : theme.claude.color)
+                            .frame(width: 14)
+                        Text(AgentStats.agent(of: job)).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text.color).frame(width: 74, alignment: .leading)
+                        Text(job.title.isEmpty ? job.kind : job.title).font(.dante(size: 12)).foregroundStyle(theme.text2.color).lineLimit(1)
+                        Spacer(minLength: 6)
+                        if job.tokens > 0 {
+                            Text(ClaudeUsage.short(job.tokens)).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                        }
+                        Text(job.date.relative).font(.dante(size: 11)).foregroundStyle(theme.text3.color).frame(width: 70, alignment: .trailing)
+                    }
+                    .padding(.vertical, 5)
+                    .help("\(job.model) · \(job.project) · \(String(format: "%.1f", job.seconds))s")
+                }
+            }
+        }
+    }
+
+    private func load() async {
+        let ledger = AgentLedger.standard
+        let loaded = await Task.detached(priority: .utility) {
+            ledger.jobs(since: Calendar.current.date(byAdding: .day, value: -31, to: .now) ?? .distantPast)
+        }.value
+        if loaded != jobs { jobs = loaded }
+        let found = await Ollama().models()
+        if found != models { models = found }
+    }
+}
+
+/// One agent's numbers for its card.
+struct AgentSummary: Identifiable {
+    var name: String
+    var role: String
+    var model: String
+    var jobs: [AgentJob]
+    var color: Color
+    var isClaude: Bool
+    var id: String { name }
+
+    var failed: Int { jobs.filter { $0.outcome == .failed }.count }
+    var tokens: Int { jobs.reduce(0) { $0 + $1.tokens } }
+    var averageSeconds: Double { jobs.isEmpty ? 0 : jobs.reduce(0) { $0 + $1.seconds } / Double(jobs.count) }
+    var successRate: Double { jobs.isEmpty ? 0 : Double(jobs.count - failed) / Double(jobs.count) }
+}
+
+private struct AgentCard: View {
+    @Environment(\.theme) private var theme
+    let agent: AgentSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                AgentAvatar(color: agent.color, busy: agent.jobs.last.map { Date().timeIntervalSince($0.date) < 60 } ?? false, isClaude: agent.isClaude)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(agent.name).font(.dante(size: 13.5, weight: .semibold)).foregroundStyle(theme.text.color)
+                    Text(agent.role).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 14) {
+                stat("\(agent.jobs.count)", "jobs")
+                stat(agent.jobs.isEmpty ? "–" : "\(Int((agent.successRate * 100).rounded()))%", "ok")
+                stat(agent.jobs.isEmpty ? "–" : String(format: "%.1fs", agent.averageSeconds), "avg")
+                stat(ClaudeUsage.short(agent.tokens), "tokens")
+            }
+            Text(agent.model)
+                .font(.dante(size: 11, design: .monospaced))
+                .foregroundStyle(theme.text3.color)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
+        .overlay(alignment: .top) {
+            // The agent's colour as a thin top edge.
+            UnevenRoundedRectangle(topLeadingRadius: 12, topTrailingRadius: 12, style: .continuous)
+                .fill(agent.color.opacity(agent.jobs.isEmpty ? 0.25 : 0.9))
+                .frame(height: 3)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
+        .opacity(agent.jobs.isEmpty ? 0.7 : 1)
+    }
+
+    private func stat(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(value).font(.dante(size: 16, weight: .semibold)).foregroundStyle(theme.text.color).monospacedDigit()
+            Text(label).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
+        }
+    }
+}
+
+/// A small glowing bead in the agent's colour that pulses while it's working.
+private struct AgentAvatar: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let color: Color
+    let busy: Bool
+    let isClaude: Bool
+
+    var body: some View {
+        TimelineView(.animation(paused: !busy || reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let pulse = busy && !reduceMotion ? 0.5 + 0.5 * sin(t * 4) : 0
+            ZStack {
+                Circle().fill(color.opacity(0.18 + 0.2 * pulse)).frame(width: 30 + 6 * pulse, height: 30 + 6 * pulse).blur(radius: 4)
+                Circle().fill(RadialGradient(colors: [color.opacity(0.45), color], center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 14))
+                    .frame(width: 22, height: 22)
+                if isClaude {
+                    Image.symbol("sparkle", side: 11).foregroundStyle(theme.onAccent.color)
+                }
+            }
+            .frame(width: 34, height: 34)
+        }
+    }
+}
+
+private struct BigNumber: View {
+    @Environment(\.theme) private var theme
+    let value: String
+    let label: String
+    var color: Color?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.dante(size: 30, weight: .semibold))
+                .foregroundStyle(color ?? theme.text.color)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            Text(label).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+        }
+    }
+}
+
+/// Local versus Claude, as one bar.
+private struct ShareBar: View {
+    @Environment(\.theme) private var theme
+    let local: Int
+    let claude: Int
+
+    var body: some View {
+        GeometryReader { geometry in
+            let total = max(1, local + claude)
+            HStack(spacing: 2) {
+                Capsule().fill(theme.green.color).frame(width: max(local > 0 ? 6 : 0, geometry.size.width * CGFloat(local) / CGFloat(total)))
+                Capsule().fill(theme.claude.color).frame(maxWidth: .infinity)
+            }
+        }
+        .frame(height: 6)
+        .frame(maxWidth: 520)
+        .animation(.snappy, value: local)
+        .help("Green: local models. Clay: Claude.")
+    }
+}
+
+private struct DailyChart: View {
+    @Environment(\.theme) private var theme
+    let days: [AgentStats.Day]
+
+    var body: some View {
+        Chart {
+            ForEach(days) { day in
+                BarMark(x: .value("Day", day.date, unit: .day), y: .value("Jobs", day.local))
+                    .foregroundStyle(by: .value("Who", "Local"))
+                BarMark(x: .value("Day", day.date, unit: .day), y: .value("Jobs", day.claude))
+                    .foregroundStyle(by: .value("Who", "Claude"))
+            }
+        }
+        .chartForegroundStyleScale(["Local": theme.green.color, "Claude": theme.claude.color])
+        .chartLegend(position: .top, alignment: .leading)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: days.count > 10 ? 5 : 1)) { _ in
+                AxisValueLabel(format: .dateTime.day().month(.abbreviated)).font(.dante(size: 10))
+            }
+        }
+        .chartYAxis {
+            AxisMarks { _ in
+                AxisGridLine().foregroundStyle(theme.line.color)
+                AxisValueLabel().font(.dante(size: 10))
+            }
+        }
+        .frame(height: 180)
+    }
+}
+
+/// Jobs by hour of day, as a row of cells that glow with use.
+private struct HourStrip: View {
+    @Environment(\.theme) private var theme
+    let byHour: [Int]
+
+    var body: some View {
+        let peak = max(1, byHour.max() ?? 1)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 3) {
+                ForEach(0..<24, id: \.self) { hour in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(byHour[hour] == 0 ? theme.track.color : theme.accent.color.opacity(0.25 + 0.75 * Double(byHour[hour]) / Double(peak)))
+                        .frame(height: 44)
+                        .help("\(hour):00 · \(byHour[hour]) job\(byHour[hour] == 1 ? "" : "s")")
+                }
+            }
+            HStack {
+                ForEach([0, 6, 12, 18], id: \.self) { hour in
+                    Text(String(format: "%02d:00", hour)).font(.dante(size: 10)).foregroundStyle(theme.text3.color)
+                    if hour != 18 { Spacer() }
+                }
+            }
+        }
+    }
+}

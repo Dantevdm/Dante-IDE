@@ -376,7 +376,7 @@ private struct Inspector: View {
                     Button {
                         session.askClaude("Walk me through \(node.name)\(node.path.map { " (\($0))" } ?? ""): what it's responsible for, its main types and entry points, and how it's used by \(graph.dependents(of: node.id).map(\.name).joined(separator: ", ").nonEmpty ?? "the rest of the project").")
                     } label: {
-                        Label("Ask Claude to walk through it", systemImage: "sparkle").frame(maxWidth: .infinity)
+                        ClaudeLabel("Ask Claude to walk through it").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(DanteButtonStyle(primary: true))
                 }

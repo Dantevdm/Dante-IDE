@@ -1,3 +1,4 @@
+import DanteKit
 import DanteOpen
 import Foundation
 
@@ -28,6 +29,13 @@ func danteApp() -> URL? {
     found.waitUntilExit()
     let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     return output.split(separator: "\n").first.map { URL(filePath: String($0)) }
+}
+
+// `dante mcp`: the MCP server Claude Code starts so it can delegate jobs to local models.
+if CommandLine.arguments.dropFirst().first == "mcp" {
+    let project = URL(filePath: FileManager.default.currentDirectoryPath).lastPathComponent
+    await DelegateServer.live(project: project).serve()
+    exit(0)
 }
 
 let command: OpenRequest.Command

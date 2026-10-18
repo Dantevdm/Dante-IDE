@@ -115,7 +115,7 @@ private struct TaskCard: View {
             HStack(spacing: 6) {
                 Text(task.id).font(.dante(size: 10.5, weight: .medium, design: .monospaced)).foregroundStyle(theme.text3.color)
                 if task.claude == true {
-                    Label("with Claude", systemImage: "sparkle")
+                    ClaudeLabel("with Claude")
                         .labelStyle(.titleAndIcon)
                         .font(.dante(size: 10))
                         .foregroundStyle(theme.accent.color)

@@ -129,7 +129,7 @@ struct ChangesPanel: View {
                         if git.writingMessage {
                             ProgressView().controlSize(.mini)
                         } else {
-                            Image(systemName: "sparkle").font(.dante(size: 11, weight: .semibold))
+                            ClaudeSparkIcon(size: 12)
                         }
                     }
                     .frame(width: 22, height: 22)

@@ -231,7 +231,7 @@ private struct SuggestionList: View {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 Button { choose(index) } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: row.symbol).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color).frame(width: 14)
+                        Image.symbol(row.symbol, side: 11).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color).frame(width: 14)
                         Text(row.title).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
                         Text(row.detail).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.head)
                         Spacer(minLength: 0)

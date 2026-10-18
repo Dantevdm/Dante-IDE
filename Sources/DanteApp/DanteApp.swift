@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         MenuShortcuts.install()
         PresenceController.shared.install()
+        VoiceController.shared.install()
         ActiveProject.install()
         // Needed when running the bare executable (`swift run`) rather than the .app bundle.
         NSApp.setActivationPolicy(.regular)

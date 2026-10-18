@@ -176,7 +176,7 @@ final class GitModel {
         messageWarning = found
         let prompt = CommitMessage.prompt(diff: diff, recentSubjects: await subjects, tasks: tasks)
         do {
-            let draft = CommitMessage.read(try await ClaudeQuick.text(prompt, system: CommitMessage.system, in: root))
+            let draft = CommitMessage.read(try await QuickModel.text(prompt, system: CommitMessage.system, kind: .commitMessage, in: root, local: Preferences.shared.delegatesToLocalModels))
             if !draft.message.isEmpty { message = draft.message }
             messageWarning = found ?? draft.warning
         } catch {

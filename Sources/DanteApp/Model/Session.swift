@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, plan, map, code, tests, environments, data, ship, run, timeline, claude, docs, spec
+    case home, plan, map, code, tests, environments, data, ship, run, timeline, claude, agents, docs, spec
 
     var id: String { rawValue }
 
@@ -24,6 +24,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .run: "Run"
         case .timeline: "Timeline"
         case .claude: "Claude"
+        case .agents: "Agents"
         case .docs: "Docs"
         case .spec: "Spec"
         }
@@ -42,6 +43,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .run: "waveform.path.ecg"
         case .timeline: "clock.arrow.circlepath"
         case .claude: "sparkle"
+        case .agents: "circle.hexagongrid"
         case .docs: "doc.text"
         case .spec: "book.closed"
         }
@@ -61,12 +63,13 @@ enum Area: String, CaseIterable, Identifiable {
         case .run: "Production metrics, errors and alarms, each linked back to a task."
         case .timeline: "Commits, releases, Claude sessions, test runs and CI in one stream, newest first."
         case .claude: "How Claude works on this project: usage, skills, memory, connectors and permissions."
+        case .agents: "Claude and the local models it delegates to: jobs, tokens kept local and how each agent is doing."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
         case .spec: "The .dante folder: lifecycle, phase checklists and what Claude may propose."
         }
     }
 
-    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .data, .ship, .run, .timeline, .claude]
+    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .data, .ship, .run, .timeline, .claude, .agents]
     static let footer: [Area] = [.docs, .spec]
 }
 
@@ -442,7 +445,17 @@ final class Session {
         guard let claude = claude ?? self.claude else { return }
         claude.asksFirst = Preferences.shared.claudeAsksFirst
         claude.requestedModel = Preferences.shared.claudeModel.argument
+        claude.delegateCommand = Preferences.shared.delegatesToLocalModels ? Self.danteCommand : nil
+        claude.ledger = .standard
     }
+
+    /// The bundled `dante` command, which also serves local models to Claude Code. Missing
+    /// when running outside the app bundle.
+    static let danteCommand: String? = {
+        guard let url = Bundle.main.resourceURL?.appending(path: "bin/dante"),
+              FileManager.default.isExecutableFile(atPath: url.path) else { return nil }
+        return url.path
+    }()
 
     // MARK: Terminal tabs (methods in Session+Terminal.swift)
     var terminalTabs: [TerminalTab] = [TerminalTab()]
