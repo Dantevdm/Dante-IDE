@@ -35,7 +35,6 @@ struct WorkspaceView: View {
                         case .run: RunView(session: session, workspace: workspace)
                         case .timeline: ProjectTimelineView(session: session, workspace: workspace)
                         case .claude: ClaudeAreaView(session: session, workspace: workspace)
-                        case .settings: SettingsArea(session: session, workspace: workspace)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

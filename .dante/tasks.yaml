@@ -417,11 +417,11 @@ tasks:
 - id: DI-102
   title: "Presence: an animated orb in the menu bar that shows what Claude is doing, with a panel"
   phase: build
-  state: in_progress
+  state: review
 - id: DI-103
   title: "Settings as a native macOS Settings window (Dante › Settings…, ⌘,), not an area in the window"
   phase: build
-  state: ready
+  state: review
 - id: DI-104
   title: "Remove the explanatory text under titles, in empty states and in footers across the app"
   phase: build

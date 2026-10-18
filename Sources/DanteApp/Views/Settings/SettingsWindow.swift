@@ -2,78 +2,54 @@ import AppKit
 import DanteKit
 import SwiftUI
 
-/// Settings inside the window (⌘,): the app-wide preferences, plus the tools on this Mac
-/// and this project's Dante setup, which only make sense next to a project.
-struct SettingsArea: View {
-    @Environment(\.theme) private var theme
+/// Dante › Settings… (⌘,): a standard macOS Settings window. The panes that act on a project
+/// (Tools, Project) use the one in the window used most recently.
+struct SettingsWindow: View {
     @Environment(ThemeStore.self) private var themeStore
-    let session: Session
-    let workspace: Workspace
+    private let active = ActiveProject.shared
 
-    enum Section: String, CaseIterable, Identifiable {
-        case appearance = "Appearance", editor = "Editor", keyboard = "Keyboard", languages = "Languages", files = "Files", claude = "Claude", tools = "Tools & drivers", project = "This project"
-        var id: String { rawValue }
-
-        var symbol: String {
-            switch self {
-            case .appearance: "paintpalette"
-            case .editor: "chevron.left.forwardslash.chevron.right"
-            case .keyboard: "keyboard"
-            case .languages: "curlybraces"
-            case .files: "doc"
-            case .claude: "sparkle"
-            case .tools: "wrench.and.screwdriver"
-            case .project: "folder.badge.gearshape"
-            }
-        }
+    enum Pane: String {
+        case appearance, editor, keyboard, languages, files, claude, tools, project
     }
 
-    @AppStorage("settingsSection") private var section: Section = .appearance
+    @AppStorage("settingsPane") private var pane: Pane = .appearance
+
+    /// The most recent window's project, or any open one.
+    private var session: Session? { active.session ?? Sessions.all.first { $0.workspace != nil } }
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Settings").font(.dante(size: 20, weight: .semibold)).foregroundStyle(theme.text.color)
-                    .padding(.horizontal, 10).padding(.bottom, 12)
-                ForEach(Section.allCases) { item in
-                    Button { section = item } label: {
-                        Label(item.rawValue, systemImage: item.symbol)
-                            .font(.dante(size: 13, weight: section == item ? .medium : .regular))
-                            .foregroundStyle(section == item ? theme.text.color : theme.text2.color)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(section == item ? theme.raised.color : .clear, in: RoundedRectangle(cornerRadius: 7))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 28)
-            .frame(width: 210)
-            .background(theme.panel.color)
-            Rectangle().fill(theme.line.color).frame(width: 1)
+        let theme = themeStore.theme
+        let session = session
+        TabView(selection: $pane) {
+            AppearancePane(themeStore: themeStore)
+                .tabItem { Label("Appearance", systemImage: "paintpalette") }.tag(Pane.appearance)
+            EditorSettings(preferences: Preferences.shared)
+                .tabItem { Label("Editor", systemImage: "chevron.left.forwardslash.chevron.right") }.tag(Pane.editor)
+            KeyboardPane()
+                .tabItem { Label("Keyboard", systemImage: "keyboard") }.tag(Pane.keyboard)
+            LanguagesPane()
+                .tabItem { Label("Languages", systemImage: "curlybraces") }.tag(Pane.languages)
+            FileSettings(preferences: Preferences.shared)
+                .tabItem { Label("Files", systemImage: "doc") }.tag(Pane.files)
+            ClaudePreferencesPane()
+                .tabItem { Label("Claude", systemImage: "sparkle") }.tag(Pane.claude)
+            ToolsPane(session: session)
+                .id(session.map(ObjectIdentifier.init))
+                .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }.tag(Pane.tools)
             Group {
-                switch section {
-                case .appearance: AppearancePane(themeStore: themeStore)
-                case .editor: EditorSettings(preferences: Preferences.shared)
-                case .keyboard: KeyboardPane()
-                case .languages: LanguagesPane(session: session)
-                case .files: FileSettings(preferences: Preferences.shared)
-                case .claude: ClaudePreferencesPane(session: session)
-                case .tools: ToolsPane(session: session, workspace: workspace)
-                case .project: ProjectPane(session: session, workspace: workspace)
+                if let session, let workspace = session.workspace {
+                    ProjectPane(session: session, workspace: workspace)
+                } else {
+                    Form { Text("No project open").foregroundStyle(theme.text3.color) }
                 }
             }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-            .frame(maxWidth: 760, maxHeight: .infinity, alignment: .top)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .tabItem { Label("Project", systemImage: "folder.badge.gearshape") }.tag(Pane.project)
         }
-        .background(theme.ground.color)
+        .formStyle(.grouped)
+        .frame(width: 660, height: 580)
+        .environment(\.theme, theme)
         .tint(theme.accent.color)
+        .preferredColorScheme(theme.colorScheme)
     }
 }
 
@@ -107,8 +83,8 @@ private struct AppearancePane: View {
                     }
                 }
                 Toggle("Geist and Geist Mono", isOn: Bindable(Preferences.shared).usesGeist)
-            } footer: {
-                Text("Geist is the design’s typeface, bundled with Dante. Off uses SF Pro and SF Mono.")
+                    .help("The design’s typeface, bundled with Dante. Off uses SF Pro and SF Mono.")
+                Toggle("Claude in the menu bar", isOn: Bindable(Preferences.shared).showsPresence)
             }
         }
     }
@@ -167,7 +143,6 @@ private struct ThemePreview: View {
 // MARK: Claude
 
 private struct ClaudePreferencesPane: View {
-    let session: Session
     @Bindable private var preferences = Preferences.shared
 
     var body: some View {
@@ -177,17 +152,10 @@ private struct ClaudePreferencesPane: View {
                     ForEach(Preferences.ClaudeModel.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 Toggle("Ask clarifying questions before ambiguous work", isOn: $preferences.claudeAsksFirst)
-                Toggle("Notify me when Claude finishes or needs approval while Dante is in the background", isOn: $preferences.notifiesOnClaude)
+                Toggle("Notify when Claude finishes or needs approval in the background", isOn: $preferences.notifiesOnClaude)
                     .onChange(of: preferences.notifiesOnClaude) { _, on in
                         if on { Task { if await !Session.requestNotificationPermission() { preferences.notifiesOnClaude = false } } }
                     }
-            } footer: {
-                Text("Changes apply from your next message. Sign-in and plan stay in Claude Code.")
-            }
-            SwiftUI.Section {
-                LabeledContent("Skills, memory, connectors and usage") {
-                    Button("Open the Claude area") { session.area = .claude }
-                }
             }
         }
     }
@@ -197,8 +165,7 @@ private struct ClaudePreferencesPane: View {
 
 private struct ToolsPane: View {
     @Environment(\.theme) private var theme
-    let session: Session
-    let workspace: Workspace
+    let session: Session?
     @State private var statuses: [String: ToolStatus] = [:]
     @State private var showsAll = false
     @State private var command: CommandLineTool.State?
@@ -207,10 +174,10 @@ private struct ToolsPane: View {
     private var languages: [String] {
         let names: [String: String] = ["go": "Go", "js": "JavaScript", "mjs": "JavaScript", "jsx": "JavaScript", "ts": "TypeScript", "tsx": "TypeScript",
                                        "py": "Python", "rs": "Rust", "swift": "Swift"]
-        return Array(Set(workspace.files.compactMap { names[($0 as NSString).pathExtension.lowercased()] }))
+        return Array(Set((session?.workspace?.files ?? []).compactMap { names[($0 as NSString).pathExtension.lowercased()] }))
     }
 
-    private var tools: [Tool] { showsAll ? Tool.all : Tool.relevant(stack: languages) }
+    private var tools: [Tool] { showsAll || session?.workspace == nil ? Tool.all : Tool.relevant(stack: languages) }
 
     var body: some View {
         Form {
@@ -222,17 +189,13 @@ private struct ToolsPane: View {
                         ForEach(inGroup) { tool in row(tool) }
                     } header: {
                         Text(group.rawValue)
-                    } footer: {
-                        if group == .databases {
-                            Text("The Data area runs queries through these clients, or inside the database’s container when the client isn’t installed here.")
-                        }
                     }
                 }
             }
-            SwiftUI.Section {
-                Toggle("Show tools for languages this project doesn’t use", isOn: $showsAll)
-            } footer: {
-                Text("Install types the command into the terminal below; press Return to run it. Dante doesn’t install anything itself.")
+            if session?.workspace != nil {
+                SwiftUI.Section {
+                    Toggle("Show tools for languages this project doesn’t use", isOn: $showsAll)
+                }
             }
         }
         .task(id: showsAll) { await check() }
@@ -241,10 +204,8 @@ private struct ToolsPane: View {
     private func row(_ tool: Tool) -> some View {
         let status = statuses[tool.id]
         return HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(tool.name).font(.dante(size: 13, weight: .medium))
-                Text(tool.purpose).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-            }
+            Text(tool.name).font(.dante(size: 13, weight: .medium))
+                .help(tool.purpose)
             Spacer()
             if let status {
                 if status.installed {
@@ -254,8 +215,9 @@ private struct ToolsPane: View {
                         .help(status.path ?? "")
                 } else {
                     Text("Not installed").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                    Button("Install…") { session.typeInTerminal(tool.install) }
-                    .help(tool.install)
+                    Button("Install…") { install(tool.install) }
+                        .disabled(session == nil)
+                        .help("Types \(tool.install) into the project’s terminal")
                 }
             } else {
                 ProgressView().controlSize(.mini)
@@ -266,11 +228,8 @@ private struct ToolsPane: View {
     /// The `dante` command: open folders and files from any terminal.
     private var commandRow: some View {
         HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("dante command").font(.dante(size: 13, weight: .medium))
-                Text("Open folders and files from the terminal: dante . or dante src/main.go:42")
-                    .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-            }
+            Text("dante command").font(.dante(size: 13, weight: .medium))
+                .help("Open folders and files from the terminal: dante . or dante src/main.go:42")
             Spacer()
             if let bundledCommand {
                 let install = CommandLineTool.installCommand(
@@ -287,10 +246,10 @@ private struct ToolsPane: View {
                         .help(path)
                 case .elsewhere(let path):
                     Text("Points to another copy").font(.dante(size: 12)).foregroundStyle(theme.amber.color).help(path)
-                    Button("Link This Copy…") { session.typeInTerminal(install) }.help(install)
+                    Button("Link This Copy…") { self.install(install) }.disabled(session == nil).help(install)
                 case .notInstalled:
                     Text("Not installed").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                    Button("Install…") { session.typeInTerminal(install) }.help(install)
+                    Button("Install…") { self.install(install) }.disabled(session == nil).help(install)
                 case nil:
                     ProgressView().controlSize(.mini)
                 }
@@ -298,6 +257,14 @@ private struct ToolsPane: View {
                 Text("Comes with the app bundle").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
             }
         }
+    }
+
+    /// Types the command into the project's terminal and brings its window forward; it runs
+    /// only when the user presses Return there.
+    private func install(_ command: String) {
+        guard let session else { return }
+        session.typeInTerminal(command)
+        session.window?.makeKeyAndOrderFront(nil)
     }
 
     private func check() async {
@@ -344,42 +311,32 @@ private struct ProjectPane: View {
             }
             SwiftUI.Section {
                 if hasDante {
-                    LabeledContent {
+                    LabeledContent("The .dante folder") {
                         Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([workspace.danteFolder]) }
-                    } label: {
-                        Text("The .dante folder")
-                        Text("Phases, tasks, the spec and what Claude may change. Plain files, checked in with the code.")
                     }
-                    LabeledContent {
-                        Button("Set up again…") { session.offerSetup(force: true) }
-                    } label: {
-                        Text("Run setup again")
-                        Text("Pick a different lifecycle or start the checklists over. Existing tasks are kept.")
+                    LabeledContent("Run setup again") {
+                        Button("Set Up Again…") { session.offerSetup(force: true) }
+                            .help("Pick a different lifecycle or start the checklists over. Existing tasks are kept.")
                     }
-                    LabeledContent {
+                    LabeledContent("Remove Dante from this project") {
                         Button("Remove…", role: .destructive) { confirmsRemoval = true }
-                    } label: {
-                        Text("Remove Dante from this project")
-                        Text("Moves .dante/ to the Trash, so you can put it back. The code isn’t touched.")
+                            .help("Moves .dante/ to the Trash. The code isn’t touched.")
                     }
                 } else {
-                    LabeledContent {
-                        Button("Set up…") { session.offerSetup(force: true) }
-                    } label: {
-                        Text("Set up this project for Dante")
-                        Text("Adds a .dante folder with phases, a task list and Claude’s rules.")
+                    LabeledContent("Set up this project for Dante") {
+                        Button("Set Up…") { session.offerSetup(force: true) }
                     }
                 }
             } header: {
                 Text("Dante setup")
             }
             SwiftUI.Section {
-                LabeledContent {
-                    Button("Forget…") { confirmsForget = true }
-                        .disabled(savedConnections == 0)
-                } label: {
-                    Text("Saved database connections")
-                    Text(savedConnections == 0 ? "None saved for this project." : "\(savedConnections) saved on this Mac, not in the repo.")
+                LabeledContent("Saved database connections") {
+                    HStack {
+                        Text(savedConnections == 0 ? "None" : "\(savedConnections)").foregroundStyle(theme.text2.color)
+                        Button("Forget…") { confirmsForget = true }
+                            .disabled(savedConnections == 0)
+                    }
                 }
             } header: {
                 Text("Kept on this Mac")
@@ -436,8 +393,6 @@ private struct KeyboardPane: View {
             }
             SwiftUI.Section {
                 HStack {
-                    Text("Click a shortcut, then press the new keys. ⌫ removes it, esc cancels.")
-                        .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                     Spacer()
                     Button("Restore All Defaults") { shortcuts.reset() }
                         .disabled(shortcuts.overrides.isEmpty)
@@ -533,7 +488,6 @@ private struct KeyRecorder: NSViewRepresentable {
 
 private struct LanguagesPane: View {
     @Environment(\.theme) private var theme
-    let session: Session
     @State private var options: [String: LanguageServerOptions] = LanguageServerOptions.load()
     @State private var saved: [String: LanguageServerOptions] = LanguageServerOptions.load()
 
@@ -571,10 +525,6 @@ private struct LanguagesPane: View {
                     Text("\(server.name) · \(server.languageIDs.keys.map(\.displayName).sorted().joined(separator: ", "))")
                 }
             }
-            SwiftUI.Section {
-                Text("Settings go to the server when it starts and whenever it asks for them. A server restarts the next time a file in its language opens.")
-                    .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-            }
         }
     }
 
@@ -586,9 +536,10 @@ private struct LanguagesPane: View {
     private func apply(_ name: String) {
         LanguageServerOptions.save(options)
         saved = options
-        session.languages?.restart(name)
-        // Files already open in that language get the server back right away.
-        if let workspace = session.workspace {
+        // Every window restarts it; files already open in that language get it back right away.
+        for session in Sessions.all {
+            session.languages?.restart(name)
+            guard let workspace = session.workspace else { continue }
             for document in workspace.documents where LanguageServer.for(document.language)?.name == name {
                 session.languages?.opened(document)
             }

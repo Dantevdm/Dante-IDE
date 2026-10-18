@@ -61,7 +61,6 @@ public final class Shortcuts {
     public static let shared = Shortcuts()
 
     public static let commands: [ShortcutCommand] = [
-        .init("settings", "Settings…", "Dante", KeyBinding(",")),
         .init("newProject", "New Project…", "File", KeyBinding("n")),
         .init("newWindow", "New Window", "File", KeyBinding("n", [.command, .shift])),
         .init("openFolder", "Open Folder…", "File", KeyBinding("o")),

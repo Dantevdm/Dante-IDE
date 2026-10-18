@@ -20,6 +20,11 @@ struct DanteApp: App {
         .commands {
             DanteCommands(themeStore: themeStore)
         }
+
+        Settings {
+            SettingsWindow()
+                .environment(themeStore)
+        }
     }
 }
 
@@ -44,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         MenuShortcuts.install()
         PresenceController.shared.install()
+        ActiveProject.install()
         // Needed when running the bare executable (`swift run`) rather than the .app bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
@@ -115,18 +121,6 @@ struct RootView: View {
         // windows take them rather than SwiftUI making a new window for each.
         .onOpenURL { Opener.handle($0, from: session, openWindow: openWindow) }
         .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
-        // With no project open, ⌘, shows the app-wide settings here.
-        .sheet(isPresented: $session.showsAppSettings) {
-            VStack(spacing: 0) {
-                SettingsView()
-                HStack {
-                    Spacer()
-                    Button("Done") { session.showsAppSettings = false }.keyboardShortcut(.defaultAction)
-                }
-                .padding(12)
-            }
-            .environment(themeStore)
-        }
         .sheet(isPresented: $session.isCloning) {
             CloneSheet(session: session)
                 .environment(\.theme, theme)
