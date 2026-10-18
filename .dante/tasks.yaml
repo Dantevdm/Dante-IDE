@@ -412,8 +412,9 @@ tasks:
 - id: DI-101
   title: "Walk and work: jobs on the Mac, away mode, and an iPhone and iPad companion"
   phase: build
-  state: ready
+  state: wip
   spec: docs/plans/walk-and-work.md
+  notes: "Step 1 is in: jobs run side by side, each with its own agent in a worktree on a dante/ branch, with a Jobs board, a switcher and inbox in the panel, merge and discard, and pausing and resuming across restarts. Next: away mode and budgets (step 2)."
 - id: DI-102
   title: "Presence: an animated orb in the menu bar that shows what Claude is doing, with a panel"
   phase: build
@@ -505,4 +506,4 @@ tasks:
   title: "Looker: a local vision model reads screenshots and images for Claude and Codex (look tool) and from the image viewer"
   phase: build
   state: review
-  notes: "Only models that read UI reliably are used (Qwen-VL, Gemma 3, Mistral Small 3, MiniCPM-V) and only if they fit in 60% of memory; llava, granite-vision and llama3.2-vision invent details or no longer load, so they're skipped with a reason. Needs ollama pull qwen3-vl:8b (about 6 GB) on this Mac, which the user hasn't approved yet."
+  notes: "Only models that read UI reliably are used (Qwen-VL, Gemma 3, Mistral Small 3, MiniCPM-V) and only if they fit in 60% of memory; llava, granite-vision and llama3.2-vision invent details or no longer load, so they're skipped with a reason. qwen3-vl:8b is installed and reads Dante's own screens accurately (about 50 s for a full description on an M4 Pro); answers render as markdown."

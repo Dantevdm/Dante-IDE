@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, map, code, tests, security, environments, data, ship, run, timeline, claude, agents, docs
+    case home, map, code, tests, security, environments, data, ship, run, timeline, claude, agents, jobs, docs
 
     var id: String { rawValue }
 
@@ -25,6 +25,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .timeline: "Timeline"
         case .claude: "Setup"
         case .agents: "Agents"
+        case .jobs: "Jobs"
         case .docs: "Docs"
         }
     }
@@ -43,6 +44,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .timeline: "clock.arrow.circlepath"
         case .claude: "slider.horizontal.3"
         case .agents: "circle.hexagongrid"
+        case .jobs: "square.stack.3d.up"
         case .docs: "doc.text"
         }
     }
@@ -62,11 +64,12 @@ enum Area: String, CaseIterable, Identifiable {
         case .timeline: "Commits, releases, Claude sessions, test runs and CI in one stream, newest first."
         case .claude: "How the agents work on this project: usage, skills, memory, connectors and permissions."
         case .agents: "Claude, Codex and the models they delegate to: who did what, who checked what, and why."
+        case .jobs: "Work handed to agents that run side by side, each on its own branch in its own worktree: what they're doing, what they need from you, and merging it."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
         }
     }
 
-    static let main: [Area] = [.home, .map, .code, .tests, .security, .environments, .data, .ship, .run, .timeline, .claude, .agents]
+    static let main: [Area] = [.home, .map, .code, .tests, .security, .environments, .data, .ship, .run, .timeline, .claude, .agents, .jobs]
     static let footer: [Area] = [.docs]
 }
 
@@ -101,6 +104,12 @@ final class Session {
     private(set) var workspace: Workspace?
     private(set) var branch: String?
     private(set) var claude: ClaudeSession?
+    /// Agents working beside the main conversation, each in its own worktree.
+    let jobs = JobsModel()
+    /// The job whose conversation the panel shows; nil for the main conversation.
+    var shownJob: String?
+    /// The conversation the panel shows.
+    var shownClaude: ClaudeSession? { shownJob.flatMap { jobs.sessions[$0] } ?? claude }
     /// Language servers for the open project's files.
     private(set) var languages: LanguageServices?
     private var watcher: DirectoryWatcher?
@@ -278,6 +287,12 @@ final class Session {
         loadBreakpoints()
         loadSinceLastVisit(for: workspace)
         claude = makeClaude(for: workspace)
+        shownJob = nil
+        jobs.makeSession = { [weak self, weak workspace] job in
+            guard let self, let workspace else { return ClaudeSession(root: job.worktreeURL, executable: nil, systemPrompt: { "" }) }
+            return self.makeJobClaude(for: job, in: workspace)
+        }
+        jobs.load(root: url, remote: RemoteRegistry.project(containing: url) != nil)
         languages = LanguageServices(root: url)
         conflicts = []
         mapCache = nil
@@ -298,6 +313,8 @@ final class Session {
         recordVisit()
         claude?.stop()
         claude = nil
+        jobs.stopAll()
+        shownJob = nil
         languages?.stop()
         languages = nil
         watcher?.stop()
@@ -314,6 +331,7 @@ final class Session {
         stopDebugging()
         recordVisit()
         claude?.stop()
+        jobs.stopAll()
         languages?.stop()
         watcher?.stop()
         logWatch?.stop()
@@ -380,6 +398,30 @@ final class Session {
         return claude
     }
 
+    /// A job's conversation: the project's brief and rules, plus the job's own brief, run in
+    /// the job's worktree.
+    private func makeJobClaude(for job: JobRecord, in workspace: Workspace) -> ClaudeSession {
+        let project = workspace.name
+        let claude = ClaudeSession(
+            root: job.worktreeURL,
+            executable: SystemStatus.detect().claudePath,
+            systemPrompt: { [weak workspace] in
+                ClaudeBrief.systemPrompt(for: workspace) + "\n\n" + JobPlan.brief(for: job, project: project)
+            },
+            rules: { [weak workspace] in workspace?.claudeRules ?? ClaudeRules() }
+        )
+        claude.projectName = project
+        // Keeps the board's change count current while the job edits.
+        claude.onFileChanged = { [weak self] _ in self?.jobs.changesMayHaveChanged(job.id) }
+        claude.onAttention = { [weak self] attention in
+            self?.notifyClaude(attention, job: job.title)
+            Task { await self?.jobs.refreshChanges(of: job.id) }
+        }
+        claude.engine = job.engine == .codex && Self.codexPath != nil ? .codex : .claude
+        applyClaudePreferences(to: claude)
+        return claude
+    }
+
     /// Settings Claude starts with; a change applies from the next message.
     func applyClaudePreferences(to claude: ClaudeSession? = nil) {
         guard let claude = claude ?? self.claude else { return }
@@ -402,6 +444,8 @@ final class Session {
         }
         // With Codex in charge, the server also carries Claude for second opinions.
         claude.delegateCommand = local || !environment.isEmpty || claude.engine == .codex ? Self.danteCommand : nil
+        // A job's tools file their work under the project, not the worktree's folder.
+        if let project = claude.projectName { environment[DelegateEnvironment.project] = project }
         claude.delegateEnvironment = environment
         claude.ledger = .standard
         claude.approvalLevel = Preferences.shared.approvalLevel

@@ -33,7 +33,8 @@ func danteApp() -> URL? {
 
 // `dante mcp`: the MCP server Claude Code starts so it can delegate jobs to local models.
 if CommandLine.arguments.dropFirst().first == "mcp" {
-    let project = URL(filePath: FileManager.default.currentDirectoryPath).lastPathComponent
+    let project = ProcessInfo.processInfo.environment[DelegateEnvironment.project]
+        ?? URL(filePath: FileManager.default.currentDirectoryPath).lastPathComponent
     await DelegateServer.live(project: project).serve()
     exit(0)
 }

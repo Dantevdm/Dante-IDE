@@ -218,6 +218,9 @@ public final class ClaudeSession {
     public private(set) var limitReachedAt: Date?
     /// Where each turn and sub-agent is recorded for the Agents stats; nil records nothing.
     public var ledger: AgentLedger?
+    /// The project the ledger files this conversation's jobs under, when `root` isn't the
+    /// project's own folder (a job's worktree).
+    public var projectName: String?
     /// This turn's tokens so far, for the ledger: the largest context, and output per message.
     private var turnUsage = (input: 0, output: [String: Int](), title: "")
     /// The `--model` to start with; nil leaves it to Claude Code. Takes effect on the next message.
@@ -962,7 +965,7 @@ public final class ClaudeSession {
                     updateTool(tool.id) { $0.status = .done }
                     if tool.name == "Task" || tool.name == "Agent" {
                         ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: tool.input["subagent_type"]?.string ?? "general-purpose",
-                                                project: root.lastPathComponent, requestedBy: "claude",
+                                                project: projectName ?? root.lastPathComponent, requestedBy: "claude",
                                                 title: tool.input["description"]?.string ?? "Sub-agent", gist: AgentJob.gist(of: result.text)))
                     }
                     if let change = tool.change ?? ProposedChange.make(toolName: tool.name, input: tool.input, root: root) {
@@ -1028,7 +1031,7 @@ public final class ClaudeSession {
         case .result(let result):
             state = .idle
             ledger?.append(AgentJob(kind: "turn", provider: startedEngine == .codex ? .codex : .claude,
-                                    model: startedEngine == .codex ? (model ?? "codex") : (requestedModel ?? "claude"), project: root.lastPathComponent,
+                                    model: startedEngine == .codex ? (model ?? "codex") : (requestedModel ?? "claude"), project: projectName ?? root.lastPathComponent,
                                     promptTokens: turnUsage.input, outputTokens: turnUsage.output.values.reduce(0, +),
                                     seconds: Double(result.durationMS ?? 0) / 1000, outcome: result.isError ? .failed : .done,
                                     requestedBy: "you", title: turnUsage.title,

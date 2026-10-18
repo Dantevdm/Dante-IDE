@@ -160,7 +160,7 @@ private struct ClaudeToggle: View {
             withAnimation(.snappy(duration: 0.22)) { session.showsClaude.toggle() }
         }
         .overlay(alignment: .topTrailing) {
-            if session.claude?.pendingApprovals.isEmpty == false, !session.showsClaude {
+            if !session.inbox.isEmpty, !session.showsClaude {
                 StatusDot(color: theme.amber.color, size: 6).offset(x: -3, y: 3)
             }
         }

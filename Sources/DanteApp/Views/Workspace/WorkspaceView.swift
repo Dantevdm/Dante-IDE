@@ -34,6 +34,7 @@ struct WorkspaceView: View {
                         case .timeline: ProjectTimelineView(session: session, workspace: workspace)
                         case .claude: ClaudeAreaView(session: session, workspace: workspace)
                         case .agents: AgentsView(session: session, workspace: workspace)
+                        case .jobs: JobsView(session: session, workspace: workspace)
                         case .security: SecurityView(session: session, workspace: workspace)
                         }
                     }
@@ -54,7 +55,7 @@ struct WorkspaceView: View {
                 // Takes the width that's left, so wide rows adapt instead of running under the panel.
                 .frame(minWidth: 0, maxWidth: .infinity)
                 .clipped()
-                if session.showsClaude, let claude = session.claude {
+                if session.showsClaude, let claude = session.shownClaude {
                     ResizeHandle(axis: .horizontal, value: Bindable(session).claudeWidth, range: 300...1400, inverted: true)
                     ClaudePanel(session: session, workspace: workspace, claude: claude)
                         .frame(width: session.claudeWidth, alignment: .leading)

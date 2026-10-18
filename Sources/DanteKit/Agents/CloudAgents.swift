@@ -167,4 +167,6 @@ public enum DelegateEnvironment {
     public static let requester = "DANTE_REQUESTER"
     /// Looker's vision model chosen in Settings; unset for the best installed.
     public static let lookerModel = "DANTE_LOOKER_MODEL"
+    /// The project's name for the ledger, when Claude runs in a job's worktree.
+    public static let project = "DANTE_PROJECT"
 }

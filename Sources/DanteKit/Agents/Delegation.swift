@@ -146,6 +146,8 @@ public struct AgentJob: Codable, Equatable, Sendable, Identifiable {
                 if rest.isEmpty || rest.hasPrefix("A second opinion") || rest.hasPrefix("Check this") { continue }
             }
             guard var plain = clean(line) else { continue }
+            // A label such as "Summary of changes:" introduces the gist; it isn't one.
+            if plain.hasSuffix(":"), plain.count <= 40 { continue }
             if let end = sentenceEnd(plain) { plain = String(plain[..<end]) }
             if plain.count > limit { plain = String(plain.prefix(limit - 1)).trimmingCharacters(in: .whitespaces) + "…" }
             return plain

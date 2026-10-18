@@ -11,9 +11,18 @@ struct ClaudePanel: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if !session.jobs.open.isEmpty || session.jobs.starting != nil {
+                JobStrip(session: session)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             ContextChips(session: session, workspace: workspace)
             Rectangle().fill(theme.line.color).frame(height: 1)
+            if let id = session.shownJob, let job = session.jobs.record(id) {
+                JobBanner(session: session, job: job)
+                Rectangle().fill(theme.line.color).frame(height: 1)
+            }
             Transcript(session: session, claude: claude)
+                .id(session.shownJob ?? "main")
             if claude.needsLogin {
                 SignInBanner(session: session)
             }
@@ -22,6 +31,7 @@ struct ClaudePanel: View {
         }
         .background(theme.panel.color)
         .modifier(AcceptsAttachments(session: session))
+        .animation(.snappy(duration: 0.3), value: session.jobs.open.isEmpty && session.jobs.starting == nil)
     }
 
     private var header: some View {
@@ -41,42 +51,48 @@ struct ClaudePanel: View {
             Spacer(minLength: 4)
             // Icons only when the panel is too narrow for the labels.
             ViewThatFits(in: .horizontal) {
-                controls
-                controls.labelStyle(.iconOnly)
+                controls()
+                controls().labelStyle(.iconOnly)
+                controls(compact: true).labelStyle(.iconOnly)
             }
         }
         .padding(.horizontal, 12)
         .frame(height: 48)
     }
 
-    private var controls: some View {
-        HStack(spacing: 8) {
+    /// `compact` leaves out what's also in Settings and the composer's commands.
+    private func controls(compact: Bool = false) -> some View {
+        HStack(spacing: compact ? 4 : 8) {
+            InboxButton(session: session)
             ApprovalMenu(session: session)
-            Button {
-                Preferences.shared.claudeAsksFirst.toggle()
-            } label: {
-                Label("Questions", systemImage: Preferences.shared.claudeAsksFirst ? "questionmark.bubble.fill" : "questionmark.bubble")
-                    .font(.dante(size: 11, weight: .medium))
-                    .foregroundStyle(Preferences.shared.claudeAsksFirst ? theme.accent.color : theme.text3.color)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Preferences.shared.claudeAsksFirst ? theme.accentTint.color : .clear))
-                    .overlay(Capsule().strokeBorder(Preferences.shared.claudeAsksFirst ? theme.accentLine.color : theme.line2.color))
-                    .lineLimit(1)
-                    .fixedSize()
+            if !compact {
+                Button {
+                    Preferences.shared.claudeAsksFirst.toggle()
+                } label: {
+                    Label("Questions", systemImage: Preferences.shared.claudeAsksFirst ? "questionmark.bubble.fill" : "questionmark.bubble")
+                        .font(.dante(size: 11, weight: .medium))
+                        .foregroundStyle(Preferences.shared.claudeAsksFirst ? theme.accent.color : theme.text3.color)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Preferences.shared.claudeAsksFirst ? theme.accentTint.color : .clear))
+                        .overlay(Capsule().strokeBorder(Preferences.shared.claudeAsksFirst ? theme.accentLine.color : theme.line2.color))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .buttonStyle(.plain)
+                .help(Preferences.shared.claudeAsksFirst
+                      ? "On: Claude asks clarifying questions before starting anything ambiguous. Click to let it go straight ahead. (Approvals are the menu beside this.)"
+                      : "Off: Claude goes straight ahead without clarifying questions. (Approvals are the menu beside this.)")
             }
-            .buttonStyle(.plain)
-            .help(Preferences.shared.claudeAsksFirst
-                  ? "On: Claude asks clarifying questions before starting anything ambiguous. Click to let it go straight ahead. (Approvals are the menu beside this.)"
-                  : "Off: Claude goes straight ahead without clarifying questions. (Approvals are the menu beside this.)")
-            if claude.engine == .claude {
+            NewJobButton(session: session)
+            if !compact, claude.engine == .claude, session.shownJob == nil {
                 IconButton(symbol: "clock.arrow.circlepath", label: "Earlier conversations") { session.claudeShowsHistory.toggle() }
                     .popover(isPresented: Bindable(session).claudeShowsHistory, arrowEdge: .bottom) {
                         ConversationHistory(session: session) { session.claudeShowsHistory = false }
                     }
             }
             IconButton(symbol: "square.and.pencil", label: "New conversation (the current one stays in Earlier conversations)") { claude.reset() }
-                .disabled(claude.items.isEmpty)
+                .disabled(claude.items.isEmpty || session.shownJob != nil)
             IconButton(symbol: "sidebar.right", label: Shortcuts.label("Hide \(session.agentName)", "toggleClaude")) {
                 withAnimation(.snappy(duration: 0.22)) { session.showsClaude = false }
             }
@@ -257,7 +273,7 @@ private struct Transcript: View {
                     }
                     if claude.state == .idle, claude.queued.isEmpty, case .assistant(let text)? = claude.items.last?.content,
                        let choices = ReplyChoices.parse(text) {
-                        ChoiceChips(choices: choices) { session.askClaude($0) }
+                        ChoiceChips(choices: choices) { session.askClaude($0, in: claude) }
                             .id(claude.items.last?.id)
                     }
                     ForEach(claude.queued) { message in
@@ -373,7 +389,7 @@ private struct EmptyConversation: View {
             } else {
                 VStack(spacing: 6) {
                     ForEach(suggestions, id: \.self) { suggestion in
-                        Button(suggestion) { session.askClaude(suggestion) }
+                        Button(suggestion) { session.askClaude(suggestion, in: claude) }
                             .buttonStyle(SuggestionButtonStyle())
                     }
                 }

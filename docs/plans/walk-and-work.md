@@ -2,7 +2,7 @@
 
 Hand Dante jobs, go for a walk, and talk to it through earbuds. The Mac does the work; the iPhone is a voice in your ear; the iPad is a desk away from the desk.
 
-Status: a plan. Nothing is built yet.
+Status: step 1 (jobs on the Mac) is built; the rest is a plan.
 
 ## Decisions so far
 

@@ -331,7 +331,7 @@ final class VoiceController {
     /// The session spoken to: the frontmost project's, else one where Claude is busy or waiting.
     private var target: Session? {
         ActiveProject.shared.session
-            ?? Sessions.all.first { $0.claude?.pendingApprovals.isEmpty == false }
+            ?? Sessions.all.first { $0.waitingConversation != nil }
             ?? Sessions.all.first { $0.claude?.state == .working }
             ?? Sessions.all.first { $0.workspace != nil }
     }
@@ -345,7 +345,7 @@ final class VoiceController {
             conversing = false
             say(["Anytime.", "Sure.", "Okay."].randomElement() ?? "Okay.")
         case .stop:
-            for session in Sessions.all where session.claude?.state == .working { session.claude?.interrupt() }
+            for claude in Sessions.all.flatMap(\.allConversations) where claude.state == .working { claude.interrupt() }
             answering = nil
             if state == .waiting { state = .idle }
             say("Stopped.")
@@ -355,12 +355,14 @@ final class VoiceController {
             session.window?.makeKeyAndOrderFront(nil)
             say("Here’s \(project).")
         case .approve:
-            guard let session = target, let claude = session.claude, !claude.pendingApprovals.isEmpty else { return say("Nothing’s waiting.") }
+            guard let session = target, let claude = session.waitingConversation?.claude else { return say("Nothing’s waiting.") }
             for tool in claude.pendingApprovals { claude.approve(tool.id) }
+            // Replies are read out from the main conversation; a job carries on by itself.
+            guard claude === session.claude else { return say("Okay, the job carries on.") }
             conversing = Preferences.shared.keepsConversation
             listenForReply(in: session, from: claude.items.count)
         case .decline:
-            guard let session = target, let claude = session.claude, !claude.pendingApprovals.isEmpty else { return say("Nothing’s waiting.") }
+            guard let claude = target?.waitingConversation?.claude else { return say("Nothing’s waiting.") }
             for tool in claude.pendingApprovals { claude.decline(tool.id) }
             say("Okay, I won’t.")
         case .stage(let open):

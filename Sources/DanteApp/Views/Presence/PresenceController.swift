@@ -110,8 +110,7 @@ final class PresenceController: NSObject {
         var tools = 0, running = 0
         var limitAt: Date?
         var satellites: [OrbSatellite] = []
-        for session in Sessions.all {
-            guard let claude = session.claude else { continue }
+        for claude in Sessions.all.flatMap(\.allConversations) {
             if let at = claude.limitReachedAt { limitAt = max(limitAt ?? at, at) }
             for item in claude.items {
                 guard case .tool(let tool) = item.content else { continue }
@@ -147,9 +146,10 @@ final class PresenceController: NSObject {
         var sources: [PresenceSource] = []
         var byID: [String: Session] = [:]
         for session in Sessions.all {
-            guard let source = session.presenceSource else { continue }
-            sources.append(source)
-            byID[source.id] = session
+            for source in session.presenceSources {
+                sources.append(source)
+                byID[source.id] = session
+            }
         }
         sessions = byID
         return sources
@@ -308,22 +308,46 @@ final class PresenceController: NSObject {
     func show(_ id: String) {
         popover?.performClose(nil)
         guard let session = sessions[id] else { return showDante() }
-        session.showsClaude = true
+        // A job's source id is the window's, a slash, and the job's.
+        let job = id.split(separator: "/").dropFirst().first.map(String.init)
+        session.showJob(job)
         NSApp.activate()
         session.window?.makeKeyAndOrderFront(nil)
     }
 
     func stop(_ id: String) {
-        sessions[id]?.claude?.interrupt()
+        guard let session = sessions[id] else { return }
+        if let job = id.split(separator: "/").dropFirst().first.map(String.init) {
+            session.jobs.sessions[job]?.interrupt()
+        } else {
+            session.claude?.interrupt()
+        }
     }
 }
 
 extension Session {
+    /// The main conversation and every running job's.
+    var allConversations: [ClaudeSession] {
+        (claude.map { [$0] } ?? []) + jobs.open.compactMap { jobs.sessions[$0.id] }
+    }
+
+    /// The window's conversation and each live job's, for the orb.
+    var presenceSources: [PresenceSource] {
+        guard let main = presenceSource, let workspace else { return [] }
+        return [main] + jobs.open.compactMap { job in
+            jobs.sessions[job.id].map { Self.presenceSource(for: $0, id: "\(main.id)/\(job.id)", project: "\(workspace.name) · \(job.title)", root: job.worktreeURL) }
+        }
+    }
+
     /// This window's Claude session, for the orb. Nil before a folder is open.
     var presenceSource: PresenceSource? {
         guard let workspace else { return nil }
         let id = String(UInt(bitPattern: ObjectIdentifier(self).hashValue), radix: 36)
         guard let claude else { return PresenceSource(id: id, project: workspace.name, claude: .off) }
+        return Self.presenceSource(for: claude, id: id, project: workspace.name, root: workspace.url)
+    }
+
+    private static func presenceSource(for claude: ClaudeSession, id: String, project: String, root: URL) -> PresenceSource {
         let state: PresenceSource.Claude = switch claude.state {
         case .idle: .idle
         case .working: .working
@@ -334,7 +358,7 @@ extension Session {
         var waiting = 0
         for item in claude.items.reversed() {
             guard case .tool(let tool) = item.content else { continue }
-            let line = [tool.verb, tool.target(in: workspace.url)].filter { !$0.isEmpty }.joined(separator: " ")
+            let line = [tool.verb, tool.target(in: root)].filter { !$0.isEmpty }.joined(separator: " ")
             if tool.isAwaitingApproval {
                 waiting += 1
                 if waiting == 1 { last = line }
@@ -343,6 +367,6 @@ extension Session {
             if running == nil, tool.status == .running { running = line }
             if waiting == 0, last != nil, running != nil || claude.state != .working { break }
         }
-        return PresenceSource(id: id, project: workspace.name, claude: state, waiting: waiting, running: running, last: last)
+        return PresenceSource(id: id, project: project, claude: state, waiting: waiting, running: running, last: last)
     }
 }

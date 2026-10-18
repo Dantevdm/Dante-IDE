@@ -159,7 +159,7 @@ struct Composer: View {
         guard canSend else { return }
         let mentioned = ComposerToken.mentions(in: draft, files: Set(session.workspace?.files ?? []))
         let instructions = mentioned.isEmpty ? nil : "The user pointed at these project files with @; read them before answering: " + mentioned.joined(separator: ", ")
-        session.askClaude(draft, instructions: instructions)
+        session.askClaude(draft, instructions: instructions, in: claude)
         draft = ""
     }
 

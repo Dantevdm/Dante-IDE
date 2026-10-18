@@ -199,13 +199,11 @@ private struct LookerBar: View {
                     }
                 } else if let answer {
                     ScrollView {
-                        Text(answer)
-                            .font(.dante(size: 12.5))
-                            .foregroundStyle(theme.text.color)
+                        MarkdownText(text: answer)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxHeight: 180)
+                    .frame(maxHeight: 220)
                     .transition(.opacity)
                 }
             }

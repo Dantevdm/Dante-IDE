@@ -33,10 +33,10 @@ extension Session {
     }
 
     /// Claude finished or is waiting, and Dante isn't the app in front.
-    func notifyClaude(_ attention: ClaudeSession.Attention) {
+    func notifyClaude(_ attention: ClaudeSession.Attention, job: String? = nil) {
         guard Preferences.shared.notifiesOnClaude, !NSApplication.shared.isActive, let workspace else { return }
         let content = UNMutableNotificationContent()
-        content.subtitle = workspace.url.lastPathComponent
+        content.subtitle = workspace.url.lastPathComponent + (job.map { " · \($0)" } ?? "")
         switch attention {
         case .finished(let reply):
             content.title = "\(agentName) is done"
@@ -46,6 +46,6 @@ extension Session {
             content.body = what
             content.sound = .default
         }
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "claude-\(workspace.url.path)", content: content, trigger: nil))
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "claude-\(workspace.url.path)\(job.map { "-" + $0 } ?? "")", content: content, trigger: nil))
     }
 }

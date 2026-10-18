@@ -87,7 +87,7 @@ final class StageController: NSObject, NSWindowDelegate {
         case 49:
             VoiceController.shared.toggle()
         case 36, 76:
-            guard let session = StageView.waitingSession, let claude = session.claude else { return false }
+            guard let claude = StageView.waitingSession?.waitingConversation?.claude else { return false }
             for tool in claude.pendingApprovals { claude.approve(tool.id) }
         default:
             return false
@@ -142,7 +142,7 @@ struct StageView: View {
 
     /// The window with something waiting for an answer, if any.
     @MainActor static var waitingSession: Session? {
-        Sessions.all.first { $0.claude?.pendingApprovals.isEmpty == false }
+        Sessions.all.first { $0.waitingConversation != nil }
     }
 
     /// The project the caption follows: one waiting, else one working, else the frontmost.
@@ -352,10 +352,18 @@ struct StageView: View {
                         .multilineTextAlignment(.center)
                         .lineLimit(3)
                 }
-            } else if let session = Self.waitingSession, let claude = session.claude, let tool = claude.pendingApprovals.first {
-                let what = [tool.verb, tool.target(in: session.workspace?.url ?? claude.root)].filter { !$0.isEmpty }.joined(separator: " ")
+            } else if let waiting = Self.waitingSession?.waitingConversation, let tool = waiting.claude.pendingApprovals.first {
+                let claude = waiting.claude
+                let target = tool.target(in: claude.root)
+                let what = [tool.verb, waiting.job.map { JobPlan.shortened(target, worktree: $0.worktree) } ?? target].filter { !$0.isEmpty }.joined(separator: " ")
                 VStack(spacing: 16 * unit) {
-                    Text("Claude wants to \(what.prefix(1).lowercased() + what.dropFirst())")
+                    if let job = waiting.job {
+                        Text(job.title)
+                            .font(.dante(size: 18 * unit, weight: .medium))
+                            .foregroundStyle(theme.text3.color)
+                            .lineLimit(1)
+                    }
+                    Text("\(claude.engine.title) wants to \(what.prefix(1).lowercased() + what.dropFirst())")
                         .font(.dante(size: 28 * unit, weight: .medium))
                         .foregroundStyle(theme.text.color)
                         .multilineTextAlignment(.center)

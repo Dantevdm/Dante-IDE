@@ -51,11 +51,16 @@ extension Session {
     /// Sends a message to Claude with what's on screen as context, and any attached files.
     /// `instructions` go with the message but aren't shown in the transcript, for long prompts
     /// Dante writes on the user's behalf.
-    func askClaude(_ text: String, instructions: String? = nil, attachments extra: [Attachment] = []) {
-        guard let claude, let workspace else { return }
+    /// Sends to the main conversation, or to `target` (a job's, from the panel).
+    func askClaude(_ text: String, instructions: String? = nil, attachments extra: [Attachment] = [], in target: ClaudeSession? = nil) {
+        guard let claude = target ?? claude, let workspace else { return }
         showsClaude = true
         let diagnostics = workspace.activeDocument.flatMap { languages?.diagnostics(for: $0) } ?? []
-        let brief = ClaudeBrief.context(workspace: workspace, line: cursor.line, diagnostics: diagnostics)
+        var brief = ClaudeBrief.context(workspace: workspace, line: cursor.line, diagnostics: diagnostics)
+        // A job works in its own copy; what the user has open is the main checkout's.
+        if claude !== self.claude, let open = brief {
+            brief = "(In the main checkout, not your worktree.) " + open
+        }
         applyClaudePreferences(to: claude)
         claude.send(text, context: [instructions, brief].compactMap { $0 }.joined(separator: "\n\n"),
                     attachments: claudeAttachments + extra)
