@@ -12,7 +12,27 @@ struct SearchPanel: View {
 
     var body: some View {
         @Bindable var search = search
+        VStack(alignment: .leading, spacing: 0) {
+            if search.references == nil {
+                SearchModeSwitch(byMeaning: $search.byMeaning)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 8)
+            }
+            if search.byMeaning, search.references == nil {
+                MeaningSearchView(session: session, workspace: workspace)
+                    .transition(.opacity)
+            } else {
+                textSearch
+                    .transition(.opacity)
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: search.byMeaning)
+    }
+
+    private var textSearch: some View {
+        @Bindable var search = search
         let shown = search.references?.result ?? search.result
+        return
         VStack(alignment: .leading, spacing: 0) {
             if let references = search.references {
                 HStack(spacing: 6) {

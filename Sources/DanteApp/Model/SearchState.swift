@@ -14,6 +14,8 @@ final class SearchState {
     /// A language server's references, shown in place of search results until closed.
     var references: (symbol: String, result: ProjectSearch.Result)?
     var showsReplace = false
+    /// Searching by meaning (a local embedding model) rather than by text.
+    var byMeaning = false
     var replacement = ""
     /// Matches taken out of a replace, as "path#line:column".
     var dismissed: Set<String> = []

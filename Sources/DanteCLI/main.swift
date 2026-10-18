@@ -73,6 +73,39 @@ if CommandLine.arguments.dropFirst().first == "scan" {
     exit(0)
 }
 
+// `dante search <question> [--in folder] [--limit n]`: search the project by meaning with an
+// embedding model in Ollama, updating the index first (only changed code is embedded again).
+if CommandLine.arguments.dropFirst().first == "search" {
+    var arguments = Array(CommandLine.arguments.dropFirst(2))
+    func value(_ name: String) -> String? {
+        guard let index = arguments.firstIndex(of: name), index + 1 < arguments.count else { return nil }
+        defer { arguments.removeSubrange(index...index + 1) }
+        return arguments[index + 1]
+    }
+    let folder = value("--in")
+    let limit = value("--limit").flatMap(Int.init) ?? 8
+    let question = arguments.joined(separator: " ")
+    guard !question.isEmpty else { fail("usage: dante search <question> [--in folder] [--limit n]") }
+    let root = URL(filePath: folder ?? ".", directoryHint: .isDirectory,
+                   relativeTo: URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory)).standardizedFileURL
+    let search = SemanticSearch()
+    do {
+        let started = Date()
+        let index = try await search.update(root: root) { done, total in
+            if total > 0 { FileHandle.standardError.write(Data("\rIndexing \(done)/\(total) pieces".utf8)) }
+        }
+        let indexed = Date().timeIntervalSince(started)
+        let hits = try await search.search(question, in: index, limit: limit)
+        FileHandle.standardError.write(Data("\r\(index.chunks.count) pieces in \(index.files) files · \(index.model) · \(String(format: "%.1f", indexed)) s to update, \(String(format: "%.1f", Date().timeIntervalSince(started) - indexed)) s to search\n".utf8))
+        for hit in hits {
+            print("\(String(format: "%.2f", hit.score))  \(hit.chunk.location)\(hit.chunk.symbol.map { "  \($0)" } ?? "")")
+        }
+    } catch {
+        fail(error.localizedDescription)
+    }
+    exit(0)
+}
+
 let command: OpenRequest.Command
 do {
     command = try OpenRequest.parse(

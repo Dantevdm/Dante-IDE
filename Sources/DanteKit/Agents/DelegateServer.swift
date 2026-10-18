@@ -25,6 +25,8 @@ public struct DelegateServer: Sendable {
     public var askClaude: ClaudeAsker?
     /// Who's in charge and calling these tools: "claude" or "codex", for the ledger.
     public var requester = "claude"
+    /// Searches the project by meaning: the question and how many pieces, as text for the agent.
+    public var searchCode: (@Sendable (_ question: String, _ limit: Int) async throws -> String)?
 
     public static let protocolVersion = "2025-06-18"
 
@@ -66,6 +68,15 @@ public struct DelegateServer: Sendable {
             }
         }
         server.requester = environment[DelegateEnvironment.requester] ?? "claude"
+        if server.offersLocal {
+            let rootURL = URL(filePath: root, directoryHint: .isDirectory)
+            let search = SemanticSearch(ollama: ollama)
+            server.searchCode = { question, limit in
+                let index = try await search.update(root: rootURL)
+                let hits = try await search.search(question, in: index, limit: limit)
+                return SemanticSearch.report(hits, root: rootURL, index: index)
+            }
+        }
         if let path = environment[DelegateEnvironment.claude], !path.isEmpty {
             let claude = ClaudeOpinion(executable: path)
             let model = environment[DelegateEnvironment.claudeModel]
@@ -113,6 +124,7 @@ public struct DelegateServer: Sendable {
     var instructions: String {
         var parts: [String] = []
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
+        if searchCode != nil { parts.append("search_code finds code by what it does, for questions grep can't answer.") }
         if decide != nil { parts.append("Jev answers typed questions (pick one, rate, yes or no) about some material in well under a second.") }
         if askGrok != nil { parts.append("Grok (xAI) gives an independent second opinion or draft.") }
         if askCodex != nil { parts.append("Codex (OpenAI) reads the project itself, read-only, for a second opinion.") }
@@ -123,6 +135,7 @@ public struct DelegateServer: Sendable {
     var tools: [JSONValue] {
         var tools: [JSONValue] = []
         if offersLocal { tools += Self.localTools }
+        if searchCode != nil { tools.append(Self.searchTool) }
         if decide != nil { tools.append(Self.decideTool) }
         if askGrok != nil { tools.append(Self.grokTool) }
         if askCodex != nil { tools.append(Self.codexTool) }
@@ -132,7 +145,7 @@ public struct DelegateServer: Sendable {
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard tool["name"]?.string != "local_models", var object = tool.object,
+        guard !["local_models", "search_code"].contains(tool["name"]?.string ?? ""), var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
         schema["properties"] = .object(properties)
@@ -208,6 +221,19 @@ public struct DelegateServer: Sendable {
         ],
     ]
 
+    static let searchTool: JSONValue = [
+        "name": "search_code",
+        "description": "Search this project by meaning with a local embedding model: describe what the code does (\"where failed payments are retried\", \"how the session token is refreshed\") and get the best matching pieces with their lines. Use it when you don't know the names to grep for; use grep when you do. Fast and free: it runs on the user's Mac.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "question": ["type": "string", "description": "What the code you're looking for does, in plain words."],
+                "limit": ["type": "integer", "description": "How many pieces to return (default 6, at most 20)."],
+            ],
+            "required": ["question"],
+        ],
+    ]
+
     static var localTools: [JSONValue] {
         let kinds = DelegateKind.allCases.map { "\($0.rawValue): \($0.guidance)" }.joined(separator: "; ")
         return [
@@ -260,6 +286,16 @@ public struct DelegateServer: Sendable {
             return await callCodex(arguments)
         case "ask_claude":
             return await callClaude(arguments)
+        case "search_code":
+            guard let searchCode, let question = arguments["question"]?.string, !question.isEmpty else {
+                return Self.text("search_code needs a question.", isError: true)
+            }
+            let limit = min(max(arguments["limit"]?.int ?? 6, 1), 20)
+            do {
+                return Self.text(try await searchCode(question, limit))
+            } catch {
+                return Self.text("Couldn’t search by meaning: \(error.localizedDescription) Use grep instead.", isError: true)
+            }
         case "local_models":
             guard let installed = await models() else { return Self.text("Ollama isn’t running on this Mac.", isError: true) }
             let lines = installed.map { model -> String in

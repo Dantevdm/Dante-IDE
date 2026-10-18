@@ -70,6 +70,7 @@ public enum ClaudeBrief {
     public nonisolated static let delegation = """
     # Delegating to local models
     You're the orchestrator. The `delegate` tool (from the dante MCP server) hands a self-contained job to a model running on the user's Mac, which saves their plan's usage. Use it for work a smaller model does well: condensing long logs, diffs or files you only need the gist of (summary), sorting many failures or errors (triage), first drafts of boilerplate, fixtures or repetitive tests (draft), and prose (writing). Put everything the job needs in the prompt; the local model can't read files or run tools. Always check what comes back, fix it or redo it yourself if it's wrong, and say briefly when you delegated. Don't delegate design decisions, subtle bugs, security-sensitive code or anything needing the whole codebase in mind.
+    When you don't know what the code you need is called, `search_code` finds it by what it does (a local embedding model, free and fast); use grep when you know the names.
     """
 
     /// Added to the system prompt while "Ask questions first" is on.

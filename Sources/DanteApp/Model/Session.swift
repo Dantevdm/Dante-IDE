@@ -127,6 +127,7 @@ final class Session {
     enum Sidebar { case files, search, changes, problems, debug }
     var sidebar: Sidebar = .files
     let search = SearchState()
+    let semantic = SemanticState()
     /// Source control: status, staging, commits, branches.
     let git = GitModel()
     /// The branch switcher in the title bar is open.

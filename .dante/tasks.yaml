@@ -496,3 +496,8 @@ tasks:
   phase: build
   state: review
   notes: "Security area: Dante's scanner (secrets, POPIA personal information, encryption, injection, containers, CI, infrastructure), installed scanners, OSV.dev when checking online, a grade, accepted risks in .dante/security.yaml, fixes by the agent in charge with the other checking, deep audits, edit review before approval, and dante scan for CI."
+- id: DI-121
+  title: "Search by meaning: a local embedding model indexes the project, the Search panel answers plain questions, and Claude and Codex get search_code"
+  phase: build
+  state: review
+  notes: "SemanticIndex cuts files at top-level declarations (Chunker), embeds them with an embedding model in Ollama (qwen3-embedding first), keeps vectors per Mac in Application Support and re-embeds only changed pieces. The first index of Dante's 330 files takes about 3.5 minutes (the model's speed), later updates half a second; it saves progress as it goes, main code first. dante search for the terminal."
