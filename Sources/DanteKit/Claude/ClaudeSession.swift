@@ -377,6 +377,22 @@ public final class ClaudeSession {
         }
     }
 
+    /// The newest reply in the transcript, for the ledger's gist of a turn.
+    private var lastReply: String {
+        for item in items.reversed() {
+            if case .user = item.content { break }
+            if case .assistant(let text) = item.content, !text.isEmpty { return text }
+        }
+        return ""
+    }
+
+    /// Files the current turn changed, relative to the project.
+    private var turnFiles: [String] {
+        guard let turn = currentTurn, let checkpoint = checkpoints[turn] else { return [] }
+        let prefix = root.standardizedFileURL.path + "/"
+        return checkpoint.files.map { $0.hasPrefix(prefix) ? String($0.dropFirst(prefix.count)) : ($0 as NSString).lastPathComponent }
+    }
+
     public func approve(_ toolID: String) {
         guard let tool = tool(toolID), case .awaitingApproval(let requestID) = tool.status else { return }
         if let turn = currentTurn {
@@ -941,7 +957,7 @@ public final class ClaudeSession {
                     if tool.name == "Task" || tool.name == "Agent" {
                         ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: tool.input["subagent_type"]?.string ?? "general-purpose",
                                                 project: root.lastPathComponent, requestedBy: "claude",
-                                                title: tool.input["description"]?.string ?? "Sub-agent"))
+                                                title: tool.input["description"]?.string ?? "Sub-agent", gist: AgentJob.gist(of: result.text)))
                     }
                     if let change = tool.change ?? ProposedChange.make(toolName: tool.name, input: tool.input, root: root) {
                         onFileChanged(change.url)
@@ -1004,7 +1020,8 @@ public final class ClaudeSession {
                                     model: startedEngine == .codex ? (model ?? "codex") : (requestedModel ?? "claude"), project: root.lastPathComponent,
                                     promptTokens: turnUsage.input, outputTokens: turnUsage.output.values.reduce(0, +),
                                     seconds: Double(result.durationMS ?? 0) / 1000, outcome: result.isError ? .failed : .done,
-                                    requestedBy: "you", title: turnUsage.title))
+                                    requestedBy: "you", title: turnUsage.title,
+                                    gist: AgentJob.gist(of: result.isError ? result.text : lastReply), files: turnFiles))
             turnUsage = (0, [:], "")
             if result.isError, Vitality.isLimitMessage(result.text) {
                 limitReachedAt = Date()

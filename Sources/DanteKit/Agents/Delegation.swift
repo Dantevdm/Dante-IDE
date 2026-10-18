@@ -101,10 +101,17 @@ public struct AgentJob: Codable, Equatable, Sendable, Identifiable {
     public var title: String
     /// What the provider charged, when it says (Jev does).
     public var costUSD: Double?
+    /// Why the agent in charge asked, in its own words (the tools' `why` argument).
+    public var why: String?
+    /// The answer's first sentence, from `AgentJob.gist(of:)`.
+    public var gist: String?
+    /// Files a turn changed, relative to the project.
+    public var files: [String]?
 
     public init(id: UUID = UUID(), date: Date = Date(), kind: String, provider: Provider, model: String, project: String,
                 promptTokens: Int = 0, outputTokens: Int = 0, seconds: Double = 0, outcome: Outcome = .done,
-                requestedBy: String = "dante", title: String = "", costUSD: Double? = nil) {
+                requestedBy: String = "dante", title: String = "", costUSD: Double? = nil,
+                why: String? = nil, gist: String? = nil, files: [String]? = nil) {
         self.id = id
         self.date = date
         self.kind = kind
@@ -118,9 +125,60 @@ public struct AgentJob: Codable, Equatable, Sendable, Identifiable {
         self.requestedBy = requestedBy
         self.title = title
         self.costUSD = costUSD
+        self.why = why.flatMap { Self.clean($0) }
+        self.gist = gist
+        self.files = files?.isEmpty == true ? nil : files
     }
 
     public var tokens: Int { promptTokens + outputTokens }
+
+    /// The first sentence of a reply, as plain text: tool headers, headings, code and markdown
+    /// marks left out, at most `limit` characters.
+    public static func gist(of text: String, limit: Int = 160) -> String? {
+        var inCode = false
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("```") { inCode.toggle(); continue }
+            if inCode || line.isEmpty || line.hasPrefix("#") || line.hasPrefix("|") || line.allSatisfy({ "-*_=".contains($0) }) { continue }
+            // Dante's own tool headers: "[Codex · 1→2 tokens · 3s] …"
+            if line.hasPrefix("["), let close = line.firstIndex(of: "]"), line[line.startIndex..<close].contains("·") {
+                let rest = line[line.index(after: close)...].trimmingCharacters(in: .whitespaces)
+                if rest.isEmpty || rest.hasPrefix("A second opinion") || rest.hasPrefix("Check this") { continue }
+            }
+            guard var plain = clean(line) else { continue }
+            if let end = sentenceEnd(plain) { plain = String(plain[..<end]) }
+            if plain.count > limit { plain = String(plain.prefix(limit - 1)).trimmingCharacters(in: .whitespaces) + "…" }
+            return plain
+        }
+        return nil
+    }
+
+    /// Markdown marks and list bullets off; nil when nothing's left.
+    static func clean(_ text: String) -> String? {
+        var line = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        for bullet in ["- ", "* ", "> ", "• "] where line.hasPrefix(bullet) { line.removeFirst(bullet.count) }
+        if let dot = line.firstIndex(of: "."), line[..<dot].allSatisfy(\.isNumber), !line[..<dot].isEmpty,
+           line[line.index(after: dot)...].hasPrefix(" ") {
+            line = String(line[line.index(dot, offsetBy: 2)...])
+        }
+        line = line.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "").replacingOccurrences(of: "`", with: "")
+        line = line.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+        return line.isEmpty ? nil : line
+    }
+
+    /// Where the first sentence ends: after ". ", "! " or "? ", but not inside "e.g. " or a file name.
+    private static func sentenceEnd(_ text: String) -> String.Index? {
+        var index = text.startIndex
+        while index < text.endIndex {
+            let next = text.index(after: index)
+            if ".!?".contains(text[index]), next < text.endIndex, text[next] == " " {
+                let before = text[text.startIndex..<index].split(separator: " ").last.map(String.init) ?? ""
+                if !["e.g", "i.e", "etc", "vs", "Mr", "Dr"].contains(before) { return next }
+            }
+            index = next
+        }
+        return nil
+    }
 }
 
 /// Every agent job on this Mac, one JSON line each, in Application Support. Shared by the
@@ -265,7 +323,9 @@ extension AgentStats {
         public var date: Date
         public var local: Int
         public var claude: Int
+        /// Grok and Jev.
         public var cloud: Int = 0
+        public var codex: Int = 0
         public var id: Date { date }
     }
 
@@ -281,7 +341,8 @@ extension AgentStats {
             switch job.provider {
             case .local: result[index].local += 1
             case .claude: result[index].claude += 1
-            case .grok, .jev, .codex: result[index].cloud += 1
+            case .codex: result[index].codex += 1
+            case .grok, .jev: result[index].cloud += 1
             }
         }
         return result

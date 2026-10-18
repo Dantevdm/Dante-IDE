@@ -127,7 +127,17 @@ public struct DelegateServer: Sendable {
         if askGrok != nil { tools.append(Self.grokTool) }
         if askCodex != nil { tools.append(Self.codexTool) }
         if askClaude != nil { tools.append(Self.claudeTool) }
-        return tools
+        return tools.map(Self.askingWhy)
+    }
+
+    /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
+    static func askingWhy(_ tool: JSONValue) -> JSONValue {
+        guard tool["name"]?.string != "local_models", var object = tool.object,
+              var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
+        properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
+        schema["properties"] = .object(properties)
+        object["inputSchema"] = .object(schema)
+        return .object(object)
     }
 
     static let decideTool: JSONValue = [
@@ -234,12 +244,12 @@ public struct DelegateServer: Sendable {
                 let (model, reply) = try await run(kind, prompt)
                 ledger?.append(AgentJob(kind: kind.rawValue, provider: .local, model: model, project: project,
                                         promptTokens: reply.promptTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
-                                        requestedBy: requester, title: title))
+                                        requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: reply.text)))
                 let header = "[\(kind.agent) · \(model) · \(reply.promptTokens)→\(reply.outputTokens) tokens · \(String(format: "%.1f", reply.seconds))s] Check this before relying on it."
                 return Self.text(header + "\n\n" + reply.text)
             } catch {
                 ledger?.append(AgentJob(kind: kind.rawValue, provider: .local, model: "unavailable", project: project,
-                                        outcome: .failed, requestedBy: requester, title: title))
+                                        outcome: .failed, requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: error.localizedDescription)))
                 return Self.text("The local model couldn’t do this: \(error.localizedDescription) Do it yourself.", isError: true)
             }
         case "decide":
@@ -280,12 +290,12 @@ public struct DelegateServer: Sendable {
             let seconds = Date().timeIntervalSince(started)
             ledger?.append(AgentJob(kind: "decision", provider: .jev, model: decision.model, project: project,
                                     promptTokens: decision.inputTokens, seconds: seconds, requestedBy: requester,
-                                    title: title, costUSD: decision.costUSD))
+                                    title: title, costUSD: decision.costUSD, why: arguments["why"]?.string, gist: AgentJob.gist(of: decision.summary(questions))))
             let header = "[Jev · \(decision.model) · \(decision.inputTokens) tokens · $\(String(format: "%.6f", decision.costUSD)) · \(String(format: "%.2f", seconds))s]"
             return Self.text(header + "\n\n" + decision.summary(questions))
         } catch {
             ledger?.append(AgentJob(kind: "decision", provider: .jev, model: "jev", project: project,
-                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title))
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: error.localizedDescription)))
             return Self.text("Jev couldn’t decide: \(error.localizedDescription) Decide yourself.", isError: true)
         }
     }
@@ -301,12 +311,12 @@ public struct DelegateServer: Sendable {
             let reply = try await askGrok(arguments["system"]?.string, prompt)
             ledger?.append(AgentJob(kind: "opinion", provider: .grok, model: reply.model, project: project,
                                     promptTokens: reply.promptTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
-                                    requestedBy: requester, title: title))
+                                    requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: reply.text)))
             let header = "[Grok · \(reply.model) · \(reply.promptTokens)→\(reply.outputTokens) tokens · \(String(format: "%.1f", reply.seconds))s] A second opinion: weigh it, don’t just adopt it."
             return Self.text(header + "\n\n" + reply.text)
         } catch {
             ledger?.append(AgentJob(kind: "opinion", provider: .grok, model: "grok", project: project,
-                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title))
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: error.localizedDescription)))
             return Self.text("Grok couldn’t answer: \(error.localizedDescription)", isError: true)
         }
     }
@@ -322,13 +332,13 @@ public struct DelegateServer: Sendable {
             let reply = try await askCodex(prompt)
             ledger?.append(AgentJob(kind: "opinion", provider: .codex, model: "codex", project: project,
                                     promptTokens: reply.inputTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
-                                    requestedBy: requester, title: title))
+                                    requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: reply.text)))
             let looked = reply.commands.isEmpty ? "" : " · looked with \(reply.commands.count) command\(reply.commands.count == 1 ? "" : "s")"
             let header = "[Codex · \(reply.inputTokens)→\(reply.outputTokens) tokens · \(String(format: "%.0f", reply.seconds))s\(looked)] A second opinion: weigh it, don’t just adopt it."
             return Self.text(header + "\n\n" + reply.text)
         } catch {
             ledger?.append(AgentJob(kind: "opinion", provider: .codex, model: "codex", project: project,
-                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title))
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: error.localizedDescription)))
             return Self.text("Codex couldn’t answer: \(error.localizedDescription)", isError: true)
         }
     }
@@ -344,12 +354,12 @@ public struct DelegateServer: Sendable {
             let reply = try await askClaude(prompt)
             ledger?.append(AgentJob(kind: "opinion", provider: .claude, model: "claude", project: project,
                                     promptTokens: reply.inputTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
-                                    requestedBy: requester, title: title))
+                                    requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: reply.text)))
             let header = "[Claude · \(reply.inputTokens)→\(reply.outputTokens) tokens · \(String(format: "%.0f", reply.seconds))s] A second opinion: weigh it, don’t just adopt it."
             return Self.text(header + "\n\n" + reply.text)
         } catch {
             ledger?.append(AgentJob(kind: "opinion", provider: .claude, model: "claude", project: project,
-                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title))
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: error.localizedDescription)))
             return Self.text("Claude couldn’t answer: \(error.localizedDescription)", isError: true)
         }
     }

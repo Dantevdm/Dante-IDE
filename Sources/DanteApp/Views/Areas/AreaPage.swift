@@ -198,6 +198,7 @@ struct CardGrid<Content: View>: View {
 extension Date {
     /// "3 min ago", "2 days ago".
     var relative: String {
+        if abs(timeIntervalSinceNow) < 45 { return "just now" }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: self, relativeTo: .now)

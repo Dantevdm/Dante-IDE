@@ -45,6 +45,7 @@ struct AgentsView: View {
             .fixedSize()
         } content: {
             hero(stats)
+            AgentStoryCard(digest: AgentDigest(shown))
             CardGrid(minimum: 220) {
                 ForEach(agents(stats)) { agent in AgentCard(agent: agent) }
             }
@@ -57,8 +58,8 @@ struct AgentsView: View {
                 }
             }
             CardGrid(minimum: 420) {
+                AgentThreadsCard(threads: AgentDigest(shown).threads)
                 modelsCard
-                recentCard
             }
         }
         .task {
@@ -80,7 +81,7 @@ struct AgentsView: View {
                 HStack(spacing: 28) {
                     BigNumber(value: "\(stats.localJobs + stats.claudeJobs + stats.cloudJobs)", label: "Jobs")
                     BigNumber(value: ClaudeUsage.short(stats.tokensKeptLocal), label: "Tokens kept local", color: theme.green.color)
-                    BigNumber(value: "\(stats.delegatedByClaude)", label: "Delegated by Claude", color: theme.claude.color)
+                    BigNumber(value: "\(stats.delegatedByClaude)", label: "Delegated", color: theme.claude.color)
                     BigNumber(value: stats.localJobs + stats.claudeJobs == 0 ? "–" : "\(Int((stats.delegationShare * 100).rounded()))%",
                               label: "Done locally", color: theme.accent.color)
                 }
@@ -88,7 +89,7 @@ struct AgentsView: View {
                 HStack(spacing: 10) {
                     Toggle(isOn: Binding(get: { Preferences.shared.delegatesToLocalModels },
                                          set: { Preferences.shared.delegatesToLocalModels = $0; session.applyClaudePreferences() })) {
-                        Text("Let Claude delegate to local models").font(.dante(size: 12.5))
+                        Text("Let Claude and Codex delegate to local models").font(.dante(size: 12.5))
                     }
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -127,7 +128,7 @@ struct AgentsView: View {
         let codexJobs = byAgent["Codex"] ?? []
         if Session.codexPath != nil && (Preferences.shared.asksCodex || lead == .codex) || !codexJobs.isEmpty {
             let codex = AgentSummary(name: "Codex", role: lead == .codex ? "In charge: writes, decides, checks" : "Reviews Claude’s work · OpenAI",
-                                     model: Preferences.shared.codexModel.isEmpty ? "Codex default" : Preferences.shared.codexModel,
+                                     model: Preferences.shared.codexModel.isEmpty ? codexJobs.last(where: { $0.kind == "turn" })?.model ?? "Codex default" : Preferences.shared.codexModel,
                                      jobs: codexJobs, color: theme.syntax.function.color, isClaude: false, isCodex: true)
             if lead == .codex { result.insert(codex, at: 0) } else { result.append(codex) }
         }
@@ -182,37 +183,6 @@ struct AgentsView: View {
             } else {
                 Text("Ollama isn’t running. Start it to give Claude local helpers.")
                     .font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
-            }
-        }
-    }
-
-    // MARK: Recent
-
-    private var recentCard: some View {
-        Card("Latest jobs") {
-            let recent = shown.suffix(12).reversed()
-            if recent.isEmpty {
-                Text("Nothing yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
-            }
-            VStack(spacing: 0) {
-                ForEach(Array(recent)) { job in
-                    HStack(spacing: 10) {
-                        Image(systemName: job.outcome == .failed ? "xmark.circle.fill" : job.provider == .local ? "cpu" : job.provider == .jev ? "arrow.triangle.branch" : "cloud")
-                            .font(.dante(size: 11))
-                            .foregroundStyle(job.outcome == .failed ? theme.red.color : job.provider == .local ? theme.green.color
-                                             : job.provider.isCloudAgent ? theme.syntax.type.color : theme.claude.color)
-                            .frame(width: 14)
-                        Text(AgentStats.agent(of: job)).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text.color).frame(width: 74, alignment: .leading)
-                        Text(job.title.isEmpty ? job.kind : job.title).font(.dante(size: 12)).foregroundStyle(theme.text2.color).lineLimit(1)
-                        Spacer(minLength: 6)
-                        if job.tokens > 0 {
-                            Text(ClaudeUsage.short(job.tokens)).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
-                        }
-                        Text(job.date.relative).font(.dante(size: 11)).foregroundStyle(theme.text3.color).frame(width: 70, alignment: .trailing)
-                    }
-                    .padding(.vertical, 5)
-                    .help("\(job.model) · \(job.project) · \(String(format: "%.1f", job.seconds))s")
-                }
             }
         }
     }
@@ -372,11 +342,14 @@ private struct DailyChart: View {
                     .foregroundStyle(by: .value("Who", "Local"))
                 BarMark(x: .value("Day", day.date, unit: .day), y: .value("Jobs", day.claude))
                     .foregroundStyle(by: .value("Who", "Claude"))
+                BarMark(x: .value("Day", day.date, unit: .day), y: .value("Jobs", day.codex))
+                    .foregroundStyle(by: .value("Who", "Codex"))
                 BarMark(x: .value("Day", day.date, unit: .day), y: .value("Jobs", day.cloud))
-                    .foregroundStyle(by: .value("Who", "Cloud agents"))
+                    .foregroundStyle(by: .value("Who", "Grok and Jev"))
             }
         }
-        .chartForegroundStyleScale(["Local": theme.green.color, "Claude": theme.claude.color, "Cloud agents": theme.syntax.type.color])
+        .chartForegroundStyleScale(["Local": theme.green.color, "Claude": theme.claude.color, "Codex": theme.syntax.function.color,
+                                    "Grok and Jev": theme.syntax.type.color])
         .chartLegend(position: .top, alignment: .leading)
         .chartXAxis {
             AxisMarks(values: .stride(by: .day, count: days.count > 10 ? 5 : 1)) { _ in
