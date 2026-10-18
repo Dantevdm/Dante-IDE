@@ -39,8 +39,8 @@ struct MapView: View {
     var body: some View {
         HStack(spacing: 0) {
             AreaPage(
-                eyebrow: "Map · \(workspace.info.name ?? workspace.name)",
-                title: showsSystem || (source == .system && !loaded) ? "System" : graph?.title ?? "Architecture",
+                eyebrow: nil,
+                title: showsSystem || (source == .system && !loaded) ? "System map" : graph?.title ?? "Architecture",
                 subtitle: nil
             ) {
                 if sources.count > 1 {

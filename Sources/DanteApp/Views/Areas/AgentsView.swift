@@ -36,7 +36,7 @@ struct AgentsView: View {
 
     var body: some View {
         let stats = AgentStats(shown)
-        AreaPage(eyebrow: "Agents", title: "Agents", subtitle: nil) {
+        AreaPage(eyebrow: nil, title: "Agents", subtitle: nil) {
             Picker("Range", selection: $range) {
                 ForEach(Range.allCases) { Text($0.rawValue).tag($0) }
             }

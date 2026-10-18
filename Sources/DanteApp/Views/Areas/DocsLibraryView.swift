@@ -22,7 +22,7 @@ struct DocsLibraryView: View {
     private let rowLimit = 6
 
     var body: some View {
-        AreaPage(eyebrow: "Docs", title: "Library", subtitle: nil) {
+        AreaPage(eyebrow: nil, title: "Docs", subtitle: nil) {
             Button(action: addFiles) { Label("Add files…", systemImage: "plus") }
                 .buttonStyle(DanteButtonStyle())
         } content: {

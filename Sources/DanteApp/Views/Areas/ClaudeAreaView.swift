@@ -34,7 +34,7 @@ struct ClaudeAreaView: View {
 
     var body: some View {
         AreaPage(
-            eyebrow: "Claude · \(workspace.info.name ?? workspace.name)",
+            eyebrow: nil,
             title: "Claude",
             subtitle: nil
         ) {
@@ -158,10 +158,8 @@ struct ClaudeAreaView: View {
                 RowList(data: suggested, padding: 9) { suggestion in
                     HStack(spacing: 10) {
                         Image(systemName: "plus.circle").font(.dante(size: 13)).foregroundStyle(theme.text3.color).frame(width: 18)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(suggestion.title).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
-                            Text(suggestion.reason).font(.dante(size: 12)).foregroundStyle(theme.text3.color).lineLimit(2)
-                        }
+                        Text(suggestion.title).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color)
+                            .help(suggestion.reason)
                         Spacer()
                         Button("Draft with Claude") { session.askClaude(suggestion.prompt) }
                             .buttonStyle(DanteButtonStyle())

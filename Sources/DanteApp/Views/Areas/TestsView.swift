@@ -18,7 +18,7 @@ struct TestsView: View {
 
     var body: some View {
         AreaPage(
-            eyebrow: "Quality",
+            eyebrow: nil,
             title: "Tests",
             subtitle: nil
         ) {
@@ -124,17 +124,14 @@ struct TestsView: View {
                     .frame(width: 340)
                 }
             } else {
+                // The header's Run tests starts a run; this offers the narrower ones.
                 EmptyState(
                     symbol: "play.circle",
-                    title: "Run \(command?.label ?? "the tests")"
+                    title: "No run yet"
                 ) {
                     VStack(spacing: 12) {
-                        HStack(spacing: 8) {
-                            Button { run() } label: { Label("Run all tests", systemImage: "play.fill") }
-                                .buttonStyle(DanteButtonStyle(primary: true))
-                            if runWritten != nil, (inventory?.categories.count ?? 0) <= 1 {
-                                Button("Pick tests…") { tab = .written }.buttonStyle(DanteButtonStyle())
-                            }
+                        if runWritten != nil, (inventory?.categories.count ?? 0) <= 1 {
+                            Button("Pick tests…") { tab = .written }.buttonStyle(DanteButtonStyle())
                         }
                         categoryRuns
                     }

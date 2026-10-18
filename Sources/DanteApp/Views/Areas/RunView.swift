@@ -14,7 +14,7 @@ struct RunView: View {
 
     var body: some View {
         AreaPage(
-            eyebrow: "Operate",
+            eyebrow: nil,
             title: "Runtime health",
             subtitle: nil
         ) {
@@ -66,16 +66,8 @@ private struct SetupCard: View {
                 session.askClaude("Set up the Operate area for this project: add an operate: block to .dante/project.yaml with checks (name and url of each health endpoint), logs (a shell command that streams production logs, for whichever host this project deploys to) and alarms (cloudwatch with profile, region and an alarm name prefix, or a command that prints alarms as JSON). Look at the code and config to work out what exists; ask me for anything you can't find.")
             }
             .buttonStyle(DanteButtonStyle(primary: true))
+            .help("Claude adds an operate: block to .dante/project.yaml: health checks (name and url), a log command, and alarms (CloudWatch, or a command that prints them as JSON).")
         }
-        CodeBlock(text: """
-        operate:
-          checks:
-            - { name: api, url: "https://api.example.com/health" }
-          logs: fly logs -a my-app
-          alarms:
-            - { source: cloudwatch, profile: prod, region: eu-west-1, prefix: "my-app-" }
-            - { source: command, run: ./scripts/alarms.sh }   # prints [{ name, state, reason, url }]
-        """, language: "yaml")
     }
 }
 

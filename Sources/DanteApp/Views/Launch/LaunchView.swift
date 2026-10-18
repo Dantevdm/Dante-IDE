@@ -68,20 +68,6 @@ struct LaunchView: View {
                     .offset(y: drawn || reduceMotion ? 0 : 10)
                     .animation(reduceMotion ? nil : Self.ease.delay(1.35), value: drawn)
             }
-
-            HStack(spacing: 14) {
-                ForEach(Array(Lifecycle.defaultPhases.enumerated()), id: \.offset) { index, phase in
-                    Text(phase.uppercased())
-                        .font(.dante(size: 10.5, design: .monospaced))
-                        .tracking(0.5)
-                        .foregroundStyle(theme.text3.color)
-                        .opacity(drawn ? 1 : 0)
-                        .offset(y: drawn || reduceMotion ? 0 : 8)
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.45).delay(0.25 + Double(index) * 0.11), value: drawn)
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Lifecycle phases: " + Lifecycle.defaultPhases.joined(separator: ", "))
         }
         .padding(40)
     }
@@ -100,7 +86,7 @@ struct LaunchView: View {
         VStack(alignment: .leading, spacing: 26) {
             VStack(alignment: .leading, spacing: 10) {
                 Eyebrow("Start")
-                StartAction(symbol: "plus", title: "New project", subtitle: "Create a folder and start in Discover", shortcut: Shortcuts.shared.binding("newProject")?.display ?? "") {
+                StartAction(symbol: "plus", title: "New project", subtitle: "Create a folder for a new project", shortcut: Shortcuts.shared.binding("newProject")?.display ?? "") {
                     session.newProject()
                 }
                 StartAction(symbol: "folder", title: "Open folder", subtitle: "Any project, with or without .dante/", shortcut: Shortcuts.shared.binding("openFolder")?.display ?? "") {
@@ -115,13 +101,8 @@ struct LaunchView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Eyebrow("Recent")
-                if recents.items.isEmpty {
-                    Text("Projects you open appear here.")
-                        .font(.dante(size: 12.5))
-                        .foregroundStyle(theme.text3.color)
-                        .padding(.vertical, 8)
-                } else {
+                if !recents.items.isEmpty {
+                    Eyebrow("Recent")
                     ScrollView {
                         VStack(spacing: 2) {
                             ForEach(recents.items) { project in

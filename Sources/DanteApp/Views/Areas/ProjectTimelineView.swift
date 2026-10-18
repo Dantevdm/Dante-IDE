@@ -21,7 +21,7 @@ struct ProjectTimelineView: View {
 
     var body: some View {
         AreaPage(
-            eyebrow: "History",
+            eyebrow: nil,
             title: "Timeline",
             subtitle: nil
         ) {

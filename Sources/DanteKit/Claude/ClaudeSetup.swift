@@ -91,11 +91,6 @@ public enum ClaudeSkills {
             """))
         }
 
-        if hasDante {
-            add("dante-tasks", "Keep the Dante plan in step",
-                "The project is planned in .dante/: tasks, phases and the spec.",
-                "Explain .dante/tasks.yaml (ids, phase, state, note) and .dante/phases/*.md, and say to move a task's state when work on it finishes and to add a task for new work found along the way.")
-        }
         let routeFiles = files.filter { ["handlers.go", "routes.go", "router.go", "routes.ts", "routes.js", "urls.py", "views.py", "main.py", "app.py"].contains(($0 as NSString).lastPathComponent.lowercased()) }
         if !routeFiles.isEmpty || folders.contains("api") || folders.contains("handlers") || folders.contains("routes") {
             add("add-endpoint", "Add an API endpoint",

@@ -425,7 +425,7 @@ tasks:
 - id: DI-104
   title: "Remove the explanatory text under titles, in empty states and in footers across the app"
   phase: build
-  state: ready
+  state: review
 - id: DI-105
   title: "Docs: group documents (project, phases, plans, folders, images) instead of one long list"
   phase: build

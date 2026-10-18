@@ -20,7 +20,7 @@ struct ShipView: View {
 
     var body: some View {
         AreaPage(
-            eyebrow: "Release",
+            eyebrow: draft == nil ? nil : "Release",
             title: draft?.version ?? "Release",
             subtitle: nil
         ) {

@@ -289,7 +289,7 @@ struct DataEmptyState: View {
         AreaPage(
             eyebrow: "Data",
             title: profile.headline ?? "No database yet",
-            subtitle: profile.isEmpty ? nil : "The code expects a database Dante can’t reach yet."
+            subtitle: nil
         ) {
             EmptyView()
         } content: {
@@ -353,15 +353,15 @@ private struct OptionCard: View {
                     if recommended { Chip(text: "Suggested", color: theme.accent.color) }
                 }
                 Text(title).font(.dante(size: 14, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text(detail).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
             .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(hovering || recommended ? theme.accentLine.color : theme.line.color))
             .contentShape(Rectangle())
         }
+        .help(detail)
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
     }

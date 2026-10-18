@@ -15,7 +15,7 @@ struct ClaudeSetupTests {
         let files = ["backend/internal/api/handlers.go", "backend/internal/api/handlers_test.go", "frontend/views/orders.js",
                      "docker-compose.yml", "backend/migrations/001_init.sql", ".dante/tasks.yaml"]
         let ids = ClaudeSkills.suggestions(files: files, stack: ["Go"], hasDante: true, existing: []).map(\.id)
-        #expect(ids == ["dante-tasks", "add-endpoint", "new-screen", "db-change", "local-env", "write-tests", "review-changes"])
+        #expect(ids == ["add-endpoint", "new-screen", "db-change", "local-env", "write-tests", "review-changes"])
 
         let existing = [ClaudeSkill(name: "add-endpoint", description: "", scope: .project, file: URL(filePath: "/home/me/app/.claude/skills/add-endpoint/SKILL.md"))]
         let left = ClaudeSkills.suggestions(files: files, stack: ["Go"], hasDante: false, existing: existing)

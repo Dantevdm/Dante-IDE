@@ -14,7 +14,7 @@ struct HomeView: View {
 
     var body: some View {
         AreaPage(
-            eyebrow: "Project",
+            eyebrow: nil,
             title: workspace.info.name ?? workspace.name,
             subtitle: workspace.info.summary
         ) {

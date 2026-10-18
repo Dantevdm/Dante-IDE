@@ -1,11 +1,11 @@
 import DanteKit
 import SwiftUI
 
-/// The shared frame of the lifecycle areas: a scrolling column with an eyebrow, title,
-/// one-line description and actions on the right, then the area's cards.
+/// The shared frame of the areas: a scrolling column with an optional eyebrow (only where
+/// the title needs context), the title and actions on the right, then the area's cards.
 struct AreaPage<Actions: View, Content: View>: View {
     @Environment(\.theme) private var theme
-    let eyebrow: String
+    let eyebrow: String?
     let title: String
     let subtitle: String?
     /// Pages fill the window by default, so wide and ultra-wide screens get more columns.
@@ -17,7 +17,7 @@ struct AreaPage<Actions: View, Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Eyebrow(eyebrow)
+                    if let eyebrow { Eyebrow(eyebrow) }
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(title)
                             .font(.dante(size: 28, weight: .semibold))
@@ -45,7 +45,7 @@ struct AreaPage<Actions: View, Content: View>: View {
 }
 
 extension AreaPage where Actions == EmptyView {
-    init(eyebrow: String, title: String, subtitle: String?, maxWidth: CGFloat = .infinity, @ViewBuilder content: () -> Content) {
+    init(eyebrow: String?, title: String, subtitle: String?, maxWidth: CGFloat = .infinity, @ViewBuilder content: () -> Content) {
         self.init(eyebrow: eyebrow, title: title, subtitle: subtitle, maxWidth: maxWidth, actions: { EmptyView() }, content: content)
     }
 }
