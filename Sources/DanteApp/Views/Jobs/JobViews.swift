@@ -253,8 +253,80 @@ struct NewJobForm: View {
     @State private var awayMinutes = 30
     @FocusState private var focused: Bool
 
+    private var type: JobType? { session.jobs.type(session.jobs.draftType) }
+    private var task: PlanTask? {
+        guard type?.input == .task, let id = session.jobs.draftTask else { return nil }
+        return session.workspace?.tasks.tasks.first { $0.id == id }
+    }
+    /// Tasks a Builder can take: ones not done or in review.
+    private var openTasks: [PlanTask] {
+        (session.workspace?.tasks.tasks ?? []).filter { $0.state == .ready || $0.state == .inProgress }
+    }
+
     private var canStart: Bool {
-        !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && session.jobs.starting == nil && session.jobs.unavailable == nil
+        let hasWords = !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return (hasWords || task != nil) && session.jobs.starting == nil && session.jobs.unavailable == nil
+    }
+
+    private var placeholder: String {
+        if type?.input == .task { return task == nil ? "Pick a task, or say what to build." : "Anything to add? (optional)" }
+        if let type { return "What should the \(type.name.lowercased()) do this time?" }
+        return "What should the job do? It works on its own branch, so you can keep going here."
+    }
+
+    private func start() {
+        var subject = brief.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let task, let root = session.workspace?.url {
+            subject = JobType.subject(for: task, in: root) + (subject.isEmpty ? "" : "\n\n" + subject)
+        }
+        session.startJob(subject, engine: engine, awayMinutes: away ? awayMinutes : nil, type: type)
+        brief = ""
+        session.jobs.draftTask = nil
+        onStart()
+    }
+
+    /// A type brings its own agent and away time.
+    private func adopt(_ type: JobType?) {
+        withAnimation(.snappy) {
+            if let agent = type?.agent.flatMap(AgentEngine.init(rawValue:)), Session.codexPath != nil || agent == .claude { engine = agent }
+            if let minutes = type?.awayMinutes {
+                away = true
+                awayMinutes = AwayMenu.choices.min { abs($0 - minutes) < abs($1 - minutes) } ?? 30
+            } else if type == nil {
+                away = false
+            }
+        }
+    }
+
+    private var typePicker: some View {
+        let manual = session.jobs.types.filter { $0.trigger == .manual }
+        return Menu {
+            Button("Any job") { session.jobs.draftType = nil }
+            if !manual.isEmpty { Divider() }
+            ForEach(manual) { type in
+                Button { session.jobs.draftType = type.id } label: {
+                    Label(type.name, systemImage: JobTypeIcon.symbol(for: type))
+                }
+            }
+        } label: {
+            Label(type?.name ?? "Any job", systemImage: type.map(JobTypeIcon.symbol(for:)) ?? "square.stack.3d.up")
+                .font(.dante(size: 11.5, weight: .medium))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(type?.summary ?? "A job type brings its own brief, scope and away time. Types live in .dante/jobs/.")
+    }
+
+    private var taskPicker: some View {
+        Picker("Task", selection: Binding(get: { session.jobs.draftTask }, set: { session.jobs.draftTask = $0 })) {
+            Text("No task").tag(String?.none)
+            ForEach(openTasks) { task in
+                Text("\(task.id)  \(task.title)").lineLimit(1).tag(Optional(task.id))
+            }
+        }
+        .labelsHidden()
+        .controlSize(.small)
+        .frame(maxWidth: 360)
     }
 
     var body: some View {
@@ -262,9 +334,19 @@ struct NewJobForm: View {
             if let reason = session.jobs.unavailable {
                 Label(reason, systemImage: "exclamationmark.triangle").font(.dante(size: 12)).foregroundStyle(theme.amber.color)
             }
+            if !session.jobs.types.isEmpty {
+                HStack(spacing: 10) {
+                    typePicker
+                    if type?.input == .task {
+                        taskPicker.transition(.opacity.combined(with: .move(edge: .leading)))
+                    }
+                    Spacer(minLength: 0)
+                }
+                .animation(.snappy, value: type?.id)
+            }
             ZStack(alignment: .topLeading) {
                 if brief.isEmpty {
-                    Text("What should the job do? It works on its own branch, so you can keep going here.")
+                    Text(placeholder)
                         .font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
                         .padding(.horizontal, 5).padding(.vertical, 8)
                         .allowsHitTesting(false)
@@ -306,11 +388,7 @@ struct NewJobForm: View {
                 Text(startsFrom).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 4)
-                Button {
-                    session.startJob(brief, engine: engine, awayMinutes: away ? awayMinutes : nil)
-                    brief = ""
-                    onStart()
-                } label: {
+                Button(action: start) {
                     AgentButtonLabel(engine: engine, title: "Start job", filled: true)
                 }
                 .buttonStyle(DanteButtonStyle(primary: true))
@@ -322,7 +400,11 @@ struct NewJobForm: View {
                     .onTapGesture { session.jobs.clearStartFailure() }
             }
         }
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            adopt(type)
+        }
+        .onChange(of: session.jobs.draftType) { adopt(type) }
     }
 
     private var startsFrom: String {
@@ -513,5 +595,20 @@ struct AwayChip: View {
     static func remaining(_ seconds: TimeInterval) -> String {
         let minutes = Int((seconds / 60).rounded(.up))
         return minutes < 60 ? "\(minutes) min left" : "\(minutes / 60) h \(minutes % 60) min left"
+    }
+}
+
+/// A job type's symbol: its role where it's a known one.
+enum JobTypeIcon {
+    static func symbol(for type: JobType) -> String {
+        if type.trigger == .ciFailed { return "waveform.path.ecg" }
+        let name = type.id.lowercased()
+        if name.contains("build") { return "hammer" }
+        if name.contains("review") { return "checklist" }
+        if name.contains("test") { return "leaf" }
+        if name.contains("doc") { return "doc.text" }
+        if name.contains("triage") || name.contains("alarm") { return "bell.badge" }
+        if name.contains("scout") || name.contains("research") { return "binoculars" }
+        return "square.stack.3d.up"
     }
 }

@@ -35,9 +35,11 @@ extension Session {
     }
 
     /// `reportsFailure` says why in an alert, for jobs that didn't come from the form.
-    func startJob(_ brief: String, engine: AgentEngine, awayMinutes: Int? = nil, reportsFailure: Bool = false) {
+    /// With a `type`, `brief` is what to do this time and the type's own brief follows it.
+    func startJob(_ brief: String, engine: AgentEngine, awayMinutes: Int? = nil, type: JobType? = nil, reportsFailure: Bool = false) {
+        let request = type.flatMap { type in workspace.map { type.request(brief, projectRoot: $0.url) } } ?? brief
         Task {
-            if let job = await jobs.start(brief: brief, engine: engine, awayMinutes: awayMinutes) {
+            if let job = await jobs.start(brief: request, engine: engine, awayMinutes: awayMinutes, type: type) {
                 showJob(job.id)
             } else if reportsFailure {
                 errorMessage = jobs.startFailure ?? jobs.unavailable ?? "The job couldn’t start."

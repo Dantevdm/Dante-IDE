@@ -34,6 +34,14 @@ public struct JobRecord: Codable, Identifiable, Equatable, Sendable {
     /// as the window's approval level says.
     public var awayMinutes: Int?
     public var awaySince: Date?
+    /// The job type's id (`JobType`), when it was started as one.
+    public var kind: String?
+    /// What started it by itself, such as a failed CI run (`JobTrigger.ci`).
+    public var trigger: String?
+    /// The type's `paths`: edits elsewhere wait for the person.
+    public var scope: [String]?
+    /// The type's `commands`: more commands it may run while away.
+    public var commands: [String]?
 
     public init(id: String = JobRecord.newID(), title: String, brief: String, branch: String, worktree: String, base: String,
                 baseBranch: String?, engine: AgentEngine, created: Date = Date(), conversationID: String? = nil,

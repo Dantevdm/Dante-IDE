@@ -11,15 +11,18 @@ public struct JobRequest: Equatable, Sendable {
     public var awayMinutes: Int?
     /// "claude" or "codex"; nil for the one in charge by default.
     public var agent: String?
+    /// A job type's id (`.dante/jobs/<id>.md` or a built-in one).
+    public var kind: String?
     /// The local key (`JobRequest.localKey`), which proves the request came from the `dante`
     /// command on this Mac rather than a link in a web page or another app.
     public var key: String?
 
-    public init(folder: String, brief: String, awayMinutes: Int? = nil, agent: String? = nil, key: String? = nil) {
+    public init(folder: String, brief: String, awayMinutes: Int? = nil, agent: String? = nil, kind: String? = nil, key: String? = nil) {
         self.folder = folder
         self.brief = brief
         self.awayMinutes = awayMinutes
         self.agent = agent
+        self.kind = kind
         self.key = key
     }
 
@@ -59,6 +62,7 @@ public struct JobRequest: Equatable, Sendable {
         var query = [URLQueryItem(name: "path", value: folder), URLQueryItem(name: "brief", value: brief)]
         if let awayMinutes { query.append(URLQueryItem(name: "away", value: String(awayMinutes))) }
         if let agent { query.append(URLQueryItem(name: "agent", value: agent)) }
+        if let kind { query.append(URLQueryItem(name: "type", value: kind)) }
         if let key { query.append(URLQueryItem(name: "key", value: key)) }
         components.queryItems = query
         return components.url!
@@ -72,7 +76,8 @@ public struct JobRequest: Equatable, Sendable {
               let brief = value("brief")?.trimmingCharacters(in: .whitespacesAndNewlines), !brief.isEmpty else { return nil }
         let away = value("away").flatMap(Int.init).flatMap { $0 > 0 ? min($0, 24 * 60) : nil }
         let agent = value("agent").flatMap { ["claude", "codex"].contains($0) ? $0 : nil }
-        self.init(folder: folder, brief: brief, awayMinutes: away, agent: agent, key: value("key"))
+        let kind = value("type").flatMap { $0.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" } && !$0.isEmpty ? $0 : nil }
+        self.init(folder: folder, brief: brief, awayMinutes: away, agent: agent, kind: kind, key: value("key"))
     }
 
     /// Reads `dante job <brief…> [--in folder] [--away minutes] [--codex|--claude]`. The
@@ -82,6 +87,7 @@ public struct JobRequest: Equatable, Sendable {
         var folder = directory
         var away: Int?
         var agent: String?
+        var kind: String?
         var index = 0
         func next(_ option: String) throws -> String {
             index += 1
@@ -98,6 +104,7 @@ public struct JobRequest: Equatable, Sendable {
                     throw OpenRequest.ArgumentError(description: "--away takes a number of minutes, such as --away 30.")
                 }
                 away = minutes
+            case "--type": kind = try next(argument).lowercased()
             case "--codex": agent = "codex"
             case "--claude": agent = "claude"
             case "-h", "--help": throw OpenRequest.ArgumentError(description: usage)
@@ -110,16 +117,18 @@ public struct JobRequest: Equatable, Sendable {
         let brief = words.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !brief.isEmpty else { throw OpenRequest.ArgumentError(description: "Say what the job should do: dante job \"Fix the login redirect\"") }
         guard isDirectory(folder) else { throw OpenRequest.ArgumentError(description: "\(folder): no such folder") }
-        return JobRequest(folder: folder, brief: brief, awayMinutes: away, agent: agent)
+        return JobRequest(folder: folder, brief: brief, awayMinutes: away, agent: agent, kind: kind)
     }
 
     public static let usage = """
-        Usage: dante job <what to do> [--in folder] [--away minutes] [--codex|--claude]
+        Usage: dante job <what to do> [--type name] [--in folder] [--away minutes] [--codex|--claude]
 
         Hands a job to an agent in Dante: it works on its own branch in its own
         worktree of the project (the current folder unless --in says otherwise),
         while you carry on. Look over its changes and merge it from the Jobs area.
 
+          --type name       a job type from .dante/jobs/ (or builder); for the
+                            builder, say which task: dante job DI-12 --type builder
           --in folder       the project to work on
           --away minutes    go ahead without asking for this long, within the
                             project's rules (never pushing, merging or deploying)

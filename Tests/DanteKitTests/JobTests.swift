@@ -253,3 +253,122 @@ import Testing
         #expect(JobGuard.verdict(for: asking, toolName: "Edit", input: edit, hasNote: false) == nil)
     }
 }
+
+@Suite struct JobTypeTests {
+    @Test func readsAFileLeniently() {
+        let text = """
+        ---
+        name: Docs keeper
+        description: "Keeps docs: current"
+        starts: CI-Failed
+        branches: main, release
+        input: task
+        away: 45 minutes
+        agent: Codex
+        paths: [docs/, README.md]
+        commands:
+          - make docs
+        uses: writer
+        colour: blue
+        ---
+
+        Update the docs.
+        """
+        let type = JobType.parse(text, id: "docs-keeper")
+        #expect(type.name == "Docs keeper")
+        #expect(type.summary == "Keeps docs: current")
+        #expect(type.trigger == .ciFailed)
+        #expect(type.branches == ["main", "release"])
+        #expect(type.input == .task)
+        #expect(type.awayMinutes == 45)
+        #expect(type.agent == "codex")
+        #expect(type.paths == ["docs/", "README.md"])
+        #expect(type.commands == ["make docs"])
+        #expect(type.uses == "writer")
+        #expect(type.brief == "Update the docs.")
+
+        let bare = JobType.parse("Just do it.", id: "quick-fix")
+        #expect(bare.name == "Quick Fix")
+        #expect(bare.trigger == .manual && bare.input == .text && bare.awayMinutes == nil && bare.agent == nil)
+        #expect(bare.brief == "Just do it.")
+        #expect(JobType.parse("---\naway: -3\nagent: someone\nstarts: hourly\n---\nx", id: "odd") == JobType(id: "odd", name: "Odd", brief: "x"))
+    }
+
+    @Test func builtInTypesRoundTripThroughTheirFiles() throws {
+        for type in JobType.builtIn {
+            var read = JobType.parse(type.markdown, id: type.id)
+            read.file = nil
+            #expect(read == type)
+        }
+    }
+
+    @Test func projectFilesReplaceBuiltInOnes() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "job-types-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(JobType.load(projectRoot: root).map(\.id) == ["builder", "pipeline-watcher"])
+        let file = try JobType.builder.copy(into: root)
+        #expect(file.path.hasSuffix(".dante/jobs/builder.md"))
+        try "---\nname: My builder\n---\nMine.".write(to: file, atomically: true, encoding: .utf8)
+        try "Review it.".write(to: JobType.folder(in: root).appending(path: "reviewer.md"), atomically: true, encoding: .utf8)
+        // Copying again leaves the project's changes alone.
+        _ = try JobType.builder.copy(into: root)
+        let types = JobType.load(projectRoot: root)
+        #expect(types.map(\.id) == ["builder", "reviewer", "pipeline-watcher"])
+        #expect(types[0].name == "My builder" && types[0].file != nil)
+    }
+
+    @Test func briefsTheJob() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "job-brief-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root.appending(path: ".claude/agents"), withIntermediateDirectories: true)
+        try "---\nname: fixer\n---\nFix carefully.".write(to: root.appending(path: ".claude/agents/fixer.md"), atomically: true, encoding: .utf8)
+        let type = JobType(id: "t", name: "Fixer", paths: ["src/"], uses: "fixer", brief: "Steps.")
+        let request = type.request("Fix the login.", projectRoot: root)
+        #expect(request.hasPrefix("Fix the login.\n\n## How to do this job (Fixer)\n\nSteps."))
+        #expect(request.contains("Fix carefully."))
+        #expect(request.contains("Keep your changes to src/"))
+        #expect(JobPlan.title(from: request) == "Fix the login")
+        #expect(JobType(id: "t", name: "T", uses: "../secret", brief: "").request("x", projectRoot: root) == "x")
+
+        let task = PlanTask(id: "DI-7", title: "Add tax", phase: "build", note: "Use rates.")
+        #expect(JobType.subject(for: task, in: root) == "Take DI-7: Add tax\nNotes: Use rates.")
+        let run = CIRun(id: 42, title: "Add tax", workflow: "CI", branch: "main", status: "completed", conclusion: "failure", created: nil, url: nil)
+        #expect(JobType.subject(for: run) == "CI is red: CI failed on main (Add tax). Run 42.")
+    }
+
+    @Test func typeCommandsRunUnattendedButNeverPushes() {
+        #expect(JobGuard.runsUnattended("gh run view 42 --log-failed", also: ["gh run view"]))
+        #expect(!JobGuard.runsUnattended("gh run view 42 --log-failed"))
+        #expect(!JobGuard.runsUnattended("gh run viewer", also: ["gh run view"]))
+        #expect(JobGuard.forbidden("gh run rerun 42") != nil)
+        let worktree = URL(filePath: "/home/me/jobs/x")
+        let push: JSONValue = ["command": "git push"]
+        #expect(JobGuard.verdict(toolName: "Bash", input: push, worktree: worktree, away: true, hasNote: false, commands: ["git push"]) != .approve)
+    }
+}
+
+@Suite struct JobTriggerTests {
+    private func run(_ id: Int, _ conclusion: String, branch: String = "main", workflow: String = "CI", status: String = "completed", minutes: Double = 0) -> CIRun {
+        CIRun(id: id, title: "t", workflow: workflow, branch: branch, status: status, conclusion: conclusion,
+              created: Date(timeIntervalSince1970: 1_000_000 + minutes * 60), url: nil)
+    }
+
+    @Test func startsOneJobPerNewFailure() {
+        let before = [run(1, "failure"), run(2, "", status: "in_progress", minutes: 1)]
+        let baseline = JobTrigger.baseline(before)
+        #expect(baseline == [1])
+        let now = [run(1, "failure"), run(2, "failure", minutes: 1), run(3, "failure", minutes: 2), run(4, "failure", branch: "other", minutes: 3),
+                   run(5, "success", workflow: "Lint", minutes: 4), run(6, "timed_out", workflow: "Lint", minutes: 5)]
+        let found = JobTrigger.newFailures(in: now, baseline: baseline, branches: ["main"], jobs: [])
+        // The newest failure per workflow and branch; old ones and other branches are left.
+        #expect(found.map(\.id) == [6, 3])
+
+        var job = JobRecord(title: "x", brief: "x", branch: "dante/x", worktree: "/home/me/x", base: "abc", baseBranch: "main", engine: .claude)
+        job.trigger = JobTrigger.ci(found[1])
+        // An open job on the same workflow and branch already has it in hand.
+        #expect(JobTrigger.newFailures(in: now, baseline: baseline, branches: ["main"], jobs: [job]).map(\.id) == [6])
+        job.outcome = .discarded
+        // Once that job is closed, a newer failure is news but the one it had isn't.
+        #expect(JobTrigger.newFailures(in: now, baseline: baseline, branches: ["main"], jobs: [job]).map(\.id) == [6, 2])
+    }
+}

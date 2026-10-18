@@ -101,8 +101,23 @@ extension Session {
             if let line = file.line { open(file: url, line: line) } else { open(file: url) }
         }
         for job in Opener.takeJobs(for: target.folder) {
-            let engine = job.agent.flatMap(AgentEngine.init(rawValue:)) ?? Preferences.shared.agentEngine
-            startJob(job.brief, engine: engine, awayMinutes: job.awayMinutes, reportsFailure: true)
+            var type: JobType?
+            if let kind = job.kind {
+                guard let found = jobs.type(kind) else {
+                    errorMessage = "There’s no job type called \(kind) in this project. Types are in .dante/jobs/; built in: \(JobType.builtIn.map(\.id).joined(separator: ", "))."
+                    continue
+                }
+                type = found
+            }
+            // Only the dante command (which carries this Mac's key) may send a job off alone.
+            let trusted = job.isTrusted(by: JobRequest.localKey(create: false))
+            let engine = (job.agent ?? type?.agent).flatMap(AgentEngine.init(rawValue:)) ?? Preferences.shared.agentEngine
+            var brief = job.brief
+            if type?.input == .task, let workspace,
+               let task = workspace.tasks.tasks.first(where: { $0.id.caseInsensitiveCompare(job.brief.trimmingCharacters(in: .whitespaces)) == .orderedSame }) {
+                brief = JobType.subject(for: task, in: workspace.url)
+            }
+            startJob(brief, engine: engine, awayMinutes: trusted ? job.awayMinutes ?? type?.awayMinutes : nil, type: type, reportsFailure: true)
         }
     }
 }

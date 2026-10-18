@@ -41,6 +41,14 @@ struct JobsView: View {
                 }
                 .animation(.spring(response: 0.45, dampingFraction: 0.8), value: jobs.open.map(\.id))
             }
+            if !jobs.types.isEmpty, jobs.unavailable == nil {
+                Card("Job types") {
+                    LinkButton("New type") { newType() }
+                        .help("Write a job type in .dante/jobs/: a brief, a scope and when it starts")
+                } content: {
+                    RowList(data: jobs.types) { type in JobTypeRow(session: session, type: type) }
+                }
+            }
             if !jobs.closed.isEmpty {
                 Card("Finished") {
                     RowList(data: jobs.closed) { job in FinishedRow(session: session, job: job) }
@@ -48,7 +56,29 @@ struct JobsView: View {
             }
         }
         .animation(.snappy(duration: 0.3), value: jobs.inboxItems(session).map(\.id))
-        .task(id: workspace.revision) { await jobs.refreshChanges() }
+        .task(id: workspace.revision) {
+            jobs.reloadTypes()
+            await jobs.refreshChanges()
+        }
+    }
+
+    /// Starts a project job type from a template and opens it.
+    private func newType() {
+        let folder = JobType.folder(in: workspace.url)
+        var name = "new-job"
+        var number = 2
+        while FileManager.default.fileExists(atPath: folder.appending(path: "\(name).md").path) {
+            name = "new-job-\(number)"
+            number += 1
+        }
+        let template = JobType(id: name, name: "New job", summary: "What this kind of job is for", awayMinutes: 30,
+                               paths: [], brief: "How to do this kind of job, step by step. The person's request comes first, then this.")
+        do {
+            session.open(file: try template.copy(into: workspace.url))
+            session.jobs.reloadTypes()
+        } catch {
+            session.errorMessage = "Couldn’t write the job type: \(error.localizedDescription)"
+        }
     }
 
     private var subtitle: String? {
@@ -114,6 +144,13 @@ private struct JobCard: View {
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
                         AgentIcon(engine: job.engine, size: 11)
+                        if let type = jobs.type(job.kind) {
+                            Label(type.name, systemImage: job.trigger == nil ? JobTypeIcon.symbol(for: type) : "bolt")
+                                .labelStyle(.titleAndIcon)
+                                .lineLimit(1)
+                                .fixedSize()
+                            Text("·")
+                        }
                         Text(job.branch).font(.dante(size: 11, design: .monospaced)).lineLimit(1).truncationMode(.middle)
                         Text("·")
                         Elapsed(since: job.created)
@@ -274,5 +311,145 @@ private struct FinishedRow: View {
             Spacer(minLength: 8)
             IconButton(symbol: "xmark", label: "Remove from the list", size: 10) { session.jobs.forget(job.id) }
         }
+    }
+}
+
+/// A job type on the board: what it does, when it starts, what it may touch, and a way to
+/// start it (or let it start itself).
+private struct JobTypeRow: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let type: JobType
+
+    var body: some View {
+        let jobs = session.jobs
+        let watching = type.trigger == .ciFailed && jobs.watching.contains(type.id)
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                if watching { Radar(color: theme.green.color).frame(width: 44, height: 44) }
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill((watching ? theme.green : theme.accent).color.opacity(0.14))
+                    .frame(width: 30, height: 30)
+                Image(systemName: JobTypeIcon.symbol(for: type))
+                    .font(.dante(size: 13, weight: .semibold))
+                    .foregroundStyle((watching ? theme.green : theme.accent).color)
+            }
+            .frame(width: 30, height: 30)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(type.name).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                    if type.isBuiltIn {
+                        Text("BUILT IN").font(.dante(size: 9, weight: .bold)).tracking(0.6).foregroundStyle(theme.text3.color)
+                    }
+                }
+                if !type.summary.isEmpty {
+                    Text(type.summary).font(.dante(size: 12)).foregroundStyle(theme.text2.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { chips }
+                    VStack(alignment: .leading, spacing: 5) { chips }
+                }
+                if watching { watchStatus }
+            }
+            Spacer(minLength: 8)
+            actions
+        }
+        .padding(.vertical, 3)
+        .animation(.snappy, value: watching)
+    }
+
+    @ViewBuilder private var chips: some View {
+        Chip(text: type.trigger == .ciFailed ? "When CI fails\(type.branches.isEmpty ? "" : " on " + type.branches.joined(separator: ", "))" : (type.input == .task ? "From a task" : "By hand"),
+             symbol: type.trigger == .ciFailed ? "bolt" : "hand.point.up.left")
+        if let minutes = type.awayMinutes { Chip(text: "Away \(AwayMenu.label(minutes))", symbol: "figure.walk") }
+        if !type.paths.isEmpty { Chip(text: type.paths.joined(separator: " "), symbol: "folder", mono: true) }
+        if !type.commands.isEmpty {
+            Chip(text: type.commands.joined(separator: ", "), symbol: "terminal", mono: true)
+                .help("Commands it may run while away, besides building, testing and committing")
+        }
+    }
+
+    private var watchStatus: some View {
+        let jobs = session.jobs
+        return Group {
+            if let problem = jobs.ciProblem {
+                Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(theme.amber.color)
+            } else if let checked = jobs.ciChecked {
+                TimelineView(.periodic(from: .now, by: 15)) { context in
+                    Text("Watching \(session.branch ?? "the current branch") · checked \(Self.ago(checked, now: context.date))")
+                        .foregroundStyle(theme.green.color)
+                }
+            } else {
+                Text("Looking at CI…").foregroundStyle(theme.text3.color)
+            }
+        }
+        .font(.dante(size: 11.5))
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private static func ago(_ date: Date, now: Date) -> String {
+        let seconds = Int(now.timeIntervalSince(date))
+        return seconds < 60 ? "just now" : "\(seconds / 60) min ago"
+    }
+
+    @ViewBuilder private var actions: some View {
+        let jobs = session.jobs
+        HStack(spacing: 8) {
+            if type.trigger == .ciFailed {
+                Toggle(isOn: Binding(get: { jobs.watching.contains(type.id) }, set: { jobs.setWatching(type.id, $0) })) {
+                    Text("Watch CI").font(.dante(size: 11.5, weight: .medium))
+                }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .fixedSize()
+                .help("While this window is open, Dante checks CI every minute and a half and starts this job when a run on your branch fails. Only on this Mac.")
+            } else {
+                Button("Start…") {
+                    withAnimation(.snappy) { jobs.draftType = type.id }
+                }
+                .buttonStyle(DanteButtonStyle())
+                .help("Choose it in New job above")
+            }
+            Menu {
+                Button(type.isBuiltIn ? "Copy into .dante/jobs and Edit" : "Edit") { edit() }
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+    }
+
+    private func edit() {
+        guard let root = session.workspace?.url else { return }
+        do {
+            session.open(file: try type.copy(into: root))
+            session.jobs.reloadTypes()
+        } catch {
+            session.errorMessage = "Couldn’t write the job type: \(error.localizedDescription)"
+        }
+    }
+}
+
+/// Rings spreading out from a watching job type, like a radar ping.
+private struct Radar: View {
+    let color: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            Canvas { canvas, size in
+                let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+                for ring in 0..<3 {
+                    let phase = (time / 2.4 + Double(ring) / 3).truncatingRemainder(dividingBy: 1)
+                    let radius = 12 + phase * (size.width / 2 - 12)
+                    let rect = CGRect(x: centre.x - radius, y: centre.y - radius, width: radius * 2, height: radius * 2)
+                    canvas.stroke(Path(ellipseIn: rect), with: .color(color.opacity(0.5 * (1 - phase))), lineWidth: 1.2)
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

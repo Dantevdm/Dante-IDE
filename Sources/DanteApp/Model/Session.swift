@@ -295,6 +295,10 @@ final class Session {
         jobs.onAwayTimeUp = { [weak self] job in
             self?.notifyClaude(.needsApproval("Its away time is up; from here on each step waits for you."), job: job.title)
         }
+        jobs.currentBranch = { [weak self] in self?.branch }
+        jobs.onTriggered = { [weak self] job in
+            self?.notifyClaude(.needsApproval("Started by itself: \(job.title)"), job: job.title)
+        }
         jobs.load(root: url, remote: RemoteRegistry.project(containing: url) != nil)
         languages = LanguageServices(root: url)
         conflicts = []
@@ -411,7 +415,13 @@ final class Session {
             systemPrompt: { [weak workspace] in
                 ClaudeBrief.systemPrompt(for: workspace) + "\n\n" + JobPlan.brief(for: job, project: project)
             },
-            rules: { [weak workspace] in workspace?.claudeRules ?? ClaudeRules() }
+            rules: { [weak workspace] in
+                // A job type's paths say where its changes are expected; edits elsewhere get a
+                // note, which away mode waits on.
+                var rules = workspace?.claudeRules ?? ClaudeRules()
+                if let scope = job.scope, !scope.isEmpty { rules.propose = scope }
+                return rules
+            }
         )
         claude.projectName = project
         // Keeps the board's change count current while the job edits.

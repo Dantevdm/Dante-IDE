@@ -15,18 +15,19 @@ public enum JobGuard {
     /// The verdict for a job as it stands: refusals always, then once away time is up every
     /// step waits (questions are answered as usual), else away mode or the approval level.
     public static func verdict(for job: JobRecord, toolName: String, input: JSONValue, hasNote: Bool, now: Date = Date()) -> Verdict? {
-        let verdict = verdict(toolName: toolName, input: input, worktree: job.worktreeURL, away: job.isAway, hasNote: hasNote)
+        let verdict = verdict(toolName: toolName, input: input, worktree: job.worktreeURL, away: job.isAway, hasNote: hasNote,
+                              commands: job.commands ?? [])
         if case .refuse = verdict { return verdict }
         if job.outOfTime(at: now) { return ApprovalPolicy.questionTools.contains(toolName) ? nil : .ask }
         return verdict
     }
 
     /// nil when the job's usual approval level should decide.
-    public static func verdict(toolName: String, input: JSONValue, worktree: URL, away: Bool, hasNote: Bool) -> Verdict? {
+    public static func verdict(toolName: String, input: JSONValue, worktree: URL, away: Bool, hasNote: Bool, commands: [String] = []) -> Verdict? {
         if toolName == "Bash", let command = input["command"]?.string {
             if let reason = forbidden(command) { return .refuse(reason) }
             guard away else { return nil }
-            return !hasNote && runsUnattended(command) ? .approve : .ask
+            return !hasNote && runsUnattended(command, also: commands) ? .approve : .ask
         }
         if ApprovalPolicy.editTools.contains(toolName) {
             for path in paths(in: input) where !inside(path, worktree) {
@@ -67,8 +68,11 @@ public enum JobGuard {
                 default: break
                 }
             case "gh":
-                if let sub = rest.first, ["pr", "release", "repo", "workflow", "api"].contains(sub) {
+                if let sub = rest.first, ["pr", "release", "repo", "workflow", "api", "secret", "variable"].contains(sub) {
                     return "Jobs don’t act on GitHub; Dante opens pull requests when you accept the job."
+                }
+                if rest.first == "run", let action = rest.dropFirst().first, ["rerun", "cancel", "delete"].contains(action) {
+                    return "Jobs only read CI runs; rerunning or cancelling them is for the person."
                 }
             case "npm", "pnpm", "yarn", "cargo", "twine", "gem", "pod", "poetry", "dotnet":
                 if rest.contains("publish") || rest.contains("push") || rest.first == "trunk" { return "Jobs don’t publish packages." }
@@ -86,13 +90,16 @@ public enum JobGuard {
 
     /// Building, testing, linting, formatting and local commits: safe to run unattended in a
     /// worktree. Commands that substitute or redirect never are.
-    public static func runsUnattended(_ command: String) -> Bool {
+    /// `also` adds a job type's own commands, each matched word by word from the start.
+    public static func runsUnattended(_ command: String, also extra: [String] = []) -> Bool {
         let command = withPlainMessages(command)
         if ApprovalPolicy.readsOnly(command) { return true }
         guard let parts = ApprovalPolicy.commandParts(command), !parts.isEmpty else { return false }
+        let allowed = extra.map { $0.split(whereSeparator: \.isWhitespace).map(String.init) }.filter { !$0.isEmpty }
         return parts.allSatisfy { part in
             let words = part.split(whereSeparator: \.isWhitespace).map(String.init)
             guard let first = words.first else { return true }
+            if allowed.contains(where: { words.starts(with: $0) }) { return true }
             let second = words.dropFirst().first ?? ""
             let third = words.dropFirst(2).first ?? ""
             switch first {
