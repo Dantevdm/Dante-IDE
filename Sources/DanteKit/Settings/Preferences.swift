@@ -51,6 +51,14 @@ public final class Preferences {
     public var claudeModel: ClaudeModel { didSet { defaults.set(claudeModel.rawValue, forKey: Keys.claudeModel) } }
     /// Let Claude hand small jobs to models in Ollama on this Mac (the `delegate` tool).
     public var delegatesToLocalModels: Bool { didSet { defaults.set(delegatesToLocalModels, forKey: Keys.delegatesToLocalModels) } }
+    /// After a spoken reply, listen for a follow-up without the talk key.
+    public var keepsConversation: Bool { didSet { defaults.set(keepsConversation, forKey: Keys.keepsConversation) } }
+    /// Listen for "Hey Dante" while Dante is open (recognised on this Mac). Off until asked for.
+    public var listensForWakeWord: Bool { didSet { defaults.set(listensForWakeWord, forKey: Keys.listensForWakeWord) } }
+    /// The voice replies are read in (an `AVSpeechSynthesisVoice` identifier); empty picks the best English one.
+    public var voiceIdentifier: String { didSet { defaults.set(voiceIdentifier, forKey: Keys.voiceIdentifier) } }
+    /// How fast replies are read, 0.4 (slow) … 0.62 (fast).
+    public var speechRate: Double { didSet { defaults.set(speechRate, forKey: Keys.speechRate) } }
     /// The Grok model `ask_grok` uses; empty picks the best the key has.
     public var grokModel: String { didSet { defaults.set(grokModel, forKey: Keys.grokModel) } }
     /// How much Claude may do without asking.
@@ -80,6 +88,10 @@ public final class Preferences {
         delegatesToLocalModels = bool(Keys.delegatesToLocalModels, true)
         speaksReplies = bool(Keys.speaksReplies, true)
         grokModel = defaults.string(forKey: Keys.grokModel) ?? ""
+        keepsConversation = bool(Keys.keepsConversation, true)
+        listensForWakeWord = bool(Keys.listensForWakeWord, false)
+        voiceIdentifier = defaults.string(forKey: Keys.voiceIdentifier) ?? ""
+        speechRate = defaults.object(forKey: Keys.speechRate) as? Double ?? 0.52
         approvalLevel = defaults.string(forKey: Keys.approvalLevel).flatMap(ApprovalLevel.init(rawValue:)) ?? .ask
         claudeModel = defaults.string(forKey: Keys.claudeModel).flatMap(ClaudeModel.init(rawValue:)) ?? .default
         usesGeist = bool(Keys.usesGeist, true)
@@ -118,6 +130,10 @@ public final class Preferences {
         static let delegatesToLocalModels = "delegatesToLocalModels"
         static let speaksReplies = "speaksReplies"
         static let grokModel = "grokModel"
+        static let keepsConversation = "keepsConversation"
+        static let listensForWakeWord = "listensForWakeWord"
+        static let voiceIdentifier = "voiceIdentifier"
+        static let speechRate = "speechRate"
         static let approvalLevel = "approvalLevel"
         static let claudeModel = "claudeModel"
         static let usesGeist = "usesGeist"

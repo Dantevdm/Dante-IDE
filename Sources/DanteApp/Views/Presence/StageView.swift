@@ -367,6 +367,14 @@ struct StageView: View {
                             .buttonStyle(StageButtonStyle(primary: true, unit: unit))
                     }
                 }
+            } else if let line = voice.saying {
+                Text(line)
+                    .font(.dante(size: 30 * unit, weight: .medium))
+                    .foregroundStyle(theme.text.color)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                    .id(line)
+                    .transition(.opacity)
             } else if let line = spokenLine {
                 Text(line)
                     .font(.dante(size: 26 * unit))
@@ -376,12 +384,13 @@ struct StageView: View {
                     .id(line)
                     .transition(.opacity)
             }
-            Text("Space to talk · Esc to leave")
+            Text(voice.wakeListening ? "Say “Hey Dante” · Space to talk · Esc to leave" : "Space to talk · Esc to leave")
                 .font(.dante(size: 14 * unit))
                 .tracking(1 * unit)
                 .foregroundStyle(theme.text3.color)
         }
         .animation(.easeOut(duration: 0.25), value: spokenLine)
+        .animation(.easeOut(duration: 0.2), value: voice.saying)
         .animation(.easeOut(duration: 0.25), value: voice.state)
     }
 

@@ -183,6 +183,9 @@ final class PresenceController: NSObject {
             presence = Presence(mood: .listening, line: voice.heard.isEmpty ? "Go ahead" : "“\(voice.heard)”", sources: presence.sources)
             vitality.intensity = voice.level
             vitality.fatigue = 0
+        } else if voice.isSpeaking {
+            // While Dante reads a reply out, the orb pulses with each word.
+            vitality.intensity = max(vitality.intensity, voice.level)
         }
         model.presence = presence
         if model.vitality != vitality { model.vitality = vitality }

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import DanteKit
 import SwiftUI
 
@@ -161,8 +162,8 @@ private struct ClaudePreferencesPane: View {
                 Toggle("Let Claude delegate small jobs to local models", isOn: $preferences.delegatesToLocalModels)
                     .help("Claude gets a delegate tool backed by Ollama on this Mac, for summaries, triage, drafts and commit messages. It checks what comes back.")
                     .onChange(of: preferences.delegatesToLocalModels) { Sessions.all.forEach { $0.applyClaudePreferences() } }
-                Toggle("Read replies aloud after you speak (\(VoiceController.keyLabel))", isOn: $preferences.speaksReplies)
             }
+            VoicePreferencesSection()
             SwiftUI.Section {
                 ForEach(CloudAgent.allCases) { agent in CloudAgentKeyRow(agent: agent) }
             } header: {
@@ -170,6 +171,60 @@ private struct ClaudePreferencesPane: View {
                     .help("Claude can ask Grok for a second opinion and Jev for quick typed decisions, using your own keys. Keys stay in your Keychain; Claude asks before sending anything to them unless approvals are off.")
             }
         }
+    }
+}
+
+/// Talking to Claude: reading replies out, conversations, "Hey Dante" and the voice.
+private struct VoicePreferencesSection: View {
+    @Environment(\.theme) private var theme
+    @Bindable private var preferences = Preferences.shared
+    private let voice = VoiceController.shared
+    private let voices = VoiceController.voices
+
+    var body: some View {
+        SwiftUI.Section {
+            Toggle("Read replies aloud after you speak (\(VoiceController.keyLabel))", isOn: $preferences.speaksReplies)
+            Toggle("Keep the conversation going", isOn: $preferences.keepsConversation)
+                .help("After reading a reply, Dante listens for a follow-up without the key. Silence or “thanks” ends it.")
+                .disabled(!preferences.speaksReplies)
+            Toggle("Listen for “Hey Dante”", isOn: $preferences.listensForWakeWord)
+                .help("While Dante is open, the microphone stays on and speech is recognised on this Mac only; nothing is sent anywhere until you say “Hey Dante”. macOS shows the microphone in use.")
+                .onChange(of: preferences.listensForWakeWord) { VoiceController.shared.updateWakeListening() }
+            if preferences.listensForWakeWord, let problem = voice.wakeProblem {
+                Label(problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.dante(size: 11.5))
+                    .foregroundStyle(theme.amber.color)
+            }
+            Picker("Voice", selection: $preferences.voiceIdentifier) {
+                Text("Best available").tag("")
+                ForEach(voices, id: \.identifier) { voice in
+                    Text(Self.label(voice)).tag(voice.identifier)
+                }
+            }
+            .help("Premium and Enhanced voices sound far better. Download them in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
+            HStack {
+                Slider(value: $preferences.speechRate, in: 0.4...0.62) {
+                    Text("Speed")
+                } minimumValueLabel: {
+                    Image(systemName: "tortoise")
+                } maximumValueLabel: {
+                    Image(systemName: "hare")
+                }
+                Button("Preview") { VoiceController.shared.preview() }
+            }
+        } header: {
+            Text("Voice")
+        }
+    }
+
+    static func label(_ voice: AVSpeechSynthesisVoice) -> String {
+        let quality = switch voice.quality {
+        case .premium: " · Premium"
+        case .enhanced: " · Enhanced"
+        default: ""
+        }
+        let region = Locale.current.localizedString(forRegionCode: String(voice.language.split(separator: "-").last ?? "")) ?? voice.language
+        return "\(voice.name) (\(region))\(quality)"
     }
 }
 

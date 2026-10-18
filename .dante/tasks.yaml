@@ -471,3 +471,7 @@ tasks:
   title: "Cloud agents with the user's own keys: Grok (xAI) as ask_grok for second opinions, Jev as decide for fast typed decisions; keys in the Keychain, passed to dante mcp in a private config file, shown in Settings and the Agents area"
   phase: build
   state: review
+- id: DI-115
+  title: "Full voice: replies spoken as they stream, hands-free follow-ups, opt-in “Hey Dante” wake word (on-device only), spoken status and usage, voice and speed in Settings, orb and Stage react to Dante speaking"
+  phase: build
+  state: review
