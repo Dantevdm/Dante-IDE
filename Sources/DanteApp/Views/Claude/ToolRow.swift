@@ -39,6 +39,15 @@ struct ToolRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let note = tool.securityNote {
+                Label(note, systemImage: tool.securityBlocks ? "exclamationmark.shield.fill" : "shield.lefthalf.filled")
+                    .font(.dante(size: 11.5))
+                    .foregroundStyle(tool.securityBlocks ? theme.red.color : theme.amber.color)
+                    .padding(.leading, 21)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help("Dante's security rules checked the lines this edit adds. High and critical findings always wait for you.")
+            }
+
             if tool.name == "AskUserQuestion" {
                 if tool.isAwaitingApproval {
                     QuestionCard(tool: tool, claude: claude)

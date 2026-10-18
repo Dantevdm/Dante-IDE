@@ -67,6 +67,8 @@ public final class Preferences {
     public var codexEffort: String { didSet { defaults.set(codexEffort, forKey: Keys.codexEffort) } }
     /// Who new windows' conversations start with: Claude or Codex.
     public var agentEngine: AgentEngine { didSet { defaults.set(agentEngine.rawValue, forKey: Keys.agentEngine) } }
+    /// Ask OSV.dev about the project's dependencies when scanning (sends package names and versions).
+    public var checksDependenciesOnline: Bool { didSet { defaults.set(checksDependenciesOnline, forKey: Keys.checksDependenciesOnline) } }
     /// The Grok model `ask_grok` uses; empty picks the best the key has.
     public var grokModel: String { didSet { defaults.set(grokModel, forKey: Keys.grokModel) } }
     /// How much Claude may do without asking.
@@ -100,6 +102,7 @@ public final class Preferences {
         codexModel = defaults.string(forKey: Keys.codexModel) ?? ""
         codexEffort = defaults.string(forKey: Keys.codexEffort) ?? ""
         agentEngine = defaults.string(forKey: Keys.agentEngine).flatMap(AgentEngine.init(rawValue:)) ?? .claude
+        checksDependenciesOnline = bool(Keys.checksDependenciesOnline, false)
         keepsConversation = bool(Keys.keepsConversation, true)
         listensForWakeWord = bool(Keys.listensForWakeWord, false)
         voiceIdentifier = defaults.string(forKey: Keys.voiceIdentifier) ?? ""
@@ -146,6 +149,7 @@ public final class Preferences {
         static let codexModel = "codexModel"
         static let codexEffort = "codexEffort"
         static let agentEngine = "agentEngine"
+        static let checksDependenciesOnline = "checksDependenciesOnline"
         static let keepsConversation = "keepsConversation"
         static let listensForWakeWord = "listensForWakeWord"
         static let voiceIdentifier = "voiceIdentifier"

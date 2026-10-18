@@ -494,4 +494,5 @@ tasks:
 - id: DI-120
   title: "Security layer: scan the project (secrets, dependencies, code, config, containers, infra), explain and rank findings, suggest and apply fixes through Claude or Codex, and keep watching on every change"
   phase: build
-  state: ready
+  state: review
+  notes: "Security area: Dante's scanner (secrets, POPIA personal information, encryption, injection, containers, CI, infrastructure), installed scanners, OSV.dev when checking online, a grade, accepted risks in .dante/security.yaml, fixes by the agent in charge with the other checking, deep audits, edit review before approval, and dante scan for CI."

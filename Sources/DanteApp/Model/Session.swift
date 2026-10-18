@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, map, code, tests, environments, data, ship, run, timeline, claude, agents, docs
+    case home, map, code, tests, security, environments, data, ship, run, timeline, claude, agents, docs
 
     var id: String { rawValue }
 
@@ -17,6 +17,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .map: "Map"
         case .code: "Code"
         case .tests: "Tests"
+        case .security: "Security"
         case .environments: "Env"
         case .data: "Data"
         case .ship: "Ship"
@@ -34,6 +35,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .map: "point.3.connected.trianglepath.dotted"
         case .code: "chevron.left.forwardslash.chevron.right"
         case .tests: "testtube.2"
+        case .security: "shield.lefthalf.filled"
         case .environments: "shippingbox"
         case .data: "cylinder.split.1x2"
         case .ship: "paperplane"
@@ -52,18 +54,19 @@ enum Area: String, CaseIterable, Identifiable {
         case .map: "Architecture, process flows, data model and cloud diagrams generated from the code."
         case .code: "The editor, file explorer and terminal."
         case .tests: "Tests traced to specs and code paths, coverage by component, and tests Claude can draft."
+        case .security: "Secrets, personal information, encryption, injection, dependencies and config: scanned, explained and fixed by Claude or Codex."
         case .environments: "Docker Compose services with logs, shells and restarts, and Docker files Claude can write."
         case .data: "The project's databases: create one, browse tables, run queries and see the schema as a diagram."
         case .ship: "A release checklist, a changelog drafted from commits, and the CI pipeline."
         case .run: "Production metrics, errors and alarms."
         case .timeline: "Commits, releases, Claude sessions, test runs and CI in one stream, newest first."
         case .claude: "How the agents work on this project: usage, skills, memory, connectors and permissions."
-        case .agents: "Claude and the local models it delegates to: jobs, tokens kept local and how each agent is doing."
+        case .agents: "Claude, Codex and the models they delegate to: who did what, who checked what, and why."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
         }
     }
 
-    static let main: [Area] = [.home, .map, .code, .tests, .environments, .data, .ship, .run, .timeline, .claude, .agents]
+    static let main: [Area] = [.home, .map, .code, .tests, .security, .environments, .data, .ship, .run, .timeline, .claude, .agents]
     static let footer: [Area] = [.docs]
 }
 
@@ -191,6 +194,8 @@ final class Session {
     var claudeShowsUsage = false
     /// The Map's last build, kept while the window is open.
     @ObservationIgnored var mapCache: MapCache?
+    /// The Security area's report, scans and audits.
+    let security = SecurityModel()
     /// 1-based breakpoint lines per file path, saved per project on this Mac.
     var breakpoints: [String: Set<Int>] = [:]
     /// The debugging run, while there is one (and after it ends, until the next).

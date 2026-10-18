@@ -21,6 +21,10 @@ public struct ToolActivity: Equatable, Sendable {
     public var ruleNote: String?
     /// Refused automatically by a `never` rule.
     public var blockedByRule = false
+    /// What Dante's security rules found in the lines an edit adds.
+    public var securityNote: String?
+    /// A high or critical finding: the edit waits for you whatever the approval level.
+    public var securityBlocks = false
 
     public init(id: String, name: String, input: JSONValue, status: Status, change: ProposedChange? = nil) {
         self.id = id
@@ -281,7 +285,7 @@ public final class ClaudeSession {
     /// Applies every waiting file edit, and with `restOfTurn` the ones still to come this turn.
     public func applyAll(restOfTurn: Bool = false) {
         if restOfTurn { autoAppliedTurn = currentTurn }
-        for tool in pendingApprovals where Self.editTools.contains(tool.name) { approve(tool.id) }
+        for tool in pendingApprovals where Self.editTools.contains(tool.name) && !tool.securityBlocks { approve(tool.id) }
     }
 
     public func stopApplyingRestOfTurn() { autoAppliedTurn = nil }
@@ -455,7 +459,7 @@ public final class ClaudeSession {
         }
         for rule in rules where !allowRules.contains(rule) { allowRules.append(rule) }
         approve(toolID)
-        for waiting in pendingApprovals where ApprovalPolicy.allowed(waiting.name, input: waiting.input, by: allowRules) && waiting.ruleNote == nil {
+        for waiting in pendingApprovals where ApprovalPolicy.allowed(waiting.name, input: waiting.input, by: allowRules) && waiting.ruleNote == nil && !waiting.securityBlocks {
             approve(waiting.id)
         }
     }
@@ -971,7 +975,7 @@ public final class ClaudeSession {
             let id = request.toolUseID ?? "request-\(request.requestID)"
             defer {
                 if case .awaitingApproval = activity(id)?.status {
-                    let hasNote = activity(id)?.ruleNote != nil
+                    let hasNote = activity(id)?.ruleNote != nil || activity(id)?.securityBlocks == true
                     if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
                     } else if ["mcp__dante__delegate", "mcp__dante__local_models"].contains(request.toolName) {
@@ -986,6 +990,7 @@ public final class ClaudeSession {
                 }
             }
             let change = ProposedChange.make(toolName: request.toolName, input: request.input, root: root)
+            let security = change.map { SecurityReview.findings(in: $0, root: root) } ?? []
             if index[id] == nil {
                 append(TranscriptItem(id: id, content: .tool(ToolActivity(id: id, name: request.toolName, input: request.input, status: .running))))
             }
@@ -1004,12 +1009,16 @@ public final class ClaudeSession {
                     $0.input = request.input
                     $0.change = change
                     $0.ruleNote = note
+                    $0.securityNote = SecurityReview.note(for: security)
+                    $0.securityBlocks = SecurityReview.blocks(security)
                     $0.status = .awaitingApproval(requestID: request.requestID)
                 }
             case .allowed:
                 updateTool(id) {
                     $0.input = request.input
                     $0.change = change
+                    $0.securityNote = SecurityReview.note(for: security)
+                    $0.securityBlocks = SecurityReview.blocks(security)
                     $0.status = .awaitingApproval(requestID: request.requestID)
                 }
             }

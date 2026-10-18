@@ -6,3 +6,5 @@ ignore:
     reason: "Planted problems for the scanner's tests; the keys, ID and card numbers are made up."
   - path: "Tests/DanteKitTests/PullRequestTests.swift"
     reason: "Made-up secrets that test the commit box's secret warning."
+  - path: Tests/DanteKitTests/SecurityReviewTests.swift
+    reason: Planted problems that test the review of agents' edits

@@ -38,7 +38,7 @@ public enum ProjectSecurity {
         }.value
         var scanners = ["Dante"]
         if options.externalTools {
-            for tool in SecurityTool.all {
+            for tool in SecurityTool.all where tool.applies(root) && (options.onlineAdvisories || !tool.sendsDependencies) {
                 guard let path = tool.locate() else { continue }
                 progress?("Running \(tool.name)")
                 if let found = await tool.run(executable: path, root: root) {

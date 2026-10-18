@@ -102,3 +102,21 @@ extension Session {
         }
     }
 }
+
+extension Session {
+    /// The other agent's second-opinion tool, when the one in charge can ask it.
+    var reviewPartner: (name: String, tool: String)? {
+        guard let claude else { return nil }
+        switch claude.engine {
+        case .claude: return Preferences.shared.asksCodex && Self.codexPath != nil ? ("Codex", "ask_codex") : nil
+        case .codex: return claude.executable != nil ? ("Claude", "ask_claude") : nil
+        }
+    }
+
+    /// Hands security findings to the agent in charge, which fixes them and has the other check.
+    func fixSecurity(_ findings: [SecurityFinding]) {
+        guard !findings.isEmpty else { return }
+        let names = findings.count == 1 ? findings[0].title : "\(findings.count) security findings"
+        askClaude("Fix \(names.prefix(1).lowercased() + names.dropFirst())", instructions: SecurityBrief.fix(findings, partner: reviewPartner))
+    }
+}

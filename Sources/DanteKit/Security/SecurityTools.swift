@@ -12,6 +12,9 @@ public struct SecurityTool: Sendable, Identifiable {
     var applies: @Sendable (URL) -> Bool
     var arguments: @Sendable (URL) -> [String]
     var parse: @Sendable (String, URL) -> [SecurityFinding]
+    /// Sends the project's dependency list to an online database, so it runs only when
+    /// checking online is on.
+    public var sendsDependencies = false
     public var id: String { name }
 
     public static let all: [SecurityTool] = [semgrep, gitleaks, osvScanner, govulncheck, npmAudit, pipAudit]
@@ -32,28 +35,32 @@ public struct SecurityTool: Sendable, Identifiable {
         name: "OSV-Scanner", executable: "osv-scanner", purpose: "Known vulnerabilities in every lockfile",
         install: "brew install osv-scanner", applies: { _ in true },
         arguments: { _ in ["scan", "source", "-r", "--format", "json", "."] },
-        parse: { output, _ in SecurityToolOutput.osvScanner(output) })
+        parse: { output, _ in SecurityToolOutput.osvScanner(output) },
+        sendsDependencies: true)
 
     static let govulncheck = SecurityTool(
         name: "govulncheck", executable: "govulncheck", purpose: "Go vulnerabilities your code actually calls",
         install: "go install golang.org/x/vuln/cmd/govulncheck@latest",
         applies: { FileManager.default.fileExists(atPath: $0.appending(path: "go.mod").path) },
         arguments: { _ in ["-json", "./..."] },
-        parse: { output, _ in SecurityToolOutput.govulncheck(output) })
+        parse: { output, _ in SecurityToolOutput.govulncheck(output) },
+        sendsDependencies: true)
 
     static let npmAudit = SecurityTool(
         name: "npm audit", executable: "npm", purpose: "Advisories for the packages in package-lock.json",
         install: "Comes with Node.js",
         applies: { FileManager.default.fileExists(atPath: $0.appending(path: "package-lock.json").path) },
         arguments: { _ in ["audit", "--json"] },
-        parse: { output, _ in SecurityToolOutput.npmAudit(output) })
+        parse: { output, _ in SecurityToolOutput.npmAudit(output) },
+        sendsDependencies: true)
 
     static let pipAudit = SecurityTool(
         name: "pip-audit", executable: "pip-audit", purpose: "Advisories for Python requirements",
         install: "brew install pip-audit",
         applies: { FileManager.default.fileExists(atPath: $0.appending(path: "requirements.txt").path) },
         arguments: { _ in ["-f", "json", "-r", "requirements.txt", "--progress-spinner", "off"] },
-        parse: { output, _ in SecurityToolOutput.pipAudit(output) })
+        parse: { output, _ in SecurityToolOutput.pipAudit(output) },
+        sendsDependencies: true)
 
     /// The tool on the PATH or in the usual install folders.
     public func locate() -> String? {
@@ -238,12 +245,13 @@ public enum SecurityToolOutput {
 
     static func categoryFor(_ text: String) -> SecurityFinding.Category {
         let lower = text.lowercased()
-        if lower.contains("secret") || lower.contains("hardcoded") || lower.contains("cwe-798") { return .secrets }
+        if lower.contains("secret") || lower.contains("hardcoded") || lower.contains("credential") || lower.contains("api key") || lower.contains("cwe-798") { return .secrets }
+        if ["personal", "popia", "gdpr", "privacy", "pii", "id number", "identity number", "cwe-532", "cwe-359"].contains(where: lower.contains) { return .privacy }
+        if ["encrypt", "plaintext", "plain text", "https", "hsts", "password hash", "cwe-311", "cwe-319"].contains(where: lower.contains) { return .encryption }
         if lower.contains("crypto") || lower.contains("tls") || lower.contains("ssl") || lower.contains("cwe-327") || lower.contains("cwe-295") { return .encryption }
         if lower.contains("dockerfile") || lower.contains("docker-compose") || lower.contains("kubernetes") { return .containers }
         if lower.contains("github-actions") || lower.contains("gitlab") { return .pipelines }
         if lower.contains("terraform") || lower.contains("cloudformation") { return .infrastructure }
-        if lower.contains("cwe-532") || lower.contains("cwe-359") || lower.contains("pii") { return .privacy }
         return .code
     }
 

@@ -31,6 +31,8 @@ struct ClaudeSparkIcon: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var size: CGFloat = 13
     var isWorking = false
+    /// Replaces the brand colour, for a mark on a filled button.
+    var tint: Color?
 
     var body: some View {
         if isWorking && !reduceMotion {
@@ -47,7 +49,7 @@ struct ClaudeSparkIcon: View {
 
     private var spark: some View {
         ClaudeSpark()
-            .fill(theme.claude.color)
+            .fill(tint ?? theme.claude.color)
             .frame(width: size, height: size)
             .accessibilityHidden(true)
     }
@@ -130,11 +132,13 @@ struct AgentIcon: View {
     let engine: AgentEngine
     var size: CGFloat = 13
     var isWorking = false
+    /// Replaces the brand colour, for a mark on a filled button.
+    var tint: Color?
 
     var body: some View {
         switch engine {
         case .claude:
-            ClaudeSparkIcon(size: size, isWorking: isWorking)
+            ClaudeSparkIcon(size: size, isWorking: isWorking, tint: tint)
         case .codex:
             if isWorking && !reduceMotion {
                 TimelineView(.animation) { context in
@@ -149,7 +153,7 @@ struct AgentIcon: View {
 
     private var glyph: some View {
         CodexGlyph()
-            .fill(theme.syntax.function.color)
+            .fill(tint ?? theme.syntax.function.color)
             .frame(width: size, height: size)
             .accessibilityHidden(true)
     }

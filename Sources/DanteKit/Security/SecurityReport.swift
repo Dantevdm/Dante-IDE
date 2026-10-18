@@ -28,7 +28,9 @@ public struct SecurityReport: Codable, Equatable, Sendable {
         var byKey: [String: SecurityFinding] = [:]
         var order: [String] = []
         for finding in findings {
-            let key = finding.line > 0 ? "\(finding.file):\(finding.line):\(finding.reference ?? finding.rule)" : finding.id
+            // Audits by different agents of the same line are the same problem.
+            let kind = finding.rule.hasPrefix("audit.") ? "audit" : (finding.reference ?? finding.rule)
+            let key = finding.line > 0 ? "\(finding.file):\(finding.line):\(kind)" : finding.id
             if var existing = byKey[key] {
                 if finding.severity > existing.severity {
                     let sources = existing.source

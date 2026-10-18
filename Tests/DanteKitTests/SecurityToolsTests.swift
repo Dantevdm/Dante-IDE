@@ -82,4 +82,9 @@ import Testing
     @Test func splitsAJSONStream() {
         #expect(JSONStream.objects("{\"a\":\"}{\"}\n{\"b\":{\"c\":1}}").count == 2)
     }
+
+    @Test func onlyOfflineToolsRunWithoutCheckingOnline() {
+        let online = SecurityTool.all.filter(\.sendsDependencies).map(\.name)
+        #expect(online == ["OSV-Scanner", "govulncheck", "npm audit", "pip-audit"])
+    }
 }

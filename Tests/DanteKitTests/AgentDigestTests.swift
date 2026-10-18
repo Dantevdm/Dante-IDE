@@ -91,4 +91,10 @@ import Testing
         let tool = DelegateServer.askingWhy(DelegateServer.codexTool)
         #expect(tool["inputSchema"]?["properties"]?["why"]?["type"]?.string == "string")
     }
+
+    @Test func auditsCountAsChecks() {
+        let digest = AgentDigest([job("audit", .codex, at: 0, by: "you", model: "gpt-6.1-sol", title: "Security audit")])
+        #expect(digest.checks.first?.agent == "Codex")
+        #expect(digest.models.first?.work == ["security audits"])
+    }
 }

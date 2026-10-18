@@ -72,7 +72,7 @@ public struct AgentDigest: Equatable, Sendable {
     static func role(of job: AgentJob) -> Role {
         switch job.kind {
         case "turn": return .led
-        case "opinion": return .checked
+        case "opinion", "audit": return .checked
         case "decision": return .decided
         case "subagent": return .helped
         default: return job.requestedBy == "claude" || job.requestedBy == "codex" ? .delegated : .dante
@@ -157,7 +157,9 @@ public struct AgentDigest: Equatable, Sendable {
     static func work(_ step: Step) -> String {
         switch step.role {
         case .led: return "led your requests"
-        case .checked: return step.asker == "You" || step.asker == "Dante" ? "second opinions" : "checked \(step.asker)’s work"
+        case .checked:
+            if step.job.kind == "audit" { return "security audits" }
+            return step.asker == "You" || step.asker == "Dante" ? "second opinions" : "checked \(step.asker)’s work"
         case .decided: return "decisions"
         case .helped: return "sub-agent work"
         case .delegated, .dante:
