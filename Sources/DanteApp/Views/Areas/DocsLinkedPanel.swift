@@ -4,8 +4,7 @@ import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// What points at this doc: tasks that use it as their spec, and the project files it
-/// mentions in `code`.
+/// The doc's outline, and the project files it mentions in `code`.
 struct LinkedPanel: View {
     @Environment(\.theme) private var theme
     let session: Session
@@ -14,10 +13,6 @@ struct LinkedPanel: View {
     let markdown: MarkdownDocument?
 
     var body: some View {
-        let tasks = workspace.tasks.tasks.filter { task in
-            guard let spec = task.spec else { return false }
-            return ".dante/" + spec == doc.path || spec == doc.path
-        }
         let files = mentionedFiles
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
@@ -43,16 +38,11 @@ struct LinkedPanel: View {
                     Rectangle().fill(theme.line.color).frame(height: 1).padding(.vertical, 6)
                 }
                 Eyebrow("Linked to this doc")
-                if tasks.isEmpty, files.isEmpty {
+                if files.isEmpty {
                     Text("Nothing linked")
                         .font(.dante(size: 12))
                         .foregroundStyle(theme.text3.color)
                         .fixedSize(horizontal: false, vertical: true)
-                }
-                ForEach(tasks) { task in
-                    note(symbol: "checklist", title: task.id, subtitle: "\(task.title) · \(task.state.title.lowercased())") {
-                        session.showPhase(task.phase.capitalized)
-                    }
                 }
                 ForEach(files, id: \.self) { file in
                     note(symbol: "doc.text", title: (file as NSString).lastPathComponent, subtitle: file) {

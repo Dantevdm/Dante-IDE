@@ -463,3 +463,7 @@ tasks:
   title: "Orb energy follows the work: intensity from tool rate, parallel sessions and sub-agents; tired (dimmer, slower, heavy-lidded) as the five-hour or weekly usage runs low; asleep when the limit is hit, waking as it resets"
   phase: build
   state: ready
+- id: DI-113
+  title: "Take planning out of the app for now: Plan and Spec areas, phase ribbon, setup sheet, task board, Finish Task and task links"
+  phase: build
+  state: review

@@ -177,7 +177,6 @@ private struct ChangelogCard: View {
     let git: GitSnapshot?
 
     var body: some View {
-        let doneTasks = workspace.tasks.tasks.filter { $0.state == .done }
         Card(draft.map { "Changelog · \($0.version)" } ?? "Changelog") {
             Button("Polish with Claude") {
                 guard let draft else { return }
@@ -207,17 +206,6 @@ private struct ChangelogCard: View {
                                 Text(String(entry.hash.prefix(7)))
                                     .font(.dante(size: 11, design: .monospaced))
                                     .foregroundStyle(theme.text3.color)
-                            }
-                        }
-                    }
-                }
-                if !doneTasks.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Eyebrow("Tasks done")
-                        ForEach(doneTasks) { task in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(task.id).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
-                                Text(MarkdownText.attributed(task.title, theme: theme)).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
                             }
                         }
                     }
@@ -263,13 +251,6 @@ private struct ReleaseChecklist: View {
                             Text(note).font(.dante(size: 11.5)).foregroundStyle(theme.amber.color)
                         }
                     }
-                }
-            }
-            Rectangle().fill(theme.line.color).frame(height: 1)
-            HStack {
-                Spacer()
-                if workspace.phaseDocs["release"] == nil {
-                    LinkButton("Add release.md") { session.showPhase(workspace.lifecycle.phases.first { $0.lowercased() == "release" } ?? "Release") }
                 }
             }
         }

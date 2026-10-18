@@ -40,14 +40,10 @@ public enum ClaudeBrief {
 
     public static func sections(for workspace: Workspace?) -> [Section] {
         var sections = [
-            Section(title: "How Dante works", source: "built in", text: [
-                "You are working inside Dante, a macOS IDE organised around the software lifecycle: Discover, Define, Design, Build, Test, Release, Operate.",
-                "The project's plan lives in `.dante/` at the repository root: `project.yaml` (name, `lifecycle.current`, optional `lifecycle.phases`), `tasks.yaml`, and markdown specs and decisions. Read them when they're relevant, and keep them current when your work changes what they describe.",
-            ].joined(separator: "\n\n")),
-            Section(title: "Pair mode", source: "built in", text: [
-                "You are a pair, not an autopilot. The user reviews every file change as a diff and every command before it runs. Make focused edits with the Edit tool, and say briefly what each change does and why.",
-                "Phases are guidance, not gates: favour work that fits the current phase, but don't refuse other work.",
-            ].joined(separator: "\n\n")),
+            Section(title: "How Dante works", source: "built in", text:
+                "You are working inside Dante, a native macOS IDE. The user sees your conversation in a panel beside the code."),
+            Section(title: "Pair mode", source: "built in", text:
+                "You are a pair, not an autopilot. The user reviews every file change as a diff and every command before it runs. Make focused edits with the Edit tool, and say briefly what each change does and why."),
         ]
         guard let workspace else { return sections }
         let rules = workspace.claudeRules
@@ -57,21 +53,6 @@ public enum ClaudeBrief {
             if !rules.flag.isEmpty { parts.append("call out any change to \(rules.flag.joined(separator: ", ")) and explain why it's needed") }
             if !rules.never.isEmpty { parts.append("never read or change \(rules.never.joined(separator: ", "))") }
             sections.append(Section(title: "Rules for Claude", source: "project.yaml › claude", text: "This project's rules for you (.dante/project.yaml): " + parts.joined(separator: "; ") + "."))
-        }
-        let lifecycle = workspace.lifecycle
-        if let current = lifecycle.currentIndex {
-            let phase = lifecycle.phases[current]
-            sections.append(Section(
-                title: "Current phase: \(phase)",
-                source: "project.yaml › lifecycle",
-                text: "The project is in the \(phase) phase (\(current + 1) of \(lifecycle.phases.count): \(lifecycle.phases.joined(separator: ", ")))."
-            ))
-        } else if !lifecycle.hasSpec {
-            sections.append(Section(
-                title: "Setting up",
-                source: "no project.yaml",
-                text: "This project has no `.dante/project.yaml` yet. If the user asks you to set the project up, draft one from the README, docs, code and git history, and let them review it."
-            ))
         }
         return sections
     }

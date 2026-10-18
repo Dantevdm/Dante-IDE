@@ -311,7 +311,7 @@ private struct ProjectPane: View {
                         .textSelection(.enabled)
                 }
                 LabeledContent("Dante setup") {
-                    Text(hasDante ? "\(danteFiles.count) files in .dante/ · \(workspace.tasks.tasks.count) tasks" : "Not set up")
+                    Text(hasDante ? "\(danteFiles.count) files in .dante/" : "None")
                         .foregroundStyle(theme.text2.color)
                 }
             }
@@ -320,17 +320,9 @@ private struct ProjectPane: View {
                     LabeledContent("The .dante folder") {
                         Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([workspace.danteFolder]) }
                     }
-                    LabeledContent("Run setup again") {
-                        Button("Set Up Again…") { session.offerSetup(force: true) }
-                            .help("Pick a different lifecycle or start the checklists over. Existing tasks are kept.")
-                    }
                     LabeledContent("Remove Dante from this project") {
                         Button("Remove…", role: .destructive) { confirmsRemoval = true }
                             .help("Moves .dante/ to the Trash. The code isn’t touched.")
-                    }
-                } else {
-                    LabeledContent("Set up this project for Dante") {
-                        Button("Set Up…") { session.offerSetup(force: true) }
                     }
                 }
             } header: {
@@ -354,7 +346,7 @@ private struct ProjectPane: View {
         .confirmationDialog("Move .dante to the Trash?", isPresented: $confirmsRemoval) {
             Button("Move to Trash", role: .destructive) { removeDante() }
         } message: {
-            Text("Dante stops showing phases and tasks for this project. You can restore the folder from the Trash, or set the project up again later.")
+            Text("Claude’s rules for this project go with it. You can restore the folder from the Trash.")
         }
         .confirmationDialog("Forget the saved connections?", isPresented: $confirmsForget) {
             Button("Forget", role: .destructive) {

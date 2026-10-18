@@ -106,7 +106,7 @@ struct TestsView: View {
                     .buttonStyle(DanteButtonStyle(primary: true))
                 }
             } else if let run = session.testRun {
-                RunSummary(run: run, checklist: testChecklist)
+                RunSummary(run: run)
                 if run.failedOutsideTests || isCouldNotStart(run) {
                     OutputCard(run: run, title: "The run stopped before any test failed", expanded: true)
                 }
@@ -148,12 +148,6 @@ struct TestsView: View {
         var map: [String: String] = [:]
         for test in inventory?.tests ?? [] { map[testKey(test.name)] = test.category }
         return map
-    }
-
-    private var testChecklist: (done: Int, total: Int)? {
-        let phase = workspace.lifecycle.phases.first { $0.lowercased() == "test" } ?? "Test"
-        guard let doc = workspace.phaseDocs[phase.lowercased()], !doc.doneWhen.isEmpty else { return nil }
-        return (doc.doneWhen.count(where: \.done), doc.doneWhen.count)
     }
 
     private func isCouldNotStart(_ run: TestRun) -> Bool {
@@ -214,7 +208,6 @@ struct TestsView: View {
 private struct RunSummary: View {
     @Environment(\.theme) private var theme
     let run: TestRun
-    let checklist: (done: Int, total: Int)?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
@@ -228,13 +221,6 @@ private struct RunSummary: View {
                 count(run.passed, "passed", theme.green.color)
                 count(run.failed, "failed", run.failed > 0 ? theme.red.color : theme.text3.color)
                 count(run.skipped, "skipped", theme.text3.color)
-                if let checklist {
-                    Rectangle().fill(theme.line.color).frame(width: 1, height: 34)
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(checklist.done)/\(checklist.total)").font(.dante(size: 18, weight: .medium, design: .monospaced)).foregroundStyle(theme.text.color)
-                        Text("Test checklist").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
-                    }
-                }
             }
             .padding(16)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))

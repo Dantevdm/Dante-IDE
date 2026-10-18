@@ -218,8 +218,6 @@ private struct ErrorsCard: View {
                         }
                         Spacer(minLength: 8)
                         Text("×\(issue.count)").font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
-                        Button("Create task") { createTask(for: issue) }
-                            .buttonStyle(DanteButtonStyle())
                         Button("Ask Claude") {
                             session.askClaude("This error shows up \(issue.count) times in production logs:\n\n\(issue.example)\n\nFind where it comes from in the code and propose a fix.")
                         }
@@ -234,15 +232,6 @@ private struct ErrorsCard: View {
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
-    }
-
-    private func createTask(for issue: ErrorDigest.Issue) {
-        let phase = workspace.lifecycle.phases.first { $0.lowercased() == "operate" } ?? workspace.lifecycle.phases.last ?? "Operate"
-        do {
-            try workspace.tasks.add(title: "Fix in production: \(issue.summary)", phase: phase.lowercased())
-        } catch {
-            session.errorMessage = "Couldn’t add the task: \(error.localizedDescription)"
         }
     }
 }
@@ -274,19 +263,6 @@ private struct AlarmsCard: View {
                 IconButton(symbol: "arrow.clockwise", label: "Check alarms now", size: 11) { Task { await monitor.poll() } }
             }
         } content: {
-            ForEach(Alarms.refired(monitor.alarms, tasks: workspace.tasks.tasks), id: \.alarm.id) { refired in
-                HStack(spacing: 10) {
-                    Image(systemName: "arrow.uturn.backward.circle.fill").foregroundStyle(theme.red.color)
-                    Text("\(refired.alarm.name) is firing again after \(refired.task.id) was done.")
-                        .font(.dante(size: 12.5, weight: .medium))
-                        .foregroundStyle(theme.text.color)
-                    Spacer()
-                    Button("Reopen \(refired.task.id)") { session.reopen(refired.task) }
-                        .buttonStyle(DanteButtonStyle(primary: true))
-                }
-                .padding(10)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.red.opacity(0.08).color))
-            }
             ForEach(monitor.errors.sorted(by: { $0.key < $1.key }), id: \.key) { source, message in
                 Text("\(source): \(message)")
                     .font(.dante(size: 12))
@@ -300,8 +276,7 @@ private struct AlarmsCard: View {
                     .foregroundStyle(theme.text3.color)
             }
             RowList(data: monitor.alarms, padding: 10) { alarm in
-                AlarmRow(alarm: alarm, task: session.task(for: alarm),
-                         createTask: { session.createTask(for: alarm) },
+                AlarmRow(alarm: alarm,
                          investigate: { session.investigate(alarm) },
                          open: alarm.url.map { url in { openURL(url) } })
             }
@@ -312,8 +287,6 @@ private struct AlarmsCard: View {
 private struct AlarmRow: View {
     @Environment(\.theme) private var theme
     let alarm: Alarm
-    let task: PlanTask?
-    let createTask: () -> Void
     let investigate: () -> Void
     let open: (() -> Void)?
 
@@ -332,17 +305,11 @@ private struct AlarmRow: View {
                     if let updated = alarm.updated {
                         Text("since \(updated.relative)").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                     }
-                    if let task {
-                        Chip(text: "\(task.id) · \(task.state.title)", symbol: "checklist")
-                    }
                 }
             }
             Spacer(minLength: 8)
             if let open {
                 IconButton(symbol: "arrow.up.right.square", label: "Open in the monitoring console", size: 12, action: open)
-            }
-            if task == nil || task?.state == .done {
-                Button("Create task", action: createTask).buttonStyle(DanteButtonStyle())
             }
             if alarm.state == .alarm {
                 Button("Investigate", action: investigate)

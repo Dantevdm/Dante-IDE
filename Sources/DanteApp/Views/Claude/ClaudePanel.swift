@@ -30,9 +30,14 @@ struct ClaudePanel: View {
                 .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Claude").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text(subtitle).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                if let subtitle {
+                    Text(subtitle).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
-            Spacer()
+            .layoutPriority(-1)
+            Spacer(minLength: 4)
             ApprovalMenu(session: session)
             Button {
                 Preferences.shared.claudeAsksFirst.toggle()
@@ -44,6 +49,8 @@ struct ClaudePanel: View {
                     .padding(.vertical, 4)
                     .background(Capsule().fill(Preferences.shared.claudeAsksFirst ? theme.accentTint.color : .clear))
                     .overlay(Capsule().strokeBorder(Preferences.shared.claudeAsksFirst ? theme.accentLine.color : theme.line2.color))
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .buttonStyle(.plain)
             .help(Preferences.shared.claudeAsksFirst
@@ -63,12 +70,13 @@ struct ClaudePanel: View {
         .frame(height: 48)
     }
 
-    private var subtitle: String {
+    /// Only while there's something to say; at rest the approval menu says how Claude works.
+    private var subtitle: String? {
         switch claude.state {
         case .unavailable: "Not available"
         case .working where !claude.pendingApprovals.isEmpty: "Waiting for you"
         case .working: "Working…"
-        case .idle: "Proposes, you apply"
+        case .idle: nil
         }
     }
 }
@@ -125,7 +133,7 @@ private struct ApplyAllBar: View {
     }
 }
 
-/// What Claude can see: the phase and the open file.
+/// What Claude can see: the open file.
 private struct ContextChips: View {
     @Environment(\.theme) private var theme
     let session: Session
@@ -133,9 +141,6 @@ private struct ContextChips: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if let current = workspace.lifecycle.currentIndex {
-                chip("\(workspace.lifecycle.phases[current]) phase", symbol: "circle.circle")
-            }
             if let document = workspace.activeDocument {
                 chip(document.name, symbol: "doc.text")
                     .help("Claude sees which file is open and where the cursor is")
@@ -314,11 +319,6 @@ private struct EmptyConversation: View {
     private var suggestions: [String] {
         var list = ["Explain how this project is put together"]
         if let workspace = session.workspace {
-            if !workspace.lifecycle.hasSpec {
-                list.append("Draft a .dante/project.yaml for this project")
-            } else if let current = workspace.lifecycle.currentIndex {
-                list.append("What should I do next in the \(workspace.lifecycle.phases[current]) phase?")
-            }
             if let document = workspace.activeDocument {
                 list.append(document.kind.opensAsText ? "Write tests for \(document.name)" : "Summarise \(document.name)")
             }

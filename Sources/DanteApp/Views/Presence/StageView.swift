@@ -61,7 +61,9 @@ final class StageController: NSObject, NSWindowDelegate {
             MainActor.assumeIsolated { StageController.shared.hidePointerIfStill() }
         }
         keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            MainActor.assumeIsolated { StageController.shared.handle(event) ? nil : event }
+            let key = event.keyCode, window = event.windowNumber
+            let handled = MainActor.assumeIsolated { StageController.shared.handle(key: key, window: window) }
+            return handled ? nil : event
         }
     }
 
@@ -77,9 +79,9 @@ final class StageController: NSObject, NSWindowDelegate {
     }
 
     /// Esc leaves, Space talks, Return approves what's waiting.
-    private func handle(_ event: NSEvent) -> Bool {
-        guard let window, event.window === window else { return false }
-        switch Int(event.keyCode) {
+    private func handle(key: UInt16, window number: Int) -> Bool {
+        guard let window, window.windowNumber == number else { return false }
+        switch Int(key) {
         case 53:
             close()
         case 49:

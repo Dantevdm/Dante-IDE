@@ -1,8 +1,8 @@
 import DanteKit
 import SwiftUI
 
-/// Home: where the project is. The lifecycle, the current phase's checklist and tasks,
-/// then git, the local environment, what Claude knows and the docs.
+/// Home: where the project is. What changed since your last visit, then git, the local
+/// environment, what Claude knows and the docs.
 struct HomeView: View {
     @Environment(\.theme) private var theme
     let session: Session
@@ -11,8 +11,6 @@ struct HomeView: View {
     @State private var git: GitSnapshot?
     @State private var containers: Result<[ContainerState], DockerUnavailable>?
     @State private var compose: ComposeFile?
-
-    private var lifecycle: Lifecycle { workspace.lifecycle }
 
     var body: some View {
         AreaPage(
@@ -30,11 +28,6 @@ struct HomeView: View {
             facts
             if let since = session.sinceLastVisit {
                 SinceLastVisitCard(session: session, since: since)
-            }
-            Timeline(session: session, workspace: workspace)
-            HStack(alignment: .top, spacing: 16) {
-                CurrentPhaseCard(session: session, workspace: workspace)
-                PhaseTasksCard(session: session, workspace: workspace)
             }
             CardGrid(minimum: 300) {
                 GitCard(git: git) { session.area = .ship }
@@ -123,23 +116,6 @@ private struct SinceLastVisitCard: View {
                     Text("and \(since.moreCommits) more").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                 }
             }
-            if !since.taskMoves.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(since.taskMoves.prefix(6)) { move in
-                        HStack(spacing: 8) {
-                            Text(move.id).font(.dante(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(theme.text3.color)
-                            Text(MarkdownText.attributed(move.title, theme: theme)).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
-                            Spacer(minLength: 6)
-                            Text(move.from.map { "\($0.title) → \(move.to.title)" } ?? "New · \(move.to.title)")
-                                .font(.dante(size: 11.5))
-                                .foregroundStyle(move.to == .done ? theme.green.color : theme.text2.color)
-                        }
-                    }
-                    if since.taskMoves.count > 6 {
-                        LinkButton("and \(since.taskMoves.count - 6) more on the board") { session.area = .plan }
-                    }
-                }
-            }
         }
     }
 
@@ -149,184 +125,6 @@ private struct SinceLastVisitCard: View {
             Text(text).font(.dante(size: 12))
         }
         .foregroundStyle(theme.text2.color)
-    }
-}
-
-// MARK: Lifecycle
-
-private struct Timeline: View {
-    @Environment(\.theme) private var theme
-    let session: Session
-    let workspace: Workspace
-
-    var body: some View {
-        let lifecycle = workspace.lifecycle
-        HStack(alignment: .top, spacing: 10) {
-            ForEach(Array(lifecycle.phases.enumerated()), id: \.offset) { index, phase in
-                Button { session.showPhase(phase) } label: {
-                    step(phase, index: index, current: lifecycle.currentIndex)
-                }
-                .buttonStyle(.plain)
-                .help("Open \(phase) in Plan")
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
-    }
-
-    private func step(_ phase: String, index: Int, current: Int?) -> some View {
-        let state: (bar: Double, label: String, color: Color, weight: Font.Weight) = {
-            guard let current else { return (0, "Not started", theme.text3.color, .regular) }
-            if index < current { return (1, "Done", theme.text3.color, .regular) }
-            if index == current {
-                let count = workspace.tasks.count(in: phase)
-                let fraction = count.total == 0 ? 0.08 : max(0.08, Double(count.done) / Double(count.total))
-                return (fraction, count.total == 0 ? "In progress" : "\(count.done) of \(count.total) tasks", theme.accent.color, .semibold)
-            }
-            return (0, "Not started", theme.text3.color, .regular)
-        }()
-        let isDone = current.map { index < $0 } ?? false
-        return VStack(alignment: .leading, spacing: 8) {
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(isDone ? theme.done.color : theme.track.color)
-                    if !isDone, state.bar > 0 {
-                        Capsule().fill(theme.accent.color).frame(width: proxy.size.width * state.bar)
-                    }
-                }
-            }
-            .frame(height: 4)
-            HStack(spacing: 5) {
-                if isDone {
-                    Image(systemName: "checkmark").font(.dante(size: 9, weight: .bold)).foregroundStyle(theme.green.color)
-                }
-                Text(phase)
-                    .font(.dante(size: 12.5, weight: state.weight))
-                    .foregroundStyle(index == current ? theme.text.color : (isDone ? theme.text2.color : theme.text3.color))
-            }
-            Text(state.label).font(.dante(size: 11.5)).foregroundStyle(state.color)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-    }
-}
-
-private struct CurrentPhaseCard: View {
-    @Environment(\.theme) private var theme
-    let session: Session
-    let workspace: Workspace
-
-    var body: some View {
-        let lifecycle = workspace.lifecycle
-        let phase = lifecycle.currentIndex.map { lifecycle.phases[$0] }
-        let doc = phase.flatMap { workspace.phaseDocs[$0.lowercased()] }
-        let items = doc?.doneWhen ?? []
-        Card(spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Eyebrow("Current phase")
-                    Text(phase ?? "None set").font(.dante(size: 20, weight: .semibold)).foregroundStyle(theme.text.color)
-                    if let summary = doc?.summary.nonEmpty ?? phase.map({ PhaseDoc.parse(workspace.lifecycle.phaseDocTemplate($0)).summary }) {
-                        Text(summary).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                Spacer()
-                if !items.isEmpty {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        (Text("\(items.count(where: \.done))") + Text("/\(items.count)").foregroundStyle(theme.text3.color))
-                            .font(.dante(size: 22, weight: .medium, design: .monospaced))
-                            .foregroundStyle(theme.text.color)
-                        Text("done when").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-                    }
-                }
-            }
-            if items.isEmpty, let phase {
-                Text("No “done when” checklist for \(phase) yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
-            }
-            VStack(alignment: .leading, spacing: 9) {
-                ForEach(items) { item in
-                    HStack(alignment: .firstTextBaseline, spacing: 9) {
-                        Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
-                            .font(.dante(size: 12))
-                            .foregroundStyle(item.done ? theme.green.color : theme.text3.color)
-                        Text(MarkdownText.attributed(item.text, theme: theme))
-                            .font(.dante(size: 12.5))
-                            .foregroundStyle(item.done ? theme.text2.color : theme.text.color)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            HStack {
-                if let index = lifecycle.currentIndex, index + 1 < lifecycle.phases.count {
-                    (Text("Up next: ") + Text(lifecycle.phases[index + 1]).foregroundStyle(theme.text2.color) + Text(". Move on whenever you’re ready."))
-                        .font(.dante(size: 12))
-                        .foregroundStyle(theme.text3.color)
-                }
-                Spacer()
-                Button("Open phase") { phase.map(session.showPhase) ?? (session.area = .plan) }
-                    .buttonStyle(DanteButtonStyle())
-            }
-        }
-    }
-}
-
-private struct PhaseTasksCard: View {
-    @Environment(\.theme) private var theme
-    let session: Session
-    let workspace: Workspace
-
-    var body: some View {
-        let lifecycle = workspace.lifecycle
-        let phase = lifecycle.currentIndex.map { lifecycle.phases[$0] }
-        let order: [TaskState] = [.inProgress, .review, .ready]
-        let tasks = phase.map { phase in order.flatMap { workspace.tasks.tasks(in: phase, state: $0) } } ?? []
-        Card(phase.map { "\($0) tasks" } ?? "Tasks") {
-            LinkButton("Board") { session.area = .plan }
-        } content: {
-            if let error = workspace.tasks.loadError {
-                TasksFileProblem(session: session, workspace: workspace, message: error)
-            } else if tasks.isEmpty {
-                Text(workspace.tasks.tasks.isEmpty ? "No tasks yet. Add them on the Plan board." : "Nothing open in this phase.")
-                    .font(.dante(size: 12.5))
-                    .foregroundStyle(theme.text3.color)
-            } else {
-                RowList(data: Array(tasks.prefix(7))) { task in
-                    HStack(spacing: 10) {
-                        Text(task.id)
-                            .font(.dante(size: 11.5, design: .monospaced))
-                            .foregroundStyle(theme.text3.color)
-                            .frame(width: 48, alignment: .leading)
-                        Text(MarkdownText.attributed(task.title, theme: theme))
-                            .font(.dante(size: 12.5))
-                            .foregroundStyle(theme.text.color)
-                            .lineLimit(1)
-                        Spacer(minLength: 8)
-                        if task.claude == true {
-                            Text("with Claude").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-                        }
-                        HStack(spacing: 5) {
-                            StatusDot(color: color(for: task.state), size: 6)
-                            Text(task.state.title).font(.dante(size: 12)).foregroundStyle(color(for: task.state))
-                        }
-                        .frame(width: 92, alignment: .trailing)
-                    }
-                }
-                if tasks.count > 7 {
-                    Text("\(tasks.count - 7) more on the board").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-                }
-            }
-        }
-    }
-
-    private func color(for state: TaskState) -> Color {
-        switch state {
-        case .inProgress: theme.accent.color
-        case .review: theme.amber.color
-        case .done: theme.green.color
-        case .ready: theme.text3.color
-        }
     }
 }
 
@@ -447,9 +245,6 @@ private struct ClaudeKnowsCard: View {
         let rules = workspace.claudeRules
         let fileManager = FileManager.default
         let facts = [
-            Fact(label: "Project and lifecycle", value: workspace.lifecycle.hasSpec ? "project.yaml" : "missing", present: workspace.lifecycle.hasSpec),
-            Fact(label: "Phase definitions", value: "\(workspace.phaseDocs.count) of \(workspace.lifecycle.phases.count)", present: !workspace.phaseDocs.isEmpty),
-            Fact(label: "Tasks", value: workspace.tasks.tasks.isEmpty ? "none" : "\(workspace.tasks.tasks.count)", present: !workspace.tasks.tasks.isEmpty),
             Fact(label: "Rules for Claude", value: rules.isEmpty ? "none" : "\(rules.propose.count) · \(rules.flag.count) · \(rules.never.count)", present: !rules.isEmpty),
             Fact(label: "Project notes", value: fileManager.fileExists(atPath: workspace.url.appending(path: "CLAUDE.md").path) ? "CLAUDE.md" : "none",
                  present: fileManager.fileExists(atPath: workspace.url.appending(path: "CLAUDE.md").path)),

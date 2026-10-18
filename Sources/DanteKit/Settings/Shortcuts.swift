@@ -81,7 +81,6 @@ public final class Shortcuts {
         .init("renameSymbol", "Rename Symbol…", "Edit", KeyBinding("e", [.command, .control])),
         .init("formatDocument", "Format Document", "Edit", KeyBinding("i", [.control, .shift])),
         .init("problems", "Problems", "Edit", KeyBinding("m", [.command, .shift])),
-        .init("finishTask", "Finish Task…", "Git", nil),
         .init("sourceControl", "Source Control", "Git", KeyBinding("g", [.control, .shift])),
         .init("push", "Push", "Git", nil),
         .init("pull", "Pull", "Git", nil),

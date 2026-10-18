@@ -2,7 +2,7 @@ import DanteKit
 import SwiftUI
 
 /// The workspace's own title bar. The window's system title bar is hidden, so this draws
-/// everything above the content: project, lifecycle ribbon and window-level actions.
+/// everything above the content: project, branch and window-level actions.
 struct TitleBar: View {
     @Environment(\.theme) private var theme
     @Environment(ThemeStore.self) private var themeStore
@@ -15,9 +15,6 @@ struct TitleBar: View {
 
     var body: some View {
         ZStack {
-            // Ribbon centred on the window, not on the space left between the side groups.
-            PhaseRibbon(lifecycle: workspace.lifecycle, selected: session.area == .plan ? session.planPhase : nil) { session.showPhase($0) }
-
             HStack(spacing: 6) {
                 HStack(spacing: 0) {
                     IconButton(symbol: "chevron.left", label: Shortcuts.shared.binding("back").map { "Back (\($0.display) or the mouse’s back button)" } ?? "Back (the mouse’s back button)", size: 11) { session.goBack() }

@@ -130,18 +130,6 @@ struct RootView: View {
             RemoteSheet(session: session)
                 .environment(\.theme, theme)
         }
-        .sheet(isPresented: Binding(get: { session.setupProfile != nil && session.workspace != nil }, set: { if !$0 { session.setupProfile = nil } })) {
-            if let profile = session.setupProfile, let workspace = session.workspace {
-                SetupSheet(session: session, workspace: workspace, profile: profile)
-                    .environment(\.theme, theme)
-            }
-        }
-        .sheet(isPresented: Binding(get: { session.finishing != nil && session.workspace != nil }, set: { if !$0 { session.finishing = nil } })) {
-            if let model = session.finishing, let workspace = session.workspace {
-                FinishTaskSheet(session: session, workspace: workspace, model: model)
-                    .environment(\.theme, theme)
-            }
-        }
         .alert(
             "Something went wrong",
             isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } }),

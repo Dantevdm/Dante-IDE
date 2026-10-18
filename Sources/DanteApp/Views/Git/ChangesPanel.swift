@@ -123,7 +123,7 @@ struct ChangesPanel: View {
             .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(theme.line.color))
             .overlay(alignment: .bottomTrailing) {
                 Button {
-                    Task { await git.writeMessage(tasks: inProgressTasks) }
+                    Task { await git.writeMessage(tasks: []) }
                 } label: {
                     Group {
                         if git.writingMessage {
@@ -182,10 +182,6 @@ struct ChangesPanel: View {
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
-    }
-
-    private var inProgressTasks: [String] {
-        workspace.tasks.tasks.filter { $0.state == .inProgress }.map { "\($0.id) \($0.title)" }
     }
 
     private func banner(_ error: GitRepository.Failure) -> some View {

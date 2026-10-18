@@ -7,14 +7,13 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, plan, map, code, tests, environments, data, ship, run, timeline, claude, agents, docs, spec
+    case home, map, code, tests, environments, data, ship, run, timeline, claude, agents, docs
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .home: "Home"
-        case .plan: "Plan"
         case .map: "Map"
         case .code: "Code"
         case .tests: "Tests"
@@ -26,14 +25,12 @@ enum Area: String, CaseIterable, Identifiable {
         case .claude: "Claude"
         case .agents: "Agents"
         case .docs: "Docs"
-        case .spec: "Spec"
         }
     }
 
     var symbol: String {
         switch self {
         case .home: "house"
-        case .plan: "checklist"
         case .map: "point.3.connected.trianglepath.dotted"
         case .code: "chevron.left.forwardslash.chevron.right"
         case .tests: "testtube.2"
@@ -45,32 +42,29 @@ enum Area: String, CaseIterable, Identifiable {
         case .claude: "sparkle"
         case .agents: "circle.hexagongrid"
         case .docs: "doc.text"
-        case .spec: "book.closed"
         }
     }
 
     /// What the area is for, shown as the rail button's tooltip.
     var summary: String {
         switch self {
-        case .home: "Where the project is: the current phase and its checklist, tasks, environment and docs at a glance."
-        case .plan: "Phases, what “done” means in each, and a task board stored in .dante/tasks.yaml."
+        case .home: "Where the project is: what changed, the environment, Claude and docs at a glance."
         case .map: "Architecture, process flows, data model and cloud diagrams generated from the code."
         case .code: "The editor, file explorer and terminal."
         case .tests: "Tests traced to specs and code paths, coverage by component, and tests Claude can draft."
         case .environments: "Docker Compose services with logs, shells and restarts, and Docker files Claude can write."
         case .data: "The project's databases: create one, browse tables, run queries and see the schema as a diagram."
-        case .ship: "A release checklist, a changelog drafted from tasks and commits, and the CI pipeline."
-        case .run: "Production metrics, errors and alarms, each linked back to a task."
+        case .ship: "A release checklist, a changelog drafted from commits, and the CI pipeline."
+        case .run: "Production metrics, errors and alarms."
         case .timeline: "Commits, releases, Claude sessions, test runs and CI in one stream, newest first."
         case .claude: "How Claude works on this project: usage, skills, memory, connectors and permissions."
         case .agents: "Claude and the local models it delegates to: jobs, tokens kept local and how each agent is doing."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
-        case .spec: "The .dante folder: lifecycle, phase checklists and what Claude may propose."
         }
     }
 
-    static let main: [Area] = [.home, .plan, .map, .code, .tests, .environments, .data, .ship, .run, .timeline, .claude, .agents]
-    static let footer: [Area] = [.docs, .spec]
+    static let main: [Area] = [.home, .map, .code, .tests, .environments, .data, .ship, .run, .timeline, .claude, .agents]
+    static let footer: [Area] = [.docs]
 }
 
 /// What the command palette searches. ⌘K opens it on everything, ⌘P on files.
@@ -111,8 +105,6 @@ final class Session {
     var conflicts: Set<URL> = []
 
     var area: Area = .code
-    /// The phase Plan shows; nil follows the project's current phase.
-    var planPhase: String?
     var showsTerminal = true
     var terminalHeight: Double = 240
     var showsClaude = true
@@ -133,8 +125,6 @@ final class Session {
     let git = GitModel()
     /// The branch switcher in the title bar is open.
     var showsBranches = false
-    /// The Finish Task sheet, while open.
-    var finishing: FinishTaskModel?
     /// Claude rewriting code in the editor (⌘I), while its bar is open.
     var inlineEdit: InlineEditModel?
     /// What changed since this project was last closed, for Home; nil when nothing did.
@@ -173,12 +163,6 @@ final class Session {
     }
     var claudeWidth: Double = 380
 
-    /// Opens Plan on a phase, as the title bar's ribbon does.
-    func showPhase(_ phase: String) {
-        planPhase = phase
-        area = .plan
-    }
-
     /// The document the Docs area shows, as a project-relative path.
     var docPath: String?
     /// A heading to scroll the open doc to.
@@ -199,8 +183,6 @@ final class Session {
     private(set) var terminalInput: TerminalInput?
     /// Bumped to move keyboard focus to Claude's message box.
     var claudeFocusRequest = 0
-    /// The task whose conversation is starting, so its id can be written to the task.
-    var claudeTaskLink: PlanTask.ID?
     /// The Claude panel's history and usage popovers, so `/history` and `/context` can open them.
     var claudeShowsHistory = false
     var claudeShowsUsage = false
@@ -300,57 +282,6 @@ final class Session {
         branch = Git.currentBranch(in: url)
         area = .code
         recents.note(url)
-        if !workspace.lifecycle.hasSpec { offerSetup() }
-    }
-
-    // MARK: Project setup
-
-    /// Shows the setup sheet for a project without `.dante/project.yaml` once Dante has
-    /// looked at its files and history. Projects the user said "Not now" to are skipped
-    /// unless `force` is set.
-    var setupProfile: ProjectProfile?
-    private static let declinedSetupKey = "declinedSetup"
-
-    func offerSetup(force: Bool = false) {
-        guard let workspace else { return }
-        let root = workspace.url
-        if !force, UserDefaults.standard.stringArray(forKey: Self.declinedSetupKey)?.contains(root.path) == true { return }
-        Task {
-            let paths = await Task.detached(priority: .userInitiated) { FileIndex.scan(root) }.value
-            let commits = await Shell.run(["git", "rev-list", "--count", "HEAD"], in: root)
-            let tags = await Shell.run(["git", "tag"], in: root)
-            let profile = ProjectProfile.detect(
-                paths: paths,
-                commits: commits.status == 0 ? Int(commits.stdout) ?? 0 : 0,
-                tags: tags.status == 0 ? tags.stdout.split(separator: "\n").count : 0,
-                testCommand: TestCommand.detect(projectRoot: root)?.label,
-                summary: Workspace.readmeSummary(in: root)
-            ) { path in try? String(contentsOf: root.appending(path: path), encoding: .utf8) }
-            guard self.workspace?.url == root else { return }
-            setupProfile = profile
-        }
-    }
-
-    func declineSetup() {
-        guard let root = workspace?.url.path else { return }
-        var declined = UserDefaults.standard.stringArray(forKey: Self.declinedSetupKey) ?? []
-        if !declined.contains(root) { declined.append(root) }
-        UserDefaults.standard.set(declined, forKey: Self.declinedSetupKey)
-        setupProfile = nil
-    }
-
-    /// Writes the skeleton `.dante/` and, if any parts were picked, asks Claude to fill it in.
-    func setUpProject(_ request: ProjectSetupRequest) {
-        guard let workspace, let profile = setupProfile else { return }
-        do {
-            try workspace.setUp(with: request.template, current: request.phase)
-        } catch {
-            errorMessage = "Couldn’t create .dante/: \(error.localizedDescription)"
-            return
-        }
-        setupProfile = nil
-        area = .plan
-        if !request.parts.isEmpty { askClaude(request.summary, instructions: request.prompt(profile: profile)) }
     }
 
     func closeProject() {
@@ -435,7 +366,6 @@ final class Session {
             self?.notifyClaude(attention)
             self?.pullRemoteTranscripts()
         }
-        claude.onConversationStarted = { [weak self] id in self?.linkConversation(id) }
         applyClaudePreferences(to: claude)
         return claude
     }
@@ -464,12 +394,11 @@ final class Session {
 
     // MARK: Back and forward
 
-    /// Where the window is: the area, plus the doc, file or phase it shows.
+    /// Where the window is: the area, plus the doc or file it shows.
     struct Place: Equatable, Sendable {
         var area: Area
         var docPath: String?
         var file: URL?
-        var planPhase: String?
     }
 
     var history = NavigationHistory<Place>()
@@ -480,8 +409,7 @@ final class Session {
         Place(
             area: area,
             docPath: area == .docs ? docPath : nil,
-            file: area == .code ? workspace?.activeDocument?.url : nil,
-            planPhase: area == .plan ? planPhase : nil
+            file: area == .code ? workspace?.activeDocument?.url : nil
         )
     }
 
@@ -513,7 +441,6 @@ final class Session {
             }
         }
         if let docPath = target.docPath { self.docPath = docPath }
-        if target.area == .plan { planPhase = target.planPhase }
         area = target.area
         restoredPlace = place
     }

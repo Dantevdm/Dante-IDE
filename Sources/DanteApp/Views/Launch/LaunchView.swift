@@ -61,7 +61,7 @@ struct LaunchView: View {
                     .blur(radius: drawn || reduceMotion ? 0 : 6)
                     .opacity(drawn ? 1 : 0)
                     .animation(reduceMotion ? nil : .timingCurve(0.2, 0.7, 0.2, 1, duration: 1).delay(1.05), value: drawn)
-                Text("The whole lifecycle, in one window.")
+                Text("Your code and Claude, in one window.")
                     .font(.dante(size: 15))
                     .foregroundStyle(theme.text2.color)
                     .opacity(drawn ? 1 : 0)
@@ -203,7 +203,6 @@ private struct RecentRow: View {
     let project: RecentProject
     let action: () -> Void
     @State private var hovering = false
-    @State private var lifecycle = Lifecycle()
 
     private var remote: RemoteProject? { RemoteRegistry.known(mirror: project.url) }
 
@@ -220,12 +219,6 @@ private struct RecentRow: View {
                         .truncationMode(.middle)
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 5) {
-                    Text(lifecycle.currentIndex.map { lifecycle.phases[$0] } ?? (lifecycle.hasSpec ? "" : "No spec yet"))
-                        .font(.dante(size: 12))
-                        .foregroundStyle(theme.text2.color)
-                    PhaseDots(lifecycle: lifecycle)
-                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
@@ -234,6 +227,5 @@ private struct RecentRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .task(id: project.path) { lifecycle = Lifecycle.load(projectRoot: project.url) }
     }
 }

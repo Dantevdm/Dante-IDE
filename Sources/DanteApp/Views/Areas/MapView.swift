@@ -332,7 +332,6 @@ private struct Inspector: View {
     let close: () -> Void
 
     var body: some View {
-        let tasks = workspace.tasks.tasks.filter { $0.state != .done && ($0.title.localizedCaseInsensitiveContains(node.name) || ($0.note ?? "").localizedCaseInsensitiveContains(node.name)) }
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
@@ -349,20 +348,6 @@ private struct Inspector: View {
                     row("Size", value: node.detail, mono: true)
                     row("Depends on", value: graph.dependencies(of: node.id).map(\.name).joined(separator: ", ").nonEmpty ?? "nothing")
                     row("Used by", value: graph.dependents(of: node.id).map(\.name).joined(separator: ", ").nonEmpty ?? "nothing")
-                }
-                if !tasks.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Eyebrow("Open tasks")
-                        ForEach(tasks) { task in
-                            Button { session.showPhase(task.phase.capitalized) } label: {
-                                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                    Text(task.id).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
-                                    Text(task.title).font(.dante(size: 12)).foregroundStyle(theme.text.color).lineLimit(2)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     if let path = node.path, FileManager.default.fileExists(atPath: workspace.url.appending(path: path).path) {

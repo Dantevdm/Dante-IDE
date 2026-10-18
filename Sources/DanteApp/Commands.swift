@@ -19,8 +19,6 @@ struct DanteCommands: Commands {
                 .shortcut("clone")
             Button("Open Remote…") { session?.showsOpenRemote = true }
                 .shortcut("openRemote")
-            Button("Set Up Project for Dante…") { session?.offerSetup(force: true) }
-                .disabled(session?.workspace == nil)
             Divider()
             Button("New Database…") {
                 session?.area = .data
@@ -95,10 +93,6 @@ struct DanteCommands: Commands {
         }
 
         CommandMenu("Git") {
-            Button("Finish Task…") { session?.finishCurrentTask() }
-                .shortcut("finishTask")
-                .disabled(session?.workspace == nil)
-            Divider()
             Button("Source Control") { session?.showChanges() }
                 .shortcut("sourceControl")
                 .disabled(session?.workspace == nil)

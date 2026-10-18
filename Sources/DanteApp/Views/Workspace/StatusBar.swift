@@ -12,12 +12,6 @@ struct StatusBar: View {
             if let branch = session.git.status?.branch ?? session.branch {
                 Label(branch, systemImage: "arrow.triangle.branch")
             }
-            if let current = workspace.lifecycle.currentIndex {
-                HStack(spacing: 5) {
-                    StatusDot(color: theme.accent.color, size: 6)
-                    Text("\(workspace.lifecycle.phases[current]) phase")
-                }
-            }
             Spacer()
             if let document = workspace.activeDocument, document.kind.opensAsText {
                 LanguageStatus(session: session, document: document)

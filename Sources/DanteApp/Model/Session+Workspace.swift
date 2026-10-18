@@ -147,22 +147,6 @@ extension Session {
         }
     }
 
-    /// Git › Finish Task: the task being worked on with Claude, else the first in progress.
-    func finishCurrentTask() {
-        guard let workspace else { return }
-        let open = workspace.tasks.file.tasks.filter { $0.state == .inProgress }
-        guard let task = open.first(where: { $0.claude == true }) ?? open.first else {
-            errorMessage = "No task is in progress. Move one to In progress on the Plan board, or use Finish… on its card."
-            return
-        }
-        finish(task)
-    }
-
-    func finish(_ task: PlanTask) {
-        guard let workspace else { return }
-        finishing = FinishTaskModel(root: workspace.url, task: task)
-    }
-
     func toggleSplit() {
         guard let workspace else { return }
         if workspace.split == nil { workspace.splitEditor() } else { workspace.closeSplit() }
