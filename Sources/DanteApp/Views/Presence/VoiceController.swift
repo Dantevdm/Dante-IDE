@@ -6,7 +6,7 @@ import Speech
 
 /// Talking to Claude through the orb. ⌃⌥Space (anywhere) or the panel's mic starts
 /// listening; it sends after a pause, or on the key again. Speech is recognised on this Mac.
-/// A few phrases are commands (stop, yes, no, switch to a project); anything else goes to
+/// A few phrases are commands (stop, yes, no, switch to a project, full screen, minimise); anything else goes to
 /// Claude in the frontmost project, and the reply is read out when the turn ends.
 @MainActor
 @Observable
@@ -206,6 +206,8 @@ final class VoiceController {
         case .decline:
             guard let session = target, let claude = session.claude, !claude.pendingApprovals.isEmpty else { return say("Nothing’s waiting.") }
             for tool in claude.pendingApprovals { claude.decline(tool.id) }
+        case .stage(let open):
+            if open { StageController.shared.open() } else { StageController.shared.close() }
         case .ask(let text):
             guard let session = target else { return say("Open a project first.") }
             session.askClaude(text)

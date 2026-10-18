@@ -12,6 +12,9 @@ final class PresenceModel {
     var vitality = Vitality()
     /// Sub-agents and local models working now, circling the orb.
     var satellites: [OrbSatellite] = []
+    /// The five-hour window so far against the busiest one seen (1 = as busy), when known.
+    var windowShare: Double?
+    var usageResets: Date?
 }
 
 /// Claude's presence in the menu bar: an orb that shows, across every window, whether Claude
@@ -150,8 +153,11 @@ final class PresenceController: NSObject {
             guard let self else { return }
             self.loadingUsage = false
             self.usageLoaded = Date()
-            self.fatigue = Vitality.fatigue(current: usage.current?.usage.weighted ?? 0, busiest: usage.busiestWindow?.weighted)
+            let current = usage.current?.usage.weighted ?? 0
+            self.fatigue = Vitality.fatigue(current: current, busiest: usage.busiestWindow?.weighted)
             self.usageResets = usage.current?.resets
+            self.model.windowShare = usage.busiestWindow.flatMap { $0.weighted > 0 ? Double(current) / Double($0.weighted) : nil }
+            self.model.usageResets = usage.current?.resets
             self.scheduleUpdate()
         }
     }
@@ -242,6 +248,24 @@ final class PresenceController: NSObject {
         let talk = NSMenuItem(title: "Talk to Claude  \(VoiceController.keyLabel)", action: #selector(talk), keyEquivalent: "")
         talk.target = self
         menu.addItem(talk)
+        // The Stage, on any screen: a TV shows up here once it's connected or AirPlayed to.
+        let screens = NSScreen.screens
+        if screens.count > 1 {
+            let stage = NSMenuItem(title: "Open Stage", action: nil, keyEquivalent: "")
+            let choices = NSMenu()
+            for (index, screen) in screens.enumerated() {
+                let item = NSMenuItem(title: "On \(screen.localizedName)", action: #selector(openStageOnScreen(_:)), keyEquivalent: "")
+                item.target = self
+                item.tag = index
+                choices.addItem(item)
+            }
+            stage.submenu = choices
+            menu.addItem(stage)
+        } else {
+            let stage = NSMenuItem(title: StageController.shared.isOpen ? "Leave Stage" : "Open Stage", action: #selector(toggleStage), keyEquivalent: "")
+            stage.target = self
+            menu.addItem(stage)
+        }
         menu.addItem(.separator())
         let hide = NSMenuItem(title: "Hide from Menu Bar", action: #selector(hide), keyEquivalent: "")
         hide.target = self
@@ -255,6 +279,15 @@ final class PresenceController: NSObject {
     @objc private func hide() { Preferences.shared.showsPresence = false }
 
     @objc private func talk() { VoiceController.shared.toggle() }
+
+    @objc private func toggleStage() { StageController.shared.toggle() }
+
+    @objc private func openStageOnScreen(_ item: NSMenuItem) {
+        let screens = NSScreen.screens
+        guard screens.indices.contains(item.tag) else { return }
+        StageController.shared.close()
+        StageController.shared.open(on: screens[item.tag])
+    }
 
     @objc private func showDante() {
         NSApp.activate()
@@ -281,6 +314,12 @@ final class PresenceController: NSObject {
     }
 
     // MARK: Actions from the panel
+
+    /// The panel's orb was clicked: go full screen.
+    func openStage() {
+        popover?.performClose(nil)
+        StageController.shared.open()
+    }
 
     func show(_ id: String) {
         popover?.performClose(nil)

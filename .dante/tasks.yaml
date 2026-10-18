@@ -433,7 +433,7 @@ tasks:
 - id: DI-106
   title: "Stage: a full-screen Jarvis-style view for a TV, with the orb and a Dante HUD"
   phase: build
-  state: ready
+  state: review
   spec: docs/plans/walk-and-work.md
 - id: DI-107
   title: "Hands: let Claude open apps, find folders and control the Mac, with a visible kill switch"

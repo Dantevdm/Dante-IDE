@@ -116,6 +116,15 @@ import Testing
         #expect(VoiceCommand.parse("  ", projects: projects) == .cancel)
     }
 
+    @Test func opensAndLeavesTheStage() {
+        #expect(VoiceCommand.parse("Go full screen.", projects: []) == .stage(true))
+        #expect(VoiceCommand.parse("Open the stage, please", projects: []) == .stage(true))
+        #expect(VoiceCommand.parse("Minimise", projects: []) == .stage(false))
+        #expect(VoiceCommand.parse("minimize it.", projects: []) == .stage(false))
+        #expect(VoiceCommand.parse("Close", projects: []) == .stage(false))
+        #expect(VoiceCommand.parse("Close the login bug", projects: []) == .ask("Close the login bug"))
+    }
+
     @Test func spokenRepliesDropCodeAndMarkdown() {
         let reply = """
         ## Done

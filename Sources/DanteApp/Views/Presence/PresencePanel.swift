@@ -11,6 +11,18 @@ struct PresencePanel: View {
         VStack(spacing: 0) {
             OrbRepresentable(size: .large)
                 .frame(width: 260, height: 220)
+                .overlay {
+                    // The orb itself doesn't take clicks; this does, over the orb only.
+                    Button { controller.openStage() } label: {
+                        Color.clear
+                            .frame(width: 150, height: 150)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .offset(y: 16)
+                    .help("Open the Stage: Dante full screen. Esc or “minimise” leaves it.")
+                    .accessibilityLabel("Open the Stage")
+                }
                 .padding(.top, 6)
             Text(model.mood.title)
                 .font(.dante(size: 19, weight: .semibold))
