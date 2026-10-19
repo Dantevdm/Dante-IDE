@@ -20,6 +20,10 @@ struct EnvironmentView: View {
     @State private var holders: [PortHolder] = []
     /// A start held back because a port it publishes is taken.
     @State private var portPrompt: PortPrompt?
+    /// Frontends, APIs and workers in the repo, and whether compose runs them.
+    @State private var apps: [RunnableApp] = []
+    /// This project's containers started outside compose (`docker run --name sp-pg`).
+    @State private var others: [DockerContainer] = []
 
     struct PortPrompt: Identifiable {
         var conflicts: [PortConflict]
@@ -93,6 +97,7 @@ struct EnvironmentView: View {
                         )
                     }
                 }
+                projectCards(compose: compose)
                 if dockerReady {
                     ComposeLogsPanel(root: workspace.url, services: compose.services.map(\.name), service: $logService, waiting: waiting)
                 }
@@ -108,11 +113,12 @@ struct EnvironmentView: View {
                     title: "No docker-compose.yml",
                     message: dockerfiles.isEmpty ? nil : "\(dockerfiles.count == 1 ? "1 Dockerfile" : "\(dockerfiles.count) Dockerfiles"), no compose file"
                 ) {
-                    Button("Ask Claude to write it") {
+                    Button("Ask \(session.agentName) to write it") {
                         session.askClaude("Write a docker-compose.yml for running this project locally: the app and every service the code connects to (databases, caches, queues), with ports, health checks and volumes. Add Dockerfiles where a service builds from this repo. Explain each service briefly.")
                     }
                     .buttonStyle(DanteButtonStyle(primary: true))
                 }
+                projectCards(compose: nil)
             }
         }
         .confirmationDialog(portPromptTitle, isPresented: Binding(get: { portPrompt != nil }, set: { if !$0 { portPrompt = nil } }), titleVisibility: .visible, presenting: portPrompt) { prompt in
@@ -140,6 +146,14 @@ struct EnvironmentView: View {
         }
         .task(id: workspace.revision) {
             compose = ComposeFile.load(projectRoot: workspace.url)
+            let files = workspace.files, root = workspace.url, loaded = compose
+            apps = await Task.detached(priority: .utility) {
+                RunnableApp.detect(files: files, read: { path in
+                    let url = root.appending(path: path)
+                    guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 256_000 else { return nil }
+                    return try? String(contentsOf: url, encoding: .utf8)
+                }, compose: loaded)
+            }.value
             await refresh()
             // Keep states current while the area is open.
             while !Task.isCancelled, compose != nil {
@@ -251,7 +265,35 @@ struct EnvironmentView: View {
         }
     }
 
+    /// The project's apps and its containers outside compose.
+    @ViewBuilder
+    private func projectCards(compose: ComposeFile?) -> some View {
+        if !apps.isEmpty {
+            AppsCard(session: session, apps: apps, hasCompose: compose != nil, composeName: compose?.url.lastPathComponent ?? "docker-compose.yml",
+                     databases: others.filter { $0.engine != nil }.map(\.name))
+        }
+        if !others.isEmpty {
+            ContainersCard(session: session, containers: others, busy: busy) { container, start in
+                act("container:\(container.name)", start ? ["start", container.name] : ["stop", container.name], plain: true)
+            }
+        }
+    }
+
     private func refresh() async {
+        // The project's containers outside compose, on this Mac (a remote host's aren't here).
+        if session.remoteSync == nil, let all = await DockerContainer.load() {
+            var next: [DockerContainer] = []
+            for container in DockerContainer.related(all, project: workspace.name) {
+                // A stopped container's ports come from inspect, once.
+                if container.ports.isEmpty, !container.isRunning {
+                    let known = others.first { $0.name == container.name && $0.state == container.state && !$0.ports.isEmpty }
+                    if let known { next.append(known) } else { next.append(await DockerContainer.inspect(container).container) }
+                } else {
+                    next.append(container)
+                }
+            }
+            if next != others { others = next }
+        }
         guard compose != nil else { containers = nil; return }
         let next = await ContainerState.load(projectRoot: workspace.url)
         if next != containers { containers = next }
@@ -278,8 +320,8 @@ struct EnvironmentView: View {
     /// Runs a compose command, showing its output as it goes: `up` waits for health
     /// checks and can take a minute before it says anything went wrong.
     /// Starts (`up`) look for taken ports first and ask what to do about them.
-    private func act(_ id: String, _ arguments: [String], checkingPorts: Bool = true) {
-        if checkingPorts, arguments.first == "up", let compose, session.remoteSync == nil {
+    private func act(_ id: String, _ arguments: [String], checkingPorts: Bool = true, plain: Bool = false) {
+        if !plain, checkingPorts, arguments.first == "up", let compose, session.remoteSync == nil {
             busy = id
             Task {
                 let found = await PortCheck.holders(await ListeningPort.load())
@@ -297,10 +339,11 @@ struct EnvironmentView: View {
             return
         }
         busy = id
-        command = ComposeRun(title: (["docker", "compose"] + arguments).joined(separator: " "))
+        // `plain` runs docker itself, for containers outside compose.
+        command = ComposeRun(title: ((plain ? ["docker"] : ["docker", "compose"]) + arguments).joined(separator: " "))
         Task {
             defer { busy = nil }
-            guard let process = try? Shell.stream(["docker", "compose", "--progress", "plain"] + arguments, in: workspace.url) else {
+            guard let process = try? Shell.stream((plain ? ["docker"] : ["docker", "compose", "--progress", "plain"]) + arguments, in: workspace.url) else {
                 command?.lines.append("Couldn’t run docker.")
                 command?.status = 1
                 return
@@ -645,5 +688,118 @@ private struct PortsCard: View {
         if let remote, remote.unforwarded[row.port] != nil { return theme.amber.color }
         if row.holder != nil { return row.service == nil ? theme.accent.color : theme.amber.color }
         return row.isContainer ? theme.green.color : theme.text3.color
+    }
+}
+
+/// The project's own apps: frontends, APIs and workers found in the code, how each starts,
+/// and whether compose runs it. Run types its command into the terminal; Add to compose asks
+/// the agent in charge to containerise it beside the services already there.
+private struct AppsCard: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let apps: [RunnableApp]
+    let hasCompose: Bool
+    let composeName: String
+    /// Database containers outside compose, which a new service may need to reach.
+    let databases: [String]
+
+    var body: some View {
+        let missing = apps.filter { $0.service == nil }
+        Card("Apps in this project") {
+            if missing.count > 1 {
+                Button("Add All to Compose") { add(missing) }
+                    .buttonStyle(DanteButtonStyle())
+                    .help("\(session.agentName) writes the Dockerfiles that are missing and adds a service for each app to \(composeName); you approve each edit.")
+            }
+        } content: {
+            RowList(data: apps, padding: 6) { app in
+                HStack(spacing: 10) {
+                    Image(systemName: app.kind == .frontend ? "macwindow" : "server.rack")
+                        .font(.dante(size: 13))
+                        .foregroundStyle(theme.text2.color)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(app.name).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                            Text(app.stack).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                        }
+                        Text("\(app.folder.isEmpty ? "." : app.folder) · \(app.command)")
+                            .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    Spacer(minLength: 8)
+                    if let service = app.service {
+                        Label("in compose as \(service)", systemImage: "checkmark")
+                            .font(.dante(size: 11.5)).foregroundStyle(theme.green.color)
+                    } else {
+                        Button("Run") { session.runInTerminal(app.commandFromRoot) }
+                            .buttonStyle(DanteButtonStyle())
+                            .help("Runs \(app.commandFromRoot) in the terminal, on this Mac.")
+                        Button("Add to Compose") { add([app]) }
+                            .buttonStyle(DanteButtonStyle(primary: missing.count == 1))
+                            .help("\(session.agentName) adds \(app.name) to \(composeName)\(app.hasDockerfile ? "" : " and writes its Dockerfile"); you approve each edit.")
+                    }
+                }
+            }
+        }
+    }
+
+    private func add(_ chosen: [RunnableApp]) {
+        let list = chosen.map { app in
+            "- \(app.name) (\(app.kind.rawValue), \(app.stack)) in \(app.folder.isEmpty ? "the repo root" : app.folder + "/"): starts with `\(app.command)`\(app.hasDockerfile ? ", has a Dockerfile" : ", no Dockerfile yet")"
+        }.joined(separator: "\n")
+        let target = hasCompose ? "Add them as services to \(composeName), beside the services already there" : "Write a docker-compose.yml that runs them"
+        let outside = databases.isEmpty ? "" : " The data may live in a database container started outside compose (\(databases.joined(separator: ", "))): say so and ask before pointing a service away from the compose database."
+        session.askClaude("""
+        Run these parts of the project with Docker Compose for local development:
+        \(list)
+
+        \(target). Write a Dockerfile where one is missing (multi-stage, small runtime image, non-root user) and reuse the ones that exist. Wire each service to what it needs (the database and other services) through environment variables read from the code's own config, publish a port that doesn't clash with the others, add depends_on with health checks, and keep secrets out of the files (use .env). Don't change application code.\(outside) Explain each service in a sentence when you're done.
+        """)
+    }
+}
+
+/// This project's containers that compose doesn't manage: started by hand or by a script,
+/// like a database (`sp-pg`) or a test build of the app.
+private struct ContainersCard: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let containers: [DockerContainer]
+    let busy: String?
+    let toggle: (DockerContainer, _ start: Bool) -> Void
+
+    var body: some View {
+        Card("This project’s containers") {
+            Text("Started outside compose").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                .help("Containers run by hand (docker run) that belong to this project: built from its image or named after it. Nothing else on this Mac is shown.")
+        } content: {
+            RowList(data: containers, padding: 6) { container in
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(container.isRunning ? theme.green.color : theme.text3.color.opacity(0.5))
+                        .frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(container.name).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                            if let engine = container.engine {
+                                Text(engine.name).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                            }
+                            if let reason = container.belonging(to: session.workspace?.name ?? "") {
+                                Text(reason).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color.opacity(0.8))
+                            }
+                        }
+                        Text(([container.image] + container.ports.map { ":\($0.host)" } + [container.status]).joined(separator: " · "))
+                            .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    Spacer(minLength: 8)
+                    Button("Logs") { session.runInTerminal("docker logs --tail 200 -f \(Shell.quote(container.name))") }
+                        .buttonStyle(DanteButtonStyle())
+                    Button(container.isRunning ? "Stop" : "Start") { toggle(container, !container.isRunning) }
+                        .buttonStyle(DanteButtonStyle(primary: !container.isRunning))
+                        .disabled(busy != nil)
+                }
+            }
+        }
     }
 }

@@ -33,6 +33,12 @@ public struct ComposeFile: Equatable, Sendable {
     public var services: [Service]
     public var parseError: String?
 
+    public init(url: URL = URL(filePath: "compose.yaml"), services: [Service], parseError: String? = nil) {
+        self.url = url
+        self.services = services
+        self.parseError = parseError
+    }
+
     public static let fileNames = ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"]
 
     public static func find(in root: URL) -> URL? {

@@ -61,6 +61,8 @@ final class DataModel {
     private(set) var root: URL?
     private(set) var profile = DataDetector.detect(paths: [])
     private(set) var saved: [DatabaseConnection] = []
+    /// Database containers started outside compose that look like this project's (`sp-pg`).
+    private(set) var containers: [DatabaseConnection] = []
     var selectedID: String?
     private(set) var status: [String: Status] = [:]
     private(set) var schemas: [String: DatabaseSchema] = [:]
@@ -87,7 +89,9 @@ final class DataModel {
     /// Detected and saved connections; a saved one replaces the detected one it came from.
     var connections: [DatabaseConnection] {
         let savedIDs = Set(saved.map(\.id))
-        return saved + profile.connections.filter { !savedIDs.contains($0.id) }
+        let found = profile.connections.filter { !savedIDs.contains($0.id) }
+        let known = savedIDs.union(found.map(\.id))
+        return saved + found + containers.filter { !known.contains($0.id) }
     }
 
     var selected: DatabaseConnection? {
@@ -111,6 +115,19 @@ final class DataModel {
         }
         saved = store.connections(for: root)
         if selectedID == nil || !connections.contains(where: { $0.id == selectedID }) { selectedID = connections.first?.id }
+    }
+
+    /// Finds this project's database containers outside compose, running or not.
+    func loadContainers(workspace: Workspace) async {
+        guard RemoteRegistry.project(containing: workspace.url) == nil, let all = await DockerContainer.load() else { return }
+        var found: [DatabaseConnection] = []
+        for container in DockerContainer.related(all, project: workspace.name) where container.engine != nil {
+            let inspected = await DockerContainer.inspect(container)
+            if let connection = inspected.container.connection(environment: inspected.environment) { found.append(connection) }
+        }
+        guard found != containers else { return }
+        containers = found
+        if selectedID == nil { selectedID = connections.first?.id }
     }
 
     func select(_ connection: DatabaseConnection) {
@@ -169,12 +186,15 @@ final class DataModel {
         return .failed(error)
     }
 
-    /// `docker compose up -d <service>`, then waits for the database to answer.
+    /// `docker compose up -d <service>` (or `docker start` for a container outside compose),
+    /// then waits for the database to answer.
     func start(_ connection: DatabaseConnection) async {
-        guard let root, let service = connection.service else { return }
+        guard let root, let service = connection.service ?? connection.container else { return }
         startingService = service
         defer { startingService = nil }
-        let output = await Shell.run(["docker", "compose", "up", "-d", service], in: root)
+        let output = connection.service != nil
+            ? await Shell.run(["docker", "compose", "up", "-d", service], in: root)
+            : await Shell.run(["docker", "start", service], in: root)
         guard output.succeeded else {
             status[connection.id] = .failed(output.message)
             return

@@ -38,6 +38,7 @@ struct DataOverview: View {
                 fact("Engine", model.schema?.version ?? connection.engine.name)
                 fact("Through", route)
                 if let service = connection.service { fact("Compose service", service, mono: true) }
+                if let container = connection.container { fact("Docker container", container, mono: true) }
                 if let bytes = model.schema?.bytes { fact("Size", DataFormat.bytes(bytes)) }
                 if let schema = model.schema {
                     fact("Tables", "\(schema.tables.filter { !$0.isView }.count) tables, \(schema.tables.filter(\.isView).count) views")

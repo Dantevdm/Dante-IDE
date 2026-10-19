@@ -60,6 +60,7 @@ struct DataView: View {
             if let connection = model.selected, first || model.status[connection.id] == nil {
                 await model.connect(connection)
             }
+            await model.loadContainers(workspace: workspace)
         }
         .confirmationDialog(confirmTitle,
                             isPresented: Binding(get: { model.removing != nil }, set: { if !$0 { model.removing = nil } }),
@@ -506,12 +507,13 @@ private struct DataMain: View {
             }
         case .offline(let message):
             DataBanner(symbol: "bolt.horizontal.circle", color: theme.amber.color,
-                       title: connection.service.map { "The \($0) service isn’t running" } ?? "Nothing is answering at \(connection.displayURL)", detail: message) {
-                if connection.service != nil, model.hasCompose {
+                       title: connection.service.map { "The \($0) service isn’t running" } ?? connection.container.map { "The \($0) container isn’t running" }
+                           ?? "Nothing is answering at \(connection.displayURL)", detail: message) {
+                if let name = connection.service.flatMap({ model.hasCompose ? $0 : nil }) ?? connection.container {
                     Button {
                         Task { await model.start(connection) }
                     } label: {
-                        Label(model.startingService == nil ? "Start \(connection.service!)" : "Starting…", systemImage: "play.fill")
+                        Label(model.startingService == nil ? "Start \(name)" : "Starting…", systemImage: "play.fill")
                     }
                     .buttonStyle(DanteButtonStyle(primary: true))
                     .disabled(model.startingService != nil)

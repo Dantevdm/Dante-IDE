@@ -80,6 +80,9 @@ public struct DatabaseConnection: Codable, Equatable, Hashable, Sendable, Identi
     public var file: String?
     /// The Compose service that runs it, so Dante can start it and use the client inside.
     public var service: String?
+    /// A container started outside compose (`docker run --name sp-pg`), so Dante can start it.
+    /// Found afresh each time, so not saved.
+    public var container: String?
     /// Refuse statements that change data. On for anything that isn't on this Mac.
     public var readOnly: Bool
     public var origin: Origin
