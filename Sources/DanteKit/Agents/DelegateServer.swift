@@ -27,6 +27,9 @@ public struct DelegateServer: Sendable {
     public var requester = "claude"
     /// Searches the project by meaning: the question and how many pieces, as text for the agent.
     public var searchCode: (@Sendable (_ question: String, _ limit: Int) async throws -> String)?
+    /// Runs Dante's security scan of the project, saves it for the Security page and returns
+    /// the summary.
+    public var securityReport: (@Sendable () async -> String)?
     /// Looker's vision model, when a capable one is installed.
     public var lookerModel: (@Sendable () async -> String?)?
     /// Reads an image file (a path in the project or absolute) and answers about it with a model.
@@ -95,6 +98,12 @@ public struct DelegateServer: Sendable {
                 return SemanticSearch.report(hits, root: rootURL, index: index)
             }
         }
+        let projectRoot = URL(filePath: root, directoryHint: .isDirectory)
+        let online = environment[DelegateEnvironment.securityOnline] == "1"
+        server.securityReport = {
+            let report = await ProjectSecurity.refresh(root: projectRoot, onlineAdvisories: online)
+            return ProjectSecurity.summary(report, root: projectRoot, limit: 30)
+        }
         if let path = environment[DelegateEnvironment.claude], !path.isEmpty {
             let claude = ClaudeOpinion(executable: path)
             let model = environment[DelegateEnvironment.claudeModel]
@@ -144,6 +153,7 @@ public struct DelegateServer: Sendable {
     var instructions: String {
         var parts: [String] = []
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
+        if securityReport != nil { parts.append("security_report runs Dante's security scan and returns the score and findings the user sees on the Security page: start there for any question about the project's security.") }
         if searchCode != nil { parts.append("search_code finds code by what it does, for questions grep can't answer.") }
         if look != nil { parts.append("look (Looker) reads screenshots and images on this Mac when a vision model is installed.") }
         if decide != nil { parts.append("Jev answers typed questions (pick one, rate, yes or no) about some material in well under a second.") }
@@ -156,6 +166,7 @@ public struct DelegateServer: Sendable {
     var tools: [JSONValue] {
         var tools: [JSONValue] = []
         if offersLocal { tools += Self.localTools }
+        if securityReport != nil { tools.append(Self.securityTool) }
         if searchCode != nil { tools.append(Self.searchTool) }
         if decide != nil { tools.append(Self.decideTool) }
         if askGrok != nil { tools.append(Self.grokTool) }
@@ -166,7 +177,7 @@ public struct DelegateServer: Sendable {
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard !["local_models", "search_code"].contains(tool["name"]?.string ?? ""), var object = tool.object,
+        guard !["local_models", "search_code", "security_report"].contains(tool["name"]?.string ?? ""), var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
         schema["properties"] = .object(properties)
@@ -256,6 +267,12 @@ public struct DelegateServer: Sendable {
         ],
     ]
 
+    static let securityTool: JSONValue = [
+        "name": "security_report",
+        "description": "Run Dante's security scan of this project again and get what its Security page shows: the score out of 100, the grade, and the findings most severe first, each with where it is and how to fix it. Covers secrets, personal information (POPIA), encryption, injection, containers, CI, infrastructure and, with the scanners installed, dependencies. Use it first for any question about the project's security, a score or what's critical, instead of exploring the code or sending sub-agents; then read only what it names. Runs on the user's Mac in seconds and updates the page they see.",
+        "inputSchema": ["type": "object", "properties": [:]],
+    ]
+
     static let searchTool: JSONValue = [
         "name": "search_code",
         "description": "Search this project by meaning with a local embedding model: describe what the code does (\"where failed payments are retried\", \"how the session token is refreshed\") and get the best matching pieces with their lines. Use it when you don't know the names to grep for; use grep when you do. Fast and free: it runs on the user's Mac.",
@@ -333,6 +350,13 @@ public struct DelegateServer: Sendable {
             } catch {
                 return Self.text("Couldn’t search by meaning: \(error.localizedDescription) Use grep instead.", isError: true)
             }
+        case "security_report":
+            guard let securityReport else { return Self.text("Dante's security scan isn’t available here.", isError: true) }
+            let started = Date()
+            let summary = await securityReport()
+            ledger?.append(AgentJob(kind: "audit", provider: .local, model: "dante-scan", project: project, seconds: Date().timeIntervalSince(started),
+                                    requestedBy: requester, title: "Security scan", gist: summary.split(separator: "\n").first.map(String.init)))
+            return Self.text(summary + "\n\nThis is the Security page the user sees; Dante has opened it for them.")
         case "local_models":
             guard let installed = await models() else { return Self.text("Ollama isn’t running on this Mac.", isError: true) }
             let lines = installed.map { model -> String in

@@ -315,10 +315,14 @@ private struct CodexRow: View {
                 .onChange(of: preferences.agentEngine) { _, engine in
                     for session in Sessions.all {
                         guard let claude = session.claude, claude.state != .working, claude.remote == nil else { continue }
+                        if engine == .claude { claude.keepClaude() }
                         claude.engine = engine
                         session.applyClaudePreferences()
                     }
                 }
+                Toggle("Switch to Codex when Claude’s limit is near", isOn: $preferences.switchesToCodexAtLimit)
+                    .help("When Claude Code warns that your plan is at 90% or more, or stops at its limit, Codex takes over the conversation with a summary of it, and a request Claude couldn’t finish is sent again.")
+                    .onChange(of: preferences.switchesToCodexAtLimit) { Sessions.all.forEach { $0.applyClaudePreferences() } }
             }
             if Session.codexPath != nil, preferences.asksCodex || preferences.agentEngine == .codex {
                 TextField("Model", text: $preferences.codexModel, prompt: Text("Codex default"))

@@ -55,6 +55,23 @@ import Testing
         #expect(bad?.contains(#""isError":true"#) == true)
     }
 
+    @Test func securityReportRunsTheScanAndIsLogged() async {
+        let ledgerURL = FileManager.default.temporaryDirectory.appending(path: "ledger-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: ledgerURL) }
+        var server = DelegateServer(project: "shop", ledger: AgentLedger(url: ledgerURL), models: { [] }) { _, _ in
+            ("none", OllamaReply(text: "", promptTokens: 0, outputTokens: 0, seconds: 0, tokensPerSecond: 0))
+        }
+        server.offersLocal = false
+        #expect(await server.handle(#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#)?.contains("security_report") == false)
+        server.securityReport = { "Security: B (82/100) · 2 findings in 40 files · Dante" }
+        let list = await server.handle(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#) ?? ""
+        #expect(list.contains(#""name":"security_report""#) && !list.contains(#""name":"delegate""#))
+        let call = await server.handle(#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"security_report","arguments":{}}}"#) ?? ""
+        #expect(call.contains("82/100") && call.contains("Security page"))
+        let job = AgentLedger(url: ledgerURL).jobs().first
+        #expect(job?.kind == "audit" && job?.gist == "Security: B (82/100) · 2 findings in 40 files · Dante")
+    }
+
     @Test func statsSumByModel() {
         let base = Date(timeIntervalSince1970: 1_000_000)
         let stats = AgentStats([

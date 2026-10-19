@@ -77,6 +77,23 @@ public enum ProjectSecurity {
         return SecurityScanner.GitView(tracked: paths(tracked.stdout), ignored: ignoredPaths)
     }
 
+    /// A new scan with an agent's audit findings from the saved report carried over (they stay
+    /// until the next audit), saved for the Security page. What `security_report` runs.
+    public static func refresh(root: URL, onlineAdvisories: Bool) async -> SecurityReport {
+        let earlier = SecurityReport.load(for: root)
+        let report = keepingAudits(await scan(root: root, options: .init(onlineAdvisories: onlineAdvisories, save: false)), from: earlier)
+        report.save(for: root)
+        return report
+    }
+
+    /// `fresh` with the audit findings of `earlier`, which a scan doesn't make.
+    public static func keepingAudits(_ fresh: SecurityReport, from earlier: SecurityReport?) -> SecurityReport {
+        let audit = earlier?.findings.filter { $0.rule.hasPrefix("audit.") } ?? []
+        guard !audit.isEmpty else { return fresh }
+        return SecurityReport(date: fresh.date, findings: fresh.findings + audit, ignored: fresh.ignored, scanners: fresh.scanners,
+                              files: fresh.files, seconds: fresh.seconds)
+    }
+
     /// A short text summary for the terminal.
     public static func summary(_ report: SecurityReport, root: URL, limit: Int = 40) -> String {
         var lines = ["Security: \(report.grade) (\(report.score)/100) · \(report.findings.count) finding\(report.findings.count == 1 ? "" : "s") in \(report.files) files · \(report.scanners.joined(separator: ", "))"]

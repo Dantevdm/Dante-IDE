@@ -112,7 +112,8 @@ import Testing
     }
 
     @Test func briefsClaudeOnlyAboutToolsItHas() {
-        #expect(ClaudeBrief.delegation(local: false, jev: false, grok: false) == nil)
+        #expect(ClaudeBrief.delegation(local: false, jev: false, grok: false, security: false) == nil)
+        #expect(ClaudeBrief.delegation(local: false, jev: false, grok: false)?.contains("`security_report`") == true)
         let cloud = ClaudeBrief.delegation(local: false, jev: true, grok: true) ?? ""
         #expect(cloud.contains("`decide`") && cloud.contains("`ask_grok`") && !cloud.contains("`delegate`"))
     }

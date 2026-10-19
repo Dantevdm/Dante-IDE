@@ -157,6 +157,7 @@ private struct EngineSwitch: View {
 
     private func choose(_ engine: AgentEngine) {
         guard engine != claude.engine else { return }
+        if engine == .claude { claude.keepClaude() }
         claude.engine = engine
         Preferences.shared.agentEngine = engine
         session.applyClaudePreferences()

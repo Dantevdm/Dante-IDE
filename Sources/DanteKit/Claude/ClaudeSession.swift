@@ -66,6 +66,7 @@ public struct ToolActivity: Equatable, Sendable {
         case "mcp__dante__ask_codex": return resolved ? "Asked Codex" : "Asking Codex"
         case "mcp__dante__ask_claude": return resolved ? "Asked Claude" : "Asking Claude"
         case "mcp__dante__local_models": return "Checked local models"
+        case "mcp__dante__security_report": return resolved ? "Scanned the project's security" : "Scanning the project's security"
         case "mcp__dante__search_code": return resolved ? "Searched the code by meaning" : "Searching the code by meaning"
         case "mcp__dante__look": return resolved ? "Looker read an image" : "Looker is reading an image"
         default:
@@ -155,6 +156,9 @@ public final class ClaudeSession {
     public var onFileChanged: (URL) -> Void = { _ in }
     /// Something the person should look at: a finished turn, or a change or question waiting.
     public var onAttention: (Attention) -> Void = { _ in }
+    /// One of Dante's own MCP tools started or finished (`security_report`, without the
+    /// `mcp__dante__` prefix), so the window can show what it's about.
+    public var onDanteTool: (_ name: String, _ finished: Bool) -> Void = { _, _ in }
     /// Claude Code named the conversation (its session id), for linking it to a task.
     public var onConversationStarted: (String) -> Void = { _ in }
 
@@ -220,6 +224,26 @@ public final class ClaudeSession {
     public private(set) var allowRules: [String] = []
     /// When Claude Code last said a usage limit was hit; cleared by the next turn that works.
     public private(set) var limitReachedAt: Date?
+    /// Claude Code's latest word on the plan's usage limit.
+    public private(set) var rateLimit: ClaudeEvent.RateLimit?
+    /// Hand the conversation to Codex when Claude's plan is nearly out or out, when Codex is here.
+    public var switchesAtLimit = true
+    /// When Claude (not Codex) last stopped at its limit.
+    private var claudeLimitAt: Date?
+
+    /// Claude's plan is nearly or fully used, as of what Claude Code last said; lapses when
+    /// the limit resets (or five hours after a stop, when no reset time came).
+    public var claudeNearlyOut: Bool {
+        if let limit = rateLimit, limit.isNearlyOut, (limit.resetsAt ?? .distantFuture) > Date() { return true }
+        return claudeLimitAt.map { Date().timeIntervalSince($0) < 5 * 3600 } ?? false
+    }
+
+    /// The user put Claude back in charge themselves: don't hand over again until Claude Code
+    /// warns or stops anew.
+    public func keepClaude() {
+        rateLimit = nil
+        claudeLimitAt = nil
+    }
     /// Where each turn and sub-agent is recorded for the Agents stats; nil records nothing.
     public var ledger: AgentLedger?
     /// The project the ledger files this conversation's jobs under, when `root` isn't the
@@ -314,6 +338,11 @@ public final class ClaudeSession {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
         if state != .working { turnUsage = (0, [:], String(trimmed.prefix(80))) }
+        // Claude's plan is nearly used up: Codex takes this message, before it's spent.
+        if state != .working, Self.handsOver(engine: engine, nearlyOut: claudeNearlyOut,
+                                             codexAvailable: codexExecutable != nil && remote == nil, enabled: switchesAtLimit) {
+            handToCodex(because: claudeLimitAt != nil || rateLimit?.status == .rejected ? "has reached" : "is nearly at")
+        }
         // Mid-turn, a button such as "Find untested code" waits its turn rather than vanishing.
         if state == .working {
             queued.append(QueuedMessage(text: text, context: context, attachments: attachments))
@@ -354,6 +383,17 @@ public final class ClaudeSession {
             write(ClaudeInput.userMessage(message, attachments: attachments))
         }
         state = .working
+    }
+
+    /// Whether the conversation should move from Claude to Codex because Claude's plan is (nearly) out.
+    nonisolated static func handsOver(engine: AgentEngine, nearlyOut: Bool, codexAvailable: Bool, enabled: Bool) -> Bool {
+        enabled && engine == .claude && nearlyOut && codexAvailable
+    }
+
+    private func handToCodex(because reason: String) {
+        engine = .codex
+        let resets = (rateLimit?.resetsAt).map { " It resets \($0.formatted(.relative(presentation: .named)))." } ?? ""
+        note("Claude \(reason) its usage limit, so Codex takes over with the conversation so far.\(resets) Switch back with Claude in the header.", isError: false)
     }
 
     /// The conversation so far, for an agent taking over: the last messages, newest last,
@@ -953,6 +993,7 @@ public final class ClaudeSession {
                 case .toolUse(let id, let name, let input):
                     if index[id] == nil {
                         append(TranscriptItem(id: id, content: .tool(ToolActivity(id: id, name: name, input: input, status: .running))))
+                        if name.hasPrefix("mcp__dante__") { onDanteTool(String(name.dropFirst(12)), false) }
                     }
                 }
             }
@@ -967,6 +1008,7 @@ public final class ClaudeSession {
                     }
                 } else {
                     updateTool(tool.id) { $0.status = .done }
+                    if tool.name.hasPrefix("mcp__dante__") { onDanteTool(String(tool.name.dropFirst(12)), true) }
                     if tool.name == "Task" || tool.name == "Agent" {
                         ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: tool.input["subagent_type"]?.string ?? "general-purpose",
                                                 project: projectName ?? root.lastPathComponent, requestedBy: "claude",
@@ -994,7 +1036,7 @@ public final class ClaudeSession {
                         }
                     } else if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
-                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look"].contains(request.toolName) {
+                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report"].contains(request.toolName) {
                         // Dante's own local-model tools: nothing leaves the Mac. Grok and Jev
                         // send material away, so they follow the approval level.
                         approve(id)
@@ -1057,6 +1099,11 @@ public final class ClaudeSession {
             } else if !result.isError {
                 limitReachedAt = nil
             }
+            // Claude stopped at its limit: Codex picks up the same request.
+            let limited = result.isError && startedEngine == .claude && Vitality.isLimitMessage(result.text)
+            if limited { claudeLimitAt = Date() } else if !result.isError, startedEngine == .claude { claudeLimitAt = nil }
+            let retry = limited && Self.handsOver(engine: engine, nearlyOut: true, codexAvailable: codexExecutable != nil && remote == nil, enabled: switchesAtLimit)
+                ? lastUserMessage : nil
             streamingTextItemID = nil
             if let cost = result.costUSD { totalCostUSD = costBeforeThisProcess + cost }
             if let window = result.contextWindow, window > 0 { contextWindow = window }
@@ -1066,7 +1113,10 @@ public final class ClaudeSession {
             if result.isError, !result.text.isEmpty, !alreadyShown {
                 note(result.text, isError: true)
             }
-            if !queued.isEmpty {
+            if let retry {
+                handToCodex(because: "has reached")
+                send(retry)
+            } else if !queued.isEmpty {
                 let next = queued.removeFirst()
                 send(next.text, context: next.context, attachments: next.attachments)
             } else {
@@ -1078,9 +1128,23 @@ public final class ClaudeSession {
                 }
             }
 
+        case .rateLimit(let limit):
+            // Codex's limits arrive another way; these are Claude's.
+            guard startedEngine == .claude else { break }
+            rateLimit = limit
+            if limit.status == .rejected { limitReachedAt = Date() }
+
         case .ignored:
             break
         }
+    }
+
+    /// What the user last asked, for handing it to another agent.
+    private var lastUserMessage: String? {
+        for item in items.reversed() {
+            if case .user(let text, _) = item.content, !text.isEmpty { return text }
+        }
+        return nil
     }
 
     private func activity(_ id: String) -> ToolActivity? {

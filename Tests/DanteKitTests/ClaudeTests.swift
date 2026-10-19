@@ -52,6 +52,29 @@ struct ClaudeProtocolTests {
         #expect(environment["PATH"]?.hasPrefix("/usr/bin:") == true)
         #expect(environment["PATH"]?.contains("/opt/homebrew/bin") == true)
     }
+
+    @Test func parsesRateLimitEvents() {
+        let warning = ClaudeEvent(line: #"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","utilization":0.93,"resetsAt":1800000000,"rateLimitType":"five_hour"},"session_id":"s"}"#)
+        #expect(warning == .rateLimit(.init(status: .warning, utilization: 0.93, resetsAt: Date(timeIntervalSince1970: 1_800_000_000), kind: "five_hour")))
+        guard case .rateLimit(let limit) = warning else { return }
+        #expect(limit.isNearlyOut)
+        #expect(!ClaudeEvent.RateLimit(status: .warning, utilization: 0.75).isNearlyOut)
+        #expect(ClaudeEvent.RateLimit(status: .warning).isNearlyOut)
+        #expect(ClaudeEvent.RateLimit(status: .rejected).isNearlyOut)
+        #expect(!ClaudeEvent.RateLimit(status: .allowed, utilization: 0.99).isNearlyOut)
+        // A percentage reads as a fraction too.
+        #expect(ClaudeEvent(line: #"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","utilization":80}}"#) == .rateLimit(.init(status: .warning, utilization: 0.8)))
+        #expect(ClaudeEvent(line: #"{"type":"rate_limit_event","rate_limit_info":{"status":"odd"}}"#) == .ignored)
+    }
+
+    @Test func handsOverToCodexOnlyFromClaudeNearItsLimit() {
+        #expect(ClaudeSession.handsOver(engine: .claude, nearlyOut: true, codexAvailable: true, enabled: true))
+        #expect(!ClaudeSession.handsOver(engine: .claude, nearlyOut: false, codexAvailable: true, enabled: true))
+        #expect(!ClaudeSession.handsOver(engine: .codex, nearlyOut: true, codexAvailable: true, enabled: true))
+        #expect(!ClaudeSession.handsOver(engine: .claude, nearlyOut: true, codexAvailable: false, enabled: true))
+        #expect(!ClaudeSession.handsOver(engine: .claude, nearlyOut: true, codexAvailable: true, enabled: false))
+    }
+
 }
 
 struct LineDiffTests {

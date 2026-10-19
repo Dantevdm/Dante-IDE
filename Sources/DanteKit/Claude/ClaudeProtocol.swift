@@ -20,7 +20,41 @@ public enum ClaudeEvent: Equatable, Sendable {
     case permissionRequest(PermissionRequest)
     /// The turn finished.
     case result(TurnResult)
+    /// Where the plan's usage limit stands (Claude Code sends this as it nears or hits one).
+    case rateLimit(RateLimit)
     case ignored
+
+    public struct RateLimit: Equatable, Sendable {
+        public enum Status: String, Sendable {
+            case allowed
+            case warning = "allowed_warning"
+            case rejected
+        }
+
+        public var status: Status
+        /// How much of the limit is used, 0…1, when Claude Code says.
+        public var utilization: Double?
+        public var resetsAt: Date?
+        /// "five_hour", "seven_day"…
+        public var kind: String?
+
+        public init(status: Status, utilization: Double? = nil, resetsAt: Date? = nil, kind: String? = nil) {
+            self.status = status
+            self.utilization = utilization
+            self.resetsAt = resetsAt
+            self.kind = kind
+        }
+
+        /// Close enough to the limit that the next turn should go to another agent: hit, or
+        /// warned at 90% or more (or warned without a figure).
+        public var isNearlyOut: Bool {
+            switch status {
+            case .allowed: false
+            case .rejected: true
+            case .warning: (utilization ?? 1) >= 0.9
+            }
+        }
+    }
 
     public enum AssistantBlock: Equatable, Sendable {
         case text(String)
@@ -111,6 +145,15 @@ public enum ClaudeEvent: Equatable, Sendable {
                 input: request?["input"] ?? [:],
                 toolUseID: request?["tool_use_id"]?.string
             ))
+
+        case "rate_limit_event":
+            let info = json["rate_limit_info"]
+            guard let status = info?["status"]?.string.flatMap(RateLimit.Status.init(rawValue:)) else { self = .ignored; return }
+            // Utilization comes as a fraction; read a percentage as one too.
+            let used = info?["utilization"]?.double.map { $0 > 1 ? $0 / 100 : $0 }
+            self = .rateLimit(RateLimit(status: status, utilization: used,
+                                        resetsAt: info?["resetsAt"]?.double.map { Date(timeIntervalSince1970: $0) },
+                                        kind: info?["rateLimitType"]?.string))
 
         case "result":
             self = .result(TurnResult(

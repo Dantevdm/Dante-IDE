@@ -31,20 +31,30 @@ final class SecurityModel {
         defer { scanning = false; progress = "" }
         let earlier = report ?? SecurityReport.load(for: root)
         let online = Preferences.shared.checksDependenciesOnline
-        var fresh = await ProjectSecurity.scan(root: root, files: files, options: .init(onlineAdvisories: online, save: false)) { message in
+        let scanned = await ProjectSecurity.scan(root: root, files: files, options: .init(onlineAdvisories: online, save: false)) { message in
             Task { @MainActor [weak self] in self?.progress = message }
         }
         // Audit findings stay until the next audit.
-        if let earlier {
-            let audit = earlier.findings.filter { $0.rule.hasPrefix("audit.") }
-            if !audit.isEmpty {
-                fresh = SecurityReport(date: fresh.date, findings: fresh.findings + audit, ignored: fresh.ignored, scanners: fresh.scanners,
-                                       files: fresh.files, seconds: fresh.seconds)
-            }
-        }
+        let fresh = ProjectSecurity.keepingAudits(scanned, from: earlier)
         previous = earlier
         report = fresh
         fresh.save(for: root)
+    }
+
+    /// The agent in charge is running the scan through Dante's `security_report` tool.
+    func agentScanStarted(by agent: String) {
+        scanning = true
+        progress = "Scanning for \(agent)"
+    }
+
+    /// The agent's scan is saved: show it, compared with the one before.
+    func agentScanFinished(root: URL) {
+        scanning = false
+        progress = ""
+        loaded = true
+        guard let fresh = SecurityReport.load(for: root) else { return }
+        if fresh.date != report?.date { previous = report }
+        report = fresh
     }
 
     /// A read-only audit by Claude or Codex, outside the panel's conversation.

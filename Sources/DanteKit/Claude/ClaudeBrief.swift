@@ -23,8 +23,9 @@ public enum ClaudeBrief {
     """
 
     /// What Claude is told about the dante MCP server's tools, or nil when it has none.
-    public nonisolated static func delegation(local: Bool, jev: Bool, grok: Bool, codex: Bool = false, claude: Bool = false) -> String? {
+    public nonisolated static func delegation(local: Bool, jev: Bool, grok: Bool, codex: Bool = false, claude: Bool = false, security: Bool = true) -> String? {
         var parts: [String] = []
+        if security { parts.append(securityPage) }
         if local { parts.append(delegation) }
         if jev { parts.append(jevDecisions) }
         if grok { parts.append(grokOpinions) }
@@ -32,6 +33,11 @@ public enum ClaudeBrief {
         if claude { parts.append(claudeOpinions) }
         return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
+
+    public nonisolated static let securityPage = """
+    # Questions about security
+    For any question about the project's security (how safe it is, a score, what's critical, what to fix first), call `security_report` first and answer from it. It runs Dante's scanners on the user's Mac in seconds, refreshes the Security page they're looking at and returns its score and findings. Don't explore the code or send sub-agents to audit it for this; read files only to explain or confirm what the report names, and say which findings matter most and why. If they want a deeper review than the scanners give, offer the Security page's audit.
+    """
 
     public nonisolated static let jevDecisions = """
     # Quick decisions with Jev

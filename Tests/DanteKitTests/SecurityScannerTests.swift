@@ -182,4 +182,15 @@ import Testing
         let third = SecurityIgnores.adding(.init(path: "docs/"), to: second)
         #expect(SecurityIgnores.parse(third).entries.count == 2)
     }
+
+    @Test func aRescanKeepsTheAgentsAuditFindings() {
+        func finding(_ rule: String) -> SecurityFinding {
+            SecurityFinding(rule: rule, category: .code, severity: .high, title: rule, why: "", fix: "", file: "app.py", line: 1)
+        }
+        let earlier = SecurityReport(findings: [finding("audit.codex"), finding("py.sql")])
+        let fresh = SecurityReport(findings: [finding("py.eval")])
+        #expect(ProjectSecurity.keepingAudits(fresh, from: earlier).findings.map(\.rule) == ["py.eval", "audit.codex"])
+        #expect(ProjectSecurity.keepingAudits(fresh, from: nil) == fresh)
+    }
+
 }

@@ -400,6 +400,16 @@ final class Session {
             self?.notifyClaude(attention)
             self?.pullRemoteTranscripts()
         }
+        // Asked about security, the agent runs the Security page's scan: show the page.
+        claude.onDanteTool = { [weak self, weak claude] name, finished in
+            guard let self, name == "security_report", let root = self.workspace?.url else { return }
+            if finished {
+                self.security.agentScanFinished(root: root)
+            } else {
+                self.area = .security
+                self.security.agentScanStarted(by: claude?.engine.title ?? "Claude")
+            }
+        }
         claude.engine = Preferences.shared.agentEngine == .codex && Self.codexPath != nil && claude.remote == nil ? .codex : .claude
         applyClaudePreferences(to: claude)
         return claude
@@ -446,6 +456,7 @@ final class Session {
         claude.asksFirst = Preferences.shared.claudeAsksFirst
         claude.requestedModel = Preferences.shared.claudeModel.argument
         claude.codexExecutable = Self.codexPath
+        claude.switchesAtLimit = Preferences.shared.switchesToCodexAtLimit
         claude.codexModel = Preferences.shared.codexModel.isEmpty ? nil : Preferences.shared.codexModel
         claude.codexEffort = Preferences.shared.codexEffort.isEmpty ? nil : Preferences.shared.codexEffort
         // The dante MCP server carries local models, and Grok and Jev when they have keys.
@@ -456,12 +467,12 @@ final class Session {
             if !Preferences.shared.codexModel.isEmpty { environment[DelegateEnvironment.codexModel] = Preferences.shared.codexModel }
         }
         if !Preferences.shared.lookerModel.isEmpty { environment[DelegateEnvironment.lookerModel] = Preferences.shared.lookerModel }
-        if !environment.isEmpty {
-            if !local { environment[DelegateEnvironment.local] = "0" }
-            if !Preferences.shared.grokModel.isEmpty { environment[DelegateEnvironment.grokModel] = Preferences.shared.grokModel }
-        }
-        // With Codex in charge, the server also carries Claude for second opinions.
-        claude.delegateCommand = local || !environment.isEmpty || claude.engine == .codex ? Self.danteCommand : nil
+        if !Preferences.shared.grokModel.isEmpty, !environment.isEmpty { environment[DelegateEnvironment.grokModel] = Preferences.shared.grokModel }
+        if !local { environment[DelegateEnvironment.local] = "0" }
+        if Preferences.shared.checksDependenciesOnline { environment[DelegateEnvironment.securityOnline] = "1" }
+        // The server always carries the Security page's scan; with Codex in charge, also Claude
+        // for second opinions.
+        claude.delegateCommand = Self.danteCommand
         // A job's tools file their work under the project, not the worktree's folder.
         if let project = claude.projectName { environment[DelegateEnvironment.project] = project }
         claude.delegateEnvironment = environment

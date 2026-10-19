@@ -169,4 +169,6 @@ public enum DelegateEnvironment {
     public static let lookerModel = "DANTE_LOOKER_MODEL"
     /// The project's name for the ledger, when Claude runs in a job's worktree.
     public static let project = "DANTE_PROJECT"
+    /// "1" lets `security_report` ask OSV.dev about dependencies, as Settings allows.
+    public static let securityOnline = "DANTE_SECURITY_ONLINE"
 }
