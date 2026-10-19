@@ -520,8 +520,12 @@ final class VoiceController {
             say(VoiceStatus.summary(PresenceController.shared.model.presence.sources))
         case .usage:
             let model = PresenceController.shared.model
-            say(VoiceStatus.usage(share: model.windowShare, resets: model.usageResets,
-                                  limitReached: Sessions.all.contains { $0.claude?.limitReachedAt != nil }))
+            let out = Sessions.all.contains { $0.claude?.outOfUsageSince != nil }
+            if model.lead == .codex {
+                say(VoiceStatus.codexUsage(used: model.codexWindow?.usedPercent, resets: model.codexWindow?.resetsAt, limitReached: out))
+            } else {
+                say(VoiceStatus.usage(share: model.windowShare, resets: model.usageResets, limitReached: out))
+            }
         case .ask(let text):
             guard let session = target, session.claude != nil else {
                 let names = Self.recents().prefix(3).map(\.name)

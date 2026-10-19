@@ -266,6 +266,17 @@ public enum VoiceStatus {
         return "This five-hour window is at about \(percent)% of your busiest one: \(feel).\(at)"
     }
 
+    /// Codex's five-hour window, which Codex reports as a share of its limit.
+    public static func codexUsage(used: Double?, resets: Date?, limitReached: Bool, now: Date = Date(),
+                                  locale: Locale = .current, timeZone: TimeZone = .current) -> String {
+        let at = resets.flatMap { $0 > now ? $0 : nil }.map { " It resets at \(time($0, locale: locale, timeZone: timeZone))." } ?? ""
+        if limitReached { return "Codex has hit its limit.\(at)" }
+        guard let used else { return "Codex hasn’t reported its usage yet." }
+        let percent = Int(used.rounded())
+        let feel = used < 50 ? "plenty left" : used < 85 ? "a fair amount used" : "close to the limit"
+        return "Codex has used \(percent)% of its five-hour limit: \(feel).\(at)"
+    }
+
     /// "Edit SystemMap.swift" → "editing SystemMap.swift".
     static func gerund(_ running: String) -> String {
         let verbs = ["Edit": "editing", "Read": "reading", "Write": "writing", "Run": "running", "Search": "searching",

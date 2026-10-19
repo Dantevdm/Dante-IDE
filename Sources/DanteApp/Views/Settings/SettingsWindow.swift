@@ -33,7 +33,7 @@ struct SettingsWindow: View {
             FileSettings(preferences: Preferences.shared)
                 .tabItem { Label("Files", systemImage: "doc") }.tag(Pane.files)
             ClaudePreferencesPane()
-                .tabItem { ClaudeLabel("Claude", side: 20) }.tag(Pane.claude)
+                .tabItem { Label("Agents", systemImage: "person.2") }.tag(Pane.claude)
             ToolsPane(session: session)
                 .id(session.map(ObjectIdentifier.init))
                 .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }.tag(Pane.tools)
@@ -85,7 +85,7 @@ private struct AppearancePane: View {
                 }
                 Toggle("Geist and Geist Mono", isOn: Bindable(Preferences.shared).usesGeist)
                     .help("The design’s typeface, bundled with Dante. Off uses SF Pro and SF Mono.")
-                Toggle("Claude in the menu bar", isOn: Bindable(Preferences.shared).showsPresence)
+                Toggle("Dante’s orb in the menu bar", isOn: Bindable(Preferences.shared).showsPresence)
             }
         }
     }
@@ -149,27 +149,34 @@ private struct ClaudePreferencesPane: View {
     var body: some View {
         Form {
             SwiftUI.Section {
+                CodexRow()
+            } header: {
+                Text("Who leads")
+                    .help("Claude (Claude Code, your Anthropic plan) or Codex (OpenAI, your ChatGPT plan) leads the conversation and the other reviews when asked.")
+            }
+            SwiftUI.Section("Claude") {
                 Picker("Model", selection: $preferences.claudeModel) {
                     ForEach(Preferences.ClaudeModel.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
+            }
+            SwiftUI.Section {
                 Toggle("Ask clarifying questions before ambiguous work", isOn: $preferences.claudeAsksFirst)
-                Toggle("Notify when Claude finishes or needs approval in the background", isOn: $preferences.notifiesOnClaude)
+                Toggle("Notify when the agent finishes or needs approval in the background", isOn: $preferences.notifiesOnClaude)
                     .onChange(of: preferences.notifiesOnClaude) { _, on in
                         if on { Task { if await !Session.requestNotificationPermission() { preferences.notifiesOnClaude = false } } }
                     }
-            }
-            SwiftUI.Section {
-                Toggle("Let Claude delegate small jobs to local models", isOn: $preferences.delegatesToLocalModels)
-                    .help("Claude gets a delegate tool backed by Ollama on this Mac, for summaries, triage, drafts and commit messages. It checks what comes back.")
+                Toggle("Let the agent in charge delegate small jobs to local models", isOn: $preferences.delegatesToLocalModels)
+                    .help("The agent in charge gets a delegate tool backed by Ollama on this Mac, for summaries, triage, drafts and commit messages. It checks what comes back.")
                     .onChange(of: preferences.delegatesToLocalModels) { Sessions.all.forEach { $0.applyClaudePreferences() } }
+            } header: {
+                Text("Either agent")
             }
             VoicePreferencesSection()
             SwiftUI.Section {
-                CodexRow()
                 ForEach(CloudAgent.allCases) { agent in CloudAgentKeyRow(agent: agent) }
             } header: {
                 Text("Cloud agents")
-                    .help("Claude can ask Grok for a second opinion and Jev for quick typed decisions, using your own keys. Keys stay in your Keychain; Claude asks before sending anything to them unless approvals are off.")
+                    .help("The agent in charge can ask Grok for a second opinion and Jev for quick typed decisions, using your own keys. Keys stay in your Keychain; it asks before sending anything to them unless approvals are off.")
             }
         }
     }

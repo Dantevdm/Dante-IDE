@@ -265,7 +265,8 @@ struct StageView: View {
                 OrbRepresentable(size: .large, framesPerSecond: 120, track: track)
                     .frame(width: layout.orbSide, height: layout.orbSide)
                     .position(x: layout.centre.x, y: layout.centre.y - layout.orbSide * 0.08)
-                StageHUD(style: hudStyle, intensity: model.vitality.intensity, usage: model.windowShare, unit: unit,
+                StageHUD(style: hudStyle, intensity: model.vitality.intensity, usage: model.usage,
+                         usageName: model.lead.title.uppercased(), unit: unit,
                          centre: layout.centre, orbScale: layout.orbSide / 2, ringRadius: layout.ringRadius,
                          callouts: !layout.compact, track: track, reduceMotion: reduceMotion)
                     .allowsHitTesting(false)
@@ -429,12 +430,22 @@ struct StageView: View {
     private func identity(_ unit: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8 * unit) {
             HStack(spacing: 10 * unit) {
-                ClaudeSparkIcon(size: 22 * unit, isWorking: model.mood == .acting || model.mood == .thinking)
+                DanteMark(size: 22 * unit, isWorking: model.mood == .acting || model.mood == .thinking)
                 Text("DANTE")
                     .font(.dante(size: 15 * unit, weight: .semibold))
                     .tracking(6 * unit)
                     .foregroundStyle(theme.text3.color)
+                // Whoever leads: Claude or Codex, switched in the panel or when Claude runs out.
+                Text("\(model.lead.title.uppercased()) IN CHARGE")
+                    .font(.dante(size: 11 * unit, weight: .semibold))
+                    .tracking(2.5 * unit)
+                    .foregroundStyle(theme.text2.color)
+                    .padding(.horizontal, 9 * unit)
+                    .padding(.vertical, 4 * unit)
+                    .background(Capsule().stroke(theme.line2.color, lineWidth: 1))
+                    .contentTransition(.opacity)
             }
+            .animation(.easeOut(duration: 0.3), value: model.lead)
             Text(model.mood.title)
                 .font(.dante(size: 52 * unit, weight: .semibold))
                 .foregroundStyle(theme.text.color)
@@ -460,9 +471,10 @@ struct StageView: View {
                         .foregroundStyle(theme.text2.color)
                 }
             }
-            if let share = model.windowShare {
-                let resets = model.usageResets.map { " · resets \($0.formatted(date: .omitted, time: .shortened))" } ?? ""
-                Text("Usage \(Int((share * 100).rounded()))% of your busiest window\(resets)")
+            if let share = model.usage {
+                let resets = model.usageReset.map { " · resets \($0.formatted(date: .omitted, time: .shortened))" } ?? ""
+                Text(model.lead == .codex ? "Codex \(Int((share * 100).rounded()))% of its five-hour limit\(resets)"
+                                          : "Claude \(Int((share * 100).rounded()))% of your busiest window\(resets)")
                     .font(.dante(size: 15 * unit))
                     .foregroundStyle(share > 0.85 ? theme.amber.color : theme.text3.color)
             }
@@ -701,5 +713,34 @@ private struct StageCorners: Shape {
             path.addLine(to: CGPoint(x: corner.x, y: corner.y + arm * dy))
         }
         return path
+    }
+}
+
+/// Dante's own mark, not either agent's: a ring around a glowing core, like the orb in its
+/// rings. The arc turns while an agent works.
+private struct DanteMark: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var size: CGFloat
+    var isWorking: Bool
+
+    var body: some View {
+        TimelineView(.animation(paused: !isWorking || reduceMotion)) { context in
+            let turn = isWorking && !reduceMotion ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4) * 90 : 0
+            ZStack {
+                Circle()
+                    .stroke(theme.text3.color.opacity(0.45), lineWidth: size * 0.07)
+                Circle()
+                    .trim(from: 0, to: 0.28)
+                    .stroke(theme.accent.color, style: StrokeStyle(lineWidth: size * 0.1, lineCap: .round))
+                    .rotationEffect(.degrees(turn - 90))
+                Circle()
+                    .fill(RadialGradient(colors: [theme.accent.color, theme.accent.color.opacity(0.15)], center: .init(x: 0.38, y: 0.35),
+                                         startRadius: 0, endRadius: size * 0.32))
+                    .frame(width: size * 0.5, height: size * 0.5)
+            }
+            .frame(width: size, height: size)
+        }
+        .accessibilityHidden(true)
     }
 }

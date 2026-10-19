@@ -62,7 +62,7 @@ struct AgentStoryCard: View {
         VStack(alignment: .leading, spacing: 10) {
             heading("Who checked what", symbol: "checkmark.seal")
             if digest.checks.isEmpty {
-                Text("No second opinions yet. Turn on Codex in Settings › Claude, or ask the agent in charge to have the other review its work.")
+                Text("No second opinions yet. Turn on Codex in Settings › Agents, or ask the agent in charge to have the other review its work.")
                     .font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
             }
             ForEach(digest.checks.prefix(5)) { check in

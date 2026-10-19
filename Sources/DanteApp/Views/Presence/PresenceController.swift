@@ -15,6 +15,15 @@ final class PresenceModel {
     /// The five-hour window so far against the busiest one seen (1 = as busy), when known.
     var windowShare: Double?
     var usageResets: Date?
+    /// Who's in charge in the frontmost project (or the one working).
+    var lead: AgentEngine = .claude
+    /// Codex's five-hour window, as Codex last reported it.
+    var codexWindow: CodexLimits.Window?
+
+    /// The usage to show for whoever is in charge: Codex's share of its limit, or Claude's
+    /// window against the busiest one (Claude Code doesn't say its limit).
+    var usage: Double? { lead == .codex ? codexWindow.map { $0.usedPercent / 100 } : windowShare }
+    var usageReset: Date? { lead == .codex ? codexWindow?.resetsAt : usageResets }
 }
 
 /// Claude's presence in the menu bar: an orb that shows, across every window, whether Claude
@@ -83,17 +92,22 @@ final class PresenceController: NSObject {
     }
 
     private func update() {
-        let (presence, shows, work) = withObservationTracking {
-            (Presence.combine(currentSources()), Preferences.shared.showsPresence, currentWork())
+        let (presence, shows, work, lead) = withObservationTracking {
+            (Presence.combine(currentSources()), Preferences.shared.showsPresence, currentWork(), Self.currentLead())
         } onChange: { [weak self] in
             Task { @MainActor in self?.scheduleUpdate() }
         }
         setVisible(shows)
+        if model.lead != lead.engine { model.lead = lead.engine }
+        if model.codexWindow != lead.codex { model.codexWindow = lead.codex }
         let now = Date()
         workRate.record(total: work.tools, at: now)
-        let vitality = Vitality(intensity: workRate.intensity(at: now, running: work.running), fatigue: fatigue,
-                                exhaustedUntil: work.limitAt.map { usageResets.flatMap { $0 > now ? $0 : nil } ?? $0.addingTimeInterval(3600) })
-        apply(vitality.isExhausted(at: now) ? Self.sleeping(presence, until: vitality.exhaustedUntil) : presence, vitality: vitality)
+        // Tiredness follows whoever is in charge: Codex's share of its limit, or Claude's window.
+        let tiredness = lead.engine == .codex ? Vitality.fatigue(current: Int(lead.codex?.usedPercent ?? 0), busiest: 100) : fatigue
+        let resets = work.limitAgent == .codex ? lead.codex?.resetsAt : usageResets
+        let vitality = Vitality(intensity: workRate.intensity(at: now, running: work.running), fatigue: tiredness,
+                                exhaustedUntil: work.limitAt.map { resets.flatMap { $0 > now ? $0 : nil } ?? $0.addingTimeInterval(3600) })
+        apply(vitality.isExhausted(at: now) ? Self.sleeping(presence, agent: work.limitAgent, until: vitality.exhaustedUntil) : presence, vitality: vitality)
         if model.satellites != work.satellites {
             model.satellites = work.satellites
             for orb in watchers.allObjects { orb.satellites = work.satellites }
@@ -102,19 +116,33 @@ final class PresenceController: NSObject {
     }
 
     /// Out of usage: asleep, saying when it wakes.
-    private static func sleeping(_ presence: Presence, until: Date?) -> Presence {
+    private static func sleeping(_ presence: Presence, agent: AgentEngine, until: Date?) -> Presence {
         let time = until.map { " · back at \($0.formatted(date: .omitted, time: .shortened))" } ?? ""
-        return Presence(mood: .asleep, line: "Out of Claude usage" + time, sources: presence.sources)
+        return Presence(mood: .asleep, line: "Out of \(agent.title) usage" + time, sources: presence.sources)
+    }
+
+    /// The agent in charge: the frontmost project's, else one at work, else the default.
+    private static func currentLead() -> (engine: AgentEngine, codex: CodexLimits.Window?) {
+        let conversations = Sessions.all.compactMap(\.claude)
+        let engine = ActiveProject.shared.session?.claude?.engine
+            ?? conversations.first { $0.state == .working }?.engine
+            ?? Preferences.shared.agentEngine
+        return (engine, conversations.lazy.compactMap { $0.codexLimits?.primary }.first)
     }
 
     /// Tool calls made so far, what's running now (sub-agents count double), any usage limit
     /// hit, and the sub-agents and local models at work.
-    private func currentWork() -> (tools: Int, running: Int, limitAt: Date?, satellites: [OrbSatellite]) {
+    private func currentWork() -> (tools: Int, running: Int, limitAt: Date?, limitAgent: AgentEngine, satellites: [OrbSatellite]) {
         var tools = 0, running = 0
         var limitAt: Date?
+        var limitAgent = AgentEngine.claude
         var satellites: [OrbSatellite] = []
         for claude in Sessions.all.flatMap(\.allConversations) {
-            if let at = claude.limitReachedAt { limitAt = max(limitAt ?? at, at) }
+            // Only the agent in charge running out puts the orb to sleep.
+            if let at = claude.outOfUsageSince, at > limitAt ?? .distantPast {
+                limitAt = at
+                limitAgent = claude.engine
+            }
             for item in claude.items {
                 guard case .tool(let tool) = item.content else { continue }
                 tools += 1
@@ -134,7 +162,7 @@ final class PresenceController: NSObject {
                 }
             }
         }
-        return (tools, running, limitAt, satellites)
+        return (tools, running, limitAt, limitAgent, satellites)
     }
 
     private func refreshUsageIfDue(now: Date) {

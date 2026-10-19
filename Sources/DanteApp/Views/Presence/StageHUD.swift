@@ -29,6 +29,8 @@ struct StageHUD: NSViewRepresentable {
     var style: Style
     var intensity: Double
     var usage: Double?
+    /// Whose usage the gauge shows: "CLAUDE", "CODEX".
+    var usageName = "USAGE"
     var unit: CGFloat
     /// The orb's centre, in this view's coordinates (top-left origin).
     var centre: CGPoint
@@ -132,7 +134,7 @@ final class StageHUDView: NSView {
             buildRings(new)
             CATransaction.commit()
         }
-        if reshaped || old?.style != new.style || old?.usage != new.usage || old?.intensity != new.intensity {
+        if reshaped || old?.style != new.style || old?.usage != new.usage || old?.usageName != new.usageName || old?.intensity != new.intensity {
             // Colours and gauges ease over a moment, as the mood does in the orb.
             CATransaction.begin()
             CATransaction.setAnimationDuration(reshaped ? 0 : 0.9)
@@ -236,7 +238,7 @@ final class StageHUDView: NSView {
         usageTrack.strokeColor = style.faint.withAlphaComponent(0.25).cgColor
         usageFill.strokeColor = usageColor.cgColor
         usageFill.strokeEnd = usage ?? 0
-        gaugeLabel(usageLabel, "USAGE \(Int(((usage ?? 0) * 100).rounded()))%", color: usageColor, config: config, middle: 0, mirrored: false)
+        gaugeLabel(usageLabel, "\(config.usageName) \(Int(((usage ?? 0) * 100).rounded()))%", color: usageColor, config: config, middle: 0, mirrored: false)
     }
 
     private func gaugeLabel(_ label: CATextLayer, _ text: String, color: NSColor, config: StageHUD, middle: Double, mirrored: Bool) {

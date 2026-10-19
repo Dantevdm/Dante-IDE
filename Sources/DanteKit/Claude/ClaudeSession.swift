@@ -224,6 +224,11 @@ public final class ClaudeSession {
     public private(set) var allowRules: [String] = []
     /// When Claude Code last said a usage limit was hit; cleared by the next turn that works.
     public private(set) var limitReachedAt: Date?
+    /// Which agent hit that limit.
+    public private(set) var limitEngine: AgentEngine?
+    /// When the agent in charge ran out of usage; nil while it has some (Claude out with
+    /// Codex in charge isn't out).
+    public var outOfUsageSince: Date? { limitEngine == engine ? limitReachedAt : nil }
     /// Claude Code's latest word on the plan's usage limit.
     public private(set) var rateLimit: ClaudeEvent.RateLimit?
     /// Hand the conversation to Codex when Claude's plan is nearly out or out, when Codex is here.
@@ -1096,8 +1101,10 @@ public final class ClaudeSession {
             turnUsage = (0, [:], "")
             if result.isError, Vitality.isLimitMessage(result.text) {
                 limitReachedAt = Date()
+                limitEngine = startedEngine
             } else if !result.isError {
                 limitReachedAt = nil
+                limitEngine = nil
             }
             // Claude stopped at its limit: Codex picks up the same request.
             let limited = result.isError && startedEngine == .claude && Vitality.isLimitMessage(result.text)
@@ -1132,7 +1139,10 @@ public final class ClaudeSession {
             // Codex's limits arrive another way; these are Claude's.
             guard startedEngine == .claude else { break }
             rateLimit = limit
-            if limit.status == .rejected { limitReachedAt = Date() }
+            if limit.status == .rejected {
+                limitReachedAt = Date()
+                limitEngine = .claude
+            }
 
         case .ignored:
             break
