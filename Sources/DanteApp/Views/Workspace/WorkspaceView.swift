@@ -58,6 +58,7 @@ struct WorkspaceView: View {
                 if session.showsClaude, let claude = session.shownClaude {
                     ResizeHandle(axis: .horizontal, value: Bindable(session).claudeWidth, range: 300...1400, inverted: true)
                     ClaudePanel(session: session, workspace: workspace, claude: claude)
+                        .environment(\.typeInTerminal) { [weak session] command in session?.typeInTerminal(command) }
                         .frame(width: session.claudeWidth, alignment: .leading)
                         .clipped()
                         .transition(.move(edge: .trailing).combined(with: .opacity))

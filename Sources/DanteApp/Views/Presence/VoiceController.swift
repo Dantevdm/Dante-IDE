@@ -4,6 +4,7 @@ import Carbon.HIToolbox
 import DanteKit
 import DanteOpen
 import Observation
+import os
 import Speech
 
 /// Talking to Claude through the orb. ⌃⌥Space (anywhere), the panel's mic or, when it's on,
@@ -56,6 +57,8 @@ final class VoiceController {
     @ObservationIgnored private var silenceTimer: Timer?
     @ObservationIgnored private var wakeTimer: Timer?
     @ObservationIgnored private var wakeFailures = 0
+    /// Words the current wake session has heard, for the log.
+    @ObservationIgnored private var wakeWords = 0
     @ObservationIgnored private var levelTimer: Timer?
     @ObservationIgnored private let speaker = AVSpeechSynthesizer()
     @ObservationIgnored private let speech = SpeechDelegate()
@@ -77,6 +80,10 @@ final class VoiceController {
         speaker.delegate = speech
     }
 
+    /// `log stream --predicate 'subsystem == "dev.dante.ide" && category == "voice"'` shows
+    /// each step. What was heard stays private; only its length is public.
+    static let log = Logger(subsystem: "dev.dante.ide", category: "voice")
+
     // MARK: The talk key
 
     /// Registers ⌃⌥Space system-wide (Carbon hot keys need no Accessibility permission) and
@@ -94,6 +101,7 @@ final class VoiceController {
     }
 
     func toggle() {
+        Self.log.info("talk key, state \(String(describing: self.state), privacy: .public)")
         switch state {
         case .listening: finish()
         default: start()
@@ -109,11 +117,13 @@ final class VoiceController {
 
     private func begin(followUp: Bool = false) async {
         guard await Self.authorised() else {
+            Self.log.error("not authorised for the microphone or speech recognition")
             state = .unavailable("Dante needs the microphone and speech recognition. Allow them in System Settings › Privacy & Security.")
             PresenceController.shared.voiceChanged()
             return
         }
         guard let recognizer, recognizer.isAvailable else {
+            Self.log.error("speech recognition unavailable")
             state = .unavailable("Speech recognition isn’t available right now.")
             PresenceController.shared.voiceChanged()
             return
@@ -145,6 +155,7 @@ final class VoiceController {
             engine.prepare()
             try engine.start()
         } catch {
+            Self.log.error("microphone didn't start: \(error.localizedDescription, privacy: .public)")
             input.removeTap(onBus: 0)
             self.request = nil
             if mode == .command {
@@ -154,6 +165,7 @@ final class VoiceController {
             return false
         }
         self.mode = mode
+        Self.log.info("listening (\(mode == .wake ? "wake word" : "command", privacy: .public))")
         afterWake = false
         generation += 1
         let current = generation
@@ -192,9 +204,13 @@ final class VoiceController {
         case .off:
             return
         case .wake:
+            if failed { Self.log.error("wake recognition failed") }
+            wakeWords = text?.split(separator: " ").count ?? wakeWords
             if let text, let rest = WakeWord.command(in: text) {
+                Self.log.info("wake word heard")
                 woke(saying: rest)
             } else if final || failed {
+                Self.log.info("wake session ended: heard \(text?.split(separator: " ").count ?? 0, privacy: .public) words, no wake phrase: \(text ?? "", privacy: .private)")
                 wakeEnded(failed: failed)
             }
         case .command:
@@ -219,8 +235,9 @@ final class VoiceController {
 
     /// Stops listening and acts on what was heard.
     func finish() {
-        guard state == .listening else { return }
+        guard state == .listening else { return Self.log.info("finish ignored, state \(String(describing: self.state), privacy: .public)") }
         let text = heard
+        Self.log.info("heard \(text.split(separator: " ").count, privacy: .public) words: \(text, privacy: .private)")
         stopAudio()
         state = answering == nil ? .idle : .waiting
         level = 0
@@ -275,11 +292,13 @@ final class VoiceController {
         // Only once permission is given: turning the setting on asks for it.
         guard await Self.authorised() else {
             wakeProblem = "Dante needs the microphone and speech recognition. Allow them in System Settings › Privacy & Security."
+            Self.log.error("wake: not authorised")
             return
         }
-        guard let recognizer, recognizer.isAvailable else { return }
+        guard let recognizer, recognizer.isAvailable else { return Self.log.error("wake: recognition unavailable") }
         // Listening all the time is only acceptable if nothing leaves the Mac.
         guard recognizer.supportsOnDeviceRecognition else {
+            Self.log.error("wake: no on-device recognition")
             wakeProblem = "This Mac can’t recognise speech offline, so Dante won’t listen in the background."
             return
         }
@@ -290,11 +309,13 @@ final class VoiceController {
             return
         }
         wakeListening = true
+        wakeWords = 0
         // Recognition tasks wind down after a minute or so; start a fresh one before that.
         wakeTimer = Timer.scheduledTimer(withTimeInterval: 50, repeats: false) { _ in
             MainActor.assumeIsolated {
                 let voice = VoiceController.shared
                 guard voice.mode == .wake else { return }
+                Self.log.info("wake session restarted: heard \(voice.wakeWords, privacy: .public) words, no wake phrase")
                 voice.stopAudio()
                 voice.updateWakeListening()
             }
@@ -340,6 +361,7 @@ final class VoiceController {
     }
 
     private func act(on command: VoiceCommand) {
+        Self.log.info("command \(Self.kind(command), privacy: .public), \(Sessions.all.count, privacy: .public) windows, target \(self.target?.workspace?.name ?? "none", privacy: .private)")
         switch command {
         case .cancel:
             // Silence after a reply ends the conversation quietly.
@@ -421,6 +443,15 @@ final class VoiceController {
                                 configuration: NSWorkspace.OpenConfiguration())
     }
 
+    /// A command's name for the log, without what was said.
+    static func kind(_ command: VoiceCommand) -> String {
+        switch command {
+        case .ask: "ask"
+        case .show: "show"
+        default: String(describing: command)
+        }
+    }
+
     /// Projects opened before, most recent first, for opening by name.
     static func recents() -> [RecentProject] {
         RecentProjects().items.filter { FileManager.default.fileExists(atPath: $0.path) }
@@ -490,6 +521,7 @@ final class VoiceController {
 
     private func say(_ text: String) {
         guard !text.isEmpty else { return }
+        Self.log.info("say (\(Preferences.shared.speaksReplies ? "aloud" : "muted", privacy: .public)): \(text, privacy: .public)")
         if answering != nil { spokeThisTurn = true }
         guard Preferences.shared.speaksReplies else { return spoke() }
         // The microphone would hear Dante; wake listening pauses while it talks.

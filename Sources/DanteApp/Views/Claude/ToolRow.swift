@@ -313,9 +313,69 @@ struct CodeBlock: View {
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.codeBackground.color))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.line.color))
         .overlay(alignment: .topTrailing) {
-            if let language {
-                Text(language).font(.dante(size: 9.5)).foregroundStyle(theme.text3.color).padding(6)
+            if isExporting {
+                if let language {
+                    Text(language).font(.dante(size: 9.5)).foregroundStyle(theme.text3.color).padding(6)
+                }
+            } else {
+                CodeBlockActions(text: text, language: language)
             }
+        }
+    }
+}
+
+/// A code block's corner: its language, Copy, and for commands, typing them into the terminal
+/// (without pressing Return, so the person reads them first).
+private struct CodeBlockActions: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.typeInTerminal) private var typeInTerminal
+    let text: String
+    let language: String?
+    @State private var copied = false
+    @State private var typed = false
+
+    var body: some View {
+        let command = typeInTerminal == nil ? nil : ShellSnippet.command(from: text, language: language)
+        HStack(spacing: 2) {
+            if let language {
+                Text(language).font(.dante(size: 9.5)).foregroundStyle(theme.text3.color).padding(.trailing, 4)
+            }
+            if let command, let typeInTerminal {
+                button(typed ? "Typed" : "Terminal", symbol: typed ? "checkmark" : "apple.terminal", done: typed) {
+                    typeInTerminal(command)
+                    flash($typed)
+                }
+                .help("Type it into the terminal without running it: press Return there when it looks right")
+            }
+            button(copied ? "Copied" : "Copy", symbol: copied ? "checkmark" : "doc.on.doc", done: copied) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(command ?? text, forType: .string)
+                flash($copied)
+            }
+            .help(command != nil && command != text ? "Copy as one line: \(command!)" : "Copy")
+        }
+        .padding(4)
+    }
+
+    private func button(_ title: String, symbol: String, done: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.dante(size: 10, weight: .medium))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(done ? theme.green.color : theme.text2.color)
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(Capsule().fill(theme.raised.color))
+                .overlay(Capsule().strokeBorder(theme.line.color))
+        }
+        .buttonStyle(.plain)
+        .animation(.snappy, value: done)
+    }
+
+    private func flash(_ flag: Binding<Bool>) {
+        flag.wrappedValue = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            flag.wrappedValue = false
         }
     }
 }
@@ -458,6 +518,8 @@ private struct AnsweredQuestions: View {
 extension EnvironmentValues {
     /// True while a view is drawn for a PDF or print, where nothing can scroll.
     @Entry var isExporting = false
+    /// Types a command into the window's terminal without running it; nil where there's none.
+    @Entry var typeInTerminal: (@MainActor (String) -> Void)? = nil
     /// The width a diagram has to fit in when exporting.
     @Entry var exportWidth: CGFloat = 480
 }
