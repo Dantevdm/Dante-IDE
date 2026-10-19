@@ -123,6 +123,13 @@ import Testing
         #expect(VoiceCommand.parse("minimize it.", projects: []) == .stage(false))
         #expect(VoiceCommand.parse("Close", projects: []) == .stage(false))
         #expect(VoiceCommand.parse("Close the login bug", projects: []) == .ask("Close the login bug"))
+        #expect(VoiceCommand.parse("Open up in full screen", projects: []) == .stage(true))
+        #expect(VoiceCommand.parse("Hey Dante, can you go fullscreen?", projects: []) == .stage(true))
+        #expect(VoiceCommand.parse("Get out of full screen", projects: []) == .stage(false))
+        #expect(VoiceCommand.parse("Why does the editor break when the window is full screen and the sidebar is hidden", projects: []) != .stage(true))
+        #expect(VoiceCommand.parse("Are you able to open a new project?", projects: []) == .openProject)
+        #expect(VoiceCommand.parse("Open another project", projects: []) == .openProject)
+        #expect(VoiceCommand.parse("Hey Dante open up the shop", projects: ["shop"]) == .show(project: "shop"))
     }
 
     @Test func spokenRepliesDropCodeAndMarkdown() {

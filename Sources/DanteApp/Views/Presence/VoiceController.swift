@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import Carbon.HIToolbox
 import DanteKit
+import DanteOpen
 import Observation
 import Speech
 
@@ -224,7 +225,8 @@ final class VoiceController {
         state = answering == nil ? .idle : .waiting
         level = 0
         PresenceController.shared.voiceChanged()
-        act(on: VoiceCommand.parse(text, projects: Sessions.all.compactMap { $0.workspace?.name }))
+        let open = Sessions.all.compactMap { $0.workspace?.name }
+        act(on: VoiceCommand.parse(text, projects: open + Self.recents().map(\.name).filter { !open.contains($0) }))
         updateWakeListening()
     }
 
@@ -329,8 +331,9 @@ final class VoiceController {
     // MARK: Acting
 
     /// The session spoken to: the frontmost project's, else one where Claude is busy or waiting.
+    /// Never the launch screen's, which has no project and no conversation.
     private var target: Session? {
-        ActiveProject.shared.session
+        ActiveProject.shared.session.flatMap { $0.workspace != nil ? $0 : nil }
             ?? Sessions.all.first { $0.waitingConversation != nil }
             ?? Sessions.all.first { $0.claude?.state == .working }
             ?? Sessions.all.first { $0.workspace != nil }
@@ -350,10 +353,32 @@ final class VoiceController {
             if state == .waiting { state = .idle }
             say("Stopped.")
         case .show(let project):
-            guard let session = Sessions.all.first(where: { $0.workspace?.name == project }) else { return }
+            if let session = Sessions.all.first(where: { $0.workspace?.name == project }) {
+                NSApp.activate()
+                session.window?.makeKeyAndOrderFront(nil)
+                return say("Here’s \(project).")
+            }
+            // A recent project that isn't open: opened like `dante <folder>`.
+            guard let recent = Self.recents().first(where: { $0.name == project }) else { return say("I can’t find \(project).") }
             NSApp.activate()
-            session.window?.makeKeyAndOrderFront(nil)
-            say("Here’s \(project).")
+            Self.open(recent.path)
+            say("Opening \(project).")
+        case .openProject:
+            NSApp.activate()
+            let names = Self.recents().filter { recent in !Sessions.all.contains { $0.workspace?.url.standardizedFileURL.path == recent.path } }.prefix(3).map(\.name)
+            say(names.isEmpty ? "Pick a folder." : "Pick a folder, or say open and a name, like \(Self.list(Array(names))).")
+            // After speaking starts: the panel waits for an answer. The folder opens like
+            // `dante <folder>`, in a new window unless one is free.
+            DispatchQueue.main.async {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.prompt = "Open"
+                panel.message = "Choose a project folder"
+                if panel.runModal() == .OK, let url = panel.url {
+                    Self.open(url.path)
+                }
+            }
         case .approve:
             guard let session = target, let claude = session.waitingConversation?.claude else { return say("Nothing’s waiting.") }
             for tool in claude.pendingApprovals { claude.approve(tool.id) }
@@ -379,12 +404,32 @@ final class VoiceController {
             say(VoiceStatus.usage(share: model.windowShare, resets: model.usageResets,
                                   limitReached: Sessions.all.contains { $0.claude?.limitReachedAt != nil }))
         case .ask(let text):
-            guard let session = target else { return say("Open a project first.") }
+            guard let session = target, session.claude != nil else {
+                let names = Self.recents().prefix(3).map(\.name)
+                return say("I need a project open to ask \(Preferences.shared.agentEngine.title) that. "
+                           + (names.isEmpty ? "Open a folder first." : "Say open and its name, like \(Self.list(Array(names))).")) }
             let from = session.claude?.items.count ?? 0
             session.askClaude(text)
             conversing = Preferences.shared.keepsConversation
             listenForReply(in: session, from: from)
         }
+    }
+
+    /// Opens a folder like `dante <folder>` does, through this copy of Dante.
+    static func open(_ path: String) {
+        NSWorkspace.shared.open([OpenRequest(items: [.init(path: path)]).url], withApplicationAt: Bundle.main.bundleURL,
+                                configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    /// Projects opened before, most recent first, for opening by name.
+    static func recents() -> [RecentProject] {
+        RecentProjects().items.filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// "a, b or c", for saying.
+    static func list(_ names: [String]) -> String {
+        guard names.count > 1 else { return names.first ?? "" }
+        return names.dropLast().joined(separator: ", ") + " or " + names.last!
     }
 
     /// Reads the reply out as it streams, and says what's waiting for an answer.

@@ -4,8 +4,10 @@ import Foundation
 public enum VoiceCommand: Equatable, Sendable {
     /// Stop whatever Claude is doing.
     case stop
-    /// Bring a project's window forward (by its name as spoken).
+    /// Bring a project's window forward, or open a recent one (by its name as spoken).
     case show(project: String)
+    /// Open some project: Dante asks which.
+    case openProject
     /// Approve or turn down what's waiting.
     case approve, decline
     /// Said by mistake: do nothing.
@@ -32,15 +34,38 @@ public enum VoiceCommand: Equatable, Sendable {
         let spoken = lower.replacingOccurrences(of: "the ", with: "").replacingOccurrences(of: "please", with: "").trimmingCharacters(in: .whitespaces)
         if stageOpeners.contains(spoken) { return .stage(true) }
         if stageClosers.contains(spoken) { return .stage(false) }
+        if let stage = fullScreen(spoken) { return .stage(stage) }
         let core = Self.core(spoken)
         if goodbyes.contains(core) { return .goodbye }
         if statusQuestions.contains(core) { return .status }
         if usageQuestions.contains(core) { return .usage }
-        for prefix in ["show me ", "switch to ", "open ", "go to "] where lower.hasPrefix(prefix) {
-            let name = String(lower.dropFirst(prefix.count)).replacingOccurrences(of: "the ", with: "")
+        // Only the greeting comes off here: "switch to dante" names a project.
+        var greeted = spoken.split(separator: " ").map(String.init)
+        while let first = greeted.first, ["hey", "ok", "okay", "claude", "dante", "jarvis", "so"].contains(first) { greeted.removeFirst() }
+        let request = greeted.joined(separator: " ")
+        for prefix in ["show me ", "switch to ", "open up ", "open ", "go to ", "bring up "] where request.hasPrefix(prefix) {
+            let name = String(request.dropFirst(prefix.count)).replacingOccurrences(of: "the ", with: "")
             if let project = projects.first(where: { matches($0, name) }) { return .show(project: project) }
         }
+        if asksToOpenAProject(core) { return .openProject }
         return .ask(text)
+    }
+
+    /// "Open up in full screen", "can you go full screen": any short line about full screen.
+    static func fullScreen(_ spoken: String) -> Bool? {
+        let words = spoken.split(separator: " ")
+        let text = " " + spoken.replacingOccurrences(of: "fullscreen", with: "full screen") + " "
+        guard words.count <= 8, text.contains(" full screen ") || text.contains(" big screen ") else { return nil }
+        let leaving = [" exit", " leave", " close", " out of ", " minimi", " stop", " turn off", " no more", " not "]
+        return !leaving.contains { text.contains($0) }
+    }
+
+    /// "Open a new project", "are you able to open another project?", "open a project".
+    static func asksToOpenAProject(_ core: String) -> Bool {
+        let text = " " + core + " "
+        guard text.contains(" open ") || text.contains(" start ") || text.contains(" switch ") else { return false }
+        return [" a project", " new project", " another project", " other project", " different project", " some project", " a folder", " another folder"]
+            .contains { text.contains($0) }
     }
 
     static let stageOpeners: Set<String> = [
