@@ -107,6 +107,14 @@ final class VoiceController {
         configurationObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { _ in
             MainActor.assumeIsolated { VoiceController.shared.audioConfigurationChanged() }
         }
+        // Automatic follows the Mac's default input, so switch when it does.
+        Microphones.onDefaultChange {
+            MainActor.assumeIsolated {
+                guard Preferences.shared.microphone.isEmpty else { return }
+                Self.log.info("default microphone changed")
+                VoiceController.shared.microphoneChanged()
+            }
+        }
     }
 
     /// `log stream --predicate 'subsystem == "dev.dante.ide" && category == "voice"'` shows
@@ -336,7 +344,8 @@ final class VoiceController {
         if Preferences.shared.listensForWakeWord { endRecognition() } else { stopAudio() }
     }
 
-    /// A different microphone was chosen: reopen on it.
+    /// A different microphone was chosen, or the Mac's default input changed while Dante
+    /// follows it: reopen on it.
     func microphoneChanged() {
         guard engine.isRunning, state != .listening else { return }
         stopAudio()

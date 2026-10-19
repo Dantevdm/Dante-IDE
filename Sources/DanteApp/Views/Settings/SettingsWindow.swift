@@ -204,7 +204,7 @@ private struct VoicePreferencesSection: View {
                     Text(microphone.transport == .bluetooth ? "\(microphone.name) (Bluetooth)" : microphone.name).tag(microphone.uid)
                 }
             }
-            .help("Automatic uses this Mac’s microphone when the default is a Bluetooth headset. A headset’s own microphone switches it to call quality, so Dante and everything else sounds worse, and it reconnects each time listening starts or stops.")
+            .help("Automatic follows the input chosen in System Settings › Sound. While a Bluetooth headset’s microphone is open, macOS plays through it at call quality.")
             .onChange(of: preferences.microphone) { VoiceController.shared.microphoneChanged() }
             Toggle("Natural voice", isOn: $preferences.usesNaturalVoice)
                 .help("Kokoro, a neural voice that runs on this Mac: it sounds far more like a person than the system voices, and nothing you hear is made anywhere else.")

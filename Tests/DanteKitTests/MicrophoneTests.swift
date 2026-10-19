@@ -7,20 +7,11 @@ struct MicrophoneTests {
     let usb = Microphone(id: 3, uid: "usb-mic", name: "USB Mic", transport: .usb)
     let teams = Microphone(id: 4, uid: "teams", name: "Meeting Audio", transport: .virtual)
 
-    @Test func aBluetoothDefaultGivesWayToTheMacsMicrophone() {
-        #expect(Microphone.pick(from: [headset, teams, builtIn], defaultID: 1, preferred: "") == builtIn)
-    }
-
-    @Test func thenAUSBMicrophone() {
-        #expect(Microphone.pick(from: [headset, usb], defaultID: 1, preferred: "") == usb)
-    }
-
-    @Test func onlyTheHeadsetMeansTheHeadset() {
-        #expect(Microphone.pick(from: [headset, teams], defaultID: 1, preferred: "") == headset)
-    }
-
-    @Test func aWiredDefaultStays() {
+    @Test func automaticFollowsTheMacsDefaultInput() {
+        #expect(Microphone.pick(from: [headset, builtIn, usb], defaultID: 1, preferred: "") == headset)
+        #expect(Microphone.pick(from: [headset, builtIn, usb], defaultID: 2, preferred: "") == builtIn)
         #expect(Microphone.pick(from: [headset, builtIn, usb], defaultID: 3, preferred: "") == usb)
+        #expect(Microphone.pick(from: [teams], defaultID: nil, preferred: "") == nil)
     }
 
     @Test func aChosenMicrophoneWinsWhileConnected() {

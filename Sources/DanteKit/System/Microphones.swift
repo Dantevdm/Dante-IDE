@@ -20,16 +20,11 @@ public struct Microphone: Equatable, Sendable, Identifiable {
         self.transport = transport
     }
 
-    /// The device to listen with. A chosen one wins while it's connected. Otherwise the
-    /// default, unless that's a Bluetooth headset: opening a headset's microphone switches it
-    /// from stereo to its mono call mode, so everything it plays drops in quality and it
-    /// reconnects each time the microphone opens or closes. Then the Mac's own microphone, or
-    /// a USB one. Nil means the system default.
+    /// The device to listen with: a chosen one while it's connected, otherwise the Mac's
+    /// default input (System Settings › Sound), whatever it is. Nil means the system default.
     public static func pick(from inputs: [Microphone], defaultID: UInt32?, preferred: String) -> Microphone? {
         if !preferred.isEmpty, let chosen = inputs.first(where: { $0.uid == preferred }) { return chosen }
-        let current = inputs.first { $0.id == defaultID }
-        guard current?.transport == .bluetooth else { return current }
-        return inputs.first { $0.transport == .builtIn } ?? inputs.first { $0.transport == .usb } ?? current
+        return inputs.first { $0.id == defaultID }
     }
 }
 
@@ -55,6 +50,14 @@ public enum Microphones {
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id) == noErr, id != 0 else { return nil }
         return id
+    }
+
+    /// Calls `changed` on the main queue whenever the Mac's default input changes (a headset
+    /// connects, or another input is picked in System Settings). Lasts as long as the app.
+    public static func onDefaultChange(_ changed: @escaping @Sendable () -> Void) {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main) { _, _ in changed() }
     }
 
     /// The device Dante should listen with now, from `Preferences.microphone`.
