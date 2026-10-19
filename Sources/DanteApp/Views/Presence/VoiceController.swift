@@ -69,8 +69,13 @@ final class VoiceController {
     @ObservationIgnored private var levelTimer: Timer?
     @ObservationIgnored private let speaker = AVSpeechSynthesizer()
     @ObservationIgnored private var speechQueue = SpeechQueue()
-    /// Utterances handed to the synthesiser and not yet finished or cancelled.
-    @ObservationIgnored private var outstanding: Set<ObjectIdentifier> = []
+    /// Chunks handed to a voice and not yet finished or dropped.
+    @ObservationIgnored private var outstanding: Set<Int> = []
+    @ObservationIgnored private var lastToken = 0
+    /// Apple's utterances, by the chunk each one says.
+    @ObservationIgnored private var utterances: [ObjectIdentifier: Int] = [:]
+    /// The natural voice failed this time round; Apple's speaks until it's set up again.
+    @ObservationIgnored private var naturalFailed = false
     @ObservationIgnored private let speech = SpeechDelegate()
     @ObservationIgnored private var hotKey: EventHotKeyRef?
     @ObservationIgnored private weak var answering: Session?
@@ -88,6 +93,16 @@ final class VoiceController {
 
     private init() {
         speaker.delegate = speech
+        let natural = NaturalSpeaker.shared
+        natural.onStart = { _, text in VoiceController.shared.started(text) }
+        natural.onFinish = { token in VoiceController.shared.spoke(token) }
+        natural.onLevel = { level in VoiceController.shared.spoken(level: level) }
+        natural.onFailure = { token, text in
+            let voice = VoiceController.shared
+            Self.log.error("natural voice failed; Apple's voice speaks instead")
+            voice.naturalFailed = true
+            voice.speakWithApple(text, token: token)
+        }
         // A headset connecting or going away stops the engine; start again on what's there now.
         configurationObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { _ in
             MainActor.assumeIsolated { VoiceController.shared.audioConfigurationChanged() }
@@ -143,6 +158,8 @@ final class VoiceController {
             return
         }
         guard startRecognition(.command, recognizer: recognizer) else { return }
+        // A reply is coming: have the natural voice ready by then.
+        NaturalSpeaker.shared.prewarm()
         self.followUp = followUp
         if followUp { NSSound(named: "Tink")?.play() }
         heard = ""
@@ -391,6 +408,7 @@ final class VoiceController {
     /// "Hey Dante" heard: the same recognition carries on as a command, so nothing said
     /// straight after is lost.
     private func woke(saying rest: String) {
+        NaturalSpeaker.shared.prewarm()
         wakeTimer?.invalidate()
         wakeTimer = nil
         wakeFailures = 0
@@ -602,19 +620,38 @@ final class VoiceController {
         PresenceController.shared.voiceChanged()
     }
 
-    /// Hands the synthesiser the next chunk when there's room.
+    /// Hands the next chunk to a voice when there's room: the natural one when it's set up.
     private func pump() {
         guard let chunk = speechQueue.next(outstanding: outstanding.count) else { return }
-        let utterance = AVSpeechUtterance(string: chunk)
+        lastToken += 1
+        let token = lastToken
+        outstanding.insert(token)
+        if !naturalFailed, NaturalSpeaker.shared.isAvailable {
+            NaturalSpeaker.shared.speak(token: token, text: chunk)
+        } else {
+            speakWithApple(chunk, token: token)
+        }
+    }
+
+    fileprivate func speakWithApple(_ text: String, token: Int) {
+        let utterance = AVSpeechUtterance(string: text)
         utterance.rate = Float(min(0.62, max(0.4, Preferences.shared.speechRate)))
         utterance.voice = Self.voice()
-        outstanding.insert(ObjectIdentifier(utterance))
+        utterances[ObjectIdentifier(utterance)] = token
         speaker.speak(utterance)
+    }
+
+    /// The natural voice was set up or switched on: give it another go.
+    func naturalVoiceChanged() {
+        naturalFailed = false
+        if Preferences.shared.usesNaturalVoice { NaturalSpeaker.shared.prewarm() }
     }
 
     func stopSpeaking() {
         speechQueue.reset()
         outstanding.removeAll()
+        utterances.removeAll()
+        NaturalSpeaker.shared.stop()
         speaker.stopSpeaking(at: .immediate)
         saying = nil
         level = 0
@@ -663,8 +700,21 @@ final class VoiceController {
 
     /// The speaker went quiet: listen for a follow-up in a conversation, else go back to
     /// waiting for "Hey Dante".
-    fileprivate func spoke(_ utterance: ObjectIdentifier) {
-        guard outstanding.remove(utterance) != nil else { return }
+    /// Apple's synthesiser finished (or dropped) an utterance.
+    fileprivate func spoke(utterance: ObjectIdentifier) {
+        guard let token = utterances.removeValue(forKey: utterance) else { return }
+        spoke(token)
+    }
+
+    /// The natural voice's loudness: the orb swells with the actual sound.
+    fileprivate func spoken(level: Double) {
+        guard saying != nil else { return }
+        self.level += (level - self.level) * 0.6
+        PresenceController.shared.voiceChanged()
+    }
+
+    fileprivate func spoke(_ token: Int) {
+        guard outstanding.remove(token) != nil else { return }
         pump()
         guard outstanding.isEmpty else { return }
         quiet()
@@ -714,12 +764,12 @@ private final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate {
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         let id = ObjectIdentifier(utterance)
-        Task { @MainActor in VoiceController.shared.spoke(id) }
+        Task { @MainActor in VoiceController.shared.spoke(utterance: id) }
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         let id = ObjectIdentifier(utterance)
-        Task { @MainActor in VoiceController.shared.spoke(id) }
+        Task { @MainActor in VoiceController.shared.spoke(utterance: id) }
     }
 }
 

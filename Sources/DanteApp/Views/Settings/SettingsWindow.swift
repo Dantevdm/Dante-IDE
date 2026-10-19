@@ -182,6 +182,7 @@ private struct VoicePreferencesSection: View {
     private let voice = VoiceController.shared
     private let voices = VoiceController.voices
     @State private var microphones = Microphones.all().filter { $0.transport != .virtual }
+    private let naturalSetup = NaturalVoiceSetup.shared
 
     var body: some View {
         SwiftUI.Section {
@@ -205,13 +206,47 @@ private struct VoicePreferencesSection: View {
             }
             .help("Automatic uses this Mac’s microphone when the default is a Bluetooth headset. A headset’s own microphone switches it to call quality, so Dante and everything else sounds worse, and it reconnects each time listening starts or stops.")
             .onChange(of: preferences.microphone) { VoiceController.shared.microphoneChanged() }
-            Picker("Voice", selection: $preferences.voiceIdentifier) {
-                Text("Best available").tag("")
-                ForEach(voices, id: \.identifier) { voice in
-                    Text(Self.label(voice)).tag(voice.identifier)
+            Toggle("Natural voice", isOn: $preferences.usesNaturalVoice)
+                .help("Kokoro, a neural voice that runs on this Mac: it sounds far more like a person than the system voices, and nothing you hear is made anywhere else.")
+                .onChange(of: preferences.usesNaturalVoice) { VoiceController.shared.naturalVoiceChanged() }
+            if preferences.usesNaturalVoice, naturalSetup.installed {
+                Picker("Voice", selection: $preferences.naturalVoice) {
+                    ForEach(NaturalVoice.voices) { voice in
+                        Text("\(voice.name) (\(voice.accent))").tag(voice.id)
+                    }
                 }
+            } else {
+                if preferences.usesNaturalVoice {
+                    HStack {
+                        Button(naturalSetup.isWorking ? "Setting Up…" : "Set Up Natural Voice") {
+                            Task {
+                                await naturalSetup.install()
+                                VoiceController.shared.naturalVoiceChanged()
+                            }
+                        }
+                        .disabled(naturalSetup.isWorking)
+                        .help("Downloads Kokoro (about \(NaturalVoice.downloadSize)) into Application Support, with a Python environment of its own. Until then Dante speaks with the system voice below.")
+                        switch naturalSetup.state {
+                        case .working(let step):
+                            ProgressView().controlSize(.small)
+                            Text(step).foregroundStyle(theme.text3.color)
+                        case .failed(let message):
+                            Label(message, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(theme.amber.color)
+                        case .idle:
+                            EmptyView()
+                        }
+                    }
+                    .font(.dante(size: 11.5))
+                }
+                Picker(preferences.usesNaturalVoice ? "System voice" : "Voice", selection: $preferences.voiceIdentifier) {
+                    Text("Best available").tag("")
+                    ForEach(voices, id: \.identifier) { voice in
+                        Text(Self.label(voice)).tag(voice.identifier)
+                    }
+                }
+                .help("Premium and Enhanced voices sound far better. Download them in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
             }
-            .help("Premium and Enhanced voices sound far better. Download them in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
             HStack {
                 Slider(value: $preferences.speechRate, in: 0.4...0.62) {
                     Text("Speed")

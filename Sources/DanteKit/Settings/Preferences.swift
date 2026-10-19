@@ -57,6 +57,10 @@ public final class Preferences {
     public var listensForWakeWord: Bool { didSet { defaults.set(listensForWakeWord, forKey: Keys.listensForWakeWord) } }
     /// The voice replies are read in (an `AVSpeechSynthesisVoice` identifier); empty picks the best English one.
     public var voiceIdentifier: String { didSet { defaults.set(voiceIdentifier, forKey: Keys.voiceIdentifier) } }
+    /// Speak with the natural voice (Kokoro, on this Mac) once it's set up; else Apple's.
+    public var usesNaturalVoice: Bool { didSet { defaults.set(usesNaturalVoice, forKey: Keys.usesNaturalVoice) } }
+    /// The natural voice's speaker (a Kokoro voice id such as `af_heart`).
+    public var naturalVoice: String { didSet { defaults.set(naturalVoice, forKey: Keys.naturalVoice) } }
     /// The microphone Dante listens with (a Core Audio device UID); empty picks one that
     /// doesn't drop a Bluetooth headset into its low-quality call mode.
     public var microphone: String { didSet { defaults.set(microphone, forKey: Keys.microphone) } }
@@ -114,6 +118,8 @@ public final class Preferences {
         voiceIdentifier = defaults.string(forKey: Keys.voiceIdentifier) ?? ""
         speechRate = defaults.object(forKey: Keys.speechRate) as? Double ?? 0.52
         microphone = defaults.string(forKey: Keys.microphone) ?? ""
+        usesNaturalVoice = bool(Keys.usesNaturalVoice, true)
+        naturalVoice = defaults.string(forKey: Keys.naturalVoice) ?? NaturalVoice.defaultVoice
         approvalLevel = defaults.string(forKey: Keys.approvalLevel).flatMap(ApprovalLevel.init(rawValue:)) ?? .ask
         claudeModel = defaults.string(forKey: Keys.claudeModel).flatMap(ClaudeModel.init(rawValue:)) ?? .default
         usesGeist = bool(Keys.usesGeist, true)
@@ -163,6 +169,8 @@ public final class Preferences {
         static let voiceIdentifier = "voiceIdentifier"
         static let speechRate = "speechRate"
         static let microphone = "microphone"
+        static let usesNaturalVoice = "usesNaturalVoice"
+        static let naturalVoice = "naturalVoice"
         static let approvalLevel = "approvalLevel"
         static let claudeModel = "claudeModel"
         static let usesGeist = "usesGeist"
