@@ -84,8 +84,17 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Ad-hoc sign so macOS runs it locally.
-codesign --force --sign - "$app" >/dev/null 2>&1 || true
+# Sign with a stable identity when there is one: macOS keys microphone, speech and Keychain
+# permissions to the signature, and an ad-hoc one changes with every build, so each build
+# would ask again. DANTE_SIGN_IDENTITY picks one; otherwise the first Apple Development
+# certificate; otherwise ad-hoc, which still runs locally.
+identity="${DANTE_SIGN_IDENTITY:-}"
+if [ -z "$identity" ]; then
+  identity=$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development:/ { print $2; exit }')
+fi
+sign() { codesign --force --sign "${identity:--}" "$@" >/dev/null 2>&1 || codesign --force --sign - "$@" >/dev/null 2>&1 || true; }
+[ -f "$app/Contents/Resources/bin/dante" ] && sign "$app/Contents/Resources/bin/dante"
+sign "$app"
 
 echo "Built $app ($configuration)"
 if $open_after; then open "$app"; fi

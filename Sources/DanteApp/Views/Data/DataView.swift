@@ -10,6 +10,34 @@ struct DataView: View {
     let workspace: Workspace
     private var model: DataModel { session.data }
 
+    private var confirmTitle: String {
+        guard let connection = model.removing else { return "" }
+        return model.removal(for: connection) == nil ? "Remove \(connection.name) from Dante?" : "Delete the \(connection.name) database?"
+    }
+
+    private func delete(_ connection: DatabaseConnection, keepsData: Bool) {
+        model.removing = nil
+        Task {
+            let notes = await model.delete(connection, keepsData: keepsData, workspace: workspace)
+            workspace.refreshFileIndex()
+            if let notes { session.errorMessage = notes }
+        }
+    }
+
+    /// What deleting changes, in a few lines for the confirmation.
+    static func describe(_ removal: DatabaseRemoval) -> String {
+        var lines: [String] = []
+        if let service = removal.service {
+            lines.append("Stops and removes the \(service) container" + (removal.volume.map { " and deletes its data (the \($0) volume)" } ?? "") + ".")
+        }
+        if let file = removal.file { lines.append("Moves \(file) to the Trash.") }
+        for edit in removal.edits {
+            lines.append(edit.text == nil ? "Moves \(edit.path) to the Trash: nothing else is in it." : "\(edit.path): takes out \(edit.changes.joined(separator: ", ")).")
+        }
+        lines.append("Then you can set up a database again from the start.")
+        return lines.joined(separator: "\n")
+    }
+
     var body: some View {
         Group {
             if model.connections.isEmpty {
@@ -31,6 +59,29 @@ struct DataView: View {
             model.load(workspace: workspace)
             if let connection = model.selected, first || model.status[connection.id] == nil {
                 await model.connect(connection)
+            }
+        }
+        .confirmationDialog(confirmTitle,
+                            isPresented: Binding(get: { model.removing != nil }, set: { if !$0 { model.removing = nil } }),
+                            presenting: model.removing) { connection in
+            if let removal = model.removal(for: connection) {
+                Button(removal.volume != nil || removal.file != nil ? "Delete Database and Data" : "Delete Database", role: .destructive) {
+                    delete(connection, keepsData: false)
+                }
+                if removal.volume != nil || removal.file != nil {
+                    Button("Delete but Keep the Data") { delete(connection, keepsData: true) }
+                }
+            } else {
+                Button("Remove", role: .destructive) {
+                    withAnimation(.snappy) { model.remove(connection) }
+                    model.removing = nil
+                }
+            }
+        } message: { connection in
+            if let removal = model.removal(for: connection) {
+                Text(Self.describe(removal))
+            } else {
+                Text("Dante forgets the connection and its saved password on this Mac. The database itself and its data stay as they are.")
             }
         }
         .sheet(isPresented: Binding(get: { model.showsNewDatabase }, set: { model.showsNewDatabase = $0 })) {
@@ -64,11 +115,8 @@ private struct DataSidebar: View {
 
             VStack(spacing: 2) {
                 ForEach(model.connections) { connection in
-                    Button { model.select(connection) } label: {
-                        ConnectionRow(connection: connection, status: model.status[connection.id] ?? .unknown, isSelected: model.selected?.id == connection.id)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu { menu(for: connection) }
+                    ConnectionItem(session: session, connection: connection)
+                        .transition(.asymmetric(insertion: .opacity, removal: .move(edge: .leading).combined(with: .opacity)))
                 }
             }
             .padding(.horizontal, 8)
@@ -95,22 +143,6 @@ private struct DataSidebar: View {
         .background(theme.panel.color)
     }
 
-    @ViewBuilder
-    private func menu(for connection: DatabaseConnection) -> some View {
-        Button("Copy URL") {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(connection.displayURL, forType: .string)
-        }
-        Button(connection.readOnly ? "Allow Changes" : "Make Read-Only") { model.setReadOnly(!connection.readOnly, for: connection) }
-        Button("Edit…") {
-            model.editing = connection
-            model.showsConnect = true
-        }
-        if connection.origin == .saved {
-            Divider()
-            Button("Remove", role: .destructive) { model.remove(connection) }
-        }
-    }
 
     private func tables(_ schema: DatabaseSchema) -> some View {
         let shown = schema.tables.filter { filter.isEmpty || $0.qualifiedName.localizedCaseInsensitiveContains(filter) }
@@ -176,11 +208,74 @@ private struct DataSidebar: View {
     }
 }
 
+/// A connection's actions, for its sidebar row and its header.
+struct ConnectionMenu: View {
+    let model: DataModel
+    let connection: DatabaseConnection
+
+    var body: some View {
+        Button("Copy URL") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(connection.displayURL, forType: .string)
+        }
+        Button(connection.readOnly ? "Allow Changes" : "Make Read-Only") { model.setReadOnly(!connection.readOnly, for: connection) }
+        Button("Edit…") {
+            model.editing = connection
+            model.showsConnect = true
+        }
+        Divider()
+        if connection.origin == .saved {
+            Button(connection.note == DataModel.createdNote ? "Delete Database…" : "Remove from Dante…", role: .destructive) { model.removing = connection }
+        } else {
+            // Found in the project's files: it comes back while they describe it.
+            Button("Remove from Dante…") {}.disabled(true)
+                .help("Dante found this one in the project’s files (compose or env), so it shows while they describe it.")
+        }
+    }
+}
+
+/// A sidebar row: selects on click, with its menu on hover and on right-click.
+private struct ConnectionItem: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let connection: DatabaseConnection
+    @State private var hovering = false
+    private var model: DataModel { session.data }
+
+    var body: some View {
+        Button { model.select(connection) } label: {
+            ConnectionRow(connection: connection, status: model.status[connection.id] ?? .unknown,
+                          isSelected: model.selected?.id == connection.id, hidesStatus: hovering)
+        }
+        .buttonStyle(.plain)
+        .contextMenu { ConnectionMenu(model: model, connection: connection) }
+        .overlay(alignment: .trailing) {
+            if hovering {
+                Menu { ConnectionMenu(model: model, connection: connection) } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.dante(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.text2.color)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .padding(.trailing, 4)
+                .help("Copy, edit or remove \(connection.name)")
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
+        }
+        .onHover { over in withAnimation(.snappy(duration: 0.15)) { hovering = over } }
+    }
+}
+
 private struct ConnectionRow: View {
     @Environment(\.theme) private var theme
     let connection: DatabaseConnection
     let status: DataModel.Status
     let isSelected: Bool
+    var hidesStatus = false
     @State private var hovering = false
 
     var body: some View {
@@ -201,6 +296,7 @@ private struct ConnectionRow: View {
             Spacer(minLength: 4)
             StatusDot(color: status.color(theme))
                 .help(status.label)
+                .opacity(hidesStatus ? 0 : 1)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -383,6 +479,13 @@ private struct DataMain: View {
                 .buttonStyle(DanteButtonStyle(primary: true))
                 .keyboardShortcut("t", modifiers: [.command, .shift])
                 .disabled(status != .online)
+            Menu { ConnectionMenu(model: model, connection: connection) } label: {
+                Image(systemName: "ellipsis.circle").font(.dante(size: 15))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Copy, edit or remove this connection")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)

@@ -79,6 +79,10 @@ final class DataModel {
     var showsNewDatabase = false
     var showsConnect = false
     var editing: DatabaseConnection?
+    /// A saved connection waiting for the person to confirm removing it.
+    var removing: DatabaseConnection?
+    /// The connection being deleted, while Docker and the files are dealt with.
+    var deleting: String?
 
     /// Detected and saved connections; a saved one replaces the detected one it came from.
     var connections: [DatabaseConnection] {
@@ -211,6 +215,80 @@ final class DataModel {
         DatabasePasswords.set(nil, for: connection, project: root)
         saved = store.connections(for: root)
         if selectedID == connection.id { selectedID = connections.first?.id }
+    }
+
+    // MARK: Deleting a database Dante created
+
+    static let createdNote = "created by Dante"
+
+    /// What deleting a database Dante created would change, for the confirmation; nil for
+    /// connections Dante only knows about, which are just forgotten.
+    func removal(for connection: DatabaseConnection) -> DatabaseRemoval? {
+        guard let root, connection.origin == .saved, connection.note == Self.createdNote else { return nil }
+        let composePath = ComposeFile.load(projectRoot: root).map { ProposedChange.relativePath(of: $0.url, in: root) }
+        return DatabaseRemoval.plan(for: connection, composePath: composePath) { path in
+            try? String(contentsOf: root.appending(path: path), encoding: .utf8)
+        }
+    }
+
+    /// Undoes the new-database wizard: removes the container (and its data unless `keepsData`),
+    /// takes its service and keys out of the project's files, and forgets the connection, so
+    /// the Data area starts fresh. Returns what couldn't be done, for the person to finish.
+    func delete(_ connection: DatabaseConnection, keepsData: Bool, workspace: Workspace) async -> String? {
+        guard let root, let removal = removal(for: connection) else {
+            remove(connection)
+            return nil
+        }
+        deleting = connection.id
+        defer { deleting = nil }
+        var notes: [String] = []
+        if let service = removal.service {
+            // Before the compose file changes: Compose finds the container through it.
+            let project = await Self.composeProject(in: root)
+            let removed = await Shell.run(["docker", "compose", "rm", "--stop", "--force", service], in: root)
+            let dockerDown = !removed.succeeded && removed.message.localizedCaseInsensitiveContains("daemon")
+            if !removed.succeeded, !dockerDown {
+                notes.append("Docker couldn’t remove the \(service) container: \(removed.message)")
+            }
+            if !keepsData, let volume = removal.volume {
+                let name = "\(project)_\(volume)"
+                let gone = await Shell.run(["docker", "volume", "rm", name], in: root)
+                if !gone.succeeded, !gone.message.localizedCaseInsensitiveContains("no such volume") {
+                    notes.append(dockerDown
+                        ? "Docker isn’t running, so its data is still in the \(name) volume. Once Docker is up, remove it with: docker volume rm \(name)"
+                        : "The \(name) volume is still there: \(gone.message)")
+                }
+            } else if dockerDown {
+                notes.append("Docker isn’t running, so if it had a container, it’s still there: docker compose rm would have removed it.")
+            }
+        }
+        for edit in removal.edits {
+            let url = root.appending(path: edit.path)
+            do {
+                if let text = edit.text {
+                    try text.write(to: url, atomically: true, encoding: .utf8)
+                } else {
+                    // A compose file with nothing else in it goes to the Trash, not away for good.
+                    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                }
+            } catch {
+                notes.append("Couldn’t change \(edit.path): \(error.localizedDescription)")
+            }
+        }
+        if !keepsData, let file = removal.file {
+            let url = URL(filePath: file, relativeTo: root)
+            if FileManager.default.fileExists(atPath: url.path) { try? FileManager.default.trashItem(at: url, resultingItemURL: nil) }
+        }
+        remove(connection)
+        load(workspace: workspace)
+        return notes.isEmpty ? nil : notes.joined(separator: "\n\n")
+    }
+
+    /// Compose's project name, which prefixes its volumes: `name:` in the file, else the folder.
+    static func composeProject(in root: URL) async -> String {
+        let output = await Shell.run(["docker", "compose", "config", "--format", "json"], in: root)
+        if output.succeeded, let name = JSONValue(line: output.stdout)?["name"]?.string, !name.isEmpty { return name }
+        return root.lastPathComponent.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
     }
 
     func setReadOnly(_ readOnly: Bool, for connection: DatabaseConnection) {
