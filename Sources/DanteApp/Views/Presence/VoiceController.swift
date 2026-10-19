@@ -53,6 +53,8 @@ final class VoiceController {
     @ObservationIgnored private var generation = 0
     /// The command started inside a wake task: what's heard is what follows the wake phrase.
     @ObservationIgnored private var afterWake = false
+    /// The command being acted on began with "Hey Dante".
+    @ObservationIgnored private var wokeForThis = false
     @ObservationIgnored private var followUp = false
     @ObservationIgnored private var silenceTimer: Timer?
     @ObservationIgnored private var wakeTimer: Timer?
@@ -215,7 +217,9 @@ final class VoiceController {
             }
         case .command:
             guard state == .listening else { return }
-            let said = afterWake ? text.flatMap(WakeWord.command(in:)) ?? heard : text ?? heard
+            // After the wake word the same recognition carries on. Once you pause, it starts a
+            // new segment without "Hey Dante" in it, and then all of it is the command.
+            let said = afterWake ? text.map { WakeWord.command(in: $0) ?? $0 } ?? heard : text ?? heard
             if said != heard {
                 heard = said
                 armSilence()
@@ -237,6 +241,7 @@ final class VoiceController {
     func finish() {
         guard state == .listening else { return Self.log.info("finish ignored, state \(String(describing: self.state), privacy: .public)") }
         let text = heard
+        wokeForThis = afterWake
         Self.log.info("heard \(text.split(separator: " ").count, privacy: .public) words: \(text, privacy: .private)")
         stopAudio()
         state = answering == nil ? .idle : .waiting
@@ -364,8 +369,12 @@ final class VoiceController {
         Self.log.info("command \(Self.kind(command), privacy: .public), \(Sessions.all.count, privacy: .public) windows, target \(self.target?.workspace?.name ?? "none", privacy: .private)")
         switch command {
         case .cancel:
-            // Silence after a reply ends the conversation quietly.
-            if followUp { conversing = false }
+            // Silence after a reply ends the conversation quietly; after "Hey Dante" it gets a word.
+            if followUp {
+                conversing = false
+            } else if wokeForThis {
+                say("Sorry, I didn’t catch that.")
+            }
         case .goodbye:
             conversing = false
             say(["Anytime.", "Sure.", "Okay."].randomElement() ?? "Okay.")
