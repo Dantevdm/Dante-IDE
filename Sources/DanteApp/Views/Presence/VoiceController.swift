@@ -83,7 +83,7 @@ final class VoiceController {
     }
 
     /// `log stream --predicate 'subsystem == "dev.dante.ide" && category == "voice"'` shows
-    /// each step. What was heard stays private; only its length is public.
+    /// each step. What was heard and said stays private; only lengths are public.
     static let log = Logger(subsystem: "dev.dante.ide", category: "voice")
 
     // MARK: The talk key
@@ -530,7 +530,7 @@ final class VoiceController {
 
     private func say(_ text: String) {
         guard !text.isEmpty else { return }
-        Self.log.info("say (\(Preferences.shared.speaksReplies ? "aloud" : "muted", privacy: .public)): \(text, privacy: .public)")
+        Self.log.info("say (\(Preferences.shared.speaksReplies ? "aloud" : "muted", privacy: .public)) \(text.split(separator: " ").count, privacy: .public) words: \(text, privacy: .private)")
         if answering != nil { spokeThisTurn = true }
         guard Preferences.shared.speaksReplies else { return spoke() }
         // The microphone would hear Dante; wake listening pauses while it talks.
