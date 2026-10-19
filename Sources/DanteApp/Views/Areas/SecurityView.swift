@@ -54,7 +54,11 @@ struct SecurityView: View {
         .task {
             model.loadSaved(root: workspace.url)
             tools = SecurityTool.all.map { ($0, $0.locate()) }
-            if model.report == nil { await model.scan(root: workspace.url, files: workspace.files) }
+            // Opening the page shows the project as it is now: files may have changed (or gone)
+            // while it was closed.
+            if model.report.map({ Date().timeIntervalSince($0.date) > 60 }) ?? true {
+                await model.scan(root: workspace.url, files: workspace.files)
+            }
         }
         .task(id: workspace.revision) {
             // Keep watching: files changed since the last scan get a fresh look after a pause.

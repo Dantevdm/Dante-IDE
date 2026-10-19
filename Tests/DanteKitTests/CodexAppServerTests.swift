@@ -28,6 +28,30 @@ import Testing
         #expect(events(finished) == [.toolResults([.init(toolUseID: "exec-1", isError: true, text: "no such file")])])
     }
 
+    @Test func mcpToolCallsAskThroughDantesApprovals() {
+        var translator = CodexTranslator()
+        _ = translator.translate(#"{"method":"item/started","params":{"item":{"type":"mcpToolCall","id":"exec-9","server":"dante","tool":"security_report","status":"inProgress","arguments":{}},"threadId":"t","turnId":"u"}}"#)
+        let request = translator.translate(#"{"method":"mcpServer/elicitation/request","id":0,"params":{"threadId":"t","turnId":"u","serverName":"dante","mode":"form","_meta":{"codex_approval_kind":"mcp_tool_call","persist":["session","always"],"tool_params":{}},"message":"Allow the dante MCP server to run tool \"security_report\"?","requestedSchema":{"type":"object","properties":{}}}}"#)
+        #expect(events(request) == [.permissionRequest(.init(requestID: "codex-0", toolName: "mcp__dante__security_report", input: [:], toolUseID: "exec-9"))])
+        #expect(translator.reply(to: "codex-0", accept: true) == ["id": 0, "result": ["action": "accept", "content": [:]]])
+        // Forms Dante can't show are declined rather than failing the call.
+        let form = translator.translate(#"{"method":"mcpServer/elicitation/request","id":1,"params":{"threadId":"t","serverName":"x","mode":"form","message":"Pick","requestedSchema":{"type":"object","properties":{}}}}"#)
+        guard case .reply(let reply)? = form.first else { Issue.record("expected a reply"); return }
+        #expect(reply == ["id": 1, "result": ["action": "decline"]])
+    }
+
+    @Test @MainActor func dantesOwnToolsGoThroughForCodex() {
+        let session = ClaudeSession(root: URL(filePath: "/home/me/shop"), executable: nil, systemPrompt: { "" })
+        session.engine = .codex
+        session.receiveCodex(#"{"method":"item/started","params":{"item":{"type":"mcpToolCall","id":"exec-9","server":"dante","tool":"security_report","status":"inProgress","arguments":{}},"threadId":"t","turnId":"u"}}"#)
+        session.receiveCodex(#"{"method":"mcpServer/elicitation/request","id":0,"params":{"threadId":"t","serverName":"dante","mode":"form","_meta":{"codex_approval_kind":"mcp_tool_call"},"message":"Allow the dante MCP server to run tool \"security_report\"?","requestedSchema":{}}}"#)
+        #expect(session.pendingApprovals.isEmpty)
+        // A cloud tool waits for the user.
+        session.receiveCodex(#"{"method":"item/started","params":{"item":{"type":"mcpToolCall","id":"exec-10","server":"dante","tool":"ask_claude","status":"inProgress","arguments":{"prompt":"x"}},"threadId":"t","turnId":"u"}}"#)
+        session.receiveCodex(#"{"method":"mcpServer/elicitation/request","id":1,"params":{"threadId":"t","serverName":"dante","mode":"form","_meta":{"codex_approval_kind":"mcp_tool_call"},"message":"Allow the dante MCP server to run tool \"ask_claude\"?","requestedSchema":{}}}"#)
+        #expect(session.pendingApprovals.map(\.name) == ["mcp__dante__ask_claude"])
+    }
+
     @Test func patchesBecomeReviewableEdits() throws {
         var translator = CodexTranslator()
         let item = #"{"method":"item/started","params":{"item":{"type":"fileChange","id":"patch-1","status":"inProgress","changes":[{"path":"/home/me/shop/LIST.md","kind":{"type":"update","move_path":null},"diff":"@@ -1,2 +1,3 @@\n Shopping list\n-- milk\n+- oat milk\n+- eggs\n"},{"path":"/home/me/shop/NEW.md","kind":{"type":"add"},"diff":"hello\n"}]},"threadId":"t","turnId":"u"}}"#

@@ -95,6 +95,8 @@ public struct CodexTranslator: Sendable {
     private(set) var pending: [String: Pending] = [:]
     /// Each patch's files, from `item/started`, for its approval request.
     private var patches: [String: JSONValue] = [:]
+    /// The running MCP call per `server/tool`, so its approval lands on its row.
+    private var mcpCalls: [String: String] = [:]
     private var usageCount = 0
 
     enum Pending: Equatable, Sendable {
@@ -102,6 +104,8 @@ public struct CodexTranslator: Sendable {
         case decision(id: JSONValue)
         /// Questions for the user: answered with labels, keyed by question id.
         case questions(id: JSONValue, ids: [String: String])
+        /// An MCP elicitation, which is how Codex asks before an MCP tool call.
+        case elicitation(id: JSONValue)
     }
 
     public init() {}
@@ -170,8 +174,9 @@ public struct CodexTranslator: Sendable {
             patches[id] = changes
             return [toolUse(id, Self.patchTool, Self.patchInput(changes))]
         case "mcpToolCall":
-            let name = "mcp__\(item["server"]?.string ?? "server")__\(item["tool"]?.string ?? "tool")"
-            return [toolUse(id, name, item["arguments"] ?? [:])]
+            let server = item["server"]?.string ?? "server", tool = item["tool"]?.string ?? "tool"
+            mcpCalls["\(server)/\(tool)"] = id
+            return [toolUse(id, "mcp__\(server)__\(tool)", item["arguments"] ?? [:])]
         case "webSearch":
             return [toolUse(id, "WebSearch", ["query": .string(item["query"]?.string ?? "")])]
         default:
@@ -193,6 +198,7 @@ public struct CodexTranslator: Sendable {
             let status = item["status"]?.string
             return [result(id, isError: status == "failed" || status == "declined", status ?? "")]
         case "mcpToolCall":
+            mcpCalls = mcpCalls.filter { $0.value != id }
             let error = item["error"]?["message"]?.string
             return [result(id, isError: error != nil || item["status"]?.string == "failed", error ?? "")]
         case "webSearch":
@@ -228,9 +234,20 @@ public struct CodexTranslator: Sendable {
             pending[requestID] = .questions(id: id, ids: ids)
             return [.event(.permissionRequest(.init(requestID: requestID, toolName: "AskUserQuestion",
                                                     input: ["questions": .array(questions)], toolUseID: itemID)))]
+        case "mcpServer/elicitation/request" where params["_meta"]?["codex_approval_kind"]?.string == "mcp_tool_call":
+            // Codex asks before each MCP tool call: it goes through Dante's approvals like any
+            // other tool (Dante's own local tools are approved without asking).
+            let server = params["serverName"]?.string ?? "server"
+            let tool = Self.toolName(inApproval: params["message"]?.string ?? "") ?? "tool"
+            pending[requestID] = .elicitation(id: id)
+            return [.event(.permissionRequest(.init(requestID: requestID, toolName: "mcp__\(server)__\(tool)",
+                                                    input: params["_meta"]?["tool_params"] ?? [:], toolUseID: mcpCalls["\(server)/\(tool)"])))]
+        case "mcpServer/elicitation/request":
+            // A form or link Dante can't show: declined, so Codex carries on.
+            return [.reply(["id": id, "result": ["action": "decline"]])]
         default:
-            // Anything else Dante can't answer (auth refresh, elicitations) is turned down, so
-            // Codex doesn't wait forever.
+            // Anything else Dante can't answer (auth refresh) is turned down, so Codex doesn't
+            // wait forever.
             return [.reply(["id": id, "error": ["code": -32601, "message": .string("Dante doesn’t handle \(method).")]])]
         }
     }
@@ -241,6 +258,8 @@ public struct CodexTranslator: Sendable {
         switch waiting {
         case .decision(let id):
             return ["id": id, "result": ["decision": .string(accept ? "accept" : "decline")]]
+        case .elicitation(let id):
+            return accept ? ["id": id, "result": ["action": "accept", "content": [:]]] : ["id": id, "result": ["action": "decline"]]
         case .questions(let id, let ids):
             var result: [String: JSONValue] = [:]
             if accept {
@@ -251,6 +270,13 @@ public struct CodexTranslator: Sendable {
             }
             return ["id": id, "result": ["answers": .object(result)]]
         }
+    }
+
+    /// The tool in Codex's approval message: `Allow the dante MCP server to run tool "look"?`.
+    static func toolName(inApproval message: String) -> String? {
+        guard let range = message.range(of: "run tool \""), let end = message[range.upperBound...].firstIndex(of: "\"") else { return nil }
+        let name = String(message[range.upperBound..<end])
+        return name.isEmpty ? nil : name
     }
 
     /// Codex's patches show as this tool, with a diff per file.
