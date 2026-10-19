@@ -192,6 +192,9 @@ struct DanteCommands: Commands {
             Button("Actual Size") { themeStore.editorFontSize = 13 }
                 .shortcut("actualSize")
             Divider()
+            Button("Stage in a Window") { StageController.shared.open(fullScreen: false) }
+            Button("Stage Full Screen") { StageController.shared.open(fullScreen: true) }
+            Divider()
         }
     }
 }

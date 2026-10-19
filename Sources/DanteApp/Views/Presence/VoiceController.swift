@@ -45,6 +45,11 @@ final class VoiceController {
     private enum Mode { case off, command, wake }
 
     @ObservationIgnored private let engine = AVAudioEngine()
+    /// Where the microphone's buffers go; the tap stays installed while recognition tasks
+    /// come and go, so the microphone isn't reopened for each one.
+    @ObservationIgnored private let tapTarget = TapTarget()
+    @ObservationIgnored private var engineStarted = Date.distantPast
+    @ObservationIgnored private var configurationObserver: NSObjectProtocol?
     @ObservationIgnored private var recognizer = SFSpeechRecognizer()
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
     @ObservationIgnored private var task: SFSpeechRecognitionTask?
@@ -63,6 +68,9 @@ final class VoiceController {
     @ObservationIgnored private var wakeWords = 0
     @ObservationIgnored private var levelTimer: Timer?
     @ObservationIgnored private let speaker = AVSpeechSynthesizer()
+    @ObservationIgnored private var speechQueue = SpeechQueue()
+    /// Utterances handed to the synthesiser and not yet finished or cancelled.
+    @ObservationIgnored private var outstanding: Set<ObjectIdentifier> = []
     @ObservationIgnored private let speech = SpeechDelegate()
     @ObservationIgnored private var hotKey: EventHotKeyRef?
     @ObservationIgnored private weak var answering: Session?
@@ -80,6 +88,10 @@ final class VoiceController {
 
     private init() {
         speaker.delegate = speech
+        // A headset connecting or going away stops the engine; start again on what's there now.
+        configurationObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { _ in
+            MainActor.assumeIsolated { VoiceController.shared.audioConfigurationChanged() }
+        }
     }
 
     /// `log stream --predicate 'subsystem == "dev.dante.ide" && category == "voice"'` shows
@@ -142,7 +154,7 @@ final class VoiceController {
     /// Starts the microphone and a recognition task. False (with the reason shown) when the
     /// microphone won't start.
     private func startRecognition(_ mode: Mode, recognizer: SFSpeechRecognizer) -> Bool {
-        stopAudio()
+        endRecognition()
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
@@ -150,22 +162,35 @@ final class VoiceController {
         request.contextualStrings = Sessions.all.compactMap { $0.workspace?.name } + ["Claude", "Dante", "Hey Dante", "commit", "pull request", "refactor"]
         self.request = request
 
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format, block: Self.tap(request: request))
-        do {
-            engine.prepare()
-            try engine.start()
-        } catch {
-            Self.log.error("microphone didn't start: \(error.localizedDescription, privacy: .public)")
+        if !engine.isRunning {
+            let input = engine.inputNode
             input.removeTap(onBus: 0)
-            self.request = nil
-            if mode == .command {
-                state = .unavailable("Couldn’t start the microphone: \(error.localizedDescription)")
-                PresenceController.shared.voiceChanged()
+            if let microphone = Microphones.chosen(preferred: Preferences.shared.microphone) {
+                do {
+                    try input.auAudioUnit.setDeviceID(microphone.id)
+                    Self.log.info("microphone: \(String(describing: microphone.transport), privacy: .public)")
+                } catch {
+                    Self.log.error("couldn't pick the microphone: \(error.localizedDescription, privacy: .public)")
+                }
             }
-            return false
+            let format = input.outputFormat(forBus: 0)
+            input.installTap(onBus: 0, bufferSize: 1024, format: format, block: Self.tap(into: tapTarget))
+            do {
+                engine.prepare()
+                try engine.start()
+                engineStarted = .now
+            } catch {
+                Self.log.error("microphone didn't start: \(error.localizedDescription, privacy: .public)")
+                input.removeTap(onBus: 0)
+                self.request = nil
+                if mode == .command {
+                    state = .unavailable("Couldn’t start the microphone: \(error.localizedDescription)")
+                    PresenceController.shared.voiceChanged()
+                }
+                return false
+            }
         }
+        tapTarget.request = request
         self.mode = mode
         Self.log.info("listening (\(mode == .wake ? "wake word" : "command", privacy: .public))")
         afterWake = false
@@ -180,10 +205,11 @@ final class VoiceController {
         return true
     }
 
-    /// The audio tap: feeds the recogniser and measures loudness. Runs on the audio thread.
-    private nonisolated static func tap(request: SFSpeechAudioBufferRecognitionRequest) -> AVAudioNodeTapBlock {
-        nonisolated(unsafe) let request = request
+    /// The audio tap: feeds the current recognition request and measures loudness. Runs on
+    /// the audio thread.
+    private nonisolated static func tap(into target: TapTarget) -> AVAudioNodeTapBlock {
         return { buffer, _ in
+            guard let request = target.request else { return }
             request.append(buffer)
             guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
             var sum: Float = 0
@@ -243,7 +269,7 @@ final class VoiceController {
         let text = heard
         wokeForThis = afterWake
         Self.log.info("heard \(text.split(separator: " ").count, privacy: .public) words: \(text, privacy: .private)")
-        stopAudio()
+        release()
         state = answering == nil ? .idle : .waiting
         level = 0
         PresenceController.shared.voiceChanged()
@@ -253,7 +279,7 @@ final class VoiceController {
     }
 
     func cancel() {
-        stopAudio()
+        release()
         stopSpeaking()
         conversing = false
         answering = nil
@@ -263,7 +289,8 @@ final class VoiceController {
         updateWakeListening()
     }
 
-    private func stopAudio() {
+    /// Ends the recognition task; the microphone keeps running for the next one.
+    private func endRecognition() {
         silenceTimer?.invalidate()
         silenceTimer = nil
         wakeTimer?.invalidate()
@@ -271,12 +298,44 @@ final class VoiceController {
         mode = .off
         wakeListening = false
         generation += 1
-        if engine.isRunning { engine.stop() }
-        engine.inputNode.removeTap(onBus: 0)
+        tapTarget.request = nil
         request?.endAudio()
         task?.cancel()
         request = nil
         task = nil
+    }
+
+    /// Ends recognition and closes the microphone.
+    private func stopAudio() {
+        endRecognition()
+        if engine.isRunning { engine.stop() }
+        engine.inputNode.removeTap(onBus: 0)
+    }
+
+    /// Done listening for now. With "Hey Dante" on the microphone stays open, since it'll be
+    /// wanted again in a moment, and closing and reopening a headset's microphone is what
+    /// makes it drop out.
+    private func release() {
+        if Preferences.shared.listensForWakeWord { endRecognition() } else { stopAudio() }
+    }
+
+    /// A different microphone was chosen: reopen on it.
+    func microphoneChanged() {
+        guard engine.isRunning, state != .listening else { return }
+        stopAudio()
+        updateWakeListening()
+    }
+
+    private func audioConfigurationChanged() {
+        // Picking the device when the engine starts reports a change too.
+        guard Date.now.timeIntervalSince(engineStarted) > 1 else { return }
+        Self.log.info("audio devices changed")
+        if state == .listening {
+            finish()
+        } else {
+            stopAudio()
+        }
+        updateWakeListening()
     }
 
     // MARK: Hey Dante
@@ -289,6 +348,8 @@ final class VoiceController {
         if wanted, !wakeListening, mode == .off {
             Task { await startWake() }
         } else if !wanted, wakeListening {
+            release()
+        } else if !Preferences.shared.listensForWakeWord, mode == .off, engine.isRunning {
             stopAudio()
         }
     }
@@ -321,7 +382,7 @@ final class VoiceController {
                 let voice = VoiceController.shared
                 guard voice.mode == .wake else { return }
                 Self.log.info("wake session restarted: heard \(voice.wakeWords, privacy: .public) words, no wake phrase")
-                voice.stopAudio()
+                voice.endRecognition()
                 voice.updateWakeListening()
             }
         }
@@ -345,7 +406,7 @@ final class VoiceController {
     }
 
     private func wakeEnded(failed: Bool) {
-        stopAudio()
+        if failed { stopAudio() } else { endRecognition() }
         wakeFailures = failed ? wakeFailures + 1 : 0
         // Back off when recognition keeps failing, so a broken setup doesn't spin.
         let delay = failed ? min(30, pow(2, Double(wakeFailures))) : 0.2
@@ -423,7 +484,7 @@ final class VoiceController {
             say("Okay, I won’t.")
         case .stage(let open):
             if open {
-                StageController.shared.open()
+                StageController.shared.open(fullScreen: true)
             } else {
                 StageController.shared.close()
                 conversing = false
@@ -532,19 +593,28 @@ final class VoiceController {
         guard !text.isEmpty else { return }
         Self.log.info("say (\(Preferences.shared.speaksReplies ? "aloud" : "muted", privacy: .public)) \(text.split(separator: " ").count, privacy: .public) words: \(text, privacy: .private)")
         if answering != nil { spokeThisTurn = true }
-        guard Preferences.shared.speaksReplies else { return spoke() }
+        guard Preferences.shared.speaksReplies else { return quiet() }
         // The microphone would hear Dante; wake listening pauses while it talks.
-        if mode == .wake { stopAudio() }
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = Float(min(0.62, max(0.4, Preferences.shared.speechRate)))
-        utterance.voice = Self.voice()
-        utterance.postUtteranceDelay = 0.08
+        if mode == .wake { endRecognition() }
+        speechQueue.add(text)
         if saying == nil { saying = text }
-        speaker.speak(utterance)
+        pump()
         PresenceController.shared.voiceChanged()
     }
 
+    /// Hands the synthesiser the next chunk when there's room.
+    private func pump() {
+        guard let chunk = speechQueue.next(outstanding: outstanding.count) else { return }
+        let utterance = AVSpeechUtterance(string: chunk)
+        utterance.rate = Float(min(0.62, max(0.4, Preferences.shared.speechRate)))
+        utterance.voice = Self.voice()
+        outstanding.insert(ObjectIdentifier(utterance))
+        speaker.speak(utterance)
+    }
+
     func stopSpeaking() {
+        speechQueue.reset()
+        outstanding.removeAll()
         speaker.stopSpeaking(at: .immediate)
         saying = nil
         level = 0
@@ -593,8 +663,16 @@ final class VoiceController {
 
     /// The speaker went quiet: listen for a follow-up in a conversation, else go back to
     /// waiting for "Hey Dante".
-    fileprivate func spoke() {
-        guard !speaker.isSpeaking else { return }
+    fileprivate func spoke(_ utterance: ObjectIdentifier) {
+        guard outstanding.remove(utterance) != nil else { return }
+        pump()
+        guard outstanding.isEmpty else { return }
+        quiet()
+    }
+
+    /// Nothing more to say: listen for a follow-up in a conversation, else go back to waiting
+    /// for "Hey Dante".
+    private func quiet() {
         saying = nil
         level = 0
         levelTimer?.invalidate()
@@ -635,10 +713,24 @@ private final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in VoiceController.shared.spoke() }
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in VoiceController.shared.spoke(id) }
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in VoiceController.shared.spoke() }
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in VoiceController.shared.spoke(id) }
+    }
+}
+
+/// The recognition request the microphone's tap feeds, swapped on the main actor and read on
+/// the audio thread.
+private final class TapTarget: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: SFSpeechAudioBufferRecognitionRequest?
+
+    var request: SFSpeechAudioBufferRecognitionRequest? {
+        get { lock.withLock { current } }
+        set { lock.withLock { current = newValue } }
     }
 }

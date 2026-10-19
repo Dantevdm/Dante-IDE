@@ -188,6 +188,35 @@ public struct SpokenStream: Sendable {
     }
 }
 
+/// Sentences waiting to be spoken, handed to the synthesiser in chunks. Each utterance is
+/// synthesised on its own and starts its intonation afresh, so one per sentence sounds choppy;
+/// but waiting for the whole reply is slow. The first sentence goes straight away, one more
+/// waits behind whatever is playing, and the rest gather into the next chunk meanwhile.
+public struct SpeechQueue: Sendable {
+    private var pending: [String] = []
+
+    public init() {}
+
+    public var isEmpty: Bool { pending.isEmpty }
+
+    public mutating func add(_ sentence: String) {
+        let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { pending.append(trimmed) }
+    }
+
+    /// The next chunk to hand over, when there's room for one beside the `outstanding`
+    /// utterances (handed over and not yet finished).
+    public mutating func next(outstanding: Int) -> String? {
+        guard outstanding < 2, !pending.isEmpty else { return nil }
+        defer { pending.removeAll() }
+        return pending.joined(separator: " ")
+    }
+
+    public mutating func reset() {
+        pending.removeAll()
+    }
+}
+
 /// "Hey Dante": the phrase that starts listening hands-free, and what was said after it.
 public enum WakeWord {
     static let pattern = try! NSRegularExpression(

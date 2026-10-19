@@ -17,41 +17,92 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
     public var color: RGBA
     /// What it's doing, for the panel.
     public var title: String
+    /// Who handed the work over ("Claude", "Codex").
+    public var lead: String
+    /// Who took it: the sub-agent's type, the local model's role, the other agent.
+    public var agent: String
+    /// What was handed over, in a few words; empty when the call didn't say.
+    public var task: String
 
-    public init(id: String, kind: Kind, color: RGBA, title: String) {
+    public init(id: String, kind: Kind, color: RGBA, title: String, lead: String = "Claude", agent: String? = nil, task: String = "") {
         self.id = id
         self.kind = kind
         self.color = color
         self.title = title
+        self.lead = lead
+        self.agent = agent ?? title
+        self.task = task
     }
 
-    /// One satellite per running sub-agent and delegated job, oldest first.
-    public static func running(in tools: [ToolActivity]) -> [OrbSatellite] {
+    /// One satellite per running sub-agent and delegated job, oldest first. `lead` is the
+    /// agent in charge of the conversation the calls are in.
+    public static func running(in tools: [ToolActivity], lead: String = "Claude") -> [OrbSatellite] {
         tools.compactMap { tool in
             guard tool.status == .running else { return nil }
+            // Every Dante tool says why it's asking; otherwise the question's first sentence.
+            let why = tool.input["why"]?.string.flatMap(short)
+            let asked = why ?? (tool.input["prompt"]?.string ?? tool.input["question"]?.string).flatMap { AgentJob.gist(of: $0, limit: 90) }.flatMap(short) ?? ""
             switch tool.name {
             case "Task", "Agent":
                 let type = tool.input["subagent_type"]?.string ?? "general-purpose"
+                let description = tool.input["description"]?.string
                 return OrbSatellite(id: tool.id, kind: .subagent(type), color: color(subagent: type),
-                                    title: tool.input["description"]?.string ?? "Sub-agent")
+                                    title: description ?? "Sub-agent", lead: lead, agent: agentName(subagent: type),
+                                    task: description.flatMap(short) ?? asked)
             case "mcp__dante__delegate":
                 let kind = tool.input["kind"]?.string ?? "draft"
                 let agent = DelegateKind(rawValue: kind)?.agent ?? "Local model"
-                return OrbSatellite(id: tool.id, kind: .local(kind), color: color(local: kind), title: agent)
+                return OrbSatellite(id: tool.id, kind: .local(kind), color: color(local: kind), title: agent, lead: lead, task: asked)
             case "mcp__dante__look":
-                return OrbSatellite(id: tool.id, kind: .local(Looker.kind), color: RGBA(0xFFD740), title: Looker.agent)
+                return OrbSatellite(id: tool.id, kind: .local(Looker.kind), color: RGBA(0xFFD740), title: Looker.agent, lead: lead, task: asked)
             case "mcp__dante__ask_grok":
-                return OrbSatellite(id: tool.id, kind: .cloud(.grok), color: color(cloud: .grok), title: "Grok")
+                return OrbSatellite(id: tool.id, kind: .cloud(.grok), color: color(cloud: .grok), title: "Grok", lead: lead, task: asked)
             case "mcp__dante__ask_codex":
-                return OrbSatellite(id: tool.id, kind: .codex, color: RGBA(0x8C9EFF), title: "Codex")
+                return OrbSatellite(id: tool.id, kind: .codex, color: RGBA(0x8C9EFF), title: "Codex", lead: lead, task: asked)
             case "mcp__dante__ask_claude":
-                return OrbSatellite(id: tool.id, kind: .claude, color: RGBA(0xD97757), title: "Claude")
+                return OrbSatellite(id: tool.id, kind: .claude, color: RGBA(0xD97757), title: "Claude", lead: lead, task: asked)
             case "mcp__dante__decide":
-                return OrbSatellite(id: tool.id, kind: .cloud(.jev), color: color(cloud: .jev), title: "Jev")
+                return OrbSatellite(id: tool.id, kind: .cloud(.jev), color: color(cloud: .jev), title: "Jev", lead: lead, task: why ?? "a decision")
             default:
                 return nil
             }
         }
+    }
+
+    /// Made-up agents coming and going on a 30-second loop, for seeing the Stage without
+    /// spending a turn (`DANTE_STAGE_DEMO=1`).
+    public static func demo(at t: TimeInterval) -> [OrbSatellite] {
+        let cycle = t.truncatingRemainder(dividingBy: 30)
+        let loop = Int(t / 30)
+        let cast: [(start: Double, end: Double, satellite: OrbSatellite)] = [
+            (0, 14, OrbSatellite(id: "demo-explore-\(loop)", kind: .subagent("Explore"), color: color(subagent: "explore"),
+                                 title: "Find where the parser builds the tree", agent: "Explore", task: "Find where the parser builds the tree")),
+            (3, 10, OrbSatellite(id: "demo-summary-\(loop)", kind: .local("summary"), color: color(local: "summary"),
+                                 title: "Reader", task: "Summarise the failing test log")),
+            (6, 20, OrbSatellite(id: "demo-codex-\(loop)", kind: .codex, color: RGBA(0x8C9EFF),
+                                 title: "Codex", task: "Check the migration can't lock the table")),
+            (12, 24, OrbSatellite(id: "demo-look-\(loop)", kind: .local(Looker.kind), color: RGBA(0xFFD740),
+                                  title: Looker.agent, task: "Read the error in the screenshot")),
+        ]
+        return cast.filter { cycle >= $0.start && cycle < $0.end }.map(\.satellite)
+    }
+
+    /// "Explore", "Plan", "code-reviewer" → "Code reviewer"; the default type is just a sub-agent.
+    static func agentName(subagent type: String) -> String {
+        if type == "general-purpose" || type.isEmpty { return "Sub-agent" }
+        let words = type.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
+        return words.prefix(1).uppercased() + words.dropFirst()
+    }
+
+    /// One line, at most about 64 characters, cut at a word.
+    static func short(_ text: String) -> String? {
+        var line = text.split(whereSeparator: \.isNewline).first.map(String.init)?.trimmingCharacters(in: .whitespaces) ?? ""
+        while line.hasSuffix(".") { line.removeLast() }
+        guard !line.isEmpty else { return nil }
+        guard line.count > 64 else { return line }
+        let cut = line.prefix(64)
+        let word = cut.lastIndex(of: " ").map { cut[..<$0] } ?? cut
+        return word.trimmingCharacters(in: CharacterSet(charactersIn: " ,;:-")) + "…"
     }
 
     /// Sub-agents in cool colours by type; local models in greens, so you can tell at a glance
@@ -106,6 +157,12 @@ public struct Constellation: Sendable {
         /// 0 still inside the orb … 1 free of it (the neck between them fades out on the way).
         public var out: Double
         public var color: RGBA
+        /// Which satellite this is, for labels drawn beside it.
+        public var satellite: OrbSatellite
+        /// Its orbit, 0..<limit; kept while it's out, so labels can keep their place.
+        public var slot: Int = 0
+        /// Done and merging back: its work is flowing home to the lead.
+        public var returning = false
     }
 
     struct Member: Sendable {
@@ -197,7 +254,8 @@ public struct Constellation: Sendable {
         let swing = member.ended == nil ? out * out : pow(out, 4)
         let depth = min(1, max(-1, 1 + (orbitDepth - 1) * swing))
         let radius = satelliteRadius * (1 + 0.18 * depth) * (0.3 + 0.7 * min(1, free))
-        return Frame(x: x, y: y, radius: radius, depth: depth, out: out, color: member.satellite.color)
+        return Frame(x: x, y: y, radius: radius, depth: depth, out: out, color: member.satellite.color, satellite: member.satellite,
+                     slot: member.slot, returning: member.ended != nil)
     }
 
     /// Ease out with a slight overshoot, so a satellite springs free.

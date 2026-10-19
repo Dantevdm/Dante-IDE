@@ -181,6 +181,7 @@ private struct VoicePreferencesSection: View {
     @Bindable private var preferences = Preferences.shared
     private let voice = VoiceController.shared
     private let voices = VoiceController.voices
+    @State private var microphones = Microphones.all().filter { $0.transport != .virtual }
 
     var body: some View {
         SwiftUI.Section {
@@ -196,6 +197,14 @@ private struct VoicePreferencesSection: View {
                     .font(.dante(size: 11.5))
                     .foregroundStyle(theme.amber.color)
             }
+            Picker("Microphone", selection: $preferences.microphone) {
+                Text("Automatic").tag("")
+                ForEach(microphones) { microphone in
+                    Text(microphone.transport == .bluetooth ? "\(microphone.name) (Bluetooth)" : microphone.name).tag(microphone.uid)
+                }
+            }
+            .help("Automatic uses this Mac’s microphone when the default is a Bluetooth headset. A headset’s own microphone switches it to call quality, so Dante and everything else sounds worse, and it reconnects each time listening starts or stops.")
+            .onChange(of: preferences.microphone) { VoiceController.shared.microphoneChanged() }
             Picker("Voice", selection: $preferences.voiceIdentifier) {
                 Text("Best available").tag("")
                 ForEach(voices, id: \.identifier) { voice in

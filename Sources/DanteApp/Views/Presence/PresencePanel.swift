@@ -151,9 +151,13 @@ private struct TalkButton: View {
 /// An `OrbView` in SwiftUI, following the presence's mood.
 struct OrbRepresentable: NSViewRepresentable {
     var size: OrbView.Size
+    var framesPerSecond = 60
+    var track: SatelliteTrack?
 
     func makeNSView(context: Context) -> OrbView {
         let view = OrbView(size: size)
+        view.framesPerSecond = framesPerSecond
+        view.track = track
         PresenceController.shared.attach(view)
         view.wake()
         return view

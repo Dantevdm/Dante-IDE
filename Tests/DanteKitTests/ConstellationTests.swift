@@ -62,4 +62,31 @@ import Testing
         let frames = constellation.frames(at: 2 + Constellation.merge + 0.1, mainRadius: 0.46, satelliteRadius: 0.1)
         #expect(frames.frames.count == 1 && frames.merged == 5)
     }
+
+    @Test func satellitesSayWhoHandedWhatToWhom() {
+        let tools = [
+            tool("a", "Task", ["subagent_type": "Explore", "description": "Find the parser"]),
+            tool("b", "mcp__dante__delegate", ["kind": "summary", "why": "Summarise the failing test log.", "prompt": "…"]),
+            tool("c", "mcp__dante__ask_claude", ["prompt": "Is this migration safe to run while the table is busy with writes from the queue workers? Here is the diff."]),
+            tool("d", "Task", ["subagent_type": "general-purpose"]),
+        ]
+        let satellites = OrbSatellite.running(in: tools, lead: "Codex")
+        #expect(satellites.allSatisfy { $0.lead == "Codex" })
+        #expect(satellites[0].agent == "Explore")
+        #expect(satellites[0].task == "Find the parser")
+        #expect(satellites[1].task == "Summarise the failing test log")
+        #expect(satellites[2].agent == "Claude")
+        #expect(satellites[2].task.hasSuffix("…") && satellites[2].task.count <= 65)
+        #expect(satellites[3].agent == "Sub-agent")
+    }
+
+    @Test func framesKeepTheirSlotAndSayWhenTheyreHeadingHome() {
+        var constellation = Constellation()
+        constellation.update([satellite("a"), satellite("b")], at: 0)
+        constellation.update([satellite("b")], at: 2)
+        let frames = constellation.frames(at: 2.5, mainRadius: 0.46, satelliteRadius: 0.1).frames
+        #expect(frames.map(\.slot) == [0, 1])
+        #expect(frames.map(\.returning) == [true, false])
+        #expect(frames.map(\.satellite.id) == ["a", "b"])
+    }
 }

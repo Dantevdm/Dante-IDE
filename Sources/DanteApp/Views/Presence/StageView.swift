@@ -2,14 +2,29 @@ import AppKit
 import DanteKit
 import SwiftUI
 
-/// The Stage: Dante full screen, Jarvis style, for this display, a second one or a TV.
-/// The orb in the middle inside turning HUD rings, what Claude is saying under it, and the
+/// The Stage: Dante full screen, Jarvis style, for this display, a second one or a TV, or
+/// in a window of any size beside your work. The orb in the middle inside turning HUD rings,
+/// lines to each agent it has handed work to, what Claude is saying under it, and the
 /// projects and agents at the sides. Opened from the panel's orb, the menu bar menu, or by
-/// voice ("full screen"); Esc, the voice ("minimise") or leaving full screen closes it.
+/// voice ("full screen"); Esc leaves full screen for the window, and closes the window.
 @MainActor
 final class StageController: NSObject, NSWindowDelegate {
     static let shared = StageController()
 
+    /// What the Stage's own controls show.
+    @MainActor @Observable
+    final class Mode {
+        var fullScreen = true
+        /// Kept above other windows while it's a window.
+        var floats = UserDefaults.standard.bool(forKey: "stageFloats") {
+            didSet {
+                UserDefaults.standard.set(floats, forKey: "stageFloats")
+                StageController.shared.applyLevel()
+            }
+        }
+    }
+
+    let mode = Mode()
     private var window: StageWindow?
     private var activity: NSObjectProtocol?
     private var keys: Any?
@@ -17,45 +32,53 @@ final class StageController: NSObject, NSWindowDelegate {
     private var lastPointer = NSPoint.zero
     private var pointerStill: Date = .now
     private var closing = false
+    private static let windowedKey = "stageWindowed"
+    private static let frameKey = "stageFrame"
 
     var isOpen: Bool { window != nil }
 
     func toggle() { isOpen ? close() : open() }
 
-    /// Opens on `screen`, else the one the pointer is on (where you just clicked).
-    func open(on screen: NSScreen? = nil) {
+    /// Opens on `screen`, else the one the pointer is on (where you just clicked); full screen
+    /// or in a window as asked, else as it was last time.
+    func open(on screen: NSScreen? = nil, fullScreen: Bool? = nil) {
         NSApp.activate()
+        let wantsFullScreen = fullScreen ?? !UserDefaults.standard.bool(forKey: Self.windowedKey)
         if let window {
             window.makeKeyAndOrderFront(nil)
+            if fullScreen != nil, wantsFullScreen != window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
             return
         }
         let pointer = NSEvent.mouseLocation
+        let asked = screen != nil
         guard let screen = screen ?? NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }) ?? NSScreen.main else { return }
-        let window = StageWindow(contentRect: screen.frame, styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+        let window = StageWindow(contentRect: screen.frame, styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                  backing: .buffered, defer: false, screen: screen)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
+        window.isMovableByWindowBackground = true
         window.collectionBehavior = [.fullScreenPrimary, .managed]
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = Theme.dark.ground.nsColor
-        for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-            window.standardWindowButton(button)?.isHidden = true
-        }
+        window.minSize = NSSize(width: 300, height: 420)
         window.title = "Stage"
         window.contentView = NSHostingView(rootView:
-            StageView(model: PresenceController.shared.model)
+            StageView(model: PresenceController.shared.model, mode: mode)
                 .environment(\.theme, Theme.dark)
         )
-        window.setFrame(screen.frame, display: false)
+        window.setFrame(windowFrame(on: screen, chosen: asked), display: false)
         window.delegate = self
         self.window = window
         closing = false
+        mode.fullScreen = false
         window.makeKeyAndOrderFront(nil)
-        window.toggleFullScreen(nil)
+        if wantsFullScreen {
+            window.toggleFullScreen(nil)
+        } else {
+            applyLevel()
+        }
 
-        // A TV shouldn't go to sleep under it, and the pointer hides when it's still.
-        activity = ProcessInfo.processInfo.beginActivity(options: [.idleDisplaySleepDisabled, .userInitiated], reason: "Showing the Stage")
         lastPointer = pointer
         cursorTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             MainActor.assumeIsolated { StageController.shared.hidePointerIfStill() }
@@ -65,6 +88,23 @@ final class StageController: NSObject, NSWindowDelegate {
             let handled = MainActor.assumeIsolated { StageController.shared.handle(key: key, window: window) }
             return handled ? nil : event
         }
+    }
+
+    /// Where the window goes: where it was last time, else a tall window down the right of
+    /// the screen, beside whatever you're working on.
+    private func windowFrame(on screen: NSScreen, chosen: Bool) -> NSRect {
+        if !chosen, let saved = UserDefaults.standard.string(forKey: Self.frameKey) {
+            let frame = NSRectFromString(saved)
+            if frame.width >= 300, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) { return frame }
+        }
+        let visible = screen.visibleFrame
+        let width = min(520, visible.width * 0.4), height = visible.height * 0.92
+        return NSRect(x: visible.maxX - width - 24, y: visible.midY - height / 2, width: width, height: height)
+    }
+
+    /// Full screen, or back to the window.
+    func toggleFullScreen() {
+        window?.toggleFullScreen(nil)
     }
 
     /// Leaves full screen, then hides the window.
@@ -78,12 +118,17 @@ final class StageController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Esc leaves, Space talks, Return approves what's waiting.
+    fileprivate func applyLevel() {
+        guard let window else { return }
+        window.level = mode.floats && !mode.fullScreen ? .floating : .normal
+    }
+
+    /// Esc leaves full screen (and closes the window), Space talks, Return approves what's waiting.
     private func handle(key: UInt16, window number: Int) -> Bool {
         guard let window, window.windowNumber == number else { return false }
         switch Int(key) {
         case 53:
-            close()
+            if window.styleMask.contains(.fullScreen) { toggleFullScreen() } else { close() }
         case 49:
             VoiceController.shared.toggle()
         case 36, 76:
@@ -100,13 +145,36 @@ final class StageController: NSObject, NSWindowDelegate {
         if pointer != lastPointer {
             lastPointer = pointer
             pointerStill = .now
-        } else if Date.now.timeIntervalSince(pointerStill) > 3, window?.isKeyWindow == true {
+        } else if Date.now.timeIntervalSince(pointerStill) > 3, window?.isKeyWindow == true, mode.fullScreen {
             NSCursor.setHiddenUntilMouseMoves(true)
         }
     }
 
-    // Leaving full screen any other way (the green button, ⌃⌘F, a gesture) leaves the Stage too.
-    func windowDidExitFullScreen(_ notification: Notification) { finish() }
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        mode.fullScreen = true
+        UserDefaults.standard.set(false, forKey: Self.windowedKey)
+        applyLevel()
+        // A TV shouldn't go to sleep under it.
+        if activity == nil {
+            activity = ProcessInfo.processInfo.beginActivity(options: [.idleDisplaySleepDisabled, .userInitiated], reason: "Showing the Stage")
+        }
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        if closing { return finish() }
+        mode.fullScreen = false
+        UserDefaults.standard.set(true, forKey: Self.windowedKey)
+        endActivity()
+        applyLevel()
+    }
+
+    func windowDidResize(_ notification: Notification) { saveFrame() }
+    func windowDidMove(_ notification: Notification) { saveFrame() }
+
+    private func saveFrame() {
+        guard let window, !window.styleMask.contains(.fullScreen), !mode.fullScreen else { return }
+        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: Self.frameKey)
+    }
 
     func windowWillClose(_ notification: Notification) { tearDown() }
 
@@ -115,10 +183,14 @@ final class StageController: NSObject, NSWindowDelegate {
         tearDown()
     }
 
-    private func tearDown() {
+    private func endActivity() {
         if let activity { ProcessInfo.processInfo.endActivity(activity) }
-        if let keys { NSEvent.removeMonitor(keys) }
         activity = nil
+    }
+
+    private func tearDown() {
+        endActivity()
+        if let keys { NSEvent.removeMonitor(keys) }
         keys = nil
         cursorTimer?.invalidate()
         cursorTimer = nil
@@ -137,8 +209,11 @@ final class StageWindow: NSWindow {
 
 struct StageView: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let model: PresenceModel
+    var mode: StageController.Mode
     @State private var tally = StageTally()
+    @State private var track = SatelliteTrack()
 
     /// The window with something waiting for an answer, if any.
     @MainActor static var waitingSession: Session? {
@@ -153,46 +228,62 @@ struct StageView: View {
             ?? Sessions.all.first { $0.workspace != nil }
     }
 
+    /// Sizes for the Stage at any size: wide (a screen, a TV) with the projects and agents
+    /// either side, or narrow (a window beside your work) with everything stacked.
+    struct Layout {
+        var unit: CGFloat
+        var orbSide: CGFloat
+        var centre: CGPoint
+        var compact: Bool
+
+        init(_ size: CGSize) {
+            compact = size.width < max(980, size.height * 1.3)
+            if compact {
+                unit = max(0.45, min(size.width / 620, size.height / 1000))
+                orbSide = max(120, min(size.width * 0.6, size.height * 0.4))
+                // Below the heading, which is about 150 units tall plus the title bar.
+                centre = CGPoint(x: size.width / 2, y: 36 + 150 * unit + orbSide * 0.62)
+            } else {
+                unit = max(0.5, min(size.width / 1920, size.height / 1080))
+                orbSide = size.height * 0.62
+                centre = CGPoint(x: size.width / 2, y: size.height * 0.45)
+            }
+        }
+
+        /// The rings' outer edge, just clear of the satellites' orbits.
+        var ringRadius: CGFloat { orbSide * 0.53 }
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            let size = geometry.size
-            let unit = max(0.5, min(size.width / 1920, size.height / 1080))
-            let orbSide = size.height * 0.62
-            let centre = CGPoint(x: size.width / 2, y: size.height * 0.45)
+            let layout = Layout(geometry.size)
+            let unit = layout.unit
             ZStack {
-                StageBackdrop(tint: tint, unit: unit)
-                HUDRings(tint: tint, warning: theme.amber.color, alarm: theme.red.color, faint: theme.text3.color,
-                         intensity: model.vitality.intensity, usage: model.windowShare, unit: unit)
-                    .frame(width: orbSide * HUDRings.frameScale, height: orbSide * HUDRings.frameScale)
-                    .position(centre)
+                StageBackdrop(tint: tint, centre: UnitPoint(x: 0.5, y: layout.centre.y / max(1, geometry.size.height)), unit: unit)
                 // The large orb sits 8% of its frame below the frame's centre, to leave room
                 // for its flames; lift the frame so the orb itself is in the rings.
-                OrbRepresentable(size: .large)
-                    .frame(width: orbSide, height: orbSide)
-                    .position(x: centre.x, y: centre.y - orbSide * 0.08)
-                StageCorners()
-                    .stroke(theme.line2.color, lineWidth: 1.5)
-                    .padding(28 * unit)
-                VStack(spacing: 0) {
-                    HStack(alignment: .top) {
-                        identity(unit)
-                        Spacer(minLength: 40)
-                        clock(unit)
-                    }
-                    Spacer(minLength: 0)
-                    HStack(alignment: .bottom) {
-                        projects(unit)
-                            .frame(width: 440 * unit, alignment: .leading)
-                        Spacer(minLength: 24)
-                        caption(unit)
-                            .frame(maxWidth: 900 * unit)
-                        Spacer(minLength: 24)
-                        agents(unit)
-                            .frame(width: 440 * unit, alignment: .trailing)
-                    }
+                OrbRepresentable(size: .large, framesPerSecond: 120, track: track)
+                    .frame(width: layout.orbSide, height: layout.orbSide)
+                    .position(x: layout.centre.x, y: layout.centre.y - layout.orbSide * 0.08)
+                StageHUD(style: hudStyle, intensity: model.vitality.intensity, usage: model.windowShare, unit: unit,
+                         centre: layout.centre, orbScale: layout.orbSide / 2, ringRadius: layout.ringRadius,
+                         callouts: !layout.compact, track: track, reduceMotion: reduceMotion)
+                    .allowsHitTesting(false)
+                if mode.fullScreen {
+                    StageCorners()
+                        .stroke(theme.line2.color, lineWidth: 1.5)
+                        .padding(28 * unit)
                 }
-                .padding(.horizontal, 72 * unit)
-                .padding(.vertical, 64 * unit)
+                if layout.compact {
+                    compact(layout)
+                } else {
+                    wide(unit)
+                }
+                // In the title bar's row, level with the window's own buttons.
+                if !mode.fullScreen {
+                    windowControls
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                }
             }
         }
         .background(theme.ground.color)
@@ -204,6 +295,120 @@ struct StageView: View {
                 tally = await Task.detached(priority: .utility) { StageTally(jobs: ledger.jobs(since: start), since: start) }.value
                 try? await Task.sleep(for: .seconds(15))
             }
+        }
+    }
+
+    private func wide(_ unit: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top) {
+                identity(unit)
+                Spacer(minLength: 40)
+                clock(unit)
+            }
+            Spacer(minLength: 0)
+            HStack(alignment: .bottom) {
+                projects(unit)
+                    .frame(width: 440 * unit, alignment: .leading)
+                Spacer(minLength: 24)
+                caption(unit)
+                    .frame(maxWidth: 900 * unit)
+                Spacer(minLength: 24)
+                agents(unit)
+                    .frame(width: 440 * unit, alignment: .trailing)
+            }
+        }
+        .padding(.horizontal, 72 * unit)
+        .padding(.vertical, 64 * unit)
+    }
+
+    /// A narrow window: the mood and time on top, the orb, then what's said and who's working.
+    private func compact(_ layout: Layout) -> some View {
+        let unit = layout.unit
+        return VStack(spacing: 0) {
+            HStack(alignment: .top) {
+                identity(unit)
+                Spacer(minLength: 12)
+                TimelineView(.everyMinute) { context in
+                    Text(context.date, format: .dateTime.hour().minute())
+                        .font(.dante(size: 40 * unit, weight: .light, design: .monospaced))
+                        .foregroundStyle(theme.text.color)
+                }
+            }
+            Spacer(minLength: layout.ringRadius * 2.2)
+            caption(unit)
+            flows(unit)
+                .padding(.top, 22 * unit)
+            Spacer(minLength: 0)
+            projects(unit)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 28 * unit)
+        .padding(.top, 36 + 12 * unit)
+        .padding(.bottom, 24 * unit)
+    }
+
+    /// Who handed what to whom, as a list, for a window too narrow for the lines.
+    private func flows(_ unit: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 10 * unit) {
+            ForEach(model.satellites.prefix(Constellation.limit)) { satellite in
+                HStack(alignment: .firstTextBaseline, spacing: 10 * unit) {
+                    Circle()
+                        .fill(satellite.color.color)
+                        .frame(width: 9 * unit, height: 9 * unit)
+                        .shadow(color: satellite.color.color, radius: 5 * unit)
+                    VStack(alignment: .leading, spacing: 2 * unit) {
+                        Text("\(satellite.lead) → \(satellite.agent)".uppercased())
+                            .font(.dante(size: 12.5 * unit, weight: .semibold))
+                            .tracking(2 * unit)
+                            .foregroundStyle(satellite.color.color)
+                        if !satellite.task.isEmpty {
+                            Text(satellite.task)
+                                .font(.dante(size: 16 * unit))
+                                .foregroundStyle(theme.text2.color)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .animation(.easeOut(duration: 0.35), value: model.satellites.map(\.id))
+    }
+
+    /// Keep on top and full screen, for the Stage in a window.
+    private var windowControls: some View {
+        HStack(spacing: 4) {
+            Button { mode.floats.toggle() } label: {
+                Image(systemName: mode.floats ? "pin.fill" : "pin")
+                    .frame(width: 26, height: 22)
+            }
+            .help(mode.floats ? "Stop keeping the Stage above other windows" : "Keep the Stage above other windows")
+            Button { StageController.shared.toggleFullScreen() } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .frame(width: 26, height: 22)
+            }
+            .help("Full screen")
+        }
+        .buttonStyle(.plain)
+        .font(.dante(size: 12, weight: .medium))
+        .foregroundStyle(theme.text2.color)
+        .padding(.top, 3)
+        .padding(.trailing, 8)
+    }
+
+    private var hudStyle: StageHUD.Style {
+        StageHUD.Style(tint: nsColor(model.mood), warning: theme.amber.nsColor, alarm: theme.red.nsColor,
+                       faint: theme.text3.nsColor, text: theme.text.nsColor)
+    }
+
+    private func nsColor(_ mood: PresenceMood) -> NSColor {
+        switch mood {
+        case .needsYou: theme.amber.nsColor
+        case .done: theme.green.nsColor
+        case .trouble: theme.red.nsColor
+        case .asleep: theme.text3.nsColor
+        case .idle, .thinking, .acting, .listening: theme.accent.nsColor
         }
     }
 
@@ -392,7 +597,7 @@ struct StageView: View {
                     .id(line)
                     .transition(.opacity)
             }
-            Text(voice.wakeListening ? "Say “Hey Dante” · Space to talk · Esc to leave" : "Space to talk · Esc to leave")
+            Text((voice.wakeListening ? "Say “Hey Dante” · " : "") + "Space to talk · " + (mode.fullScreen ? "Esc for a window" : "Esc to close"))
                 .font(.dante(size: 14 * unit))
                 .tracking(1 * unit)
                 .foregroundStyle(theme.text3.color)
@@ -453,6 +658,8 @@ private struct StageButtonStyle: ButtonStyle {
 private struct StageBackdrop: View {
     @Environment(\.theme) private var theme
     var tint: Color
+    /// Where the orb is, for the glow and the grid's fade.
+    var centre = UnitPoint(x: 0.5, y: 0.45)
     var unit: CGFloat
 
     var body: some View {
@@ -467,7 +674,7 @@ private struct StageBackdrop: View {
                     grid.addLine(to: CGPoint(x: x, y: size.height))
                     x += step
                 }
-                var y: CGFloat = size.height * 0.45 - (size.height * 0.45 / step).rounded(.down) * step
+                var y: CGFloat = size.height * centre.y - (size.height * centre.y / step).rounded(.down) * step
                 while y < size.height {
                     grid.move(to: CGPoint(x: 0, y: y))
                     grid.addLine(to: CGPoint(x: size.width, y: y))
@@ -475,8 +682,8 @@ private struct StageBackdrop: View {
                 }
                 context.stroke(grid, with: .color(theme.line.color), lineWidth: 1)
             }
-            .mask(RadialGradient(colors: [.white.opacity(0.9), .clear], center: UnitPoint(x: 0.5, y: 0.45), startRadius: 0, endRadius: 900 * unit))
-            RadialGradient(colors: [tint.opacity(0.16), .clear], center: UnitPoint(x: 0.5, y: 0.45), startRadius: 0, endRadius: 620 * unit)
+            .mask(RadialGradient(colors: [.white.opacity(0.9), .clear], center: centre, startRadius: 0, endRadius: 900 * unit))
+            RadialGradient(colors: [tint.opacity(0.16), .clear], center: centre, startRadius: 0, endRadius: 620 * unit)
                 .animation(.easeInOut(duration: 1.2), value: tint)
         }
     }
@@ -494,117 +701,5 @@ private struct StageCorners: Shape {
             path.addLine(to: CGPoint(x: corner.x, y: corner.y + arm * dy))
         }
         return path
-    }
-}
-
-/// The rings around the orb: a turning scale, counter-turning arcs, a radar sweep that
-/// speeds up with the work, and two gauges: load on the left, the usage window on the right.
-private struct HUDRings: View {
-    var tint: Color
-    var warning: Color
-    var alarm: Color
-    var faint: Color
-    var intensity: Double
-    var usage: Double?
-    var unit: CGFloat
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The rings' outer edge is this share of the frame's half-width; the gauges and their
-    /// labels sit outside it, still inside the frame (a Canvas clips to its frame).
-    static let ringShare: CGFloat = 0.74
-    /// The frame for an orb of side 1: its outer ring just clears the satellites' orbits.
-    static let frameScale: CGFloat = 1.06 / ringShare
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            Canvas { context, size in
-                draw(in: &context, size: size, t: t)
-            }
-        }
-    }
-
-    private func point(_ centre: CGPoint, _ radius: CGFloat, _ angle: Double) -> CGPoint {
-        CGPoint(x: centre.x + radius * cos(angle), y: centre.y + radius * sin(angle))
-    }
-
-    private func arc(_ centre: CGPoint, _ radius: CGFloat, from start: Double, to end: Double) -> Path {
-        var path = Path()
-        path.addArc(center: centre, radius: radius, startAngle: .radians(start), endAngle: .radians(end), clockwise: false)
-        return path
-    }
-
-    private func draw(in context: inout GraphicsContext, size: CGSize, t: Double) {
-        let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-        let r = min(size.width, size.height) / 2 * Self.ringShare
-        let work = min(1, max(0, intensity))
-
-        // The scale: 180 ticks, every fifteenth long, turning slowly (faster with work).
-        let spin = t * (0.03 + 0.12 * work)
-        var minor = Path(), major = Path()
-        for index in 0..<180 {
-            let angle = Double(index) / 180 * 2 * .pi + spin
-            let long = index % 15 == 0
-            if long {
-                major.move(to: point(centre, r * 0.925, angle))
-                major.addLine(to: point(centre, r * 0.975, angle))
-            } else {
-                minor.move(to: point(centre, r * 0.952, angle))
-                minor.addLine(to: point(centre, r * 0.975, angle))
-            }
-        }
-        context.stroke(minor, with: .color(tint.opacity(0.25)), lineWidth: max(1, 1 * unit))
-        context.stroke(major, with: .color(tint.opacity(0.7)), lineWidth: max(1.5, 2 * unit))
-        context.stroke(arc(centre, r * 0.995, from: 0, to: 2 * .pi), with: .color(tint.opacity(0.12)), lineWidth: 1)
-
-        // Counter-turning arcs.
-        let counter = -t * (0.08 + 0.3 * work)
-        for index in 0..<3 {
-            let start = counter + Double(index) * 2 * .pi / 3
-            context.stroke(arc(centre, r * 0.885, from: start, to: start + 1.25),
-                           with: .color(tint.opacity(0.5)), style: StrokeStyle(lineWidth: max(2, 3 * unit), lineCap: .round))
-        }
-        context.stroke(arc(centre, r * 0.86, from: 0, to: 2 * .pi), with: .color(tint.opacity(0.1)), lineWidth: 1)
-
-        // The sweep: a fading wedge, like radar.
-        let sweep = t * (0.5 + 1.8 * work)
-        let slices = 28
-        let span = 0.9
-        for index in 0..<slices {
-            let a0 = sweep - span * Double(index + 1) / Double(slices)
-            let a1 = sweep - span * Double(index) / Double(slices)
-            var wedge = Path()
-            wedge.addArc(center: centre, radius: r * 0.905, startAngle: .radians(a0), endAngle: .radians(a1), clockwise: false)
-            wedge.addArc(center: centre, radius: r * 0.865, startAngle: .radians(a1), endAngle: .radians(a0), clockwise: true)
-            wedge.closeSubpath()
-            context.fill(wedge, with: .color(tint.opacity(0.32 * (1 - Double(index) / Double(slices)))))
-        }
-
-        // Gauges: load on the left, the usage window on the right, each a 100° arc.
-        gauge(&context, centre: centre, radius: r * 1.06, middle: .pi, value: work, color: tint, label: "LOAD", mirrored: true)
-        if let usage {
-            let color = usage > 0.95 ? alarm : usage > 0.8 ? warning : tint
-            gauge(&context, centre: centre, radius: r * 1.06, middle: 0, value: min(1, usage), color: color, label: "USAGE", mirrored: false)
-        }
-    }
-
-    private func gauge(_ context: inout GraphicsContext, centre: CGPoint, radius: CGFloat, middle: Double, value: Double,
-                       color: Color, label: String, mirrored: Bool) {
-        let half = 50 * Double.pi / 180
-        // Both fill upwards from the bottom of their arc.
-        let bottom = mirrored ? middle - half : middle + half
-        let top = mirrored ? middle + half : middle - half
-        let track = arc(centre, radius, from: min(bottom, top), to: max(bottom, top))
-        context.stroke(track, with: .color(faint.opacity(0.25)), style: StrokeStyle(lineWidth: max(3, 5 * unit), lineCap: .round))
-        if value > 0.005 {
-            let end = bottom + (top - bottom) * value
-            let fill = arc(centre, radius, from: min(bottom, end), to: max(bottom, end))
-            context.stroke(fill, with: .color(color), style: StrokeStyle(lineWidth: max(3, 5 * unit), lineCap: .round))
-        }
-        let text = Text("\(label) \(Int((value * 100).rounded()))%")
-            .font(.dante(size: 12 * unit, weight: .semibold))
-            .tracking(2 * unit)
-            .foregroundStyle(color.opacity(0.85))
-        let at = point(centre, radius + 26 * unit, top + (mirrored ? 0.12 : -0.12))
-        context.draw(text, at: at, anchor: mirrored ? .trailing : .leading)
     }
 }

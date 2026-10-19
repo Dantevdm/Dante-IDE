@@ -40,6 +40,9 @@ final class PresenceController: NSObject {
     private var usageLoaded: Date = .distantPast
     private var loadingUsage = false
     private var vitalityTimer: Timer?
+    /// `DANTE_STAGE_DEMO=1`: made-up agents come and go, to see the Stage at work.
+    private static let demo = ProcessInfo.processInfo.environment["DANTE_STAGE_DEMO"] == "1"
+    private var demoTimer: Timer?
     /// Orbs showing the mood: the menu bar's, the panel's and the Stage's.
     private let watchers = NSHashTable<OrbView>.weakObjects()
     weak var themeStore: ThemeStore?
@@ -118,7 +121,17 @@ final class PresenceController: NSObject {
                 if tool.status == .running { running += tool.name == "Task" || tool.name == "Agent" ? 2 : 1 }
             }
             if claude.state == .working {
-                satellites += OrbSatellite.running(in: claude.items.compactMap { item -> ToolActivity? in if case .tool(let tool) = item.content { tool } else { nil } })
+                satellites += OrbSatellite.running(in: claude.items.compactMap { item -> ToolActivity? in if case .tool(let tool) = item.content { tool } else { nil } },
+                                                   lead: claude.engine.title)
+            }
+        }
+        if Self.demo {
+            satellites += OrbSatellite.demo(at: Date().timeIntervalSinceReferenceDate)
+            running += satellites.count
+            if demoTimer == nil {
+                demoTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.scheduleUpdate() }
+                }
             }
         }
         return (tools, running, limitAt, satellites)
@@ -250,6 +263,11 @@ final class PresenceController: NSObject {
             stage.target = self
             menu.addItem(stage)
         }
+        if !StageController.shared.isOpen {
+            let windowed = NSMenuItem(title: "Stage in a Window", action: #selector(openStageWindow), keyEquivalent: "")
+            windowed.target = self
+            menu.addItem(windowed)
+        }
         menu.addItem(.separator())
         let hide = NSMenuItem(title: "Hide from Menu Bar", action: #selector(hide), keyEquivalent: "")
         hide.target = self
@@ -270,8 +288,10 @@ final class PresenceController: NSObject {
         let screens = NSScreen.screens
         guard screens.indices.contains(item.tag) else { return }
         StageController.shared.close()
-        StageController.shared.open(on: screens[item.tag])
+        StageController.shared.open(on: screens[item.tag], fullScreen: true)
     }
+
+    @objc private func openStageWindow() { StageController.shared.open(fullScreen: false) }
 
     @objc private func showDante() {
         NSApp.activate()
