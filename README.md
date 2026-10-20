@@ -25,18 +25,99 @@ You'll want [Claude Code](https://claude.com/claude-code) installed and signed i
 The rail has seven places; some have tabs.
 
 - **Home**: the project at a glance, and what changed since you were last here
-- **Map**: the system from the code itself: screens, API routes, packages, tables, outside services and webhooks, with coverage, open routes, table schemas and index suggestions; open any part to see inside it, down to a method's code; an Infra view of CloudFormation, Terraform, ARM and the pipelines that ship them
-- **Code**: a TextKit 2 editor with tree-sitter highlighting, language servers, split panes, git gutter and blame, search (by text or by meaning) and replace, a debugger, merge conflicts, and ⌘I to edit with the agent
-- **Quality**: Tests (run everything, only what your changes touch, or one test; history, flaky tests, untested code) and Security (secrets, POPIA personal information, dependencies, code and infrastructure, ranked, with fixes)
-- **Local**: Services (Docker Compose with logs and port conflicts explained, the apps in the code), Data (Postgres, MySQL and SQLite browsing, query plans, migration previews) and Health (alarms, health checks, production logs)
-- **Ship**: Release (changelog, CI, tags) and History (commits, agent sessions, test runs and CI in one stream)
-- **Agents**: Jobs (agents working beside you in their own worktrees, with an inbox and away mode), Activity (who did what, local models included) and Setup (skills, memory, connectors, plugins, permissions)
-- **Docs**, in the footer: markdown with native Mermaid diagrams, PDFs and Word files, and the motion studio
+- **Map**: the system drawn from the code, and the infrastructure and pipelines that ship it
+- **Code**: the editor, language servers, git, search, the debugger and the terminal
+- **Quality**: Tests and Security
+- **Local**: Services (Docker Compose), Data (your databases) and Health (alarms, checks, production logs)
+- **Ship**: Release and History
+- **Agents**: Jobs, Activity and Setup
+- **Docs**, in the footer: markdown, native diagrams, PDFs and Word files, and the motion studio
 
-Beside them: the agent panel (Claude or Codex in charge, diffs to approve, undo a turn, `@file` and `/` commands), the menu bar orb that shows what the agents are doing, the Stage (Dante full screen on a TV), and voice (push to talk, replies read aloud in a natural voice).
+Beside them: the agent panel, the menu bar orb, the Stage and voice. The sections below go through the big pieces.
+
+## Agents in charge
+
+Dante is built around agents rather than bolted onto them.
+
+- **Claude or Codex leads, the other reviews.** Claude Code and OpenAI's Codex both run as full agents in the panel, signed in with your own plans. Switch who's in charge mid-conversation and the new lead picks up the thread. When Claude's plan is nearly out, Dante can hand over to Codex and resend the request Claude couldn't finish.
+- **Every edit is a diff you approve.** Pick how much the agent may do on its own: ask for everything, allow edits, or allow everything. Read-only commands such as `git status` and `ls` go through without asking. "Always allow" saves the rule to Claude Code's own settings. Edits from a turn can be undone in one go, with files it created removed (shell commands' side effects can't be undone). Apply all approves the waiting edits and, if you like, the rest of the turn.
+- **It asks before it guesses.** Clarifying questions arrive as cards to answer, and a reply that ends in a list of options gets chips to click.
+- **Local models do the small jobs.** Through Dante's own MCP server (`dante mcp`), the agents can hand summaries, drafts and checks to models in [Ollama](https://ollama.com), picked per kind of job, at no cost. Looker, a local vision model, reads screenshots and images and quotes their text exactly.
+- **Cloud agents with your own keys.** Grok (xAI) for a second opinion and Jev for scored decisions, with keys in the Keychain. Those tools always ask first, since they send material off the Mac.
+- **Activity tells the story.** Every job, local or cloud, turns and sub-agents included, goes into one ledger: who did what and why, who checked whose work, the cost, and each request as a thread.
+- **Setup** lists the project's skills (and suggests new ones from its files), memory files and what they cost per message, MCP servers, plugins and permissions.
+
+### Jobs: agents working beside you
+
+A job is an agent working on its own git branch in a separate worktree, outside the repo, while you keep working in the main checkout.
+
+- Start one from the panel, the Jobs board, or the terminal: `dante job "fix the flaky login test" --away 30`.
+- A guard refuses pushes, merges, rebases, branch switches, deletions, `reset --hard`, releases, deploy tools, cloud CLIs and edits outside the worktree, whatever the approval level.
+- **Away mode** approves edits and build, test, lint and format commands for a set time. Anything else waits in the inbox, and when the time runs out every step asks again.
+- **Job types** in `.dante/jobs/<id>.md` describe recurring work: a builder that takes a task from `tasks.yaml`, or a pipeline watcher that Dante starts by itself when CI fails on your branch.
+- Merge brings a job's work into your branch; discard throws it away. Both ask first.
+
+## Map: your system, from the code
+
+The Map reads the code and draws the system: clients and their screens, API route groups, backend parts, tables, outside services and webhooks, linked by the calls the code really makes. Nothing needs configuring.
+
+- **Open any box to go inside it**: a part opens into its folders, a folder into its files, a file into its methods, down to a method's code, with the routes it serves, the tables it reaches and the classes it uses. A table traces back through the code that queries it to the routes that reach it.
+- **Open routes are flagged.** Spring Security config is read, every route is marked secured or open, and each open one gets a reason (health, sign-in, webhook, docs) or is called out as a concern.
+- **Schemas from the migrations.** The repo's SQL is replayed in migration order into table schemas you can copy as DDL, markdown, a SELECT or an ER diagram. The queries in the code (WHERE clauses, Spring Data methods, queries inside loops) become index suggestions with the SQL to fix them.
+- **Coverage per part** from lcov, Go and Cobertura reports, environment variables per part with likely secrets flagged, and drift against `.dante/architecture.md`, with a Mermaid export into it.
+- **Infra view**: CloudFormation, SAM, Terraform and ARM templates with Azure DevOps, GitHub Actions and GitLab pipelines, drawn as resources by tier with each pipeline stage linked to what it deploys. Dante says in plain sentences how a change ships and how a request travels. The agent in charge can explain or review it, or write the pipeline or infrastructure that's missing.
+- A web client or screen opens in the browser: Dante finds its port and route, and starts the dev server only when you ask.
+
+## Data: your databases, safely
+
+Data finds the project's PostgreSQL, MySQL and SQLite databases in compose files, `.env` URLs, framework config and containers that belong to the project. It shows what the code uses (drivers, ORMs, migrations) even before there's a database.
+
+- Browse tables a page at a time with sorting and filters, follow foreign keys both ways, and see the live schema as an ER diagram.
+- Run SQL scripts in one session. Dante checks before anything that drops or rewrites a whole table.
+- **Query plans explained**: tables read row by row are flagged, with the index that would help.
+- **Migration preview**: see what a script or migration file will change before it runs, checked against the live schema: missing tables, NOT NULL columns with no default, index builds that lock, rows a drop would delete.
+- **New database** sets up a Compose service (or a SQLite file) with a generated password on a free port, and can remove it again cleanly.
+- The agent writes queries from a description and fixes failing ones, with the schema as context.
+- Passwords live in the Keychain and connections stay on this Mac. A database that isn't on this Mac opens read-only.
+
+## Security layer
+
+Security runs on every project, offline by default, and sits between the agents and your code.
+
+- **The scanner** checks every tracked file for secrets, personal information (POPIA), weak encryption, injection, and container, CI and infrastructure problems. South African ID numbers and card numbers are validated properly (date, citizenship digit, Luhn), so test data and providers' test cards don't cry wolf. Severity drops a step in tests, except for secrets.
+- **Your installed scanners join in**: Semgrep, Gitleaks, OSV-Scanner, govulncheck, npm audit and pip-audit. The ones that send your dependency list to a service (OSV-Scanner, govulncheck, npm audit, pip-audit, and Dante's own OSV.dev lookup) run only once you turn on online checks.
+- **One report, one score.** Findings are merged by file, line and problem, ranked, and scored out of 100; a single critical caps the score at 49. Accepted risks go in `.dante/security.yaml`, each with a reason, and a line can be waved through inline with `nosec` or `dante:ignore`.
+- **The agents fix and check.** Fix hands findings to the agent in charge and asks the other to check the work. Audit asks for a read-only review against POPIA (sections 19, 22 and 72).
+- **Edits are scanned before you approve them.** If an agent's edit adds a high or critical finding, it asks you at any approval level, and Apply all skips it.
+- **The agents see the report** through Dante's MCP server, so a security question starts from what Dante found.
+- **In CI too**: `dante scan --fail-on high` exits non-zero when it finds something at that level (`--json` for the full report, `--online` for dependency advisories).
+
+## Voice, the orb and the Stage
+
+- **Push to talk** with ⌃⌥Space or the Talk button. Speech is recognised on the Mac. Say "stop", "yes", "no", "switch to Codex", "status" or "how much usage is left"; anything else goes to the agent in the frontmost project.
+- **Voice knows the app.** Every page has a spec, so "show me the infrastructure", "what's on this page?" and "what can you do?" work, and the agents can open pages for you as they explain.
+- **Replies are read aloud as they stream**, with code skipped, in a natural voice ([Kokoro](https://github.com/thewh1teagle/kokoro-onnx), running on the Mac) or the system voices. "Hey Dante" is there too, off by default, and works only when the Mac can recognise speech offline.
+- **The orb** in the menu bar shows what the agents are doing: thinking, acting, waiting for you, done, listening, tired as the usage window fills, asleep when the plan runs out. Sub-agents and local jobs bud off it as satellites and merge back when they finish.
+- **The Stage** is Dante full screen on a TV, or in a window: the orb in a heads-up display, the agents at work, today's tally, the reply as it's spoken, and approvals you can answer with Return.
+
+## Search, by text or by meaning
+
+Find in Project searches by text, word or regex, with previewed replace. Meaning mode searches by what code does ("where do we retry payments?") using an embedding model in Ollama. The index lives on this Mac, never in the repo, and skips env files, lockfiles and `never` paths. The agents get it as a tool too (`search_code`), and so does the terminal (`dante search`).
+
+## Motion studio
+
+In Docs, the agents make videos, slide decks and explainers from the real system, in the project's brand (`.dante/brand.yaml`), narrated in Dante's voice and rendered to 1080p or 4K. A new piece goes through four steps: the idea, the look (a live gallery of twenty animation styles plus illustration kits), the brief, and whether Claude, Codex or both make it. three.js, hairline and Open Peeps are bundled, so the agents can use them with nothing to install.
+
+## Agent HQ (coming next)
+
+The agents as people in an isometric office around a glowing brain, their shared memory. Each room is a role (research, backend, front-end, DevOps, quality, docs, security, data) and each is a job or job type you can hire for. Roads of light run between the rooms, thought bubbles are made from the agents' real tool calls, and there's a sub-agent bay, a task board and a team panel. Frontier models are drawn in light, cloud models come in through the door that leaves the Mac, and local models are pixel people. It will show on the Stage and in the menu bar too.
+
+## What stays on your Mac
+
+Connections, database passwords (in the Keychain), the search index, test history, job records and the agent ledger all stay on this Mac. Dante never reads Claude Code's or Codex's credentials. Your API keys reach Dante's MCP server through a private file that is removed when the agent stops, never on a command line. Online dependency checks and cloud agents are off until you turn them on.
 
 <details>
-<summary><b>Everything that works today</b></summary>
+<summary><b>Everything else that works today, in detail</b></summary>
 
 
 - Launch screen with recent projects, plus new project, open folder and clone
@@ -84,12 +165,12 @@ Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the s
 
 **In progress**
 
-- **Motion studio** (Docs): videos, slide decks and explainers made by the agents from the real system, in the project's brand, narrated in Dante's voice and rendered to 1080p or 4K. New piece asks like a studio: the idea, the look (a live gallery of twenty animation styles, from particles and clay 3D to split-flap and blueprint, plus illustration kits), the brief, and whether Claude, Codex or both make it. three.js, hairline and Open Peeps come bundled. Still to come: switching between and comparing two makers' versions, lint findings and a partner's critique in the player, HTML and PDF export, and presenting decks on the Stage. ([plan](docs/plans/motion-studio.md))
+- **Motion studio** (see above). Still to come: switching between and comparing two makers' versions, lint findings and a partner's critique in the player, HTML and PDF export, and presenting decks on the Stage. ([plan](docs/plans/motion-studio.md))
 - **Walk and work**: jobs, away mode and job types are in ([plan](docs/plans/walk-and-work.md)); next are away budgets, then an iPhone and iPad companion (QR pairing, a voice loop with AirPods, Live Activities and actionable notifications, an iPad desk layout) and a verifier that drives its own browser.
 
 **Next**
 
-- **Agent HQ**: the agents as little people in an isometric office around a glowing brain (shared memory). Rooms are roles (research, backend, front-end, DevOps, quality, docs, security, data), each a job or job type you can hire for, with roads of light between them, thoughts made from their real tool calls, a sub-agent bay, a task board and a team panel. Frontier models are drawn in light, cloud models in dashed light coming in through the door that leaves the Mac, local models as pixel people. On the Stage and in the menu bar too.
+- **Agent HQ** (see above): the office around the brain, in the app, on the Stage and in the menu bar.
 - **Discovery**: a freshly opened project paints the picture of everything Dante found, on Home.
 - **Motion everywhere**: the Infra view's animated links and pulses in Tests, Data, Services and Agents.
 - **Hands**: let an agent open apps and control the Mac, with a visible kill switch (needs Accessibility, asked first).
