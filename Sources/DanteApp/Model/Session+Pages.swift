@@ -27,4 +27,11 @@ extension Session {
             return nil
         }
     }
+
+    /// A database from the Map, in Local › Data: the connection for its compose service or
+    /// container, and a table opened when one is named.
+    func showInData(service: String?, table: String? = nil) {
+        data.focus = (service, table)
+        if area != .data { area = .data }
+    }
 }

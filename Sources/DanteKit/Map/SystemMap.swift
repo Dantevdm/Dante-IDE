@@ -32,6 +32,8 @@ public struct SystemMap: Equatable, Sendable {
         public var line: Int?
         /// The last line, for a method shown with its code.
         public var end: Int?
+        /// For a route: who may call it.
+        public var access: Access?
 
         public init(_ text: String, file: String? = nil, line: Int? = nil, end: Int? = nil) {
             self.text = text
@@ -254,14 +256,18 @@ public struct SystemMap: Equatable, Sendable {
         // API routes, grouped by their first meaningful path segment.
         var webhookFiles: [(group: String, file: String)] = []
         var groups: [String: (items: [Item], owners: [String: Int])] = [:]
+        var accessRules: AccessRules?
         for file in backendFiles {
             let found = isJVM(file) ? annotatedRoutes(in: text(file)) : routes(in: text(file))
             guard !found.isEmpty else { continue }
             let ownerID = owner(file)?.id
+            if accessRules == nil { accessRules = AccessRules.load(files: files, read: read) }
             for route in found where route.path != "/" {
                 let key = routeGroup(route.path)
+                var item = Item([route.method, route.path].compactMap { $0 }.joined(separator: " "), file: file, line: route.line)
+                item.access = access(method: route.method, path: route.path, file: file, line: route.line, text: text(file), rules: accessRules ?? AccessRules())
                 // Mutated in place: copying the entry out and back copies its items each time.
-                groups[key, default: ([], [:])].items.append(Item([route.method, route.path].compactMap { $0 }.joined(separator: " "), file: file, line: route.line))
+                groups[key, default: ([], [:])].items.append(item)
                 if let ownerID { groups[key, default: ([], [:])].owners[ownerID, default: 0] += 1 }
             }
         }
@@ -281,7 +287,9 @@ public struct SystemMap: Equatable, Sendable {
             let order = ["GET", "POST", "PUT", "PATCH", "DELETE"]
             let detail = "\(value.items.count) route\(value.items.count == 1 ? "" : "s")" + (methods.isEmpty ? "" : " · " + methods.sorted { (order.firstIndex(of: $0) ?? 9) < (order.firstIndex(of: $1) ?? 9) }.joined(separator: " "))
             let id = "route:" + key
-            var part = Part(id: id, name: key == "…" ? "Other routes" : key, lane: .api, kind: .routes, detail: detail, items: value.items)
+            let concerns = value.items.filter { $0.access?.isConcern == true }.count
+            var part = Part(id: id, name: key == "…" ? "Other routes" : key, lane: .api, kind: .routes,
+                            detail: detail + (concerns > 0 ? " · \(concerns) open" : ""), items: value.items)
             let hooks = value.items.filter { isWebhookRoute($0.text) }
             if !hooks.isEmpty {
                 part.isWebhook = true

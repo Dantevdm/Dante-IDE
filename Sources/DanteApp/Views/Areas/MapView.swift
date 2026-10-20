@@ -95,7 +95,7 @@ struct MapView: View {
                     SystemSummary(map: map, compact: !trail.isEmpty)
                         .id("summary" + level)
                     SystemDiagram(map: map, selected: $selected, coverage: showsCoverage ? coverage.map(map.coverage) : nil,
-                                  openable: openable[level] ?? [], opening: opening, open: open)
+                                  openable: openable[level] ?? [], opening: opening, open: open, openContainer: openContainer)
                         .id("diagram" + level)
                         .transition(.asymmetric(
                             insertion: .scale(scale: zoomingIn ? 0.35 : 1.25, anchor: zoomingIn ? zoomAnchor : .center).combined(with: .opacity),
@@ -124,9 +124,14 @@ struct MapView: View {
                     .frame(width: 300)
             } else if showsSystem, let map = shown, let id = selected, let part = map.part(id) {
                 Rectangle().fill(theme.line.color).frame(width: 1)
+                    .transition(.opacity)
                 SystemInspector(session: session, workspace: workspace, map: map, part: part, coverage: coverage.flatMap { map.coverage($0)[part.id] },
-                                open: openable[level]?.contains(part.id) == true ? { open(part) } : nil) { selected = nil }
+                                open: openable[level]?.contains(part.id) == true ? { open(part) } : nil,
+                                select: { id in withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { selected = id } }) {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { selected = nil }
+                }
                     .frame(width: 300)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             } else if !showsSystem, let graph, let id = selected, let node = graph.node(id) {
                 Rectangle().fill(theme.line.color).frame(width: 1)
                 Inspector(session: session, workspace: workspace, graph: graph, node: node) { selected = nil }
@@ -211,6 +216,15 @@ struct MapView: View {
             session.mapCache?.insides = insides
             session.mapCache?.openable = openable
             show(part)
+        }
+    }
+
+    /// A box's container chip: a database opens in Data, anything else in Services.
+    private func openContainer(_ part: SystemMap.Part) {
+        if part.lane == .data {
+            session.showInData(service: part.container, table: part.kind == .table ? part.name : nil)
+        } else {
+            session.area = .environments
         }
     }
 

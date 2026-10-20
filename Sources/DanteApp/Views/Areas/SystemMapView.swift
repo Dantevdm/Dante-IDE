@@ -13,6 +13,12 @@ struct SystemDiagram: View {
     var openable: Set<String> = []
     var opening: String?
     var open: (SystemMap.Part) -> Void = { _ in }
+    /// The container chip on a box: its database in Data, or its service in Local.
+    var openContainer: (SystemMap.Part) -> Void = { _ in }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.areaScroll) private var areaScroll
+    /// When the selection last changed, so its links light up rather than snap.
+    @State private var litAt = Date.distantPast
 
     static let width: CGFloat = 180
     static let gap: CGFloat = 44
@@ -40,6 +46,26 @@ struct SystemDiagram: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            diagram
+                .onChange(of: selected) { _, id in
+                    litAt = .now
+                    guard let id else { return }
+                    // The chosen box glides to the middle, across and down, once the
+                    // inspector has taken its room.
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(80))
+                        guard selected == id else { return }
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.9)) {
+                            proxy.scrollTo(id, anchor: .center)
+                            areaScroll?.scrollTo(id, anchor: .center)
+                        }
+                    }
+                }
+        }
+    }
+
+    private var diagram: some View {
         ScrollView(.horizontal) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: Self.gap) {
@@ -59,9 +85,12 @@ struct SystemDiagram: View {
                                     PartBox(part: part, state: state(of: part), hue: hue(section.lane), showsContainer: showsContainer(part),
                                             coverage: coverage.map { $0[part.id]?.fraction ?? -1 },
                                             opens: openable.contains(part.id), isOpening: opening == part.id,
-                                            open: { open(part) }) {
-                                        selected = selected == part.id ? nil : part.id
+                                            open: { open(part) }, openContainer: { openContainer(part) }) {
+                                        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                                            selected = selected == part.id ? nil : part.id
+                                        }
                                     }
+                                    .id(part.id)
                                     .anchorPreference(key: PartBoundsKey.self, value: .bounds) { [part.id: $0] }
                                 }
                             }
@@ -75,15 +104,36 @@ struct SystemDiagram: View {
             .padding(.bottom, 52)
             .backgroundPreferenceValue(PartBoundsKey.self) { anchors in
                 GeometryReader { proxy in
-                    Canvas { context, _ in
-                        let heaviest = max(map.links.map(\.weight).max() ?? 1, 1)
-                        for link in map.links {
-                            guard let from = anchors[link.from].map({ proxy[$0] }), let to = anchors[link.to].map({ proxy[$0] }) else { continue }
-                            let highlighted = selected != nil && (link.from == selected || link.to == selected)
-                            let dimmed = selected != nil && !highlighted
-                            let color = highlighted ? theme.accent.color : theme.line2.color.opacity(dimmed ? 0.35 : 1)
-                            let width = 1.1 + 1.6 * CGFloat(link.weight) / CGFloat(heaviest)
-                            arrow(from: from, to: to, color: color, width: highlighted ? width + 0.6 : width, in: &context)
+                    TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+                        Canvas { context, _ in
+                            let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+                            // Lit links fade in over a third of a second.
+                            let lit = reduceMotion ? 1 : min(1, max(0, timeline.date.timeIntervalSince(litAt) / 0.32))
+                            let heaviest = max(map.links.map(\.weight).max() ?? 1, 1)
+                            for (index, link) in map.links.enumerated() {
+                                guard let from = anchors[link.from].map({ proxy[$0] }), let to = anchors[link.to].map({ proxy[$0] }) else { continue }
+                                let highlighted = selected != nil && (link.from == selected || link.to == selected)
+                                let dimmed = selected != nil && !highlighted
+                                let width = 1.1 + 1.6 * CGFloat(link.weight) / CGFloat(heaviest)
+                                let path = curve(from: from, to: to)
+                                if highlighted {
+                                    let accent = theme.accent.color
+                                    stroke(path, color: theme.line2.color, width: width, in: &context)
+                                    // The lit line draws itself along the link, then traffic flows on it.
+                                    stroke(path.trimmedPath(from: 0, to: lit), color: accent, width: width + 0.6, in: &context)
+                                    stroke(path, color: accent.opacity(0.55 * lit), width: width + 0.6, dash: [5, 7], phase: -time * 24, in: &context)
+                                    pulse(path, time: time + Double(index % 5) * 0.37, color: accent, in: &context)
+                                    head(on: path, color: accent, in: &context)
+                                } else {
+                                    let color = theme.line2.color.opacity(dimmed ? 0.35 : 1)
+                                    stroke(path, color: color, width: width, in: &context)
+                                    head(on: path, color: color, in: &context)
+                                    // At rest the busiest links carry a little traffic.
+                                    if selected == nil, link.weight * 3 >= heaviest {
+                                        pulse(path, time: time + Double(index % 7) * 0.33, color: hue(map.part(link.to)?.lane ?? .backend), in: &context)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -119,39 +169,52 @@ struct SystemDiagram: View {
 
     /// Between lanes: a curve from the right edge to the left edge. Within a lane: a loop
     /// out to the right, so it doesn't run under the boxes in between.
-    private func arrow(from: CGRect, to: CGRect, color: Color, width: CGFloat, in context: inout GraphicsContext) {
+    private func curve(from: CGRect, to: CGRect) -> Path {
         var path = Path()
-        let end: CGPoint
-        let angle: CGFloat
         if to.minX > from.maxX {
             let start = CGPoint(x: from.maxX, y: from.midY)
-            end = CGPoint(x: to.minX - 2, y: to.midY)
+            let end = CGPoint(x: to.minX - 2, y: to.midY)
             let bend = max((end.x - start.x) / 2, 30)
             path.move(to: start)
             path.addCurve(to: end, control1: CGPoint(x: start.x + bend, y: start.y), control2: CGPoint(x: end.x - bend, y: end.y))
-            angle = 0
         } else if to.maxX < from.minX {
             let start = CGPoint(x: from.minX, y: from.midY)
-            end = CGPoint(x: to.maxX + 2, y: to.midY)
+            let end = CGPoint(x: to.maxX + 2, y: to.midY)
             let bend = max((start.x - end.x) / 2, 30)
             path.move(to: start)
             path.addCurve(to: end, control1: CGPoint(x: start.x - bend, y: start.y), control2: CGPoint(x: end.x + bend, y: end.y))
-            angle = .pi
         } else {
             let start = CGPoint(x: from.maxX, y: from.midY)
-            end = CGPoint(x: to.maxX + 2, y: to.midY)
+            let end = CGPoint(x: to.maxX + 2, y: to.midY)
             let reach = 22 + min(abs(end.y - start.y) / 8, 18)
             path.move(to: start)
             path.addCurve(to: end, control1: CGPoint(x: start.x + reach, y: start.y), control2: CGPoint(x: end.x + reach, y: end.y))
-            angle = .pi
         }
-        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round))
+        return path
+    }
+
+    private func stroke(_ path: Path, color: Color, width: CGFloat, dash: [CGFloat] = [], phase: Double = 0, in context: inout GraphicsContext) {
+        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round, dash: dash, dashPhase: CGFloat(phase)))
+    }
+
+    private func head(on path: Path, color: Color, in context: inout GraphicsContext) {
+        guard let end = path.currentPoint, let before = path.trimmedPath(from: 0, to: 0.97).currentPoint else { return }
+        let angle = atan2(end.y - before.y, end.x - before.x)
         var head = Path()
         head.move(to: end)
         head.addLine(to: CGPoint(x: end.x - 7 * cos(angle - 0.45), y: end.y - 7 * sin(angle - 0.45)))
         head.addLine(to: CGPoint(x: end.x - 7 * cos(angle + 0.45), y: end.y - 7 * sin(angle + 0.45)))
         head.closeSubpath()
         context.fill(head, with: .color(color))
+    }
+
+    /// A small glowing packet travelling along the path, as on the Infra view.
+    private func pulse(_ path: Path, time: Double, color: Color, in context: inout GraphicsContext) {
+        let progress = CGFloat((time / 2.4).truncatingRemainder(dividingBy: 1))
+        guard progress > 0.02, let point = path.trimmedPath(from: 0, to: progress).currentPoint else { return }
+        let fade = min(1, min(progress, 1 - progress) * 6)
+        context.fill(Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6, width: 12, height: 12)), with: .color(color.opacity(0.18 * fade)))
+        context.fill(Path(ellipseIn: CGRect(x: point.x - 2.6, y: point.y - 2.6, width: 5.2, height: 5.2)), with: .color(color.opacity(fade)))
     }
 }
 
@@ -196,8 +259,10 @@ struct PartBox: View {
     var opens = false
     var isOpening = false
     var open: () -> Void = {}
+    var openContainer: () -> Void = {}
     let action: () -> Void
     @State private var hovering = false
+    @State private var hoveringChip = false
 
     private let shown = 8
 
@@ -222,6 +287,12 @@ struct PartBox: View {
                         }
                     }
                     Spacer(minLength: 0)
+                    if let access = PartBox.access(of: part) {
+                        Image(systemName: access.isConcern ? "lock.open.fill" : access.level == .secured ? "lock.fill" : "lock.open")
+                            .font(.dante(size: 9.5, weight: .semibold))
+                            .foregroundStyle(access.isConcern ? theme.amber.color : access.level == .secured ? theme.green.color : theme.text3.color)
+                            .help(access.note)
+                    }
                     if isOpening {
                         ProgressView().controlSize(.mini)
                     } else if opens {
@@ -248,15 +319,25 @@ struct PartBox: View {
                 }
                 if showsContainer, let container = part.container {
                     HStack(spacing: 4) {
-                        Image(systemName: "shippingbox").font(.dante(size: 9))
+                        Image(systemName: part.lane == .data ? "cylinder.split.1x2" : "shippingbox").font(.dante(size: 9))
                         Text(container).font(.dante(size: 10.5, design: .monospaced))
+                        if hoveringChip { Image(systemName: "arrow.up.right").font(.dante(size: 8, weight: .semibold)) }
                     }
-                    .foregroundStyle(theme.text3.color)
+                    .foregroundStyle(hoveringChip ? hue : theme.text3.color)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(theme.raised.color, in: Capsule())
+                    .background(hoveringChip ? hue.opacity(0.14) : theme.raised.color, in: Capsule())
+                    .contentShape(Capsule())
+                    .onHover { hoveringChip = $0 }
+                    // Over the box's own click.
+                    .highPriorityGesture(TapGesture().onEnded { openContainer() })
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(part.lane == .data ? "Open the \(container) database" : "Open the \(container) service")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { openContainer() }
                     .padding(.leading, 29)
-                    .help("Runs in the \(container) container")
+                    .help(part.lane == .data ? "Open the \(container) database in Data" : "Runs in the \(container) container: open it in Services")
+                    .animation(.snappy(duration: 0.15), value: hoveringChip)
                 }
             }
             .padding(10)
@@ -271,15 +352,23 @@ struct PartBox: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(border, style: StrokeStyle(lineWidth: state == .selected ? 1.6 : 1, dash: part.lane == .outside ? [4, 3] : []))
             )
+            .shadow(color: state == .selected ? theme.accent.color.opacity(0.22) : .clear, radius: state == .selected ? 12 : 0, y: state == .selected ? 4 : 0)
             .opacity(state == .dimmed ? 0.4 : 1)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .simultaneousGesture(TapGesture(count: 2).onEnded { if opens { open() } })
         .onHover { hovering = $0 }
-        .scaleEffect(hovering && opens ? 1.015 : 1)
-        .animation(.snappy(duration: 0.15), value: state == .dimmed)
+        .scaleEffect(state == .selected ? 1.03 : hovering && opens ? 1.015 : 1)
+        .animation(.spring(response: 0.36, dampingFraction: 0.82), value: state)
         .animation(.snappy(duration: 0.18), value: hovering)
+    }
+
+    /// A route box's access: its own, or for a group the most worrying of its routes.
+    static func access(of part: SystemMap.Part) -> SystemMap.Access? {
+        guard part.lane == .api else { return nil }
+        let all = part.items.compactMap(\.access)
+        return all.first(where: \.isConcern) ?? (all.count == 1 ? all[0] : all.allSatisfy { $0.level == .secured } ? all.first : nil)
     }
 
     private var border: Color {
@@ -430,9 +519,35 @@ struct SystemInspector: View {
     var coverage: CoverageReport.Lines?
     /// Opens the part to show what's inside, when it has smaller pieces.
     var open: (() -> Void)?
+    /// Selects another part on the map: a database's table.
+    var select: (String) -> Void = { _ in }
     let close: () -> Void
+    /// The repo's SQL for a table or database, read off the main thread.
+    @State private var schema: [SystemMap.TableSchema]?
+    /// What could be better about the database, for its inspector and each table's.
+    @State private var advice: [SchemaAdvice] = []
+    @State private var copied: String?
+
+    private var table: SystemMap.TableSchema? {
+        part.kind == .table ? schema?.first { $0.name.lowercased() == part.name.lowercased() } : nil
+    }
 
     var body: some View {
+        content
+            .task(id: part.id) {
+                guard part.kind == .table || part.kind == .database else { return }
+                let files = workspace.files
+                let read = MapView.reader(root: workspace.url)
+                let found = await Task.detached(priority: .userInitiated) { () -> ([SystemMap.TableSchema], [SchemaAdvice]) in
+                    let tables = SystemMap.schema(files: files, read: read)
+                    return (tables, SchemaAdvice.analyse(tables, files: files, read: read))
+                }.value
+                schema = found.0
+                advice = found.1
+            }
+    }
+
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
@@ -455,16 +570,49 @@ struct SystemInspector: View {
                         .help("Opens it in your browser on localhost. If its dev server isn’t running, Dante says so and starts it first.")
                     }
                 }
-                if !part.items.isEmpty {
+                if part.kind == .table, let table {
+                    TableDetail(session: session, workspace: workspace, map: map, table: table, copied: $copied, copy: copy)
+                } else if part.kind == .database, let schema, !schema.isEmpty {
+                    DatabaseDetail(session: session, part: part, schema: schema, copied: $copied, copy: copy)
+                }
+                if part.kind == .table || part.kind == .database, schema?.isEmpty == false {
+                    let shown = part.kind == .table ? advice.filter { $0.table?.lowercased() == part.name.lowercased() } : advice
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Eyebrow("Suggestions")
+                            Spacer()
+                            if !shown.isEmpty {
+                                Text("\(shown.count)").font(.dante(size: 10.5, design: .monospaced))
+                                    .foregroundStyle(shown.contains { $0.weight == .warning } ? theme.amber.color : theme.text3.color)
+                            }
+                        }
+                        SchemaSuggestions(session: session, workspace: workspace, advice: shown, limit: part.kind == .table ? 8 : 5)
+                    }
+                    .transition(.opacity)
+                }
+                if part.lane == .api, part.items.contains(where: { $0.access != nil }) {
+                    AccessSection(session: session, workspace: workspace, part: part)
+                }
+                if !part.items.isEmpty, !(part.kind == .table && table != nil) {
                     VStack(alignment: .leading, spacing: 4) {
                         Eyebrow(part.lane == .api ? "Routes" : part.lane == .clients ? "Screens" : part.kind == .database ? "Tables"
                                 : part.kind == .table ? "Columns" : part.kind == .function || part.kind == .structure && part.path == nil ? "Declared" : "Inside")
                         ForEach(part.items, id: \.self) { item in
                             HStack(spacing: 6) {
                                 Button {
-                                    if let file = item.file { session.open(file: workspace.url.appending(path: file), line: item.line ?? 1) }
+                                    if let file = item.file {
+                                        session.open(file: workspace.url.appending(path: file), line: item.line ?? 1)
+                                    } else if part.kind == .database, map.part("table:" + item.text) != nil {
+                                        select("table:" + item.text)
+                                    }
                                 } label: {
                                     HStack {
+                                        if let access = item.access {
+                                            Image(systemName: access.isConcern ? "lock.open.fill" : access.level == .secured ? "lock.fill" : "lock.open")
+                                                .font(.dante(size: 9))
+                                                .foregroundStyle(access.isConcern ? theme.amber.color : access.level == .secured ? theme.green.color : theme.text3.color)
+                                                .frame(width: 11)
+                                        }
                                         ItemLine(item: item, isRoute: part.lane == .api)
                                         Spacer(minLength: 0)
                                         if item.file != nil {
@@ -475,8 +623,8 @@ struct SystemInspector: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .disabled(item.file == nil)
-                                .help(help(for: item))
+                                .disabled(item.file == nil && !(part.kind == .database && map.part("table:" + item.text) != nil))
+                                .help((item.access.map { $0.note + "\n" } ?? "") + help(for: item))
                                 // Beside the row, not in it: a button inside a button gives the click to the row.
                                 if part.lane == .clients, part.id.hasPrefix("client:"), part.kind == .web {
                                     IconButton(symbol: "safari", label: "Open \(item.text) in the browser", size: 10) {
@@ -537,6 +685,17 @@ struct SystemInspector: View {
             .padding(20)
         }
         .background(theme.panel.color)
+    }
+
+    /// Puts text on the pasteboard and says so on the button for a moment.
+    private func copy(_ text: String, _ what: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        withAnimation(.snappy) { copied = what }
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            if copied == what { withAnimation(.snappy) { copied = nil } }
+        }
     }
 
     /// A web frontend, or one of its screens, that can open in the browser.
@@ -742,6 +901,200 @@ private struct WebLaunchCard: View {
                     Text(detail).font(.dante(size: 11, design: detail.contains("http") || detail.contains("·") ? .monospaced : .default))
                         .foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 }
+            }
+        }
+    }
+}
+
+/// A table from the repo's SQL: its columns and keys, where it's declared, what points at it,
+/// and copying it at each level (a column, the table, a query).
+private struct TableDetail: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+    let map: SystemMap
+    let table: SystemMap.TableSchema
+    @Binding var copied: String?
+    let copy: (String, String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Button { session.showInData(service: map.parts.first { $0.kind == .database }?.container, table: table.name) } label: {
+                    Label("Browse in Data", systemImage: "tablecells").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(DanteButtonStyle(primary: true))
+                .help("Open \(table.name) in Local › Data and show its rows")
+                CopyMenu(copied: copied, items: [
+                    ("CREATE TABLE", "The CREATE TABLE and the migrations that changed it", table.ddl),
+                    ("As Markdown", "A table of its columns, for docs and pull requests", table.markdown),
+                    ("SELECT query", "SELECT its columns, LIMIT 100", table.select),
+                    ("Column names", "Comma-separated", table.columns.map(\.name).joined(separator: ", ")),
+                ], copy: copy)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Eyebrow("Columns")
+                    Spacer()
+                    Text("\(table.columns.count)").font(.dante(size: 10.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                }
+                ForEach(table.columns, id: \.name) { column in
+                    ColumnRow(column: column) { copy($0, column.name) }
+                }
+            }
+            if !table.referencedBy.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Eyebrow("Referenced by")
+                    ForEach(table.referencedBy, id: \.self) { reference in
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.turn.down.right").font(.dante(size: 9)).foregroundStyle(theme.text3.color)
+                            Text("\(reference.table).\(reference.column)").font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color)
+                        }
+                    }
+                }
+            }
+            Button { session.open(file: workspace.url.appending(path: table.file), line: table.line) } label: {
+                Label("\((table.file as NSString).lastPathComponent):\(table.line)", systemImage: "doc.text").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(DanteButtonStyle())
+            .help("Where its CREATE TABLE is: \(table.file)" + (table.statements.count > 1 ? ", changed by \(table.statements.count - 1) later statement\(table.statements.count == 2 ? "" : "s")" : ""))
+        }
+    }
+}
+
+/// One column: key marks, name and type, what it references. Right-click copies.
+private struct ColumnRow: View {
+    @Environment(\.theme) private var theme
+    let column: SystemMap.Column
+    let copy: (String) -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: column.primaryKey ? "key.fill" : column.references != nil ? "link" : "circle.fill")
+                .font(.dante(size: column.primaryKey || column.references != nil ? 9 : 4))
+                .foregroundStyle(column.primaryKey ? theme.amber.color : column.references != nil ? theme.accent.color : theme.text3.color)
+                .frame(width: 12)
+            Text(column.name).font(.dante(size: 12, weight: column.primaryKey ? .semibold : .regular, design: .monospaced)).foregroundStyle(theme.text.color)
+            Text(column.type).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
+            if !column.notNull, !column.primaryKey { Text("null").font(.dante(size: 9.5)).foregroundStyle(theme.text3.color.opacity(0.7)) }
+            Spacer(minLength: 4)
+            if let target = column.references {
+                Text("→ \(target)").font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.accent.color).lineLimit(1)
+            }
+        }
+        .padding(.vertical, 3)
+        .padding(.horizontal, 4)
+        .background(hovering ? theme.raised.color : .clear, in: RoundedRectangle(cornerRadius: 5))
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Copy Name") { copy(column.name) }
+            Button("Copy Name and Type") { copy("\(column.name) \(column.type)") }
+        }
+        .help("Right-click to copy")
+    }
+}
+
+/// The database as the repo's SQL defines it: every table's schema to copy, and Data.
+private struct DatabaseDetail: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let part: SystemMap.Part
+    let schema: [SystemMap.TableSchema]
+    @Binding var copied: String?
+    let copy: (String, String) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button { session.showInData(service: part.container) } label: {
+                Label("Open in Data", systemImage: "cylinder.split.1x2").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(DanteButtonStyle(primary: true))
+            .help("Connect to it in Local › Data: browse tables, run queries and read plans")
+            CopyMenu(copied: copied, items: [
+                ("Whole schema", "Every table's CREATE TABLE, ALTERs and indexes (\(schema.count) tables)", schema.map(\.ddl).joined(separator: "\n\n")),
+                ("ER diagram", "The tables and their foreign keys as Mermaid", "```mermaid\n" + SystemMap.mermaidER(schema) + "\n```"),
+                ("As Markdown", "Each table's columns", schema.map(\.markdown).joined(separator: "\n\n")),
+                ("Table names", "One per line", schema.map(\.name).joined(separator: "\n")),
+            ], copy: copy)
+        }
+    }
+}
+
+/// A Copy button with a menu of what to copy; says "Copied" for a moment after.
+private struct CopyMenu: View {
+    @Environment(\.theme) private var theme
+    let copied: String?
+    let items: [(title: String, help: String, text: String)]
+    let copy: (String, String) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(items, id: \.title) { item in
+                Button(item.title) { copy(item.text, item.title) }
+                    .help(item.help)
+            }
+        } label: {
+            Label(copied == nil ? "Copy" : "Copied", systemImage: copied == nil ? "doc.on.doc" : "checkmark")
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .menuStyle(.button)
+        .buttonStyle(DanteButtonStyle())
+        .fixedSize()
+        .help(copied.map { "Copied \($0)" } ?? "Copy it as SQL, Markdown or a query")
+    }
+}
+
+/// Who may call the group's routes: the open ones with why, and asking the agent about the
+/// ones nothing explains.
+private struct AccessSection: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+    let part: SystemMap.Part
+
+    var body: some View {
+        let routes = part.items.filter { $0.access != nil }
+        let open = routes.filter { $0.access?.level == .open }
+        let concerns = open.filter { $0.access?.isConcern == true }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Eyebrow("Access")
+                Spacer()
+                Text(open.isEmpty ? "all \(routes.count) secured" : "\(open.count) of \(routes.count) open")
+                    .font(.dante(size: 10.5)).foregroundStyle(concerns.isEmpty ? theme.text3.color : theme.amber.color)
+            }
+            ForEach(open, id: \.self) { item in
+                if let access = item.access {
+                    Button {
+                        if let file = access.file ?? item.file { session.open(file: workspace.url.appending(path: file), line: access.line ?? item.line ?? 1) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Image(systemName: access.isConcern ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                                    .font(.dante(size: 10)).foregroundStyle(access.isConcern ? theme.amber.color : theme.green.color)
+                                Text(item.text).font(.dante(size: 11.5, weight: .medium, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
+                            }
+                            Text(access.note).font(.dante(size: 11)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                                .padding(.leading, 16)
+                        }
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(access.isConcern ? theme.amber.color.opacity(0.08) : theme.raised.color.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open where this is decided")
+                }
+            }
+            if !concerns.isEmpty {
+                Button {
+                    let list = concerns.map { "\($0.text) (\($0.file ?? "?"):\($0.line ?? 0)): \($0.access?.note ?? "")" }.joined(separator: "\n")
+                    session.askClaude("These endpoints look open to anyone, with nothing in their paths to explain it. For each, check whether it should be public (and why), and if not, protect it the way the project protects its other endpoints. Ask before changing security configuration.\n\n" + list)
+                } label: {
+                    ClaudeLabel("Ask \(session.agentName) to check \(concerns.count == 1 ? "it" : "them")").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(DanteButtonStyle())
             }
         }
     }

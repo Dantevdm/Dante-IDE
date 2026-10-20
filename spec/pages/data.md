@@ -14,6 +14,7 @@ Data connects to the project's databases: browse tables, run queries, read query
 ## Shows
 - Databases: each connection found or added, with its engine, where it runs and whether it's reachable.
 - Overview: the connection's details, size, tables and views, the largest tables, and in the code: the libraries and the evidence the connection came from.
+- Suggestions, from the repo's SQL and the code that queries it: indexes for foreign keys and filtered columns, primary keys, money and time types, SELECT * and queries in loops, each with why, where and the SQL.
 - Tables with columns, keys and indexes; a schema diagram.
 - Query results in a grid.
 - Query insights: the plan in plain words with index suggestions.
@@ -24,11 +25,14 @@ Data connects to the project's databases: browse tables, run queries, read query
 - Run queries; explain a query; preview a migration before running it.
 - Turn read-only on or off for a connection (on for anything not on this Mac).
 - Ask the agent about the data, or to design or compare the schema with the code.
+- Copy a suggestion's SQL, or ask the agent to make the suggested changes as a new migration.
+- Arrive from the Map (a database's chip, Browse in Data on a table) with that connection and table open.
 - Delete a database the wizard created, with or without its data.
 
 ## States
 - No database: options to create one, connect, or design one with the agent.
 - Unreachable: the error, with a hint (container stopped, wrong port, password).
+- A table from the Map that isn't in the database yet: a note that the migrations haven't run against it.
 
 ## Edge cases
 - Statements run one per argument with a marker after each, so results line up.

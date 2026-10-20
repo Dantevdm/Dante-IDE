@@ -130,6 +130,36 @@ final class DataModel {
         if selectedID == nil { selectedID = connections.first?.id }
     }
 
+    /// A database (its compose service or container) and a table to show once connections
+    /// are loaded: asked for from the Map.
+    var focus: (service: String?, table: String?)?
+
+    func applyFocus() async {
+        guard let focus, !connections.isEmpty else { return }
+        let wanted = focus.service.flatMap { name in connections.first { $0.service == name || $0.container == name } }
+        guard let connection = wanted ?? connections.first(where: { $0.id == selectedID }) ?? connections.first else { return }
+        self.focus = nil
+        if selectedID != connection.id {
+            selectedID = connection.id
+            tabs = [.overview]
+            tab = .overview
+            queries = [:]
+            tables = [:]
+            await connect(connection)
+        } else if schemas[connection.id] == nil {
+            await connect(connection)
+        }
+        guard let name = focus.table else { return }
+        if let table = schemas[connection.id]?.tables.first(where: { $0.name.lowercased() == name.lowercased() }) {
+            open(table: table)
+        } else if schemas[connection.id] != nil {
+            notice = "\(name) isn’t in \(connection.name) yet: the repo’s migrations create it, but they haven’t run against this database."
+        }
+    }
+
+    /// Something to tell the user at the top of the page, until they close it.
+    var notice: String?
+
     func select(_ connection: DatabaseConnection) {
         guard selectedID != connection.id else { return }
         selectedID = connection.id

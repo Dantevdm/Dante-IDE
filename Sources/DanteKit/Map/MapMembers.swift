@@ -20,6 +20,8 @@ extension SystemMap {
         public var name: String
         public var type: String
         public var references: String?
+        public var primaryKey = false
+        public var notNull = false
     }
 
     static func stem(_ file: String) -> String {
@@ -202,14 +204,17 @@ extension SystemMap {
         // Routes, each to the method that handles it.
         var served: [Int: [String]] = [:]
         let found = isJVM(file) ? annotatedRoutes(in: text) : routes(in: text)
+        let rules = found.isEmpty ? AccessRules() : AccessRules.load(files: files, read: read)
         for route in found {
             let index = isJVM(file) ? members.firstIndex { !$0.isType && $0.line >= route.line }
                 : members.lastIndex { $0.line <= route.line } ?? members.firstIndex { $0.line >= route.line }
             let label = [route.method, route.path].compactMap { $0 }.joined(separator: " ")
             let id = "route:" + label
             if !parts.contains(where: { $0.id == id }) {
+                var item = Item(label, file: file, line: route.line)
+                item.access = access(method: route.method, path: route.path, file: file, line: route.line, text: text, rules: rules)
                 parts.append(Part(id: id, name: route.path, lane: .api, kind: .routes, detail: route.method ?? "any method",
-                                  items: [Item(label, file: file, line: route.line)]))
+                                  items: [item]))
             }
             if let index {
                 link(id, ids[index])
@@ -328,7 +333,10 @@ extension SystemMap {
             let name = first.trimmingCharacters(in: CharacterSet(charactersIn: "`\"[]"))
             let rest = text.dropFirst(first.count).trimmingCharacters(in: .whitespaces)
             let type = rest.firstMatch(of: /^\w+(?:\s+(?:varying|precision))?(?:\s*\([^)]*\))?(?:\[\])?/).map { String($0.0).lowercased() } ?? ""
-            columns.append(Column(name: name, type: type, references: reference))
+            var column = Column(name: name, type: type, references: reference)
+            column.primaryKey = rest.lowercased().contains("primary key")
+            column.notNull = column.primaryKey || rest.lowercased().contains("not null")
+            columns.append(column)
         }
         return columns
     }

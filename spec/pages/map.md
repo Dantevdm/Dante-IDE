@@ -13,6 +13,9 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Tables open the other way, back through the code to the routes that reach them, with their columns.
 - A web app or one of its screens opens in the browser: when its dev server isn't running, Dante says so, starts it in a terminal tab and opens the page once it's up.
 - Export writes the map as Mermaid into .dante/architecture.md.
+- Routes carry a lock: secured, open for a reason (a health check, sign-in, a webhook, docs), or open with nothing to explain it, which is flagged.
+- A table shows its columns, keys and what references it, with suggestions (missing indexes, keys, money in floating point) and copying at every level.
+- Selecting a box glides it into view; links draw themselves and pulse along the busiest paths.
 
 ## Shows
 - Five lanes, left to right: Clients (web and mobile apps and their screens), API (route groups), Backend (services and packages), Data (databases, tables, queues, caches) and Outside (third-party services).
@@ -20,6 +23,9 @@ The Map draws the system from its code: the clients and their screens, the API r
 - A box's detail line: its kind, how many routes, screens or methods it has, its test coverage when a coverage report exists.
 - The view picker: System (this view), Infra, Modules and, with a compose file, Services.
 - An inspector beside the map for the selected box: what it uses, what uses it, its environment variables (secrets flagged), its files, and the code of a selected method.
+- For a route group: Access, each open route with why it's open (health check, sign-in, webhook, docs, permitAll in the security config) or that nothing explains it.
+- For a table: its columns (keys, types, nullability, what each foreign key names), what references it, the file and line of its CREATE TABLE, and its suggestions.
+- For a database: its tables (click one to select it) and suggestions for the whole schema: foreign keys and filtered columns without an index, tables without a primary key, money in floating point, timestamps without a zone, SELECT *, and a query run once per item in a loop.
 
 ## Actions
 - Click a box to select it and dim everything it isn't linked to.
@@ -27,6 +33,10 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Open a table to trace it back: the code that reads or writes it, up to the routes that reach that code, with its columns and the tables its foreign keys name.
 - Open in browser on a web app or a screen: finds the dev server's port and the screen's route, starts the dev server in a terminal tab when it isn't listening (after asking), waits for the port and opens the page.
 - Open a file or method in Code.
+- The container chip on a database box opens it in Local › Data; Browse in Data on a table opens that table there (with a note when migrations haven't created it yet).
+- Copy a table as CREATE TABLE (with later ALTERs), Markdown, a SELECT query or its column names; a database as the whole schema, a Mermaid ER diagram, Markdown or table names; right-click a column to copy it.
+- Copy a suggestion's SQL, or ask the agent to make the changes (a new migration, code fixed in place).
+- Ask the agent to check open routes nothing explains.
 - Export writes a Mermaid diagram into a marked section of .dante/architecture.md.
 
 ## States
@@ -39,6 +49,9 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Tables come only from CREATE TABLE statements in the repo (and ORM table names); a live database is never read.
 - A file naming six or more services is a catalogue, not a caller, so it draws no links.
 - Route examples in comments are skipped.
+- Access comes from Spring Security config (permitAll, authenticated, ignoring, anyRequest) and annotations, Express-style middleware, Python decorators and dependencies, and Go middleware; without any auth library, routes are open with that as the reason.
+- Migrations apply in name order, so ALTERs and later CREATE INDEX statements change the table they name.
+- Suggestions are static: table sizes are unknown, so index advice is for when tables grow.
 - Tests and test folders aren't parts.
 - A hash router's screens open at /#/path; a Vite base path is put in front.
 - Dynamic route segments end the path, since there's no id to fill in.

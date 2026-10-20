@@ -73,7 +73,7 @@ struct SystemMapTests {
         let orders = map.part("route:/api/orders")
         #expect(orders?.items.map(\.text) == ["GET /api/orders", "GET /api/orders/{id}", "POST /api/orders"])
         #expect(orders?.items.first?.file == "backend/internal/api/handlers.go" && orders?.items.first?.line == 8)
-        #expect(orders?.detail == "3 routes · GET POST")
+        #expect(orders?.detail == "3 routes · GET POST · 3 open")
         #expect(map.part("route:/api/secret") == nil)
         #expect(map.routeCount == 4)
 

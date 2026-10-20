@@ -9,6 +9,8 @@ struct DataOverview: View {
     let workspace: Workspace
     let connection: DatabaseConnection
     private var model: DataModel { session.data }
+    /// From the repo's SQL and the code that queries it, not the live database.
+    @State private var advice: [SchemaAdvice]?
 
     var body: some View {
         ScrollView {
@@ -16,10 +18,27 @@ struct DataOverview: View {
                 connectionCard
                 tablesCard
                 codeCard
+                if let advice { suggestionsCard(advice) }
                 if let connection = model.selected, !model.history(for: connection).isEmpty { recentCard }
             }
             .padding(18)
         }
+        .task(id: workspace.revision) {
+            let files = workspace.files
+            let read = MapView.reader(root: workspace.url)
+            let found = await Task.detached(priority: .utility) { () -> [SchemaAdvice]? in
+                let tables = SystemMap.schema(files: files, read: read)
+                return tables.isEmpty ? nil : SchemaAdvice.analyse(tables, files: files, read: read)
+            }.value
+            withAnimation(.snappy) { advice = found }
+        }
+    }
+
+    private func suggestionsCard(_ advice: [SchemaAdvice]) -> some View {
+        Card("Suggestions") {
+            SchemaSuggestions(session: session, workspace: workspace, advice: advice)
+        }
+        .help("From the repo’s SQL and the code that queries it: indexes, keys, types and query patterns. Table sizes aren’t known, so index advice is for when tables grow.")
     }
 
     private var route: String {

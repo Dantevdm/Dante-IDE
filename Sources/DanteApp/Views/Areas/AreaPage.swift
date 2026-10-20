@@ -19,6 +19,12 @@ struct AreaPage<Actions: View, Content: View>: View {
     private func shows(_ text: String) -> Bool { !(underTabs && Area.allCases.contains { $0.title == text }) }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            page.environment(\.areaScroll, proxy)
+        }
+    }
+
+    private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -49,6 +55,11 @@ struct AreaPage<Actions: View, Content: View>: View {
         }
         .background(theme.ground.color)
     }
+}
+
+extension EnvironmentValues {
+    /// The area page's scroll view, so something inside can bring itself into view.
+    @Entry var areaScroll: ScrollViewProxy?
 }
 
 extension AreaPage where Actions == EmptyView {

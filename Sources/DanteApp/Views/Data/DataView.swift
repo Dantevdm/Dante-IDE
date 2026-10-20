@@ -43,6 +43,20 @@ struct DataView: View {
             if model.connections.isEmpty {
                 DataEmptyState(session: session, workspace: workspace)
             } else {
+                VStack(spacing: 0) {
+                if let notice = model.notice {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill").foregroundStyle(theme.accent.color)
+                        Text(notice).font(.dante(size: 12.5)).foregroundStyle(theme.text.color)
+                        Spacer(minLength: 8)
+                        IconButton(symbol: "xmark", label: "Close", size: 10) { withAnimation(.snappy) { model.notice = nil } }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(theme.accentTint.color)
+                    .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 HStack(spacing: 0) {
                     DataSidebar(session: session)
                         .frame(width: 270)
@@ -50,6 +64,7 @@ struct DataView: View {
                     if let connection = model.selected {
                         DataMain(session: session, workspace: workspace, connection: connection)
                     }
+                }
                 }
             }
         }
@@ -61,7 +76,10 @@ struct DataView: View {
                 await model.connect(connection)
             }
             await model.loadContainers(workspace: workspace)
+            await model.applyFocus()
         }
+        // Asked for while the page was already open.
+        .task(id: model.focus?.table ?? model.focus?.service ?? "") { await model.applyFocus() }
         .confirmationDialog(confirmTitle,
                             isPresented: Binding(get: { model.removing != nil }, set: { if !$0 { model.removing = nil } }),
                             presenting: model.removing) { connection in
