@@ -67,6 +67,10 @@ public struct ToolActivity: Equatable, Sendable {
         case "mcp__dante__ask_claude": return resolved ? "Asked Claude" : "Asking Claude"
         case "mcp__dante__local_models": return "Checked local models"
         case "mcp__dante__security_report": return resolved ? "Scanned the project's security" : "Scanning the project's security"
+        case "mcp__dante__dante_pages": return input["page"]?.string.flatMap(FeatureGuide.resolve).map { "Read how \($0.title) works" } ?? "Read Dante's pages"
+        case "mcp__dante__show_page":
+            let title = input["page"]?.string.flatMap(FeatureGuide.resolve).map(FeatureGuide.place) ?? "a page"
+            return resolved ? "Showed \(title)" : "Showing \(title)"
         case "mcp__dante__search_code": return resolved ? "Searched the code by meaning" : "Searching the code by meaning"
         case "mcp__dante__look": return resolved ? "Looker read an image" : "Looker is reading an image"
         default:
@@ -158,7 +162,7 @@ public final class ClaudeSession {
     public var onAttention: (Attention) -> Void = { _ in }
     /// One of Dante's own MCP tools started or finished (`security_report`, without the
     /// `mcp__dante__` prefix), so the window can show what it's about.
-    public var onDanteTool: (_ name: String, _ finished: Bool) -> Void = { _, _ in }
+    public var onDanteTool: (_ name: String, _ input: JSONValue, _ finished: Bool) -> Void = { _, _, _ in }
     /// Claude Code named the conversation (its session id), for linking it to a task.
     public var onConversationStarted: (String) -> Void = { _ in }
 
@@ -998,7 +1002,7 @@ public final class ClaudeSession {
                 case .toolUse(let id, let name, let input):
                     if index[id] == nil {
                         append(TranscriptItem(id: id, content: .tool(ToolActivity(id: id, name: name, input: input, status: .running))))
-                        if name.hasPrefix("mcp__dante__") { onDanteTool(String(name.dropFirst(12)), false) }
+                        if name.hasPrefix("mcp__dante__") { onDanteTool(String(name.dropFirst(12)), input, false) }
                     }
                 }
             }
@@ -1013,7 +1017,7 @@ public final class ClaudeSession {
                     }
                 } else {
                     updateTool(tool.id) { $0.status = .done }
-                    if tool.name.hasPrefix("mcp__dante__") { onDanteTool(String(tool.name.dropFirst(12)), true) }
+                    if tool.name.hasPrefix("mcp__dante__") { onDanteTool(String(tool.name.dropFirst(12)), tool.input, true) }
                     if tool.name == "Task" || tool.name == "Agent" {
                         ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: tool.input["subagent_type"]?.string ?? "general-purpose",
                                                 project: projectName ?? root.lastPathComponent, requestedBy: "claude",
@@ -1041,7 +1045,7 @@ public final class ClaudeSession {
                         }
                     } else if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
-                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report"].contains(request.toolName) {
+                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page"].contains(request.toolName) {
                         // Dante's own local-model tools: nothing leaves the Mac. Grok and Jev
                         // send material away, so they follow the approval level.
                         approve(id)

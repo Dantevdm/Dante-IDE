@@ -27,8 +27,12 @@ let package = Package(
         // What the `dante` command asks the app to open, and which window each part goes to.
         .target(name: "DanteOpen"),
         .executableTarget(name: "DanteCLI", dependencies: ["DanteOpen", "DanteKit"]),
+        // What every page does, as flat files any build reads (spec/README.md): bundled with
+        // the app and the `dante` command for FeatureGuide and `dante mcp`.
+        .target(name: "DanteSpec", path: "spec", exclude: ["README.md", "fixtures"],
+                resources: [.copy("pages"), .copy("places.yaml")]),
         // Models with no UI: themes, workspace, documents, lifecycle, tasks, Claude.
-        .target(name: "DanteKit", dependencies: [.product(name: "Yams", package: "Yams")]),
+        .target(name: "DanteKit", dependencies: ["DanteSpec", .product(name: "Yams", package: "Yams")]),
         // The TextKit 2 code editor and syntax highlighting.
         .target(
             name: "DanteEditor",

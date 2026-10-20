@@ -18,7 +18,9 @@ enum Area: String, CaseIterable, Identifiable {
     var fullTitle: String { place.pages.count > 1 ? "\(place.title) › \(title)" : title }
 
     /// The rail place it's a tab of.
-    var place: RailPlace { RailPlace.all.first { $0.pages.contains(self) } ?? RailPlace.all[0] }
+    var place: RailPlace {
+        (RailPlace.main + RailPlace.footer).first { $0.pages.contains(self) } ?? RailPlace(id: rawValue, title: title, pages: [self], footer: false)
+    }
 
     var symbol: String {
         switch self {
@@ -67,11 +69,17 @@ struct RailPlace: Identifiable, Equatable {
     let title: String
     let pages: [Area]
 
+    let footer: Bool
+
     static let all: [RailPlace] = FeatureGuide.places.map { place in
-        RailPlace(id: place.id, title: place.title, pages: place.pages.compactMap(Area.init(rawValue:)))
+        RailPlace(id: place.id, title: place.title, pages: place.pages.compactMap(Area.init(rawValue:)), footer: place.footer)
     }
-    static var main: [RailPlace] { all.filter { $0.id != "docs" } }
-    static var footer: [RailPlace] { all.filter { $0.id == "docs" } }
+    static var main: [RailPlace] {
+        // Without the spec (a broken bundle), each page is its own place rather than no rail.
+        all.isEmpty ? Area.allCases.filter { $0 != .docs }.map { RailPlace(id: $0.rawValue, title: $0.title, pages: [$0], footer: false) }
+                    : all.filter { !$0.footer }
+    }
+    static var footer: [RailPlace] { all.isEmpty ? [RailPlace(id: "docs", title: "Docs", pages: [.docs], footer: true)] : all.filter(\.footer) }
 
     var symbol: String {
         switch id {
@@ -431,7 +439,11 @@ final class Session {
             self?.pullRemoteTranscripts()
         }
         // Asked about security, the agent runs the Security page's scan: show the page.
-        claude.onDanteTool = { [weak self, weak claude] name, finished in
+        claude.onDanteTool = { [weak self, weak claude] name, input, finished in
+            if name == "show_page", !finished, let feature = input["page"]?.string.flatMap(FeatureGuide.resolve) {
+                self?.show(feature)
+                return
+            }
             guard let self, name == "security_report", let root = self.workspace?.url else { return }
             if finished {
                 self.security.agentScanFinished(root: root)

@@ -1,0 +1,50 @@
+---
+id: map
+title: Map
+phrases: [map, system map, architecture, system, diagram, how it fits together]
+---
+# Map
+
+The Map draws the system from its code: the clients and their screens, the API routes, the backend, the data and outside services, with arrows along the real calls.
+
+## Highlights
+- Select a box to see what it uses and what uses it.
+- Boxes with an expand mark open: a part into its folders, a folder into its classes, a class into its methods with their routes, tables and calls.
+- Tables open the other way, back through the code to the routes that reach them, with their columns.
+- A web app or one of its screens opens in the browser: when its dev server isn't running, Dante says so, starts it in a terminal tab and opens the page once it's up.
+- Export writes the map as Mermaid into .dante/architecture.md.
+
+## Shows
+- Five lanes, left to right: Clients (web and mobile apps and their screens), API (route groups), Backend (services and packages), Data (databases, tables, queues, caches) and Outside (third-party services).
+- Links between boxes along real code paths: fetch calls to routes, routes to their handlers, imports, queries naming tables, hosts called.
+- A box's detail line: its kind, how many routes, screens or methods it has, its test coverage when a coverage report exists.
+- The view picker: System (this view), Infra, Modules and, with a compose file, Services.
+- An inspector beside the map for the selected box: what it uses, what uses it, its environment variables (secrets flagged), its files, and the code of a selected method.
+
+## Actions
+- Click a box to select it and dim everything it isn't linked to.
+- Open a box with an expand mark (or double-click it): parts open into folders, folders into files or classes, a class into its methods; the breadcrumb leads back out.
+- Open a table to trace it back: the code that reads or writes it, up to the routes that reach that code, with its columns and the tables its foreign keys name.
+- Open in browser on a web app or a screen: finds the dev server's port and the screen's route, starts the dev server in a terminal tab when it isn't listening (after asking), waits for the port and opens the page.
+- Open a file or method in Code.
+- Export writes a Mermaid diagram into a marked section of .dante/architecture.md.
+
+## States
+- Building: the map is built off the main thread; the last map for the window shows meanwhile.
+- No parts found (an empty or non-code folder): an empty state that says what the map looks for.
+- Inside a part: lanes keep their names, with parts outside the backend that link to nothing removed.
+- Web launch: finding, needs start (with the reason: nothing listening on the port), starting, waiting, opening, opened or failed with the reason.
+
+## Edge cases
+- Tables come only from CREATE TABLE statements in the repo (and ORM table names); a live database is never read.
+- A file naming six or more services is a catalogue, not a caller, so it draws no links.
+- Route examples in comments are skipped.
+- Tests and test folders aren't parts.
+- A hash router's screens open at /#/path; a Vite base path is put in front.
+- Dynamic route segments end the path, since there's no id to fill in.
+
+## Acceptance
+- A 6,000-file repo maps in a few seconds.
+- Every link on the map can be explained by a line of code the inspector can open.
+- Opening then backing out returns to the same selection.
+- Open in browser never starts a server without the user pressing Start.

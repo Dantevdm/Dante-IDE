@@ -135,7 +135,15 @@ struct MapView: View {
         }
         .background(theme.ground.color)
         .task(id: workspace.revision) { await load() }
-        .onChange(of: source, initial: true) {
+        // Opened for a view (voice, show_page): start on it rather than resetting the request.
+        .onAppear {
+            if let wanted = Source.allCases.first(where: { $0.rawValue.lowercased() == session.areaView }), wanted != source {
+                source = wanted
+            } else {
+                session.areaView = source == .system ? nil : source.rawValue.lowercased()
+            }
+        }
+        .onChange(of: source) {
             if source != .system || !trail.isEmpty || selected != nil {
                 selected = nil
                 trail = []

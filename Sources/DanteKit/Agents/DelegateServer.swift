@@ -151,7 +151,7 @@ public struct DelegateServer: Sendable {
     }
 
     var instructions: String {
-        var parts: [String] = []
+        var parts: [String] = ["dante_pages describes the IDE the user is in, page by page; show_page opens one for them."]
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
         if securityReport != nil { parts.append("security_report runs Dante's security scan and returns the score and findings the user sees on the Security page: start there for any question about the project's security.") }
         if searchCode != nil { parts.append("search_code finds code by what it does, for questions grep can't answer.") }
@@ -164,7 +164,7 @@ public struct DelegateServer: Sendable {
     }
 
     var tools: [JSONValue] {
-        var tools: [JSONValue] = []
+        var tools: [JSONValue] = Self.pageTools
         if offersLocal { tools += Self.localTools }
         if securityReport != nil { tools.append(Self.securityTool) }
         if searchCode != nil { tools.append(Self.searchTool) }
@@ -177,7 +177,7 @@ public struct DelegateServer: Sendable {
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard !["local_models", "search_code", "security_report"].contains(tool["name"]?.string ?? ""), var object = tool.object,
+        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page"].contains(tool["name"]?.string ?? ""), var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
         schema["properties"] = .object(properties)
@@ -267,6 +267,43 @@ public struct DelegateServer: Sendable {
         ],
     ]
 
+    /// Dante's own pages, from spec/: always offered, since they never leave the Mac.
+    static let pageTools: [JSONValue] = [
+        [
+            "name": "dante_pages",
+            "description": "Describe Dante, the IDE the user is in: without a page, every page and view in a line each; with one, its full spec (what it shows, what the user can do there, its states and edge cases). Use it when the user asks where to find something in Dante or how a page works, before answering from memory.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "page": ["type": "string", "description": "A page id from the list, like map.infra or security. Leave out for the list."],
+                ],
+            ],
+        ],
+        [
+            "name": "show_page",
+            "description": "Open a page in Dante for the user, when what they asked about is shown there (the Security page for findings, Map › Infra for the pipelines). Say what they'll see on it.",
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "page": ["type": "string", "description": "A page id from dante_pages, like map.infra or data."],
+                ],
+                "required": ["page"],
+            ],
+        ],
+    ]
+
+    /// `dante_pages`: the list, or one page's spec.
+    static func pages(_ id: String?) -> String {
+        guard let id, !id.isEmpty else {
+            let lines = FeatureGuide.features.map { "- \($0.id): \(FeatureGuide.place($0)). \($0.summary)" }
+            return "Dante's pages (ids for dante_pages and show_page):\n" + lines.joined(separator: "\n")
+        }
+        guard let feature = FeatureGuide.resolve(id) else {
+            return "No page \(id). Pages: " + FeatureGuide.features.map(\.id).joined(separator: ", ")
+        }
+        return "Page \(feature.id), shown as \(FeatureGuide.place(feature)).\n\n" + feature.markdown
+    }
+
     static let securityTool: JSONValue = [
         "name": "security_report",
         "description": "Run Dante's security scan of this project again and get what its Security page shows: the score out of 100, the grade, and the findings most severe first, each with where it is and how to fix it. Covers secrets, personal information (POPIA), encryption, injection, containers, CI, infrastructure and, with the scanners installed, dependencies. Use it first for any question about the project's security, a score or what's critical, instead of exploring the code or sending sub-agents; then read only what it names. Runs on the user's Mac in seconds and updates the page they see.",
@@ -350,6 +387,14 @@ public struct DelegateServer: Sendable {
             } catch {
                 return Self.text("Couldn’t search by meaning: \(error.localizedDescription) Use grep instead.", isError: true)
             }
+        case "dante_pages":
+            return Self.text(Self.pages(arguments["page"]?.string))
+        case "show_page":
+            guard let id = arguments["page"]?.string, let feature = FeatureGuide.resolve(id) else {
+                return Self.text("No page \(arguments["page"]?.string ?? "named"). Pages: " + FeatureGuide.features.map(\.id).joined(separator: ", "), isError: true)
+            }
+            // The app sees the call go by and opens the page; this only answers.
+            return Self.text("Dante is showing \(FeatureGuide.place(feature)) to the user.")
         case "security_report":
             guard let securityReport else { return Self.text("Dante's security scan isn’t available here.", isError: true) }
             let started = Date()

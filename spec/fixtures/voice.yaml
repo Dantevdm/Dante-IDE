@@ -1,0 +1,45 @@
+# What people say, and what Dante does. Every build runs these.
+# navigate: opens a page (its id); explain: explains one (here = the page on screen);
+# overview: lists the places; ask: goes to the agent; show: switches to a project.
+projects: [Shop Portal, Dante IDE]
+cases:
+  - say: Show me the infrastructure
+    navigate: map.infra
+  - say: Hey Dante, take me to security
+    navigate: security
+  - say: go to the data page
+    navigate: data
+  - say: Open settings
+    navigate: settings
+  - say: tests
+    navigate: tests
+  - say: open the services
+    navigate: environments
+  - say: show me the history
+    navigate: timeline
+  - say: open shop portal
+    show: Shop Portal
+  - say: What's on this page?
+    explain: here
+  - say: What does the infra view do?
+    explain: map.infra
+  - say: Explain the map
+    explain: map
+  - say: What can you do?
+    overview: true
+  - say: show me where the orders table is written
+    ask: true
+  - say: explain how the data is saved
+    ask: true
+# Names alone: what each says opens.
+names:
+  the infrastructure: map.infra
+  pipelines: map.infra
+  infra on the map: map.infra
+  the data page: data
+  map: map
+  docker: environments
+  services: environments
+  history: timeline
+  quality: tests
+  where the data is saved: null

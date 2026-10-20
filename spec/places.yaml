@@ -1,0 +1,28 @@
+# The rail, top to bottom. A place opens on the page it showed last (its first page the
+# first time); a place with several pages shows them as tabs. Docs sits at the foot.
+places:
+  - id: home
+    title: Home
+    pages: [home]
+  - id: map
+    title: Map
+    pages: [map]
+  - id: code
+    title: Code
+    pages: [code]
+  - id: quality
+    title: Quality
+    pages: [tests, security]
+  - id: local
+    title: Local
+    pages: [environments, data, run]
+  - id: ship
+    title: Ship
+    pages: [ship, timeline]
+  - id: agents
+    title: Agents
+    pages: [jobs, agents, claude]
+  - id: docs
+    title: Docs
+    pages: [docs]
+    footer: true

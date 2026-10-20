@@ -528,23 +528,11 @@ final class VoiceController {
             }
         case .navigate(let id):
             guard let feature = FeatureGuide.feature(id) else { return say("I don’t know that page.") }
-            switch feature.area {
-            case "stage":
-                StageController.shared.open(fullScreen: true)
-            case "settings":
-                NSApp.activate()
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                say("Here are the settings.")
-            default:
-                guard let session = target, let area = Area(rawValue: feature.area) else {
-                    return say("Open a project first, then I can show you \(feature.title).")
-                }
-                NSApp.activate()
-                session.window?.makeKeyAndOrderFront(nil)
-                session.area = area
-                session.areaView = feature.view
-                say(feature.view == nil ? "Here’s \(feature.title)." : "Here’s the \(area.title)’s \(feature.title) view.")
-            }
+            if let line = Session.showOutsideWindow(feature) { return say(line) }
+            guard let session = target else { return say("Open a project first, then I can show you \(feature.title).") }
+            NSApp.activate()
+            session.window?.makeKeyAndOrderFront(nil)
+            say(session.show(feature))
         case .explain(let id):
             let shown = target.map { session in [session.area.rawValue + "." + (session.areaView ?? ""), session.area.rawValue] } ?? []
             guard let feature = id.flatMap(FeatureGuide.feature) ?? shown.lazy.compactMap(FeatureGuide.feature).first else {
