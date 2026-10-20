@@ -9,6 +9,10 @@ struct SystemDiagram: View {
     @Binding var selected: String?
     /// Line coverage per part, when the overlay is on.
     var coverage: [String: CoverageReport.Lines]?
+    /// Parts with more inside, the one being opened, and how to open one.
+    var openable: Set<String> = []
+    var opening: String?
+    var open: (SystemMap.Part) -> Void = { _ in }
 
     static let width: CGFloat = 180
     static let gap: CGFloat = 44
@@ -40,7 +44,7 @@ struct SystemDiagram: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: Self.gap) {
                     ForEach(columns, id: \.first!.lane) { column in
-                        LaneHeader(lane: column[0].lane, count: column[0].parts.count).frame(width: Self.width, alignment: .leading)
+                        LaneHeader(title: map.title(of: column[0].lane), count: column[0].parts.count).frame(width: Self.width, alignment: .leading)
                     }
                 }
                 // Columns centre on each other so arrows between short and long ones stay level.
@@ -49,11 +53,13 @@ struct SystemDiagram: View {
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(Array(column.enumerated()), id: \.element.lane) { index, section in
                                 if index > 0 {
-                                    LaneHeader(lane: section.lane, count: section.parts.count).padding(.top, 10)
+                                    LaneHeader(title: map.title(of: section.lane), count: section.parts.count).padding(.top, 10)
                                 }
                                 ForEach(section.parts) { part in
                                     PartBox(part: part, state: state(of: part), hue: hue(section.lane), showsContainer: showsContainer(part),
-                                            coverage: coverage.map { $0[part.id]?.fraction ?? -1 }) {
+                                            coverage: coverage.map { $0[part.id]?.fraction ?? -1 },
+                                            opens: openable.contains(part.id), isOpening: opening == part.id,
+                                            open: { open(part) }) {
                                         selected = selected == part.id ? nil : part.id
                                     }
                                     .anchorPreference(key: PartBoundsKey.self, value: .bounds) { [part.id: $0] }
@@ -158,12 +164,13 @@ private struct PartBoundsKey: PreferenceKey {
 
 private struct LaneHeader: View {
     @Environment(\.theme) private var theme
-    let lane: SystemMap.Lane
+    let title: String
     let count: Int
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(lane.title.uppercased())
+            Text(title.uppercased())
+                .lineLimit(1)
                 .font(.dante(size: 10.5, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(theme.text3.color)
@@ -185,6 +192,10 @@ private struct PartBox: View {
     var showsContainer = true
     /// 0…1 with the overlay on; negative when the report has nothing for this part.
     var coverage: Double?
+    /// Has smaller pieces inside: a mark in the corner, and a double-click opens it.
+    var opens = false
+    var isOpening = false
+    var open: () -> Void = {}
     let action: () -> Void
     @State private var hovering = false
 
@@ -211,6 +222,16 @@ private struct PartBox: View {
                         }
                     }
                     Spacer(minLength: 0)
+                    if isOpening {
+                        ProgressView().controlSize(.mini)
+                    } else if opens {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.dante(size: 9, weight: .semibold))
+                            .foregroundStyle(hovering ? hue : theme.text3.color)
+                            .frame(width: 18, height: 18)
+                            .background((hovering ? hue.opacity(0.14) : Color.clear), in: Circle())
+                            .help("Open \(part.name) to see what's inside (double-click)")
+                    }
                 }
                 if part.lane == .clients, part.id.hasPrefix("client:"), !part.items.isEmpty {
                     // Screens as one wrapped line; the inspector lists them all.
@@ -254,8 +275,11 @@ private struct PartBox: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture(count: 2).onEnded { if opens { open() } })
         .onHover { hovering = $0 }
+        .scaleEffect(hovering && opens ? 1.015 : 1)
         .animation(.snappy(duration: 0.15), value: state == .dimmed)
+        .animation(.snappy(duration: 0.18), value: hovering)
     }
 
     private var border: Color {
@@ -352,6 +376,8 @@ struct ItemLine: View {
 struct SystemSummary: View {
     @Environment(\.theme) private var theme
     let map: SystemMap
+    /// Inside a part: only what it has, and its pieces rather than backend parts.
+    var compact = false
 
     private static func counted(_ count: Int, _ one: String, _ many: String) -> String { "\(count) \(count == 1 ? one : many)" }
 
@@ -366,12 +392,12 @@ struct SystemSummary: View {
         let stats: [(String, String, String)] = [
             ("\(clients.count)", clients.count == 1 ? "client" : "clients", screens > 0 ? Self.counted(screens, "screen", "screens") : ""),
             ("\(map.routeCount)", map.routeCount == 1 ? "API route" : "API routes", Self.counted(routeGroups, "group", "groups")),
-            ("\(backend)", backend == 1 ? "backend part" : "backend parts", ""),
+            ("\(backend)", compact ? (backend == 1 ? "piece" : "pieces") : backend == 1 ? "backend part" : "backend parts", ""),
             ("\(stores.count)", stores.count == 1 ? "data store" : "data stores", ([stores.map(\.name).joined(separator: ", ")] + (tables > 0 ? [Self.counted(tables, "table", "tables")] : [])).filter { !$0.isEmpty }.joined(separator: " · ")),
             ("\(outside.count)", outside.count == 1 ? "outside service" : "outside services", outside.map(\.name).prefix(3).joined(separator: ", ")),
         ]
         HStack(spacing: 10) {
-            ForEach(stats, id: \.1) { value, label, note in
+            ForEach(stats.filter { !compact || $0.0 != "0" }, id: \.1) { value, label, note in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         Text(value).font(.dante(size: 20, weight: .semibold)).foregroundStyle(theme.text.color)
@@ -397,13 +423,15 @@ struct SystemInspector: View {
     let map: SystemMap
     let part: SystemMap.Part
     var coverage: CoverageReport.Lines?
+    /// Opens the part to show what's inside, when it has smaller pieces.
+    var open: (() -> Void)?
     let close: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Eyebrow(part.lane.title)
+                    Eyebrow(map.title(of: part.lane))
                     Spacer()
                     IconButton(symbol: "xmark", label: "Close", size: 10, action: close)
                 }
@@ -456,12 +484,19 @@ struct SystemInspector: View {
                     row("Uses", map.uses(part.id).map(\.name).joined(separator: ", ").nonEmpty ?? "nothing found")
                     row("Used by", map.usedBy(part.id).map(\.name).joined(separator: ", ").nonEmpty ?? "nothing found")
                 }
+                if let open {
+                    Button(action: open) {
+                        Label("Open \(part.name)", systemImage: "arrow.up.left.and.arrow.down.right").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+                    .help("See the pieces inside it, how they connect, and the routes and tables each one owns")
+                }
                 Button {
                     session.askClaude(prompt)
                 } label: {
-                    ClaudeLabel("Ask Claude to walk through it").frame(maxWidth: .infinity)
+                    ClaudeLabel("Ask \(session.agentName) to walk through it").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(DanteButtonStyle(primary: true))
+                .buttonStyle(DanteButtonStyle(primary: open == nil))
             }
             .padding(20)
         }

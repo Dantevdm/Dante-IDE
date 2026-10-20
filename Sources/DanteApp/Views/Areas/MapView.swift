@@ -24,6 +24,17 @@ struct MapView: View {
     @State private var loaded = false
     @State private var coverage: CoverageReport?
     @AppStorage("mapShowsCoverage") private var showsCoverage = false
+    /// The parts opened, outermost first; the map shown is the last one's inside.
+    @State private var trail: [SystemMap.Part] = []
+    @State private var insides: [String: SystemMap] = [:]
+    /// Per shown map (by the opened part's id, "" for the whole system): parts with more inside.
+    @State private var openable: [String: Set<String>] = [:]
+    @State private var opening: String?
+    @State private var zoomingIn = true
+    @State private var zoomAnchor: UnitPoint = .center
+
+    private var level: String { trail.last?.id ?? "" }
+    private var shown: SystemMap? { trail.last.flatMap { insides[$0.id] } ?? system }
 
     private var showsSystem: Bool { source == .system && system?.isUseful == true }
 
@@ -67,10 +78,17 @@ struct MapView: View {
             } content: {
                 if source == .system, system == nil, !loaded {
                     ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 200)
-                } else if showsSystem, let system {
-                    SystemSummary(map: system)
-                    SystemDiagram(map: system, selected: $selected, coverage: showsCoverage ? coverage.map(system.coverage) : nil)
-                    if let graph { DriftCard(session: session, graph: graph, notes: notes) }
+                } else if showsSystem, let map = shown {
+                    if !trail.isEmpty { trailBar }
+                    SystemSummary(map: map, compact: !trail.isEmpty)
+                        .id("summary" + level)
+                    SystemDiagram(map: map, selected: $selected, coverage: showsCoverage ? coverage.map(map.coverage) : nil,
+                                  openable: openable[level] ?? [], opening: opening, open: open)
+                        .id("diagram" + level)
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: zoomingIn ? 0.35 : 1.25, anchor: zoomingIn ? zoomAnchor : .center).combined(with: .opacity),
+                            removal: .scale(scale: zoomingIn ? 1.25 : 0.35, anchor: zoomingIn ? .center : zoomAnchor).combined(with: .opacity)))
+                    if trail.isEmpty, let graph { DriftCard(session: session, graph: graph, notes: notes) }
                 } else if let graph, !graph.nodes.isEmpty {
                     DiagramCard(graph: graph, selected: $selected)
                     DriftCard(session: session, graph: graph, notes: notes)
@@ -79,7 +97,7 @@ struct MapView: View {
                         symbol: "point.3.connected.trianglepath.dotted",
                         title: "Nothing to map yet"
                     ) {
-                        Button("Ask Claude to describe it") {
+                        Button("Ask \(session.agentName) to describe it") {
                             session.askClaude("Read the code and write .dante/architecture.md: the main parts of this system, what each owns, and how they talk to each other. Keep it to one page.")
                         }
                         .buttonStyle(DanteButtonStyle(primary: true))
@@ -88,9 +106,10 @@ struct MapView: View {
                     ProgressView().controlSize(.small)
                 }
             }
-            if showsSystem, let system, let id = selected, let part = system.part(id) {
+            if showsSystem, let map = shown, let id = selected, let part = map.part(id) {
                 Rectangle().fill(theme.line.color).frame(width: 1)
-                SystemInspector(session: session, workspace: workspace, map: system, part: part, coverage: coverage.flatMap { system.coverage($0)[part.id] }) { selected = nil }
+                SystemInspector(session: session, workspace: workspace, map: map, part: part, coverage: coverage.flatMap { map.coverage($0)[part.id] },
+                                open: openable[level]?.contains(part.id) == true ? { open(part) } : nil) { selected = nil }
                     .frame(width: 300)
             } else if !showsSystem, let graph, let id = selected, let node = graph.node(id) {
                 Rectangle().fill(theme.line.color).frame(width: 1)
@@ -100,7 +119,96 @@ struct MapView: View {
         }
         .background(theme.ground.color)
         .task(id: workspace.revision) { await load() }
-        .onChange(of: source) { selected = nil }
+        .onChange(of: source) {
+            selected = nil
+            trail = []
+        }
+    }
+
+    /// Where the drill-down stands: the whole system, then each part opened.
+    private var trailBar: some View {
+        HStack(spacing: 6) {
+            IconButton(symbol: "chevron.left", label: "Back out of \(trail.last?.name ?? "")") { close(to: trail.count - 1) }
+            crumb("System", index: 0, symbol: "point.3.connected.trianglepath.dotted")
+            ForEach(Array(trail.enumerated()), id: \.element.id) { index, part in
+                Image(systemName: "chevron.right").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
+                crumb(part.name, index: index + 1, symbol: part.lane == .clients ? "macwindow" : "shippingbox")
+            }
+            Spacer()
+        }
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    private func crumb(_ title: String, index: Int, symbol: String) -> some View {
+        let current = index == trail.count
+        return Button { close(to: index) } label: {
+            Label(title, systemImage: symbol)
+                .font(.dante(size: 12.5, weight: current ? .semibold : .regular))
+                .foregroundStyle(current ? theme.text.color : theme.text2.color)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(current ? theme.accentTint.color : theme.raised.color, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(current)
+    }
+
+    /// Opens a part: builds its inside once (off the main thread), then zooms into it.
+    private func open(_ part: SystemMap.Part) {
+        guard opening == nil, let map = shown else { return }
+        // Zoom out of the box's place: its column across, the middle down.
+        let columns = map.lanes.map(\.lane)
+        let column = columns.firstIndex(of: part.lane) ?? 0
+        zoomAnchor = UnitPoint(x: (Double(column) + 0.5) / Double(max(columns.count, 1)), y: 0.45)
+        if insides[part.id] != nil {
+            show(part)
+            return
+        }
+        opening = part.id
+        let files = workspace.files
+        let read = Self.reader(root: workspace.url)
+        Task {
+            let built = await Task.detached(priority: .userInitiated) { () -> (SystemMap, Set<String>)? in
+                guard let inside = SystemMap.inside(part, files: files, read: read) else { return nil }
+                return (inside, Set(inside.parts.filter { inside.opens($0, files: files) }.map(\.id)))
+            }.value
+            opening = nil
+            guard let (inside, more) = built else { return }
+            insides[part.id] = inside
+            openable[part.id] = more
+            session.mapCache?.insides = insides
+            session.mapCache?.openable = openable
+            show(part)
+        }
+    }
+
+    private func show(_ part: SystemMap.Part) {
+        zoomingIn = true
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.86)) {
+            trail.append(part)
+            selected = nil
+        }
+    }
+
+    /// Back out to `index` levels deep (0 is the whole system).
+    private func close(to index: Int) {
+        guard index < trail.count else { return }
+        zoomingIn = false
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.88)) {
+            selected = trail.count > index ? trail[index].id : nil
+            trail.removeLast(trail.count - index)
+        }
+    }
+
+    /// Reads code and manifests for the map, never data files or large SQL dumps.
+    nonisolated static func reader(root: URL) -> @Sendable (String) -> String? {
+        { path in
+            guard SystemMap.isReadable(path) else { return nil }
+            let url = root.appending(path: path)
+            // SQL is read for CREATE TABLE only; a large file is a dump, not a schema.
+            if path.lowercased().hasSuffix(".sql"), ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) > 1_000_000 { return nil }
+            return try? String(contentsOf: url, encoding: .utf8)
+        }
     }
 
     private func exportMermaid(_ map: SystemMap) {
@@ -120,6 +228,8 @@ struct MapView: View {
         // it again, which takes seconds on a big repo.
         if let cache = session.mapCache, cache.revision == workspace.revision {
             (modules, services, system, coverage, notes) = (cache.modules, cache.services, cache.system, cache.coverage, cache.notes)
+            (insides, openable) = (cache.insides, cache.openable)
+            trail = trail.filter { insides[$0.id] != nil }
             if !sources.contains(source) { source = sources.first ?? .modules }
             loaded = true
             return
@@ -140,21 +250,30 @@ struct MapView: View {
         services = compose.map(ArchitectureGraph.compose)
         let files = workspace.files
         let graph = modules
-        system = await Task.detached(priority: .userInitiated) {
-            SystemMap.build(files: files, read: { path in
-                // Only code and manifests are read; data files never are.
-                guard SystemMap.isReadable(path) else { return nil }
-                let url = root.appending(path: path)
-                // SQL is read for CREATE TABLE only; a large file is a dump, not a schema.
-                if path.lowercased().hasSuffix(".sql"), ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) > 1_000_000 { return nil }
-                return try? String(contentsOf: url, encoding: .utf8)
-            }, compose: compose, modules: graph)
+        let read = Self.reader(root: root)
+        let (built, more) = await Task.detached(priority: .userInitiated) { () -> (SystemMap, Set<String>) in
+            let map = SystemMap.build(files: files, read: read, compose: compose, modules: graph)
+            return (map, Set(map.parts.filter { map.opens($0, files: files) }.map(\.id)))
         }.value
+        system = built
+        // The code changed: opened parts are built again from it, the trail kept.
+        openable = ["": more]
+        var rebuilt: [String: SystemMap] = [:]
+        var kept: [SystemMap.Part] = []
+        for part in trail {
+            guard let inside = await Task.detached(priority: .userInitiated, operation: { SystemMap.inside(part, files: files, read: read) }).value else { break }
+            rebuilt[part.id] = inside
+            openable[part.id] = await Task.detached(priority: .userInitiated) { Set(inside.parts.filter { inside.opens($0, files: files) }.map(\.id)) }.value
+            kept.append(part)
+        }
+        insides = rebuilt
+        trail = kept
         coverage = await Task.detached(priority: .utility) { CoverageReport.load(root: root, files: files) }.value
         if !sources.contains(source) { source = sources.first ?? .modules }
         notes = try? String(contentsOf: root.appending(path: ".dante/architecture.md"), encoding: .utf8)
-        if let selected, graph?.node(selected) == nil, system?.part(selected) == nil { self.selected = nil }
-        session.mapCache = MapCache(revision: revision, modules: modules, services: services, system: system, coverage: coverage, notes: notes)
+        if let selected, graph?.node(selected) == nil, shown?.part(selected) == nil { self.selected = nil }
+        session.mapCache = MapCache(revision: revision, modules: modules, services: services, system: system, coverage: coverage, notes: notes,
+                                    insides: insides, openable: openable)
         loaded = true
     }
 }
@@ -167,6 +286,8 @@ struct MapCache {
     var system: SystemMap?
     var coverage: CoverageReport?
     var notes: String?
+    var insides: [String: SystemMap] = [:]
+    var openable: [String: Set<String>] = [:]
 }
 
 // MARK: Diagram
@@ -361,7 +482,7 @@ private struct Inspector: View {
                     Button {
                         session.askClaude("Walk me through \(node.name)\(node.path.map { " (\($0))" } ?? ""): what it's responsible for, its main types and entry points, and how it's used by \(graph.dependents(of: node.id).map(\.name).joined(separator: ", ").nonEmpty ?? "the rest of the project").")
                     } label: {
-                        ClaudeLabel("Ask Claude to walk through it").frame(maxWidth: .infinity)
+                        ClaudeLabel("Ask \(session.agentName) to walk through it").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(DanteButtonStyle(primary: true))
                 }
@@ -448,7 +569,7 @@ private struct DriftCard: View {
                         .foregroundStyle(theme.text2.color)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button("Draft with Claude") {
+                    Button("Draft with \(session.agentName)") {
                         session.askClaude("Write .dante/architecture.md: one short section per part of this system (\(graph.withoutTests.nodes.filter { $0.kind != .external }.map(\.name).joined(separator: ", "))), saying what it owns and what it talks to. Keep it to one page.")
                     }
                     .buttonStyle(DanteButtonStyle())

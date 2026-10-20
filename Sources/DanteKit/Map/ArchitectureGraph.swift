@@ -35,6 +35,8 @@ public struct ArchitectureGraph: Equatable, Sendable {
     public var source: String
     public var nodes: [Node]
     public var edges: [Edge]
+    /// For a part's inside (`inner`): the folder its loose files sit in.
+    public var base: String?
 
     public init(title: String, source: String, nodes: [Node], edges: [Edge]) {
         self.title = title

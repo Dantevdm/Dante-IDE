@@ -80,11 +80,18 @@ public struct SystemMap: Equatable, Sendable {
 
     public var parts: [Part]
     public var links: [Link]
+    /// Lane names that differ from the usual ones: inside a part, its pieces sit in the
+    /// backend lane under the part's own name.
+    public var laneTitles: [Lane: String] = [:]
+    /// Parts that can't be opened further: an opened part's loose files.
+    public var entries: Set<String> = []
 
     public init(parts: [Part], links: [Link]) {
         self.parts = parts
         self.links = links
     }
+
+    public func title(of lane: Lane) -> String { laneTitles[lane] ?? lane.title }
 
     public func part(_ id: String) -> Part? { parts.first { $0.id == id } }
     public func uses(_ id: String) -> [Part] { links.filter { $0.from == id }.compactMap { part($0.to) } }
@@ -159,7 +166,7 @@ public struct SystemMap: Equatable, Sendable {
         return !parts.dropLast().contains { skippedFolders.contains($0) || $0.hasPrefix(".") } && !isTest(path)
     }
 
-    public static func build(files: [String], read: (String) -> String?, compose: ComposeFile? = nil, modules: ArchitectureGraph? = nil) -> SystemMap {
+    public static func build(files: [String], read: (String) -> String?, compose: ComposeFile? = nil, modules: ArchitectureGraph? = nil, findsClients: Bool = true) -> SystemMap {
         let code = files.filter(isCode)
         var parts: [Part] = []
         var links: [String: Link] = [:]
@@ -186,7 +193,7 @@ public struct SystemMap: Equatable, Sendable {
         }
 
         // Clients
-        let clients = frontends(files: files, read: read)
+        let clients = findsClients ? frontends(files: files, read: read) : []
         func root(_ part: Part) -> String { part.path == "." ? "" : part.path ?? "" }
         let clientRoots = clients.map(root)
         var clientOf: [String: Part?] = [:]
@@ -242,7 +249,7 @@ public struct SystemMap: Equatable, Sendable {
         var webhookFiles: [(group: String, file: String)] = []
         var groups: [String: (items: [Item], owners: [String: Int])] = [:]
         for file in backendFiles {
-            let found = routes(in: text(file))
+            let found = isJVM(file) ? annotatedRoutes(in: text(file)) : routes(in: text(file))
             guard !found.isEmpty else { continue }
             let ownerID = owner(file)?.id
             for route in found where route.path != "/" {
@@ -281,13 +288,16 @@ public struct SystemMap: Equatable, Sendable {
 
         // What each client calls. A screen that calls the API gets a box of its own, so the
         // map shows which screens use which routes; calls from shared files stay on the app.
+        // A client that calls "/dashboard/…" on a base URL reaches "/api/dashboard": groups
+        // are matched without their api and version prefixes too.
+        var groupByCore: [String: String] = [:]
+        for key in groups.keys.sorted() where groupByCore[coreGroup(key)] == nil { groupByCore[coreGroup(key)] = key }
         for client in clients {
             let screenFiles = Dictionary(client.items.compactMap { item in item.file.map { ($0, item.text) } }) { a, _ in a }
             var screenCalls: [String: [String: Int]] = [:]
             for file in code where clientOwning(file)?.id == client.id {
                 for path in calledPaths(in: text(file)) {
-                    let key = routeGroup(path)
-                    guard groups[key] != nil else { continue }
+                    guard let key = groups[routeGroup(path)] != nil ? routeGroup(path) : groupByCore[coreGroup(routeGroup(path))] else { continue }
                     if let screen = screenFiles[file] {
                         screenCalls[screen, default: [:]]["route:" + key, default: 0] += 1
                     } else {
@@ -338,7 +348,25 @@ public struct SystemMap: Equatable, Sendable {
             for table in tables(in: text(file)) where !tableNames.contains(table) { tableNames.append(table) }
         }
         var tableUsers: [String: [String: Int]] = [:]
-        if !tableNames.isEmpty, let pattern = queryPattern(tableNames) {
+        // JPA: an @Entity names its table (or is named like it); its repository and JPQL
+        // queries ("from Process p") use the table through the entity's name.
+        var entityTables: [String: String] = [:]
+        if !tableNames.isEmpty {
+            for file in backendFiles where isJVM(file) && has(text(file), "@Entity") {
+                guard let entity = entity(in: text(file)), let table = tableNames.first(where: { $0.lowercased() == entity.table.lowercased() }) else { continue }
+                entityTables[entity.name] = table
+                if let owner = owner(file) { tableUsers[table, default: [:]][owner.id, default: 0] += 1 }
+            }
+            if !entityTables.isEmpty {
+                for file in backendFiles where isJVM(file) && has(text(file), "Repository<") {
+                    let body = text(file)
+                    for (entity, table) in entityTables where has(body, "Repository<" + entity + ",") || has(body, "Repository<" + entity + " ") {
+                        if let owner = owner(file) { tableUsers[table, default: [:]][owner.id, default: 0] += 1 }
+                    }
+                }
+            }
+        }
+        if !tableNames.isEmpty, let pattern = queryPattern(tableNames + entityTables.keys.map { $0 }) {
             for file in backendFiles {
                 let body = lower(file)
                 guard has(body, "select") || has(body, "insert") || has(body, "update") || has(body, "delete"),
@@ -348,7 +376,7 @@ public struct SystemMap: Equatable, Sendable {
                 let range = NSRange(query.startIndex..., in: query)
                 for match in pattern.matches(in: query, range: range) {
                     if let name = Range(match.range(at: 1), in: query).map({ String(query[$0]) }),
-                       let table = tableNames.first(where: { $0.lowercased() == name }) {
+                       let table = tableNames.first(where: { $0.lowercased() == name }) ?? entityTables.first(where: { $0.key.lowercased() == name })?.value {
                         tableUsers[table, default: [:]][owner.id, default: 0] += 1
                     }
                 }
@@ -595,6 +623,86 @@ public struct SystemMap: Equatable, Sendable {
         return found
     }
 
+    static func isJVM(_ path: String) -> Bool {
+        ["java", "kt"].contains((path as NSString).pathExtension.lowercased())
+    }
+
+    /// Spring (`@RequestMapping` on the class, `@GetMapping("/{id}")` on methods) and JAX-RS
+    /// (`@Path` on both, `@GET` beside the method's) routes, the class's path first.
+    static func annotatedRoutes(in text: String) -> [Route] {
+        guard has(text, "Mapping") || has(text, "@Path") else { return [] }
+        let verbs = ["GetMapping": "GET", "PostMapping": "POST", "PutMapping": "PUT", "PatchMapping": "PATCH", "DeleteMapping": "DELETE"]
+        var prefix = ""
+        var inClass = false
+        var pendingPath: String?
+        var pendingVerb: String?
+        var pendingLine = 0
+        var found: [Route] = []
+        for (number, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("//") || line.hasPrefix("*") || line.hasPrefix("/*") { continue }
+            if line.hasPrefix("@") {
+                let name = String(line.dropFirst().prefix { $0.isLetter })
+                let path = firstString(in: line)
+                if let verb = verbs[name] {
+                    found.append(Route(method: verb, path: join(prefix, path ?? ""), line: number + 1))
+                } else if name == "RequestMapping" {
+                    if inClass {
+                        let verb = ["GET", "POST", "PUT", "PATCH", "DELETE"].first { line.contains("RequestMethod." + $0) }
+                        found.append(Route(method: verb, path: join(prefix, path ?? ""), line: number + 1))
+                    } else {
+                        prefix = path ?? ""
+                    }
+                } else if name == "Path" {
+                    if inClass { pendingPath = path ?? ""; pendingLine = pendingLine == 0 ? number + 1 : pendingLine } else { prefix = path ?? "" }
+                } else if ["GET", "POST", "PUT", "PATCH", "DELETE"].contains(name), inClass {
+                    pendingVerb = name
+                    pendingLine = pendingLine == 0 ? number + 1 : pendingLine
+                }
+                continue
+            }
+            if !inClass, line.range(of: #"\b(class|interface|object)\s+\w"#, options: .regularExpression) != nil {
+                inClass = true
+                continue
+            }
+            // The method a JAX-RS verb belongs to.
+            if inClass, pendingVerb != nil || pendingPath != nil, line.contains("(") {
+                if let verb = pendingVerb { found.append(Route(method: verb, path: join(prefix, pendingPath ?? ""), line: pendingLine)) }
+                pendingVerb = nil
+                pendingPath = nil
+                pendingLine = 0
+            }
+        }
+        return found.filter { $0.path != "/" || !prefix.isEmpty }
+    }
+
+    /// The first string literal in an annotation: `("/x")`, `(value = "/x")`, `({"/a", "/b"})`.
+    static func firstString(in line: String) -> String? {
+        guard let open = line.firstIndex(of: "\"") else { return nil }
+        let rest = line[line.index(after: open)...]
+        guard let close = rest.firstIndex(of: "\"") else { return nil }
+        return String(rest[..<close])
+    }
+
+    static func join(_ prefix: String, _ path: String) -> String {
+        let parts = (prefix.split(separator: "/") + path.split(separator: "/")).map(String.init)
+        return "/" + parts.joined(separator: "/")
+    }
+
+    /// A JPA entity's class name and table: `@Table(name = "jobs")`, else the class's name in
+    /// snake case.
+    static func entity(in text: String) -> (name: String, table: String)? {
+        guard let match = text.firstMatch(of: /(?:class|record)\s+(\w+)/) else { return nil }
+        let name = String(match.1)
+        if let table = text.firstMatch(of: /@Table\s*\([^)]*?name\s*=\s*"(?:\w+\.)?(\w+)"/) { return (name, String(table.1)) }
+        var snake = ""
+        for (index, character) in name.enumerated() {
+            if character.isUppercase, index > 0 { snake += "_" }
+            snake += character.lowercased()
+        }
+        return (name, snake)
+    }
+
     /// Compiled once: Swift `Regex` literals were most of the map's build time on big repos.
     private enum RoutePattern {
         nonisolated(unsafe) static let handle = try! NSRegularExpression(pattern: #"Handle(?:Func)?\(\s*"(?:([A-Z]+)\s+)?(/[^"]*)""#)
@@ -619,8 +727,28 @@ public struct SystemMap: Equatable, Sendable {
     /// API paths a client asks for: string literals starting /api or /v1, up to the first
     /// interpolation or query.
     static func calledPaths(in text: String) -> [String] {
-        guard has(text, "/api") || has(text, "/v1") || has(text, "/v2") else { return [] }
-        return text.matches(of: /["'`](\/(?:api|v\d)(?:\/[^"'`\s?$]*)?)/).map { String($0.1) }
+        var found: [String] = []
+        if has(text, "/api") || has(text, "/v1") || has(text, "/v2") {
+            found += text.matches(of: /["'`](\/(?:api|v\d)(?:\/[^"'`\s?$]*)?)/).map { String($0.1) }
+        }
+        // `${API_BASE_URL}/orders/${id}`: a path on a base URL kept in a variable.
+        if has(text, "${") {
+            let range = NSRange(text.startIndex..., in: text)
+            for match in basePathPattern.matches(in: text, range: range) {
+                if let path = Range(match.range(at: 1), in: text).map({ String(text[$0]) }) { found.append(path) }
+            }
+        }
+        return found
+    }
+
+    nonisolated(unsafe) private static let basePathPattern = try! NSRegularExpression(
+        pattern: #"`\$\{\s*(?:[\w.]*?(?:api|url|base|host|server|backend|endpoint)[\w.]*)\s*\}(/[A-Za-z][^`\s?$]*)"#, options: .caseInsensitive)
+
+    /// A route group without its api and version prefixes: "/api/v1/orders" → "/orders".
+    static func coreGroup(_ group: String) -> String {
+        let prefixes: Set<String> = ["api", "v1", "v2", "v3", "v4", "rest", "public"]
+        let kept = group.split(separator: "/").filter { !prefixes.contains($0.lowercased()) }
+        return "/" + (kept.first.map(String.init) ?? "")
     }
 
     // MARK: Tables, webhooks and environment
@@ -641,7 +769,7 @@ public struct SystemMap: Equatable, Sendable {
     /// Matches a query naming one of `tables` (in lowercased text): FROM, INTO, UPDATE, JOIN.
     static func queryPattern(_ tables: [String]) -> NSRegularExpression? {
         let names = tables.map { NSRegularExpression.escapedPattern(for: $0.lowercased()) }.joined(separator: "|")
-        return try? NSRegularExpression(pattern: #"\b(?:from|into|update|join|table)\s+[`"\[]?("# + names + #")\b"#)
+        return try? NSRegularExpression(pattern: #"\b(?:from|into|update|join|table)\s+(?:[`"\[]?\w+[`"\]]?\.)?[`"\[]?("# + names + #")\b"#)
     }
 
     static func isWebhookRoute(_ route: String) -> Bool {
@@ -670,6 +798,7 @@ public struct SystemMap: Equatable, Sendable {
             #"ENV(?:\.fetch\(|\[)["']([A-Za-z_][A-Za-z0-9_]*)"#,
             #"env::var\("([A-Za-z_][A-Za-z0-9_]*)""#,
             #"environment\["([A-Za-z_][A-Za-z0-9_]*)"\]"#,
+            #"System\.getenv\(\s*"([A-Za-z_][A-Za-z0-9_]*)""#,
         ].joined(separator: "|"))
 
     /// Names that usually hold a secret: keys, tokens, passwords.
