@@ -163,5 +163,7 @@ struct OrbRepresentable: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: OrbView, context: Context) {}
+    func updateNSView(_ view: OrbView, context: Context) {
+        if view.framesPerSecond != framesPerSecond { view.framesPerSecond = framesPerSecond }
+    }
 }

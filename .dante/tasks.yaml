@@ -511,7 +511,7 @@ tasks:
   title: "Motion studio: videos, decks and explainers made by the agents from the real system, in the brand, narrated, rendered to 4K"
   phase: build
   state: review
-  notes: "Pieces in docs/motion/<name>/, scenes drawn from seek(t), three.js, hairline and Open Peeps bundled with an import map, a frame clock for libraries in renders, four-step New piece sheet (idea, live gallery of twenty styles and illustration kits, the brief, Claude, Codex or both). Still to do: a version switcher and compare for two makers, lint findings and a partner critique in the player, HTML and PDF export, presenting decks on the Stage."
+  notes: "Pieces in docs/motion/<name>/, scenes drawn from seek(t), three.js, hairline and Open Peeps bundled with an import map, a frame clock for libraries in renders, four-step New piece sheet (idea, live gallery of twenty styles and illustration kits, the brief, Claude, Codex or both). The player switches between and compares two makers' versions and adopts one, shows lint and the other agent's critique (contact sheet, read-only, notes sent back to the maker), exports a one-file web page and a PDF of slides or storyboard, and presents decks on the Stage (keys, clicker, voice)."
 - id: DI-124
   title: "Agent HQ: the agents as people in an isometric office around a glowing brain, with a task board and team panel (the design canvas's Office board)"
   phase: build

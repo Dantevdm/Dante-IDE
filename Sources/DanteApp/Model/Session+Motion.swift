@@ -84,7 +84,9 @@ extension Session {
         var manifest: String?
         if let here {
             do {
-                try Self.scaffold(piece, data: projectData, at: workspace.url.appending(path: folderPath))
+                var mine = piece
+                mine.maker = here.title
+                try Self.scaffold(mine, data: projectData, at: workspace.url.appending(path: folderPath))
             } catch {
                 errorMessage = "Couldn’t create \(folderPath): \(error.localizedDescription)"
                 return nil
@@ -102,8 +104,10 @@ extension Session {
             let note = both ? "Two versions are being made at once: this is \(engine.title)'s, in a job; \(lead.title) makes another in the main checkout. Make yours your own." : nil
             let brief = MotionBrief.create(ask: ask, folder: jobFolder, piece: piece, brand: brand, data: projectData, libraries: MotionLibrary.all.map(\.briefLine),
                                            answers: answers, version: note)
-            let job = await jobs.start(brief: brief, engine: engine, title: "\(engine.title)'s \(piece.title == "Untitled" ? "motion piece" : piece.title)") { worktree in
-                try Self.scaffold(piece, data: projectData, at: worktree.appending(path: jobFolder))
+            var theirs = piece
+            theirs.maker = engine.title
+            let job = await jobs.start(brief: brief, engine: engine, title: "\(engine.title)'s \(piece.title == "Untitled" ? "motion piece" : piece.title)") { [theirs] worktree in
+                try Self.scaffold(theirs, data: projectData, at: worktree.appending(path: jobFolder))
             }
             if let job {
                 if here == nil { showJob(job.id) }
@@ -127,25 +131,133 @@ extension Session {
         }
     }
 
-    /// The same piece made by an agent in a job: its folder in that job's worktree.
-    func motionVersions(of folder: String) -> [(engine: AgentEngine, job: JobRecord, folder: URL)] {
-        jobs.records.filter { $0.outcome == .open }.compactMap { job in
-            for candidate in AgentEngine.allCases.map({ "\(folder)-\($0.rawValue)" }) + [folder] {
-                let url = job.worktreeURL.appending(path: candidate)
-                if FileManager.default.fileExists(atPath: url.appending(path: MotionPiece.manifestName).path) { return (job.engine, job, url) }
+    /// Every version of the piece at `folder`: this checkout's, a sibling another agent made
+    /// here (`<folder>-codex` after its job merged), and those still in jobs' worktrees.
+    func motionVersions(of folder: String) -> [MotionVersion] {
+        guard let workspace else { return [] }
+        let base = MotionVersion.base(of: folder)
+        var versions: [MotionVersion] = []
+        func add(_ url: URL, root: URL, job: JobRecord?) {
+            let manifest = url.appending(path: MotionPiece.manifestName)
+            guard FileManager.default.fileExists(atPath: manifest.path), !versions.contains(where: { $0.folder == url }) else { return }
+            let piece = MotionPiece.parse((try? String(contentsOf: manifest, encoding: .utf8)) ?? "")
+            let maker = piece.maker.isEmpty ? job?.engine.title ?? MotionVersion.suffixMaker(url.lastPathComponent) ?? "" : piece.maker
+            versions.append(MotionVersion(folder: url, root: root, maker: maker, job: job?.id, jobTitle: job?.title))
+        }
+        let candidates = [base] + AgentEngine.allCases.map { "\(base)-\($0.rawValue)" }
+        for candidate in candidates { add(workspace.url.appending(path: candidate), root: workspace.url, job: nil) }
+        for job in jobs.records where job.outcome == .open {
+            for candidate in candidates { add(job.worktreeURL.appending(path: candidate), root: job.worktreeURL, job: job) }
+        }
+        return versions.count > 1 ? versions : []
+    }
+
+    /// Makes `version` the piece at `folder` in this checkout: the files there now go to the
+    /// Trash (renders stay), and the version's are copied in.
+    func adoptMotion(_ version: MotionVersion, into folder: String) {
+        guard let workspace else { return }
+        let target = workspace.url.appending(path: folder)
+        guard version.folder.standardizedFileURL != target.standardizedFileURL else { return }
+        let manager = FileManager.default
+        do {
+            for file in (try? manager.contentsOfDirectory(at: target, includingPropertiesForKeys: nil)) ?? [] where file.lastPathComponent != "renders" {
+                try manager.trashItem(at: file, resultingItemURL: nil)
             }
-            return nil
+            try manager.createDirectory(at: target, withIntermediateDirectories: true)
+            for file in try manager.contentsOfDirectory(at: version.folder, includingPropertiesForKeys: nil) where file.lastPathComponent != "renders" {
+                try manager.copyItem(at: file, to: target.appending(path: file.lastPathComponent))
+            }
+        } catch {
+            errorMessage = "Couldn’t use \(version.maker.isEmpty ? "that" : version.maker + "’s") version: \(error.localizedDescription)"
+        }
+        workspace.refreshFileIndex()
+    }
+
+    /// The agent that critiques a version: the other one when it's here, else the same one
+    /// with fresh eyes (a read-only question, outside the conversation).
+    func motionCritic(for version: MotionVersion?) -> AgentEngine? {
+        let available = motionMakers
+        let maker = AgentEngine.allCases.first { $0.title == version?.maker } ?? claude?.engine ?? .claude
+        return available.first { $0 != maker } ?? available.first
+    }
+
+    /// Asks the critic to review the piece in `folder` (a version's own folder, under `root`):
+    /// stills of its beats on a contact sheet, the lint, and a read-only question.
+    func critiqueMotion(source: MotionSource, maker: String) async {
+        guard motionCritiques[source.folder]?.isRunning != true else { return }
+        let version = MotionVersion(folder: source.folder, root: source.projectRoot, maker: maker, job: nil, jobTitle: nil)
+        guard let critic = motionCritic(for: version) else {
+            motionCritiques[source.folder] = .failed("A critique needs Claude Code or Codex on this Mac.")
+            return
+        }
+        motionCritiques[source.folder] = .running(critic: critic.title, since: .now)
+        let root = source.projectRoot
+        let relative = ProposedChange.relativePath(of: source.folder, in: root)
+        let started = Date()
+        let ledger = AgentLedger.standard
+        let project = workspace?.name ?? root.lastPathComponent
+        let lint = MotionLint.check(MotionLint.sceneFiles(in: source.folder), brand: source.brand).map(\.message)
+        let stills = await MotionRenderer.stills(source: source, times: MotionCritique.times(for: source.piece), width: MotionFrames.width,
+                                                 into: source.folder.appending(path: "renders/critique"), refused: motionRefused)
+        let sheet = stills.files.first { $0.lastPathComponent == "contact-sheet.png" } ?? stills.files.first
+        let prompt = MotionCritique.prompt(piece: source.piece, folder: relative,
+                                           contactSheet: sheet.map { ProposedChange.relativePath(of: $0, in: root) } ?? "",
+                                           lint: stills.errors.map { "Script error: \($0)" } + lint,
+                                           maker: maker.isEmpty ? "another agent" : maker)
+        do {
+            let text: String, model: String
+            var tokens = (input: 0, output: 0)
+            switch critic {
+            case .codex:
+                guard let path = Self.codexPath else { throw MotionExporter.Failure(message: "Codex isn’t installed.") }
+                let chosen = Preferences.shared.codexModel.isEmpty ? nil : Preferences.shared.codexModel
+                let reply = try await Codex(executable: path).ask(prompt, in: root.path, model: chosen, images: sheet.map { [$0.path] } ?? [], timeout: 900)
+                text = reply.text
+                model = chosen ?? "codex"
+                tokens = (reply.inputTokens, reply.outputTokens)
+            case .claude:
+                guard let executable = SystemStatus.detect().claudePath else { throw MotionExporter.Failure(message: "Claude Code isn’t installed.") }
+                let chosen = Preferences.shared.claudeModel.argument
+                let reply = try await ClaudeOpinion(executable: executable).ask(prompt, in: root.path, model: chosen, timeout: 900)
+                text = reply.text
+                model = chosen ?? "claude"
+                tokens = (reply.inputTokens, reply.outputTokens)
+            }
+            let critique = MotionCritique.parse(text, critic: critic.title)
+            motionCritiques[source.folder] = critique.notes.isEmpty && critique.summary == nil ? .failed("\(critic.title) didn’t give any notes.") : .done(critique)
+            ledger.append(AgentJob(kind: "critique", provider: critic == .codex ? .codex : .claude, model: model, project: project,
+                                   promptTokens: tokens.input, outputTokens: tokens.output, seconds: Date().timeIntervalSince(started),
+                                   requestedBy: "you", title: "Critique of \(source.piece.title)", why: "A second pair of eyes on a motion piece",
+                                   gist: critique.summary.flatMap { AgentJob.gist(of: $0) } ?? "\(critique.notes.count) notes"))
+        } catch {
+            motionCritiques[source.folder] = .failed(error.localizedDescription)
+            ledger.append(AgentJob(kind: "critique", provider: critic == .codex ? .codex : .claude, model: critic.title.lowercased(), project: project,
+                                   seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: "you",
+                                   title: "Critique of \(source.piece.title)", gist: AgentJob.gist(of: error.localizedDescription)))
         }
     }
 
-    /// Asks the agent to change a piece, at the moment the user is looking at.
-    func changeMotion(folder: String, ask: String, at time: Double?) {
+    /// Asks the agent to change a piece, at the moment the user is looking at: the main
+    /// conversation for this checkout's version, the job's for a version still in a job.
+    func changeMotion(folder: String, ask: String, at time: Double?, version: MotionVersion? = nil) {
         guard let workspace else { return }
-        let url = workspace.url.appending(path: folder)
+        let url = version?.folder ?? workspace.url.appending(path: folder)
         let manifest = (try? String(contentsOf: url.appending(path: MotionPiece.manifestName), encoding: .utf8)) ?? ""
         let piece = MotionPiece.parse(manifest, fallbackTitle: url.lastPathComponent)
         let brand = BrandKit.load(name: workspace.name, files: workspace.files) { try? String(contentsOf: workspace.url.appending(path: $0), encoding: .utf8) }
-        askClaude(MotionBrief.change(ask: ask, folder: folder, piece: piece, brand: brand, at: time, libraries: MotionLibrary.all.map(\.briefLine)))
+        let relative = version.map { ProposedChange.relativePath(of: $0.folder, in: $0.root) } ?? folder
+        let brief = MotionBrief.change(ask: ask, folder: relative, piece: piece, brand: brand, at: time, libraries: MotionLibrary.all.map(\.briefLine))
+        if let job = version?.job {
+            showJob(job)
+            askClaude(brief, in: jobs.sessions[job])
+        } else {
+            askClaude(brief)
+        }
+    }
+
+    /// Shows the piece on the Stage, full screen: a deck holds at each slide.
+    func presentMotion(_ source: MotionSource) {
+        StageController.shared.present(source, refused: motionRefused)
     }
 
     /// Writes the guessed brand kit to `.dante/brand.yaml` and opens it, so it can be tuned.
@@ -211,4 +323,39 @@ extension Session {
             try? JSONEncoder().encode(result).write(to: root.appending(path: MotionFrames.resultPath(folder)))
         }
     }
+}
+
+/// One version of a motion piece: this checkout's, or one an agent made in a job's worktree.
+struct MotionVersion: Identifiable, Equatable {
+    var folder: URL
+    /// The checkout it's in: the project, or the job's worktree.
+    var root: URL
+    /// "Claude", "Codex", or empty when nobody said.
+    var maker: String
+    var job: String?
+    var jobTitle: String?
+
+    var id: URL { folder }
+    var label: String { maker.isEmpty ? folder.lastPathComponent : "\(maker)’s" }
+
+    /// The piece's own folder for one of its versions: `launch-codex` → `launch`.
+    static func base(of folder: String) -> String {
+        for engine in AgentEngine.allCases where folder.hasSuffix("-\(engine.rawValue)") {
+            return String(folder.dropLast(engine.rawValue.count + 1))
+        }
+        return folder
+    }
+
+    static func suffixMaker(_ name: String) -> String? {
+        AgentEngine.allCases.first { name.hasSuffix("-\($0.rawValue)") }?.title
+    }
+}
+
+/// A critique in progress, done or failed.
+enum MotionCritiqueState: Equatable {
+    case running(critic: String, since: Date)
+    case done(MotionCritique.Critique)
+    case failed(String)
+
+    var isRunning: Bool { if case .running = self { true } else { false } }
 }

@@ -14,6 +14,8 @@ public enum VoiceCommand: Equatable, Sendable {
     case cancel
     /// Open the Stage (full screen) or leave it.
     case stage(Bool)
+    /// While a piece is presented: on to the next slide (true) or back.
+    case slide(Bool)
     /// What Claude is doing, answered by Dante without a turn.
     case status
     /// How much of the usage window is left.
@@ -29,7 +31,8 @@ public enum VoiceCommand: Equatable, Sendable {
     case ask(String)
 
     /// `projects` are the open projects' names, matched loosely ("dante ide" finds "Dante IDE").
-    public static func parse(_ utterance: String, projects: [String]) -> VoiceCommand {
+    /// While a piece is `presenting`, "next" and "back" move between its slides.
+    public static func parse(_ utterance: String, projects: [String], presenting: Bool = false) -> VoiceCommand {
         let text = utterance.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         let lower = text.lowercased().filter { !",.!?;:".contains($0) }.replacingOccurrences(of: "’", with: "'")
         guard !lower.isEmpty else { return .cancel }
@@ -38,6 +41,7 @@ public enum VoiceCommand: Equatable, Sendable {
         if ["yes", "yes do it", "do it", "approve", "approve it", "go ahead", "apply it", "apply them", "yes please"].contains(lower) { return .approve }
         if ["no", "don't", "dont", "decline", "no thanks", "don't do that"].contains(lower) { return .decline }
         let spoken = lower.replacingOccurrences(of: "the ", with: "").replacingOccurrences(of: "please", with: "").trimmingCharacters(in: .whitespaces)
+        if let forward = slide(spoken, presenting: presenting) { return .slide(forward) }
         if stageOpeners.contains(spoken) { return .stage(true) }
         if stageClosers.contains(spoken) { return .stage(false) }
         if let stage = fullScreen(spoken) { return .stage(stage) }
@@ -75,6 +79,17 @@ public enum VoiceCommand: Equatable, Sendable {
         guard words.count <= 8, text.contains(" full screen ") || text.contains(" big screen ") else { return nil }
         let leaving = [" exit", " leave", " close", " out of ", " minimi", " stop", " turn off", " no more", " not "]
         return !leaving.contains { text.contains($0) }
+    }
+
+    /// "Next slide", "go back a slide"; while presenting, also "next", "continue", "back".
+    static func slide(_ spoken: String, presenting: Bool) -> Bool? {
+        let core = spoken.replacingOccurrences(of: "  ", with: " ")
+        if ["next slide", "next one", "go to next slide", "move on", "on to next slide"].contains(core) { return true }
+        if ["previous slide", "last slide", "go back a slide", "back a slide", "slide back", "go to previous slide"].contains(core) { return false }
+        guard presenting else { return nil }
+        if ["next", "continue", "go on", "carry on", "keep going", "forward"].contains(core) { return true }
+        if ["back", "go back", "previous", "back one", "one back"].contains(core) { return false }
+        return nil
     }
 
     /// "Open a new project", "are you able to open another project?", "open a project".

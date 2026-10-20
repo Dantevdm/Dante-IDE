@@ -10,6 +10,8 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 ## Highlights
 - Studio: describe a piece and the agent in charge storyboards it, builds it as a scene drawn from the real system map and infrastructure in the project's brand, looks at its own frames and fixes them.
 - A piece plays in Docs with its narration in Dante's natural voice, and renders frame by frame to a 1080p or 4K MP4.
+- Made by both agents, a piece has two versions to switch between, play side by side and choose from; the other agent critiques either one from stills of its beats.
+- Share a piece as one HTML file that plays in any browser, or a PDF of its slides or storyboard; present a deck full screen on the Stage.
 
 ## Shows
 - The library: recently changed docs, a card per group with excerpts and thumbnails.
@@ -29,12 +31,16 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
   4. Who makes it: the agent in charge, the other one in a job, or both (two versions of the same brief at once, "Make both versions"); the project data it draws (system map, infrastructure, numbers); a line saying the look.
   The answers become BRIEF.md; each picked style and kit adds its recipe (how to build it inside the scene contract) to the brief.
 - Play, pause and scrub a piece (Space plays; arrows step a deck's slides); ask the agent to change it at the moment shown; ask it to fix script errors.
-- Render 1080p or 4K MP4 into the piece's renders/ folder, with the narration mixed in; play it or show it in Finder.
+- Export (into the piece's renders/ folder, then Open or Show in Finder): a 1080p or 4K MP4 with the narration mixed in; a web page, one HTML file carrying the scene, its modules and the libraries they import, its images, data and the fonts, that plays by itself in any browser from disk (a deck holds at each stop; arrows and Space move on); a PDF of a deck's slides (the frame where each holds), or a storyboard of anything else (the frame in the middle of each narration line with the line under it, else eight moments).
+- Present: the piece full screen on the Stage (in its window when the Stage is already open in one). A deck holds at each stop until →, ↓, Page Down, Space, Return, a click or a clicker; ←, ↑ and Page Up go back a slide; C shows or hides the captions; Esc ends it (and closes the Stage when it opened for it). By voice, "next slide" and "go back a slide", and while presenting "next" and "back". The line being said at a hold finishes before the sound stops. The slide number and a hairline of progress sit faint at the bottom.
+- Versions: when another agent made the piece too (its folder `<name>-codex` or `<name>-claude`, here or still in a job's worktree), a strip under the header names each maker's version (with "job" while it's in one). Pick one to play it; Compare plays both side by side in step (the timeline, Space and the arrows drive both; only the shown one is heard); Use <maker>'s version copies its files into the piece's folder, sending the files there to the Trash (renders stay), after a confirmation. Changes asked for a version still in a job go to that job's conversation.
+- Notes (the header's count; amber when something breaks renders): Dante's lint of the scene, each finding opening its line, with Ask to fix them; and Critique: Ask <the other agent> for a critique renders stills of every stop and narration line onto a contact sheet in renders/critique/ and asks the other agent (or the same one with fresh eyes when it's alone), read-only, as a motion designer who didn't make it. Its verdict and notes come back marked fix, polish or good, each time a link to that moment; tick off what not to send, then Send the notes to the maker. Critiques are ledger jobs of kind critique.
 - Brand kit opens .dante/brand.yaml (written from the project's own colours, fonts and logo the first time); Refresh project data rebuilds data.json from the code.
 
 ## States
 - No docs: says where it looks (docs/, documentation/, .dante/ and markdown anywhere), with New motion piece.
-- A piece loading, playing, paused, voicing its narration, rendering (with progress and Cancel), rendered, or failed with the reason.
+- A piece loading, playing, paused, voicing its narration, rendering or drawing a PDF (with progress and Cancel), saved, or failed with the reason; an export that couldn't carry a file names it.
+- A critique: not asked (says what the critic will do), running (with seconds), done, or failed with the reason.
 
 ## Edge cases
 - PDFs, images and Word files count as docs only under docs/, documentation/ and .dante/; elsewhere they're app assets.
@@ -43,11 +49,15 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 - Scenes load from their own folder, Dante's fonts and the project's images and models, never env files or the rules' never paths, and nothing from the network.
 - Bundled libraries (three.js, hairline, DiceBear Open Peeps) are imported by name through an import map Dante adds to the page; a page with its own import map keeps it. In a render, requestAnimationFrame and performance.now follow the frame being drawn, so a library with its own clock renders the same every time.
 - The Look gallery's animations pause when the window is hidden, like any web page; picks still work from the keyboard (Tab, Return or Space) and VoiceOver reads each tile's name and summary.
-- Renders stay out of git (the piece's .gitignore); the scene, manifest, storyboard and data are committed.
+- Renders stay out of git (the piece's .gitignore); the scene, manifest, storyboard and data are committed. Nothing inside a piece's folder is listed as a doc, and another agent's version isn't listed beside the piece it's a version of.
+- A manifest names its maker (`maker: Claude`), so versions are labelled after the agent that made them.
+- An exported page can't carry modules that import each other in a circle; it says which.
+- Served text files say they're UTF-8, so a scene without <meta charset> still reads right.
 - Narration needs the natural voice (Settings › Claude); without it pieces play and render silent, with captions.
 
 ## Acceptance
 - Every Mermaid diagram the parser supports draws without a browser.
 - A rendered frame matches the preview at the same time.
 - 4K renders at 3840×2160 without upscaling.
+- An exported web page plays from disk with no server and no network, three.js included.
 - Every style and kit in MotionLooks has a tile in the gallery, and a picked one's recipe is in the brief.

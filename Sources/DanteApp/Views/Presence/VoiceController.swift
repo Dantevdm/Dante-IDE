@@ -299,7 +299,8 @@ final class VoiceController {
         level = 0
         PresenceController.shared.voiceChanged()
         let open = Sessions.all.compactMap { $0.workspace?.name }
-        act(on: VoiceCommand.parse(text, projects: open + Self.recents().map(\.name).filter { !open.contains($0) }))
+        act(on: VoiceCommand.parse(text, projects: open + Self.recents().map(\.name).filter { !open.contains($0) },
+                                   presenting: StageController.shared.mode.presenting != nil))
         updateWakeListening()
     }
 
@@ -516,6 +517,9 @@ final class VoiceController {
                 StageController.shared.close()
                 conversing = false
             }
+        case .slide(let forward):
+            guard let player = StageController.shared.mode.presenting else { return say("Nothing’s being presented.") }
+            player.advance(forward)
         case .status:
             say(VoiceStatus.summary(PresenceController.shared.model.presence.sources))
         case .usage:

@@ -22,6 +22,10 @@ final class StageController: NSObject, NSWindowDelegate {
                 StageController.shared.applyLevel()
             }
         }
+        /// A motion piece shown full screen in place of the HUD.
+        var presenting: MotionPlayer?
+        /// The Stage opened to present, so ending the presentation closes it.
+        var openedToPresent = false
     }
 
     let mode = Mode()
@@ -38,6 +42,34 @@ final class StageController: NSObject, NSWindowDelegate {
     var isOpen: Bool { window != nil }
 
     func toggle() { isOpen ? close() : open() }
+
+    /// Presents a motion piece, full screen unless the Stage is already open in a window: a deck holds at each slide until → or Space (or a
+    /// clicker), ← goes back, Esc ends.
+    func present(_ source: MotionSource, refused: @escaping (String) -> Bool) {
+        let player = MotionPlayer()
+        player.load(source, refused: refused, mode: .present)
+        mode.presenting?.stop()
+        if !isOpen { mode.openedToPresent = true }
+        let wasOpen = isOpen
+        mode.presenting = player
+        open(fullScreen: wasOpen ? nil : true)
+    }
+
+    /// Ends the presentation, and closes the Stage when it opened for it.
+    func endPresentation() {
+        mode.presenting?.stop()
+        mode.presenting = nil
+        if mode.openedToPresent {
+            mode.openedToPresent = false
+            close()
+        }
+    }
+
+    /// Esc: ends a presentation, else leaves full screen or closes.
+    fileprivate func cancel() {
+        if mode.presenting != nil { return endPresentation() }
+        close()
+    }
 
     /// Opens on `screen`, else the one the pointer is on (where you just clicked); full screen
     /// or in a window as asked, else as it was last time.
@@ -126,6 +158,16 @@ final class StageController: NSObject, NSWindowDelegate {
     /// Esc leaves full screen (and closes the window), Space talks, Return approves what's waiting.
     private func handle(key: UInt16, window number: Int) -> Bool {
         guard let window, window.windowNumber == number else { return false }
+        if let player = mode.presenting {
+            switch Int(key) {
+            case 53: endPresentation()
+            case 124, 125, 121, 49, 36, 76: player.advance(true)
+            case 123, 126, 116: player.advance(false)
+            case 8: player.showsCaptions.toggle()
+            default: return false
+            }
+            return true
+        }
         switch Int(key) {
         case 53:
             if window.styleMask.contains(.fullScreen) { toggleFullScreen() } else { close() }
@@ -189,6 +231,9 @@ final class StageController: NSObject, NSWindowDelegate {
     }
 
     private func tearDown() {
+        mode.presenting?.stop()
+        mode.presenting = nil
+        mode.openedToPresent = false
         endActivity()
         if let keys { NSEvent.removeMonitor(keys) }
         keys = nil
@@ -204,7 +249,7 @@ final class StageController: NSObject, NSWindowDelegate {
 final class StageWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
-    override func cancelOperation(_ sender: Any?) { StageController.shared.close() }
+    override func cancelOperation(_ sender: Any?) { StageController.shared.cancel() }
 }
 
 struct StageView: View {
@@ -262,7 +307,7 @@ struct StageView: View {
                 StageBackdrop(tint: tint, centre: UnitPoint(x: 0.5, y: layout.centre.y / max(1, geometry.size.height)), unit: unit)
                 // The large orb sits 8% of its frame below the frame's centre, to leave room
                 // for its flames; lift the frame so the orb itself is in the rings.
-                OrbRepresentable(size: .large, framesPerSecond: 120, track: track)
+                OrbRepresentable(size: .large, framesPerSecond: mode.presenting == nil ? 120 : 1, track: track)
                     .frame(width: layout.orbSide, height: layout.orbSide)
                     .position(x: layout.centre.x, y: layout.centre.y - layout.orbSide * 0.08)
                 StageHUD(style: hudStyle, intensity: model.vitality.intensity, usage: model.usage,
@@ -280,12 +325,17 @@ struct StageView: View {
                 } else {
                     wide(unit)
                 }
+                if let player = mode.presenting {
+                    MotionPresentView(player: player)
+                        .transition(.opacity)
+                }
                 // In the title bar's row, level with the window's own buttons.
                 if !mode.fullScreen {
                     windowControls
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 }
             }
+            .animation(.easeInOut(duration: 0.4), value: mode.presenting == nil)
         }
         .background(theme.ground.color)
         .ignoresSafeArea()

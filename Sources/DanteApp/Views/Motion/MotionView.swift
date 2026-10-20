@@ -12,22 +12,158 @@ struct MotionView: View {
     /// The manifest's project path.
     let path: String
     @State private var player = MotionPlayer()
+    /// The other version, beside this one while comparing.
+    @State private var other = MotionPlayer()
     @State private var ask = ""
     @FocusState private var askFocused: Bool
+    /// The version shown: nil for this checkout's.
+    @State private var versionFolder: URL?
+    @State private var comparing = false
+    @State private var showsNotes = false
+    @State private var adopting: MotionVersion?
 
     private var folderPath: String { (path as NSString).deletingLastPathComponent }
     private var folder: URL { workspace.url.appending(path: folderPath) }
+    private var versions: [MotionVersion] { session.motionVersions(of: folderPath) }
+    /// The version on show, when there are several.
+    private var version: MotionVersion? { versions.first { $0.folder == (versionFolder ?? folder) } }
+    private var shownFolder: URL { version?.folder ?? folder }
+    /// The version compared with the one on show.
+    private var compared: MotionVersion? { versions.first { $0.folder != shownFolder } }
     /// The piece's files' revision: reloads when the agent writes them.
     private var revisionKey: String {
-        let files = workspace.files.filter { $0.hasPrefix(folderPath + "/") && !$0.contains("/renders/") }
-        let stamp = files.compactMap { try? workspace.url.appending(path: $0).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate?.timeIntervalSince1970 }.max() ?? 0
-        return "\(path)#\(workspace.revision)#\(stamp)"
+        let stamp = Self.stamp(of: shownFolder)
+        return "\(path)#\(workspace.revision)#\(stamp)#\(shownFolder.path)#\(comparing ? compared.map { "\($0.folder.path)#\(Self.stamp(of: $0.folder))" } ?? "" : "")"
+    }
+
+    /// The newest change to a piece's files, renders aside.
+    private static func stamp(of folder: URL) -> Double {
+        let files = (FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])?.allObjects as? [URL]) ?? []
+        return files.filter { !$0.path.contains("/renders/") }
+            .compactMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate?.timeIntervalSince1970 }.max() ?? 0
+    }
+
+    private func source(of folder: URL, root: URL) -> MotionSource {
+        MotionSource.load(folder: folder, projectRoot: root, files: workspace.files, projectName: workspace.name, revision: workspace.revision)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            if versions.count > 1 { versionStrip }
             Rectangle().fill(theme.line.color).frame(height: 1)
+            HStack(spacing: 2) {
+                stage
+                if comparing, let compared {
+                    ZStack(alignment: .topLeading) {
+                        Color.black
+                        MotionStageHost(player: other)
+                            .aspectRatio(CGFloat(other.source?.piece.width ?? 16) / CGFloat(other.source?.piece.height ?? 9), contentMode: .fit)
+                            .opacity(other.ready ? 1 : 0)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        VersionTag(text: compared.label)
+                        Color.clear.contentShape(Rectangle()).onTapGesture { togglePlay() }
+                    }
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .background(Color.black)
+            if !player.errors.isEmpty { errorBanner }
+            if let message = player.renderError { notice(message, symbol: "exclamationmark.triangle.fill", tint: theme.amber.color) }
+            if let note = player.exportNote { notice(note, symbol: "info.circle.fill", tint: theme.amber.color) }
+            if let file = player.lastRender, player.rendering == nil { renderedBanner(file) }
+            if showsNotes {
+                Rectangle().fill(theme.line.color).frame(height: 1)
+                MotionNotes(session: session, player: player, version: version, folderPath: folderPath)
+                    .frame(maxHeight: 240)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            Rectangle().fill(theme.line.color).frame(height: 1)
+            MotionTimeline(player: player, follower: comparing ? other : nil)
+                .padding(.horizontal, 16).padding(.top, 10)
+            askBar
+                .padding(.horizontal, 16).padding(.vertical, 10)
+        }
+        .background(theme.ground.color)
+        .animation(.snappy, value: comparing)
+        .animation(.snappy, value: showsNotes)
+        .task(id: revisionKey) {
+            player.load(source(of: shownFolder, root: version?.root ?? workspace.url), refused: session.motionRefused)
+            if comparing, let compared {
+                other.muted = true
+                other.load(source(of: compared.folder, root: compared.root), refused: session.motionRefused)
+                other.go(player.time)
+            }
+        }
+        .onChange(of: path) { versionFolder = nil; comparing = false }
+        .onDisappear { player.stop(); other.stop() }
+        .background {
+            // Space plays, arrows step a deck's slides.
+            Button("") { togglePlay() }.keyboardShortcut(.space, modifiers: []).hidden().disabled(askFocused)
+            Button("") { step(true) }.keyboardShortcut(.rightArrow, modifiers: []).hidden().disabled(askFocused)
+            Button("") { step(false) }.keyboardShortcut(.leftArrow, modifiers: []).hidden().disabled(askFocused)
+        }
+        .confirmationDialog("Use \(adopting?.label ?? "this") version?", isPresented: Binding(get: { adopting != nil }, set: { if !$0 { adopting = nil } })) {
+            Button("Use \(adopting?.label ?? "this") version") {
+                if let adopting { session.adoptMotion(adopting, into: folderPath) }
+                versionFolder = nil
+                comparing = false
+            }
+        } message: {
+            Text("Its files replace the ones in \(folderPath); those go to the Trash. Renders stay.\(adopting?.job != nil ? " The job stays open on the Jobs board until you merge or discard it." : "")")
+        }
+    }
+
+    private func togglePlay() {
+        player.togglePlay()
+        guard comparing else { return }
+        if player.playing { other.go(player.time); other.play() } else { other.pause(); other.go(player.time) }
+    }
+
+    private func step(_ forward: Bool) {
+        player.step(forward)
+        if comparing { other.pause(); other.go(player.time) }
+    }
+
+    /// The versions made of this piece, to switch between, compare, and choose.
+    private var versionStrip: some View {
+        HStack(spacing: 10) {
+            Text("Versions").font(.dante(size: 11, weight: .medium)).foregroundStyle(theme.text3.color)
+            HStack(spacing: 2) {
+                ForEach(versions) { item in
+                    let shown = item.folder == shownFolder
+                    Button {
+                        versionFolder = item.folder == folder ? nil : item.folder
+                    } label: {
+                        HStack(spacing: 5) {
+                            Circle().fill(item.maker == "Codex" ? theme.accent.color : theme.claude.color).frame(width: 6, height: 6)
+                            Text(item.label).font(.dante(size: 12, weight: shown ? .semibold : .regular))
+                            if item.job != nil { Text("job").font(.dante(size: 10)).foregroundStyle(theme.text3.color) }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(shown ? theme.raised.color : .clear, in: Capsule())
+                        .foregroundStyle(shown ? theme.text.color : theme.text2.color)
+                    }
+                    .buttonStyle(.plain)
+                    .help(item.job != nil ? "\(item.maker)’s version, still in its job (\(item.jobTitle ?? "a job"))" : "The version in \(ProposedChange.relativePath(of: item.folder, in: workspace.url))")
+                }
+            }
+            .padding(2)
+            .background(theme.card.color, in: Capsule())
+            Toggle(isOn: $comparing) { Label("Compare", systemImage: "rectangle.split.2x1") }
+                .toggleStyle(.button)
+                .help("Play both versions side by side, in step")
+            Spacer()
+            if let version, version.folder != folder {
+                Button("Use \(version.label) version") { adopting = version }
+                    .buttonStyle(DanteButtonStyle())
+                    .help("Copy this version’s files into \(folderPath), replacing what’s there")
+            }
+        }
+        .padding(.horizontal, 16).padding(.bottom, 8)
+    }
+
+    private var stage: some View {
             ZStack {
                 Color.black
                 MotionStageHost(player: player)
@@ -54,33 +190,15 @@ struct MotionView: View {
                     .allowsHitTesting(false)
                 }
                 if let rendering = player.rendering {
-                    RenderProgress(quality: rendering.quality, progress: rendering.progress) { player.cancelRender() }
+                    RenderProgress(title: player.renderTitle, progress: rendering.progress) { player.cancelRender() }
+                }
+                if comparing, let version { VersionTag(text: version.label).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading) }
+                if player.rendering == nil {
+                    // Over the web view, which would take the click.
+                    Color.clear.contentShape(Rectangle()).onTapGesture { togglePlay() }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .onTapGesture { player.togglePlay() }
-            if !player.errors.isEmpty { errorBanner }
-            if let message = player.renderError { notice(message, symbol: "exclamationmark.triangle.fill", tint: theme.amber.color) }
-            if let file = player.lastRender, player.rendering == nil { renderedBanner(file) }
-            Rectangle().fill(theme.line.color).frame(height: 1)
-            MotionTimeline(player: player)
-                .padding(.horizontal, 16).padding(.top, 10)
-            askBar
-                .padding(.horizontal, 16).padding(.vertical, 10)
-        }
-        .background(theme.ground.color)
-        .task(id: revisionKey) {
-            player.load(MotionSource.load(folder: folder, projectRoot: workspace.url, files: workspace.files, projectName: workspace.name, revision: workspace.revision),
-                        refused: session.motionRefused)
-        }
-        .onDisappear { player.stop() }
-        .background {
-            // Space plays, arrows step a deck's slides.
-            Button("") { player.togglePlay() }.keyboardShortcut(.space, modifiers: []).hidden().disabled(askFocused)
-            Button("") { player.step(true) }.keyboardShortcut(.rightArrow, modifiers: []).hidden().disabled(askFocused)
-            Button("") { player.step(false) }.keyboardShortcut(.leftArrow, modifiers: []).hidden().disabled(askFocused)
-        }
     }
 
     private var header: some View {
@@ -99,6 +217,7 @@ struct MotionView: View {
                 Label("Voicing narration", systemImage: "waveform").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                     .symbolEffect(.variableColor.iterative, options: .repeating)
             }
+            notesChip
             Toggle(isOn: $player.showsCaptions) { Image(systemName: "captions.bubble") }
                 .toggleStyle(.button).buttonStyle(.plain).foregroundStyle(player.showsCaptions ? theme.accent.color : theme.text3.color)
                 .help("Show the narration as captions while it plays")
@@ -108,23 +227,61 @@ struct MotionView: View {
                 .help("Rebuild data.json from the code as it is now: the system map, infrastructure and numbers the scene draws")
                 .disabled(player.source?.piece.data.isEmpty ?? true)
             IconButton(symbol: "chevron.left.forwardslash.chevron.right", label: "Open the scene in Code") {
-                session.open(file: folder.appending(path: player.source?.piece.scene ?? "index.html"))
+                session.open(file: shownFolder.appending(path: player.source?.piece.scene ?? "index.html"))
             }
+            Button {
+                if let source = player.source { player.pause(); session.presentMotion(source) }
+            } label: {
+                Label("Present", systemImage: "play.display")
+            }
+            .buttonStyle(DanteButtonStyle())
+            .disabled(!player.ready)
+            .help(player.source?.piece.kind == .deck
+                  ? "Present on the Stage, full screen: each slide holds until you press → or Space (a clicker works too); Esc ends"
+                  : "Play it full screen on the Stage; Space pauses, Esc ends")
             Menu {
-                ForEach(MotionRenderer.Quality.allCases) { quality in
-                    Button("Render \(quality.rawValue) MP4") { player.render(quality) }
+                Section("Video") {
+                    ForEach(MotionRenderer.Quality.allCases) { quality in
+                        Button("\(quality.rawValue) MP4, with the narration") { player.render(quality) }
+                    }
+                }
+                Section("Share") {
+                    Button("Web page, one file that plays in any browser") { player.exportWebPage() }
+                    Button(player.source?.piece.kind == .deck ? "PDF of the slides" : "PDF storyboard, with the narration") { player.exportPDF() }
                 }
             } label: {
-                Label("Render", systemImage: "film")
+                Label("Export", systemImage: "square.and.arrow.up")
             }
             .menuStyle(.button)
             .buttonStyle(DanteButtonStyle(primary: true))
             .fixedSize()
             .disabled(player.rendering != nil || !player.ready)
-            .help("Render every frame offline into an MP4 with the narration, in renders/ beside the scene")
+            .help("Render an MP4 frame by frame, or save a web page or PDF to share, in renders/ beside the scene")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    /// Lint findings and the critique: a count that opens the notes.
+    private var notesChip: some View {
+        let breaking = player.lint.filter(\.breaksRender).count
+        let critique = session.motionCritiques[shownFolder]
+        let count = player.lint.count + (critique.flatMap { if case .done(let c) = $0 { c.notes.filter { $0.kind != .good }.count } else { nil } } ?? 0)
+        return Button { showsNotes.toggle() } label: {
+            HStack(spacing: 4) {
+                if critique?.isRunning == true {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: breaking > 0 ? "exclamationmark.triangle.fill" : "text.bubble")
+                }
+                Text(count == 0 ? "Notes" : "\(count)").font(.dante(size: 11.5, weight: .medium))
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background((showsNotes ? theme.accent.color : breaking > 0 ? theme.amber.color : theme.text3.color).opacity(0.14), in: Capsule())
+            .foregroundStyle(showsNotes ? theme.accent.color : breaking > 0 ? theme.amber.color : theme.text2.color)
+        }
+        .buttonStyle(.plain)
+        .help("What Dante's lint finds in the scene, and a critique by the other agent")
     }
 
     private var errorBanner: some View {
@@ -137,7 +294,7 @@ struct MotionView: View {
             }
             Spacer()
             Button {
-                session.changeMotion(folder: folderPath, ask: "The scene reports these errors; fix them:\n" + player.errors.joined(separator: "\n"), at: player.time)
+                session.changeMotion(folder: folderPath, ask: "The scene reports these errors; fix them:\n" + player.errors.joined(separator: "\n"), at: player.time, version: version)
             } label: {
                 ClaudeLabel("Ask \(session.agentName) to fix")
             }
@@ -160,9 +317,9 @@ struct MotionView: View {
     private func renderedBanner(_ file: URL) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(theme.green.color)
-            Text("Rendered \(file.lastPathComponent)").font(.dante(size: 12)).foregroundStyle(theme.text.color)
+            Text("Saved \(file.lastPathComponent)").font(.dante(size: 12)).foregroundStyle(theme.text.color)
             Spacer()
-            Button("Play") { NSWorkspace.shared.open(file) }.buttonStyle(DanteButtonStyle())
+            Button(file.pathExtension == "mp4" ? "Play" : "Open") { NSWorkspace.shared.open(file) }.buttonStyle(DanteButtonStyle())
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([file]) }.buttonStyle(DanteButtonStyle())
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
@@ -193,7 +350,7 @@ struct MotionView: View {
         let text = ask.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         player.pause()
-        session.changeMotion(folder: folderPath, ask: text, at: player.time)
+        session.changeMotion(folder: folderPath, ask: text, at: player.time, version: version)
         ask = ""
     }
 
@@ -203,8 +360,23 @@ struct MotionView: View {
     }
 }
 
+/// A version's name over its stage while comparing.
+private struct VersionTag: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.dante(size: 11.5, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(10)
+            .allowsHitTesting(false)
+    }
+}
+
 /// The scene's web view, scaled to fit with the layout kept at the design size.
-private struct MotionStageHost: NSViewRepresentable {
+struct MotionStageHost: NSViewRepresentable {
     let player: MotionPlayer
 
     func makeNSView(context: Context) -> Host {
@@ -244,16 +416,30 @@ private struct MotionStageHost: NSViewRepresentable {
 private struct MotionTimeline: View {
     @Environment(\.theme) private var theme
     let player: MotionPlayer
+    /// The other version while comparing: it plays and seeks with this one.
+    var follower: MotionPlayer?
     @State private var hovering: Double?
+
+    private func toggle() {
+        player.togglePlay()
+        guard let follower else { return }
+        if player.playing { follower.go(player.time); follower.play() } else { follower.pause(); follower.go(player.time) }
+    }
+
+    private func step(_ forward: Bool) {
+        player.step(forward)
+        follower?.pause()
+        follower?.go(player.time)
+    }
 
     var body: some View {
         let duration = max(player.duration, 0.01)
         let piece = player.source?.piece
         HStack(spacing: 12) {
             if piece?.kind == .deck {
-                IconButton(symbol: "backward.end.fill", label: "Previous slide", size: 11) { player.step(false) }
+                IconButton(symbol: "backward.end.fill", label: "Previous slide", size: 11) { step(false) }
             }
-            Button { player.togglePlay() } label: {
+            Button { toggle() } label: {
                 Image(systemName: player.playing ? "pause.fill" : "play.fill")
                     .font(.dante(size: 13))
                     .frame(width: 30, height: 30)
@@ -265,7 +451,7 @@ private struct MotionTimeline: View {
             .disabled(!player.ready)
             .help(player.playing ? "Pause (Space)" : "Play (Space)")
             if piece?.kind == .deck {
-                IconButton(symbol: "forward.end.fill", label: "Next slide", size: 11) { player.step(true) }
+                IconButton(symbol: "forward.end.fill", label: "Next slide", size: 11) { step(true) }
             }
             Text(MotionView.clock(player.time)).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text.color).frame(width: 52, alignment: .leading)
             GeometryReader { proxy in
@@ -302,6 +488,7 @@ private struct MotionTimeline: View {
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onChanged { value in
                     player.go(Double(value.location.x / width) * duration)
+                    follower?.go(player.time)
                 })
                 .onContinuousHover { phase in
                     if case .active(let point) = phase { hovering = Double(point.x / width) * duration } else { hovering = nil }
@@ -316,7 +503,7 @@ private struct MotionTimeline: View {
 /// The render's progress over the stage, with Cancel.
 private struct RenderProgress: View {
     @Environment(\.theme) private var theme
-    let quality: MotionRenderer.Quality
+    let title: String
     let progress: Double
     let cancel: () -> Void
 
@@ -329,7 +516,7 @@ private struct RenderProgress: View {
                 Text("\(Int(progress * 100))%").font(.dante(size: 15, weight: .semibold, design: .monospaced)).foregroundStyle(.white)
             }
             .frame(width: 76, height: 76)
-            Text("Rendering \(quality.rawValue), frame by frame").font(.dante(size: 13, weight: .medium)).foregroundStyle(.white)
+            Text(title).font(.dante(size: 13, weight: .medium)).foregroundStyle(.white)
             Button("Cancel", action: cancel).buttonStyle(DanteButtonStyle())
         }
         .padding(28)
@@ -337,3 +524,63 @@ private struct RenderProgress: View {
     }
 }
 
+
+/// A piece presented on the Stage: the scene full screen on black, the narration as captions,
+/// and where you are (the slide, or a hairline of progress) kept faint at the bottom.
+struct MotionPresentView: View {
+    let player: MotionPlayer
+
+    var body: some View {
+        ZStack {
+            Color.black
+            MotionStageHost(player: player)
+                .aspectRatio(CGFloat(player.source?.piece.width ?? 16) / CGFloat(player.source?.piece.height ?? 9), contentMode: .fit)
+                .opacity(player.ready ? 1 : 0)
+                .animation(.easeOut(duration: 0.5), value: player.ready)
+            if !player.ready, player.errors.isEmpty {
+                ProgressView().controlSize(.regular).tint(.white)
+            }
+            if let error = player.errors.first {
+                Text(error).font(.dante(size: 14, design: .monospaced)).foregroundStyle(.white.opacity(0.8))
+                    .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            }
+            if player.showsCaptions, let caption = player.caption {
+                VStack {
+                    Spacer()
+                    Text(caption)
+                        .font(.dante(size: 26, weight: .medium))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 22).padding(.vertical, 12)
+                        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .padding(.bottom, 64).padding(.horizontal, 120)
+                        .transition(.opacity.combined(with: .offset(y: 8)))
+                        .id(caption)
+                }
+                .animation(.snappy, value: caption)
+            }
+            VStack {
+                Spacer()
+                HStack(alignment: .bottom) {
+                    GeometryReader { proxy in
+                        Capsule().fill(.white.opacity(0.35))
+                            .frame(width: proxy.size.width * player.time / max(0.01, player.duration), height: 2)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                    .frame(height: 2)
+                    if let slide = player.slide {
+                        Text("\(slide.index) / \(slide.count)")
+                            .font(.dante(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.4))
+                            .padding(.leading, 16)
+                    }
+                }
+                .padding(.horizontal, 28).padding(.bottom, 22)
+            }
+            .allowsHitTesting(false)
+            // The web view would take the clicks; a click (or a clicker) moves on.
+            Color.clear.contentShape(Rectangle()).onTapGesture { player.advance(true) }
+        }
+        .onDisappear { player.stop() }
+    }
+}

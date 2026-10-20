@@ -77,6 +77,11 @@ public enum MotionRuntime {
         }
     }
 
+    /// Whether a served file is text, sent as UTF-8.
+    public static func isText(_ path: String) -> Bool {
+        ["html", "htm", "js", "mjs", "css", "json", "svg", "gltf"].contains((path as NSString).pathExtension.lowercased())
+    }
+
     /// A path a scene asked for, made safe: nil when it climbs out of its folder.
     public static func safe(_ path: String) -> String? {
         let decoded = path.removingPercentEncoding ?? path

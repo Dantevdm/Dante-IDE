@@ -52,6 +52,8 @@ public struct MotionPiece: Equatable, Sendable {
     public var brief: String
     /// The project data it shows: "system", "infra", "stats" (written to `data.json`).
     public var data: [String]
+    /// The agent that made it ("Claude", "Codex"), so two versions can be told apart.
+    public var maker = ""
 
     public init(title: String, kind: Kind = .video, duration: Double = 30, fps: Int = 60, width: Int = 1920, height: Int = 1080,
                 scene: String = "index.html", stops: [Double] = [], narration: [Line] = [], brief: String = "", data: [String] = []) {
@@ -73,6 +75,17 @@ public struct MotionPiece: Equatable, Sendable {
     public static let folder = "docs/motion"
 
     /// Whether a project path is a piece's manifest.
+    /// Whether `path` is the manifest of another agent's version of a piece in `paths`:
+    /// `launch-codex/motion.yaml` beside `launch/motion.yaml`.
+    public static func isOtherVersion(_ path: String, among paths: Set<String>) -> Bool {
+        guard isManifest(path) else { return false }
+        let folder = (path as NSString).deletingLastPathComponent
+        for suffix in ["-claude", "-codex"] where folder.hasSuffix(suffix) {
+            if paths.contains(String(folder.dropLast(suffix.count)) + "/" + manifestName) { return true }
+        }
+        return false
+    }
+
     public static func isManifest(_ path: String) -> Bool {
         (path as NSString).lastPathComponent == manifestName
     }
@@ -95,6 +108,7 @@ public struct MotionPiece: Equatable, Sendable {
         piece.stops = ((meta["stops"] as? [Any]) ?? []).compactMap(seconds).filter { $0 >= 0 && $0 <= piece.duration }.sorted()
         piece.brief = (meta["brief"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         piece.data = ((meta["data"] as? [Any]) ?? []).compactMap { ($0 as? String)?.lowercased() }
+        piece.maker = (meta["maker"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
         piece.narration = ((meta["narration"] as? [Any]) ?? []).compactMap { entry -> Line? in
             if let object = entry as? [String: Any] {
                 if let text = (object["text"] as? String)?.nonEmptyTrimmed, let at = seconds(object["at"]) { return Line(at: at, text: text) }
@@ -140,6 +154,7 @@ public struct MotionPiece: Equatable, Sendable {
             "size: \(width)x\(height)       # design size; 4K renders at 2x",
             "scene: \(scene)",
         ]
+        if !maker.isEmpty { lines.append("maker: \(maker)        # who made this version") }
         if !data.isEmpty { lines.append("data: [\(data.joined(separator: ", "))]   # project data in data.json") }
         if !stops.isEmpty { lines.append("stops: [\(stops.map(Self.format).joined(separator: ", "))]   # where each slide holds") }
         if !brief.isEmpty {

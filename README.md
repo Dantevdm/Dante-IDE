@@ -109,6 +109,8 @@ Find in Project searches by text, word or regex, with previewed replace. Meaning
 
 In Docs, the agents make videos, slide decks and explainers from the real system, in the project's brand (`.dante/brand.yaml`), narrated in Dante's voice and rendered to 1080p or 4K. A new piece goes through four steps: the idea, the look (a live gallery of twenty animation styles plus illustration kits), the brief, and whether Claude, Codex or both make it. three.js, hairline and Open Peeps are bundled, so the agents can use them with nothing to install.
 
+When both agents make a piece, you switch between their versions, play them side by side in step, and keep the one you like. The other agent critiques a version from a contact sheet of its beats, as a motion designer who didn't make it, and you send its notes back to the maker. Dante's lint flags anything that would break a frame-accurate render. A piece exports as an MP4, as one HTML file that plays offline in any browser (the libraries go inside it), or as a PDF of its slides or storyboard. Decks are presented full screen on the Stage, moved on with the keys, a clicker or "next slide".
+
 ## Agent HQ (coming next)
 
 The agents as people in an isometric office around a glowing brain, their shared memory. Each room is a role (research, backend, front-end, DevOps, quality, docs, security, data) and each is a job or job type you can hire for. Roads of light run between the rooms, thought bubbles are made from the agents' real tool calls, and there's a sub-agent bay, a task board and a team panel. Frontier models are drawn in light, cloud models come in through the door that leaves the Mac, and local models are pixel people. It will show on the Stage and in the menu bar too.
@@ -166,7 +168,6 @@ Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the s
 
 **In progress**
 
-- **Motion studio** (see above). Still to come: switching between and comparing two makers' versions, lint findings and a partner's critique in the player, HTML and PDF export, and presenting decks on the Stage. ([plan](docs/plans/motion-studio.md))
 - **Walk and work**: jobs, away mode and job types are in ([plan](docs/plans/walk-and-work.md)); next are away budgets, then an iPhone and iPad companion (QR pairing, a voice loop with AirPods, Live Activities and actionable notifications, an iPad desk layout) and a verifier that drives its own browser.
 
 **Next**
@@ -178,7 +179,7 @@ Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the s
 
 **Waiting for review** (built, being tried in daily use)
 
-Presence orb and constellation, the Stage, full voice, Codex or Claude in charge, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
+The motion studio, presence orb and constellation, the Stage, full voice, Codex or Claude in charge, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
 
 ## Requirements
 

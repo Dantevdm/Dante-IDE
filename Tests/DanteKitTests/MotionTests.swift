@@ -45,6 +45,7 @@ struct MotionPieceTests {
         var piece = MotionPiece(title: "Ship \"it\"", kind: .deck, duration: 42.5, brief: "Two lines\nof brief", data: ["system"])
         piece.stops = [6, 12.25]
         piece.narration = [.init(at: 0.5, text: "Hello: world")]
+        piece.maker = "Codex"
         #expect(MotionPiece.parse(piece.yaml) == piece)
     }
 

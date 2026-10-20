@@ -46,7 +46,8 @@ final class MotionSchemeHandler: NSObject, WKURLSchemeHandler {
             data = Data(MotionLibrary.addingImportMap(to: html).utf8)
         }
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
-            "Content-Type": MotionRuntime.mimeType(for: file.path), "Content-Length": "\(data.count)",
+            // Text says it's UTF-8, so a page without <meta charset> isn't read as Latin-1.
+            "Content-Type": MotionRuntime.mimeType(for: file.path) + (MotionRuntime.isText(file.path) ? "; charset=utf-8" : ""), "Content-Length": "\(data.count)",
             "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*",
         ])!
         task.didReceive(response)

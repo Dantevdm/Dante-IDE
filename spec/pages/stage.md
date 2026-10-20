@@ -12,9 +12,11 @@ The Stage is Dante full screen: the orb, the agents at work, the reply as it's s
 - The orb in a HUD with load and usage gauges, its satellites (sub-agents and delegated jobs) with callouts.
 - The mood, a clock, projects, agents and today's tally.
 - The newest words of the reply, or the waiting approval with Approve and Decline.
+- A motion piece being presented (Present in Docs): full screen on black in place of the HUD, its captions, the slide number and progress faint at the bottom.
 
 ## Actions
 - Space talks; Return approves; Esc leaves full screen, then closes.
+- While presenting: →, Space, Return or a click moves on, ← goes back, C toggles captions, Esc ends the presentation; "next slide" and "back" by voice.
 - Pin it on top in a window of any size.
 
 ## Acceptance

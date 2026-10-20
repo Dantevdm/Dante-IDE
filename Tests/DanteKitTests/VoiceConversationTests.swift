@@ -35,6 +35,11 @@ import Testing
         #expect(VoiceCommand.parse("Hey Claude, what are you doing?", projects: []) == .status)
         #expect(VoiceCommand.parse("How much usage do I have left?", projects: []) == .usage)
         #expect(VoiceCommand.parse("Thanks, Claude.", projects: []) == .goodbye)
+        #expect(VoiceCommand.parse("Next slide, please.", projects: []) == .slide(true))
+        #expect(VoiceCommand.parse("Go back a slide", projects: []) == .slide(false))
+        #expect(VoiceCommand.parse("Back", projects: [], presenting: true) == .slide(false))
+        #expect(VoiceCommand.parse("Back", projects: []) == .stage(false))
+        #expect(VoiceCommand.parse("Next", projects: [], presenting: true) == .slide(true))
         #expect(VoiceCommand.parse("What are you doing with the parser", projects: []) == .ask("What are you doing with the parser"))
 
         #expect(VoiceStatus.summary([]) == "No projects are open.")

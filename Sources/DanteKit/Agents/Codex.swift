@@ -88,18 +88,19 @@ public struct Codex: Sendable {
     }
 
     /// `codex exec` reading the prompt from stdin: JSON events, read-only, no session saved, and
-    /// the user's own config left out (its model may not work with a ChatGPT sign-in).
-    public static func arguments(project: String, model: String?) -> [String] {
+    /// the user's own config left out (its model may not work with a ChatGPT sign-in). Images
+    /// go last, since `--image` takes every value after it.
+    public static func arguments(project: String, model: String?, images: [String] = []) -> [String] {
         var arguments = ["exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral",
                          "--ignore-user-config", "--color", "never", "-C", project]
         if let model, !model.isEmpty { arguments += ["-m", model] }
-        return arguments + ["-"]
+        return arguments + ["-"] + (images.isEmpty ? [] : ["--image"] + images)
     }
 
-    public func ask(_ prompt: String, in project: String, model: String? = nil, timeout: TimeInterval = 600) async throws -> CodexReply {
+    public func ask(_ prompt: String, in project: String, model: String? = nil, images: [String] = [], timeout: TimeInterval = 600) async throws -> CodexReply {
         let process = Process()
         process.executableURL = URL(filePath: executable)
-        process.arguments = Self.arguments(project: project, model: model)
+        process.arguments = Self.arguments(project: project, model: model, images: images)
         process.currentDirectoryURL = URL(filePath: project)
         var environment = ProcessInfo.processInfo.environment
         environment["CLAUDECODE"] = nil

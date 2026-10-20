@@ -153,6 +153,8 @@ public struct DocLibrary: Equatable, Sendable {
 
     public static func isDoc(_ path: String) -> Bool {
         if MotionPiece.isManifest(path) { return path.contains("/") }
+        // A piece's scene, stills and exports are its own: Docs lists the piece.
+        if path.hasPrefix(MotionPiece.folder + "/") || path.contains("/renders/") { return false }
         let ext = (path as NSString).pathExtension.lowercased()
         if markdownExtensions.contains(ext) { return true }
         let document = documentExtensions.contains(ext) || slideExtensions.contains(ext)
@@ -175,7 +177,9 @@ public struct DocLibrary: Equatable, Sendable {
 
     public init(paths: [String]) {
         var buckets: [String: [Doc]] = [:]
-        for path in paths where Self.isDoc(path) {
+        let all = Set(paths)
+        // Another agent's version of a piece is opened from the piece, not listed beside it.
+        for path in paths where Self.isDoc(path) && !MotionPiece.isOtherVersion(path, among: all) {
             buckets[Self.group(for: path), default: []].append(Doc(path: path))
         }
         groups = Self.order.compactMap { title in

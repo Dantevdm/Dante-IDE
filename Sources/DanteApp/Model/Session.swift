@@ -242,6 +242,8 @@ final class Session {
     var claudeShowsUsage = false
     /// The Map's last build, kept while the window is open.
     @ObservationIgnored var mapCache: MapCache?
+    /// Critiques of motion pieces, by the version's folder, kept while the window is open.
+    var motionCritiques: [URL: MotionCritiqueState] = [:]
     /// The Security area's report, scans and audits.
     let security = SecurityModel()
     /// 1-based breakpoint lines per file path, saved per project on this Mac.
