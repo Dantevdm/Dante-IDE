@@ -184,7 +184,7 @@ private struct LaneHeader: View {
     }
 }
 
-private struct PartBox: View {
+struct PartBox: View {
     @Environment(\.theme) private var theme
     let part: SystemMap.Part
     let state: SystemDiagram.PartState
@@ -211,10 +211,10 @@ private struct PartBox: View {
                         .frame(width: 22, height: 22)
                         .background(hue.opacity(0.14), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(part.name)
+                        Text(Breakable.camel(part.name))
                             .font(.dante(size: 13, weight: .semibold, design: part.lane == .api ? .monospaced : .default))
                             .foregroundStyle(theme.text.color)
-                            .lineLimit(part.lane == .api ? 1 : 2)
+                            .lineLimit(2)
                             .truncationMode(part.lane == .api ? .middle : .tail)
                             .fixedSize(horizontal: false, vertical: true)
                         if !part.detail.isEmpty {
@@ -295,6 +295,8 @@ private struct PartBox: View {
         case .routes: "arrow.left.arrow.right"
         case .app: "terminal"
         case .package: "shippingbox"
+        case .structure: "curlybraces.square"
+        case .function: "function"
         case .database: "cylinder.split.1x2"
         case .table: "tablecells"
         case .cache: "bolt.horizontal"
@@ -393,8 +395,11 @@ struct SystemSummary: View {
             ("\(clients.count)", clients.count == 1 ? "client" : "clients", screens > 0 ? Self.counted(screens, "screen", "screens") : ""),
             ("\(map.routeCount)", map.routeCount == 1 ? "API route" : "API routes", Self.counted(routeGroups, "group", "groups")),
             ("\(backend)", compact ? (backend == 1 ? "piece" : "pieces") : backend == 1 ? "backend part" : "backend parts", ""),
-            ("\(stores.count)", stores.count == 1 ? "data store" : "data stores", ([stores.map(\.name).joined(separator: ", ")] + (tables > 0 ? [Self.counted(tables, "table", "tables")] : [])).filter { !$0.isEmpty }.joined(separator: " · ")),
-            ("\(outside.count)", outside.count == 1 ? "outside service" : "outside services", outside.map(\.name).prefix(3).joined(separator: ", ")),
+            stores.isEmpty && tables > 0 ? ("\(tables)", tables == 1 ? "table" : "tables", map.parts.filter { $0.kind == .table }.map(\.name).prefix(3).joined(separator: ", "))
+                : ("\(stores.count)", stores.count == 1 ? "data store" : "data stores", ([stores.map(\.name).joined(separator: ", ")] + (tables > 0 ? [Self.counted(tables, "table", "tables")] : [])).filter { !$0.isEmpty }.joined(separator: " · ")),
+            outside.allSatisfy({ $0.kind == .structure }) && !outside.isEmpty
+                ? ("\(outside.count)", outside.count == 1 ? "class used" : "classes used", outside.map(\.name).prefix(3).joined(separator: ", "))
+                : ("\(outside.count)", outside.count == 1 ? "outside service" : "outside services", outside.map(\.name).prefix(3).joined(separator: ", ")),
         ]
         HStack(spacing: 10) {
             ForEach(stats.filter { !compact || $0.0 != "0" }, id: \.1) { value, label, note in
@@ -441,7 +446,8 @@ struct SystemInspector: View {
                 }
                 if !part.items.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Eyebrow(part.lane == .api ? "Routes" : part.lane == .clients ? "Screens" : part.kind == .database ? "Tables" : "Inside")
+                        Eyebrow(part.lane == .api ? "Routes" : part.lane == .clients ? "Screens" : part.kind == .database ? "Tables"
+                                : part.kind == .table ? "Columns" : part.kind == .function || part.kind == .structure && part.path == nil ? "Declared" : "Inside")
                         ForEach(part.items, id: \.self) { item in
                             Button {
                                 if let file = item.file { session.open(file: workspace.url.appending(path: file), line: item.line ?? 1) }
@@ -461,6 +467,15 @@ struct SystemInspector: View {
                             .help(help(for: item))
                         }
                     }
+                }
+                if let item = part.items.first, let file = item.file, let line = item.line, let end = item.end {
+                    CodeExcerpt(url: workspace.url.appending(path: file), lines: line...max(line, end))
+                }
+                if let path = part.path, SystemMap.isCode(path) {
+                    Button { session.open(file: workspace.url.appending(path: path)) } label: {
+                        Label("Open \((path as NSString).lastPathComponent)", systemImage: "doc.text").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(DanteButtonStyle())
                 }
                 if !part.env.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
@@ -486,10 +501,12 @@ struct SystemInspector: View {
                 }
                 if let open {
                     Button(action: open) {
-                        Label("Open \(part.name)", systemImage: "arrow.up.left.and.arrow.down.right").frame(maxWidth: .infinity)
+                        Label(part.kind == .table ? "Trace back from \(part.name)" : "Open \(part.name)",
+                              systemImage: part.kind == .table ? "arrow.uturn.left" : "arrow.up.left.and.arrow.down.right").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(DanteButtonStyle(primary: true))
-                    .help("See the pieces inside it, how they connect, and the routes and tables each one owns")
+                    .help(part.kind == .table ? "See the code that reads and writes it, back through the services to the routes that reach it"
+                          : "See the pieces inside it, how they connect, and the routes and tables each one owns")
                 }
                 Button {
                     session.askClaude(prompt)
@@ -534,5 +551,60 @@ struct SystemInspector: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 8)
         }
+    }
+}
+
+/// A method's code in the inspector, read from disk, at most 40 lines.
+private struct CodeExcerpt: View {
+    @Environment(\.theme) private var theme
+    let url: URL
+    let lines: ClosedRange<Int>
+    @State private var text: [String] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Eyebrow("Code")
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(text.enumerated()), id: \.offset) { index, line in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("\(lines.lowerBound + index)").foregroundStyle(theme.text3.color).frame(minWidth: 22, alignment: .trailing)
+                            Text(line.isEmpty ? " " : line).foregroundStyle(theme.text2.color)
+                        }
+                        .font(.dante(size: 10.5, design: .monospaced))
+                    }
+                    if lines.count > text.count, !text.isEmpty {
+                        Text("…").font(.dante(size: 10.5, design: .monospaced)).foregroundStyle(theme.text3.color).padding(.leading, 30)
+                    }
+                }
+                .padding(10)
+            }
+            .background(theme.card.color, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.line.color))
+        }
+        .task(id: url.path + "\(lines)") {
+            let (url, lines) = (url, lines)
+            text = await Task.detached {
+                guard let all = try? String(contentsOf: url, encoding: .utf8).components(separatedBy: "\n"), lines.lowerBound <= all.count else { return [] }
+                let shown = Array(all[(lines.lowerBound - 1)..<min(lines.upperBound, all.count, lines.lowerBound + 39)])
+                // Without the indentation they all share.
+                let indent = shown.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.map { $0.prefix { $0 == " " || $0 == "\t" }.count }.min() ?? 0
+                return shown.map { String($0.dropFirst(min(indent, $0.prefix { $0 == " " || $0 == "\t" }.count))) }
+            }.value
+        }
+    }
+}
+
+enum Breakable {
+    /// "ShopPortalTargetGroup" may wrap between its words, and a path at its slashes.
+    static func camel(_ name: String) -> String {
+        var result = ""
+        var previous: Character?
+        for character in name {
+            if let previous, (character.isUppercase && previous.isLowercase) || previous == "/" || previous == "_" { result.append("\u{200B}") }
+            result.append(character)
+            previous = character
+        }
+        return result
     }
 }

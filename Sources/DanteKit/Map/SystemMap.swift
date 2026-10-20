@@ -22,7 +22,7 @@ public struct SystemMap: Equatable, Sendable {
     }
 
     public enum Kind: String, Sendable {
-        case web, mobile, routes, app, package, database, table, cache, container, email, messaging, ai, payments, storage, monitoring, service
+        case web, mobile, routes, app, package, structure, function, database, table, cache, container, email, messaging, ai, payments, storage, monitoring, service
     }
 
     /// A line inside a part: a screen, a route, a table. Routes keep where they're declared.
@@ -30,11 +30,14 @@ public struct SystemMap: Equatable, Sendable {
         public var text: String
         public var file: String?
         public var line: Int?
+        /// The last line, for a method shown with its code.
+        public var end: Int?
 
-        public init(_ text: String, file: String? = nil, line: Int? = nil) {
+        public init(_ text: String, file: String? = nil, line: Int? = nil, end: Int? = nil) {
             self.text = text
             self.file = file
             self.line = line
+            self.end = end
         }
     }
 
@@ -160,7 +163,7 @@ public struct SystemMap: Equatable, Sendable {
         return kept.joined(separator: "\n")
     }
 
-    static func isCode(_ path: String) -> Bool {
+    public static func isCode(_ path: String) -> Bool {
         let parts = path.split(separator: "/").map(String.init)
         guard codeExtensions.contains((path as NSString).pathExtension.lowercased()) else { return false }
         return !parts.dropLast().contains { skippedFolders.contains($0) || $0.hasPrefix(".") } && !isTest(path)
@@ -230,7 +233,10 @@ public struct SystemMap: Equatable, Sendable {
         }
         // By folder: every file in one folder has the same owner.
         var owners: [String: Part?] = [:]
+        // Pieces that are single files own just themselves.
+        let fileParts = Dictionary(backend.compactMap { part in part.path.flatMap { isCode($0) ? ($0, part) : nil } }) { a, _ in a }
         func owner(_ file: String) -> Part? {
+            if let part = fileParts[file] { return part }
             let folder = (file as NSString).deletingLastPathComponent
             if let known = owners[folder] { return known }
             let found = findOwner(folder)

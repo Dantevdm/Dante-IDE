@@ -10,7 +10,7 @@ struct MapView: View {
     let workspace: Workspace
 
     enum Source: String, CaseIterable, Identifiable {
-        case system = "System", modules = "Modules", services = "Services"
+        case system = "System", infra = "Infra", modules = "Modules", services = "Services"
         var id: String { rawValue }
     }
 
@@ -23,6 +23,9 @@ struct MapView: View {
     @State private var notes: String?
     @State private var loaded = false
     @State private var coverage: CoverageReport?
+    /// Pipelines and cloud templates, for the Infra view.
+    @State private var infra: Infrastructure?
+    @State private var infraSelected: String?
     @AppStorage("mapShowsCoverage") private var showsCoverage = false
     /// The parts opened, outermost first; the map shown is the last one's inside.
     @State private var trail: [SystemMap.Part] = []
@@ -39,7 +42,14 @@ struct MapView: View {
     private var showsSystem: Bool { source == .system && system?.isUseful == true }
 
     private var sources: [Source] {
-        Source.allCases.filter { $0 == .system ? system?.isUseful == true : $0 == .modules ? modules != nil : services != nil }
+        Source.allCases.filter {
+            switch $0 {
+            case .system: system?.isUseful == true
+            case .infra: infra != nil
+            case .modules: modules != nil
+            case .services: services != nil
+            }
+        }
     }
 
     private var graph: ArchitectureGraph? {
@@ -51,7 +61,7 @@ struct MapView: View {
         HStack(spacing: 0) {
             AreaPage(
                 eyebrow: nil,
-                title: showsSystem || (source == .system && !loaded) ? "System map" : graph?.title ?? "Architecture",
+                title: source == .infra ? "Infrastructure" : showsSystem || (source == .system && !loaded) ? "System map" : graph?.title ?? "Architecture",
                 subtitle: nil
             ) {
                 if sources.count > 1 {
@@ -62,7 +72,7 @@ struct MapView: View {
                     .labelsHidden()
                     .frame(width: CGFloat(sources.count) * 82)
                 }
-                if !showsSystem, (source == .modules ? modules : services)?.nodes.contains(where: { $0.kind == .test }) == true {
+                if source != .infra, !showsSystem, (source == .modules ? modules : services)?.nodes.contains(where: { $0.kind == .test }) == true {
                     Toggle("Tests", isOn: $showsTests).toggleStyle(.checkbox)
                 }
                 if showsSystem, let coverage {
@@ -76,7 +86,9 @@ struct MapView: View {
                 }
                 IconButton(symbol: "arrow.clockwise", label: "Regenerate") { Task { await load() } }
             } content: {
-                if source == .system, system == nil, !loaded {
+                if source == .infra, let infra {
+                    InfraView(session: session, infra: infra, selected: $infraSelected)
+                } else if source == .system, system == nil, !loaded {
                     ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 200)
                 } else if showsSystem, let map = shown {
                     if !trail.isEmpty { trailBar }
@@ -106,7 +118,11 @@ struct MapView: View {
                     ProgressView().controlSize(.small)
                 }
             }
-            if showsSystem, let map = shown, let id = selected, let part = map.part(id) {
+            if source == .infra, let infra, let id = infraSelected, infra.resource(id) != nil || infra.pipelines.contains(where: { p in p.stages.contains { p.id + "#" + $0.id == id } }) {
+                Rectangle().fill(theme.line.color).frame(width: 1)
+                InfraInspector(session: session, workspace: workspace, infra: infra, id: id) { infraSelected = nil }
+                    .frame(width: 300)
+            } else if showsSystem, let map = shown, let id = selected, let part = map.part(id) {
                 Rectangle().fill(theme.line.color).frame(width: 1)
                 SystemInspector(session: session, workspace: workspace, map: map, part: part, coverage: coverage.flatMap { map.coverage($0)[part.id] },
                                 open: openable[level]?.contains(part.id) == true ? { open(part) } : nil) { selected = nil }
@@ -132,7 +148,7 @@ struct MapView: View {
             crumb("System", index: 0, symbol: "point.3.connected.trianglepath.dotted")
             ForEach(Array(trail.enumerated()), id: \.element.id) { index, part in
                 Image(systemName: "chevron.right").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
-                crumb(part.name, index: index + 1, symbol: part.lane == .clients ? "macwindow" : "shippingbox")
+                crumb(part.name, index: index + 1, symbol: PartBox.symbol(part.kind))
             }
             Spacer()
         }
@@ -170,7 +186,7 @@ struct MapView: View {
         Task {
             let built = await Task.detached(priority: .userInitiated) { () -> (SystemMap, Set<String>)? in
                 guard let inside = SystemMap.inside(part, files: files, read: read) else { return nil }
-                return (inside, Set(inside.parts.filter { inside.opens($0, files: files) }.map(\.id)))
+                return (inside, Set(inside.parts.filter { inside.opens($0, files: files, read: read) }.map(\.id)))
             }.value
             opening = nil
             guard let (inside, more) = built else { return }
@@ -228,7 +244,7 @@ struct MapView: View {
         // it again, which takes seconds on a big repo.
         if let cache = session.mapCache, cache.revision == workspace.revision {
             (modules, services, system, coverage, notes) = (cache.modules, cache.services, cache.system, cache.coverage, cache.notes)
-            (insides, openable) = (cache.insides, cache.openable)
+            (insides, openable, infra) = (cache.insides, cache.openable, cache.infra)
             trail = trail.filter { insides[$0.id] != nil }
             if !sources.contains(source) { source = sources.first ?? .modules }
             loaded = true
@@ -246,6 +262,14 @@ struct MapView: View {
                     ?? ArchitectureGraph.folders(files)
             }.value
         }
+        let infraFiles = workspace.files
+        infra = await Task.detached(priority: .userInitiated) {
+            Infrastructure.detect(files: infraFiles.filter(Infrastructure.isCandidate)) { path in
+                let url = root.appending(path: path)
+                guard ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) < 2_000_000 else { return nil }
+                return try? String(contentsOf: url, encoding: .utf8)
+            }
+        }.value
         let compose = ComposeFile.load(projectRoot: root)
         services = compose.map(ArchitectureGraph.compose)
         let files = workspace.files
@@ -253,7 +277,7 @@ struct MapView: View {
         let read = Self.reader(root: root)
         let (built, more) = await Task.detached(priority: .userInitiated) { () -> (SystemMap, Set<String>) in
             let map = SystemMap.build(files: files, read: read, compose: compose, modules: graph)
-            return (map, Set(map.parts.filter { map.opens($0, files: files) }.map(\.id)))
+            return (map, Set(map.parts.filter { map.opens($0, files: files, read: read) }.map(\.id)))
         }.value
         system = built
         // The code changed: opened parts are built again from it, the trail kept.
@@ -263,7 +287,7 @@ struct MapView: View {
         for part in trail {
             guard let inside = await Task.detached(priority: .userInitiated, operation: { SystemMap.inside(part, files: files, read: read) }).value else { break }
             rebuilt[part.id] = inside
-            openable[part.id] = await Task.detached(priority: .userInitiated) { Set(inside.parts.filter { inside.opens($0, files: files) }.map(\.id)) }.value
+            openable[part.id] = await Task.detached(priority: .userInitiated) { Set(inside.parts.filter { inside.opens($0, files: files, read: read) }.map(\.id)) }.value
             kept.append(part)
         }
         insides = rebuilt
@@ -273,7 +297,7 @@ struct MapView: View {
         notes = try? String(contentsOf: root.appending(path: ".dante/architecture.md"), encoding: .utf8)
         if let selected, graph?.node(selected) == nil, shown?.part(selected) == nil { self.selected = nil }
         session.mapCache = MapCache(revision: revision, modules: modules, services: services, system: system, coverage: coverage, notes: notes,
-                                    insides: insides, openable: openable)
+                                    insides: insides, openable: openable, infra: infra)
         loaded = true
     }
 }
@@ -288,6 +312,7 @@ struct MapCache {
     var notes: String?
     var insides: [String: SystemMap] = [:]
     var openable: [String: Set<String>] = [:]
+    var infra: Infrastructure?
 }
 
 // MARK: Diagram

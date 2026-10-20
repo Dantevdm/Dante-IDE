@@ -27,8 +27,12 @@ extension ArchitectureGraph {
             texts[file] = value
             return value
         }
+        let files_ = Self.byFile(pieces)
+        // Imports name files without their extension.
+        let stems = Dictionary(pieces.keys.filter { $0 != "…" }.map { (($0 as NSString).deletingPathExtension, $0) }) { a, _ in a }
         func piece(of file: String) -> String? {
-            pieces.keys.filter { $0 != "…" && ($0 == base ? (file as NSString).deletingLastPathComponent == base : file.hasPrefix($0 + "/")) }.max { $0.count < $1.count }
+            if files_ { return pieces[file] != nil ? file : stems[file] ?? stems[file + "/index"] }
+            return pieces.keys.filter { $0 != "…" && ($0 == base ? (file as NSString).deletingLastPathComponent == base : file.hasPrefix($0 + "/")) }.max { $0.count < $1.count }
                 ?? (pieces["…"]?.contains(file) == true ? "…" : nil)
         }
 
@@ -38,14 +42,26 @@ extension ArchitectureGraph {
         for (key, members) in pieces {
             for file in members {
                 for target in imports(of: file, text: text(file), javaRoot: javaRoot, base: base, goModule: goModule) {
-                    let folder: String? = pieces.keys.first { $0 != "…" && $0 != base && (target == $0 || target.hasPrefix($0 + "/")) }
+                    let folder: String? = files_ ? nil : pieces.keys.first { $0 != "…" && $0 != base && (target == $0 || target.hasPrefix($0 + "/")) }
                     guard let other = piece(of: target) ?? folder, other != key else { continue }
                     edges.insert(Edge(from: key, to: other))
                 }
             }
         }
+        // Classes in one package name each other without importing.
+        if files_ {
+            let named = Dictionary(pieces.keys.filter { $0 != "…" && SystemMap.namesTypes($0) }.map { (SystemMap.stem($0), $0) }) { a, _ in a }
+            for key in pieces.keys where key != "…" && SystemMap.namesTypes(key) {
+                let words = SystemMap.identifiers(text(key))
+                for (name, other) in named where other != key && words.contains(name) { edges.insert(Edge(from: key, to: other)) }
+            }
+        }
         let nodes = pieces.keys.sorted().map { key -> Node in
             let members = pieces[key]!
+            if files_, key != "…" {
+                return Node(id: key, name: SystemMap.stem(key), kind: isEntryPoint(key, text: text(key)) ? .app : .library, path: key,
+                            detail: SystemMap.fileRole(key, text: text(key)))
+            }
             let isEntry = key == base || members.contains { isEntryPoint($0, text: text($0)) }
             let name = key == "…" ? "Other" : key == base ? ((base as NSString).lastPathComponent.nonEmptyName ?? "root") : (key as NSString).lastPathComponent
             return Node(id: key, name: name, kind: isEntry ? .app : .library, path: key == "…" ? nil : key,
@@ -69,7 +85,15 @@ extension ArchitectureGraph {
             let parts = relative.split(separator: "/")
             pieces[parts.count > 1 ? (base.isEmpty ? "" : base + "/") + parts[0] : base, default: []].append(file)
         }
-        return pieces.count >= 2 ? (base, pieces) : nil
+        if pieces.count >= 2 { return (base, pieces) }
+        // A folder of files (controllers/, a package): each file is a piece of its own.
+        guard code.count <= 60 else { return nil }
+        return (root, Dictionary(uniqueKeysWithValues: code.map { ($0, [$0]) }))
+    }
+
+    /// Whether the pieces are single files rather than folders.
+    static func byFile(_ pieces: [String: [String]]) -> Bool {
+        pieces.allSatisfy { $0.key == "…" || ($0.value == [$0.key] && SystemMap.isCode($0.key)) }
     }
 
     /// The Go module the folder sits in: its path and go.mod's folder.
@@ -218,8 +242,18 @@ extension ArchitectureGraph {
 extension SystemMap {
     /// Whether a part can be opened: code with a folder of its own and smaller pieces in it.
     /// The entry piece of an opened part (its loose files) has nothing further inside.
-    public func opens(_ part: Part, files: [String]) -> Bool {
-        guard part.lane == .backend || (part.lane == .clients && part.id.hasPrefix("client:")), let path = part.path, !entries.contains(part.id) else { return false }
+    /// Tables open into the code that reaches them; a file into its methods (with `read`,
+    /// only when it has two or more).
+    public func opens(_ part: Part, files: [String], read: ((String) -> String?)? = nil) -> Bool {
+        guard !entries.contains(part.id) else { return false }
+        if part.kind == .table { return true }
+        guard let path = part.path else { return false }
+        if Self.isCode(path) {
+            guard part.id.hasPrefix("code:") else { return false }
+            guard let read else { return true }
+            return read(path).map { Self.members(of: path, text: $0).count >= 2 } ?? false
+        }
+        guard part.lane == .backend || (part.lane == .clients && part.id.hasPrefix("client:")) else { return false }
         return ArchitectureGraph.pieces(files: files, root: path == "." ? "" : path) != nil
     }
 
@@ -227,7 +261,9 @@ extension SystemMap {
     /// the routes they serve, the tables and stores they use and the services they call.
     /// Nil when it has nothing inside worth opening.
     public static func inside(_ part: Part, files: [String], read: (String) -> String?) -> SystemMap? {
+        if part.kind == .table { return trace(table: part.name, files: files, read: read) }
         guard let path = part.path else { return nil }
+        if isCode(path) { return inside(file: path, files: files, read: read) }
         let root = path == "." ? "" : path
         let prefix = root.isEmpty ? "" : root + "/"
         guard let graph = ArchitectureGraph.inner(files: files, root: root, read: read) else { return nil }
@@ -236,6 +272,12 @@ extension SystemMap {
         var map = build(files: subset, read: read, modules: graph, findsClients: false)
         map.laneTitles[.backend] = "Inside \(part.name)"
         if let base = graph.base { map.entries = Set(map.parts.filter { $0.lane == .backend && ($0.path == base || $0.path == nil) }.map(\.id)) }
+        // Only what these pieces touch: the whole schema beside a folder of controllers is noise.
+        let linked = Set(map.links.flatMap { [$0.from, $0.to] })
+        map.parts.removeAll { $0.lane != .backend && !linked.contains($0.id) }
+        for index in map.parts.indices where map.parts[index].lane == .backend && map.parts[index].kind == .package && map.parts[index].path.map(isCode) == true {
+            map.parts[index].kind = .structure
+        }
         return map
     }
 }
