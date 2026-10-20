@@ -31,7 +31,7 @@ The rail has seven places; some have tabs.
 - **Quality**: Tests and Security
 - **Local**: Services (Docker Compose), Data (your databases) and Health (alarms, checks, production logs)
 - **Ship**: Release and History
-- **Agents**: Jobs, Activity and Setup
+- **Agents**: Jobs, Activity, Setup and HQ
 - **Docs**, in the footer: markdown, native diagrams, PDFs and Word files, and the motion studio
 
 Beside them: the agent panel, the menu bar orb, the Stage and voice. The sections below go through the big pieces.
@@ -111,9 +111,11 @@ In Docs, the agents make videos, slide decks and explainers from the real system
 
 When both agents make a piece, you switch between their versions, play them side by side in step, and keep the one you like. The other agent critiques a version from a contact sheet of its beats, as a motion designer who didn't make it, and you send its notes back to the maker. Dante's lint flags anything that would break a frame-accurate render. A piece exports as an MP4, as one HTML file that plays offline in any browser (the libraries go inside it), or as a PDF of its slides or storyboard. Decks are presented full screen on the Stage, moved on with the keys, a clicker or "next slide".
 
-## Agent HQ (coming next)
+## Agent HQ
 
-The agents as people in an isometric office around a glowing brain, their shared memory. Each room is a role (research, backend, front-end, DevOps, quality, docs, security, data) and each is a job or job type you can hire for. Roads of light run between the rooms, thought bubbles are made from the agents' real tool calls, and there's a sub-agent bay, a task board and a team panel. Frontier models are drawn in light, cloud models come in through the door that leaves the Mac, and local models are pixel people. It will show on the Stage and in the menu bar too.
+A little easter egg under Agents › HQ: the agents in an isometric office around a glowing brain, and the office grows with your app. Every job an agent does and every commit counts. It starts as an empty lot and becomes a garage, a studio, an office, headquarters and finally a campus, with trees for the files and a tower under the brain for the commits.
+
+Each room is a kind of work: research, backend, front-end, DevOps, quality, docs, security and data. A room opens with its first job and is furnished as its work adds up: a desk, then a rug and lamp, a second desk, a bookshelf, and a gold-trimmed flagship with trophies after that. Rooms nobody uses go dusty, busy roads wear wider and light up, and the sky follows the time of day. Whoever is working sits in the room of the file they're editing, with a tag saying what they're doing. The story so far lists each milestone, and *Watch it grow* replays the whole history.
 
 ## What stays on your Mac
 
@@ -172,14 +174,13 @@ Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the s
 
 **Next**
 
-- **Agent HQ** (see above): the office around the brain, in the app, on the Stage and in the menu bar.
 - **Discovery**: a freshly opened project paints the picture of everything Dante found, on Home.
 - **Motion everywhere**: the Infra view's animated links and pulses in Tests, Data, Services and Agents.
 - **Hands**: let an agent open apps and control the Mac, with a visible kill switch (needs Accessibility, asked first).
 
 **Waiting for review** (built, being tried in daily use)
 
-The motion studio, presence orb and constellation, the Stage, full voice, Codex or Claude in charge, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
+Agent HQ, the motion studio, presence orb and constellation, the Stage, full voice, Codex or Claude in charge, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
 
 ## Requirements
 

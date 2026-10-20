@@ -38,6 +38,7 @@ struct WorkspaceView: View {
                         case .claude: ClaudeAreaView(session: session, workspace: workspace)
                         case .agents: AgentsView(session: session, workspace: workspace)
                         case .jobs: JobsView(session: session, workspace: workspace)
+                        case .office: OfficeView(session: session, workspace: workspace)
                         case .security: SecurityView(session: session, workspace: workspace)
                         }
                     }

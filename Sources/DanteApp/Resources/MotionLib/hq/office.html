@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent HQ</title>
+<style>
+@font-face{font-family:"Geist";src:url("/_dante/fonts/Geist.ttf");font-weight:100 900}
+@font-face{font-family:"Geist Mono";src:url("/_dante/fonts/GeistMono.ttf");font-weight:100 900}
+:root{--mono:"Geist Mono",ui-monospace,Menlo,monospace;--ground:#0A0D14;--panel:#0D1119;--glass:rgba(13,17,25,0.9);--card:#141A26;--line:#1F2636;--line2:#2C3550;--text:#E8EBEF;--text2:#9AA3B2;--text3:#7D8794;--accent:#8FA8FF;--accentTint:#162033;--dotc:rgba(255,255,255,0.05)}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ground);color:var(--text);font-family:"Geist",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none}
+button{font:inherit;cursor:pointer;color:inherit}
+#sky{position:absolute;inset:0;transition:background 1.2s}
+#dots{position:absolute;inset:0;background:radial-gradient(var(--dotc) 1px,transparent 1.2px) 0 0/22px 22px}
+#stars{position:absolute;inset:0;opacity:0;transition:opacity 1.2s;background-image:radial-gradient(1.2px 1.2px at 12% 18%,#fff,transparent),radial-gradient(1px 1px at 33% 8%,#fff,transparent),radial-gradient(1.4px 1.4px at 71% 14%,#fff,transparent),radial-gradient(1px 1px at 88% 30%,#fff,transparent),radial-gradient(1px 1px at 52% 4%,#fff,transparent),radial-gradient(1.2px 1.2px at 94% 6%,#fff,transparent),radial-gradient(1px 1px at 24% 36%,#fff,transparent)}
+.night #stars{opacity:0.55}
+#view{position:absolute;top:0;bottom:0;right:0;left:0;overflow:hidden}
+#world{position:absolute;left:0;top:0;width:1600px;height:980px;transform-origin:0 0}
+.f{position:absolute;left:0;top:0;transform-origin:0 0;box-sizing:border-box}
+.fig{position:absolute}
+.room,.live{position:absolute;left:0;top:0}
+.rise{animation:rise 1.1s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rise{0%{opacity:0;filter:brightness(2.2)}60%{opacity:1}100%{opacity:1}}
+.dash{position:absolute;left:0;right:0;top:11px;height:2px;background:repeating-linear-gradient(90deg,rgba(120,220,255,0.75) 0 8px,transparent 8px 16px);background-size:16px 2px;animation:dash 0.9s linear infinite}
+.packet{position:absolute;left:0;top:9px;width:10px;height:6px;border-radius:3px;background:#E8FBFF;box-shadow:0 0 10px 3px rgba(120,220,255,0.8);animation:packet 3.2s cubic-bezier(0.45,0,0.2,1) infinite}
+.ripple{position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 2px rgba(110,220,255,0.7);animation:ripple 3.6s ease-out infinite}
+.halo{animation:halo 6s ease-in-out infinite}
+.spin{animation:spin 14s linear infinite}
+.spin.rev{animation-duration:20s;animation-direction:reverse}
+.beam{animation:beam 3s ease-in-out infinite}
+.arc{stroke-dasharray:6 10;animation:arc 1.6s linear infinite}
+.blink{animation:blink 2.4s steps(1) infinite}
+.step{animation:step 0.45s steps(1) infinite}
+.sway{animation:sway 5s ease-in-out infinite;transform-origin:50% 100%}
+@keyframes dash{to{background-position:16px 0}}
+@keyframes packet{0%{transform:translateX(0);opacity:0}10%{opacity:1}85%{opacity:1}100%{transform:translateX(var(--len,184px));opacity:0}}
+@keyframes ripple{0%{transform:scale(0.7);opacity:0.9}100%{transform:scale(1.45);opacity:0}}
+@keyframes halo{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.05);filter:brightness(1.15)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes beam{0%,100%{opacity:0.75}50%{opacity:1}}
+@keyframes arc{to{stroke-dashoffset:-32}}
+@keyframes blink{0%{opacity:1}50%{opacity:0.45}}
+@keyframes step{0%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+@keyframes sway{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
+.tag{position:absolute;transform:translate(-50%,-100%);display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:var(--glass);box-shadow:inset 0 0 0 1px var(--line2);font-size:10.5px;white-space:nowrap;pointer-events:none;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.tag.wait{box-shadow:inset 0 0 0 1px rgba(255,46,136,0.6)}
+.tag i{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+.tag b{font-weight:400;color:var(--text2)}
+.label{position:absolute;transform:translateY(-100%);display:flex;align-items:center;gap:9px;padding:7px 10px 7px 7px;border-radius:10px;border:0;background:var(--glass);box-shadow:inset 0 0 0 1px var(--line2),0 8px 22px rgba(0,0,0,0.2);text-align:left;transition:box-shadow .2s}
+.label:hover{box-shadow:inset 0 0 0 1px var(--text3),0 8px 22px rgba(0,0,0,0.2)}
+.label .ic{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0B0E15}
+.label .tx{display:flex;flex-direction:column;gap:2px}
+.label .nm{font-size:12.5px;font-weight:600;display:flex;gap:6px;align-items:center}
+.label .sub{font-family:var(--mono);font-size:9.5px;color:var(--text2);white-space:nowrap}
+.label .bar{height:2px;border-radius:1px;background:var(--line);overflow:hidden;margin-top:2px}
+.label .bar span{display:block;height:2px}
+.label .gold{color:#F5C84B;font-size:10px;letter-spacing:1px}
+.label.vacant{opacity:0.7}
+.label .dots{display:flex;gap:3px;padding-left:4px}
+.label .dots span{width:9px;height:9px}
+aside{position:absolute;left:14px;top:14px;bottom:14px;width:330px;box-sizing:border-box;padding:16px;border-radius:14px;background:var(--glass);box-shadow:inset 0 0 0 1px var(--line),0 20px 50px rgba(0,0,0,0.25);-webkit-backdrop-filter:blur(12px);display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;z-index:5;transition:transform .35s}
+aside::-webkit-scrollbar{width:0}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--text3)}
+.row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+.row.wait{background:rgba(255,46,136,0.08);box-shadow:inset 0 0 0 1px rgba(255,46,136,0.4)}
+.chip{padding:1px 6px;border-radius:4px;color:#0B0E15;font-weight:600;font-size:10.5px}
+.muted{color:var(--text2)}
+.small{font-size:10.5px}
+.col{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{height:28px;padding:0 11px;border-radius:7px;border:1px solid var(--line2);background:none;font-size:12px;white-space:nowrap}
+.btn.hot{border:0;background:#FF2E88;color:#1A0710;font-weight:600}
+.btn.play{display:inline-flex;align-items:center;gap:6px;background:var(--accentTint);border-color:var(--line2);color:var(--accent)}
+.progress{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.progress span{display:block;height:4px;border-radius:2px}
+.era{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:linear-gradient(135deg,var(--accentTint),var(--card));box-shadow:inset 0 0 0 1px var(--line2)}
+.era .name{font-size:20px;font-weight:600;display:flex;align-items:center;gap:8px}
+.story{display:flex;flex-direction:column;gap:0;position:relative;padding-left:14px}
+.story::before{content:"";position:absolute;left:4px;top:6px;bottom:6px;width:1px;background:var(--line)}
+.story .ms{position:relative;display:flex;flex-direction:column;gap:1px;padding:6px 0}
+.story .ms::before{content:"";position:absolute;left:-13px;top:11px;width:7px;height:7px;border-radius:50%;background:var(--c,#5A6578);box-shadow:0 0 0 3px var(--panel)}
+.story .ms.new .txt{color:#D9A21F}
+.story .ms .txt{font-size:12px;color:var(--text)}
+.story .ms .when{font-family:var(--mono);font-size:9.5px;color:var(--text3)}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat{padding:10px;border-radius:10px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);display:flex;flex-direction:column;gap:2px}
+.stat span:first-child{font-size:10.5px;color:var(--text3)}
+.stat span:last-child{font-size:20px;font-weight:600}
+.close{width:28px;height:28px;padding:0;border-radius:7px;border:1px solid var(--line2);background:none;color:var(--text2);display:flex;align-items:center;justify-content:center}
+#corner{position:absolute;right:16px;top:14px;display:flex;gap:8px;z-index:4}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;background:var(--glass);box-shadow:inset 0 0 0 1px var(--line);font-size:12px;color:var(--text2)}
+.pill .dot{width:7px;height:7px;border-radius:50%}
+#caption{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:9px 16px 9px 10px;border-radius:14px;background:var(--glass);box-shadow:inset 0 0 0 1px var(--line);max-width:70%;z-index:4;transition:opacity .4s}
+#caption .orb{width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:radial-gradient(circle at 36% 32%,#FFFFFF,#4DD0E1 45%,#18A7C9);box-shadow:0 0 16px rgba(77,208,225,0.6)}
+#caption .k{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;color:var(--accent);white-space:nowrap}
+#caption .v{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#replayDate{position:absolute;right:28px;bottom:70px;text-align:right;pointer-events:none;opacity:0;transition:opacity .4s;z-index:4}
+#replayDate .d{font-size:44px;font-weight:600;letter-spacing:-0.02em}
+#replayDate .e{font-family:var(--mono);font-size:12px;letter-spacing:0.16em;color:var(--accent)}
+.replaying #replayDate{opacity:1}
+#toast{position:absolute;left:50%;top:18px;transform:translate(-50%,-220%);padding:10px 16px;border-radius:12px;background:linear-gradient(135deg,#3A2A10,#221A0C);box-shadow:inset 0 0 0 1px #6B5320,0 16px 40px rgba(0,0,0,0.5);color:#FFE7A6;font-size:13px;z-index:6;transition:transform .6s cubic-bezier(.2,.8,.2,1),visibility 0s .6s;visibility:hidden;max-width:60%;text-align:center}
+#toast.show{transform:translate(-50%,0);visibility:visible;transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+#toast b{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;display:block;color:#F5C84B;margin-bottom:2px}
+.spark{position:absolute;width:6px;height:6px;border-radius:2px;pointer-events:none;z-index:6;animation:spark 1.6s ease-out forwards}
+@keyframes spark{0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(540deg);opacity:0}}
+#panelToggle{display:none;position:absolute;left:14px;top:14px;z-index:6}
+.narrow aside{transform:translateX(-360px)}
+.narrow.panel aside{transform:none}
+.narrow #panelToggle{display:inline-flex}
+.narrow.panel #panelToggle{left:300px}
+@media (prefers-reduced-motion: reduce){*{animation:none !important}}
+</style>
+</head>
+<body>
+<div id="sky"></div><div id="stars"></div><div id="dots"></div>
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+<defs>
+<radialGradient id="hClaude" cx="38%" cy="34%" r="70%"><stop offset="0" stop-color="#FFF4EC"/><stop offset="0.5" stop-color="#F0A27F"/><stop offset="1" stop-color="#B85A3A"/></radialGradient>
+<linearGradient id="hCodex" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4FCFF"/><stop offset="0.5" stop-color="#9FE0F3"/><stop offset="1" stop-color="#3B82C9"/></linearGradient>
+<linearGradient id="hLocal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C9F7DE"/><stop offset="1" stop-color="#2E9E68"/></linearGradient>
+<linearGradient id="hCloud" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E9DDFF"/><stop offset="1" stop-color="#7A5BD6"/></linearGradient>
+<radialGradient id="hLooker" cx="38%" cy="34%" r="70%"><stop offset="0" stop-color="#FFF0D6"/><stop offset="1" stop-color="#C98532"/></radialGradient>
+<radialGradient id="hSub" cx="38%" cy="34%" r="70%"><stop offset="0" stop-color="#FFF8F2"/><stop offset="1" stop-color="#E3A487"/></radialGradient>
+</defs>
+</svg>
+<div id="view"><div id="world"></div></div>
+<aside id="panel"></aside>
+<button id="panelToggle" class="btn play" onclick="document.body.classList.toggle('panel')">☰</button>
+<div id="corner"></div>
+<div id="caption"></div>
+<div id="replayDate"><div class="e"></div><div class="d"></div></div>
+<div id="toast"></div>
+<script>
+(() => {
+  const CX = 1010, CY = 500, R = 430, W = 210, D = 170, H = 64;
+  // The scene's extent in design pixels, for fitting it to the view.
+  const BOX = { x: 372, y: 36, w: 1276, h: 912 };
+  const T = (x, y, z, o) => `translate(${CX}px, ${CY}px) rotateX(55deg) rotateZ(-45deg) translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, ${z.toFixed(1)}px)${o ? ' ' + o : ''}`;
+  const P = (x, y, z) => ({ X: CX + 0.70711 * (x + y), Y: CY + 0.40558 * (y - x) - 0.81915 * z });
+  const ROOMS = {
+    research: { color: '#8B6CF0', floor: '#B3A0FA', rug: '#C7B9FC', wa: '#9479EE', wb: '#7558D6', phi: -45 },
+    backend: { color: '#F29A4A', floor: '#F6BE87', rug: '#F9D2AA', wa: '#EFA35C', wb: '#D6833D', phi: 0 },
+    frontend: { color: '#E45FAE', floor: '#F0A0CC', rug: '#F5BDDB', wa: '#E47AB6', wb: '#C95C9B', phi: 45 },
+    devops: { color: '#2FB5A3', floor: '#84D7CA', rug: '#A3E2D8', wa: '#49C0AF', wb: '#2C9C8C', phi: 90 },
+    quality: { color: '#5DBF5A', floor: '#A2DC9C', rug: '#BCE6B7', wa: '#70C76C', wb: '#52AB4F', phi: 135 },
+    docs: { color: '#E9B93A', floor: '#F3D688', rug: '#F7E3AC', wa: '#ECC357', wb: '#D1A536', phi: 180 },
+    security: { color: '#E0534F', floor: '#EE9895', rug: '#F3B5B3', wa: '#E26A66', wb: '#C64E4A', phi: 225 },
+    data: { color: '#4F7FE8', floor: '#9BB6F4', rug: '#B6CAF7', wa: '#6990EB', wb: '#4C74D4', phi: 270 }
+  };
+  const LOOKS = {
+    claude: { head: 'url(#hClaude)', rx: 7.5, rot: false, c: '#D97757', r: '50%' },
+    codex: { head: 'url(#hCodex)', rx: 2.5, rot: true, c: '#8ED8F0', r: '3px' },
+    local: { head: 'url(#hLocal)', rx: 1.5, rot: false, c: '#5AD69A', r: '2px' },
+    looker: { head: 'url(#hLooker)', rx: 7.5, rot: false, c: '#F2B061', r: '50%' },
+    cloud: { head: 'url(#hCloud)', rx: 2.5, rot: true, c: '#A98BF5', r: '3px' },
+    subagent: { head: 'url(#hSub)', rx: 7.5, rot: false, c: '#E9B49B', r: '50%' }
+  };
+  const LEVELS = ['Vacant', 'Opened', 'Settled', 'Team room', 'Established', 'Flagship'];
+  const SKY = {
+    night: 'radial-gradient(ellipse at 63% 50%, #222A3E 0%, #141927 52%, #0A0D14 100%)',
+    dawn: 'radial-gradient(ellipse at 63% 50%, #3A3350 0%, #241F35 52%, #171320 100%)',
+    day: 'radial-gradient(ellipse at 63% 50%, #34405C 0%, #222B40 55%, #151B29 100%)',
+    dusk: 'radial-gradient(ellipse at 63% 50%, #3E2E3A 0%, #261C27 52%, #140F16 100%)'
+  };
+  const TINT = {
+    night: 'linear-gradient(rgba(40,50,110,0.10), rgba(40,50,110,0.10))',
+    dawn: 'linear-gradient(rgba(255,150,190,0.07), rgba(255,150,190,0.07))',
+    day: 'linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0))',
+    dusk: 'linear-gradient(rgba(255,140,60,0.08), rgba(255,140,60,0.08))'
+  };
+  const world = document.getElementById('world');
+  // Light themes (Light, Paper) get a daylit ground, paler roads and a pale brain platform.
+  let LIGHT = false, THEME = null;
+  const ink = () => LIGHT ? 'rgba(60,80,120,0.09)' : 'rgba(140,170,220,0.07)';
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const post = (action, extra) => { try { window.webkit.messageHandlers.office.postMessage({ action, ...(extra || {}) }); } catch (e) {} };
+
+  // A flat face of the scene: floors lie on z, walls stand on an edge.
+  const face = (w, h, t, bg, extra = {}) => `<div class="f" style="width:${w}px;height:${h}px;transform:${t};background:${bg};border-radius:${extra.r || 0};box-shadow:${extra.sh || 'none'};border:${extra.b || 0};${extra.bt ? 'border-top:' + extra.bt + ';' : ''}${extra.mask ? '-webkit-mask-image:' + extra.mask + ';' : ''}${extra.text ? 'display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;font-family:var(--mono);font-size:8.5px;letter-spacing:0.14em;color:' + (extra.tc || 'rgba(255,255,255,0.9)') + ';' : ''}${extra.op != null ? 'opacity:' + extra.op + ';' : ''}">${extra.text || ''}${extra.ripple ? '<span class="ripple"></span>' : ''}</div>`;
+  const floor = (x, y, w, d, z, bg, e) => face(w, d, T(x, y, z), bg, e);
+  const wallY = (x, y, w, h, ztop, bg, e) => face(w, h, T(x, y, ztop, 'rotateX(-90deg)'), bg, e);
+  const wallX = (x, y, d, h, ztop, bg, e) => face(h, d, T(x, y, ztop, 'rotateY(90deg)'), bg, e);
+  const at = (p, w, h, ml, mt, inner, cls = '') => `<div class="fig ${cls}" style="left:${p.X.toFixed(1)}px;top:${p.Y.toFixed(1)}px;width:${w}px;height:${h}px;margin-left:${ml}px;margin-top:${mt}px">${inner}</div>`;
+
+  const svgSeat = (shirt, look, on, op = 1) => {
+    const m = LOOKS[look] || LOOKS.claude;
+    return `<svg width="36" height="48" viewBox="0 0 36 48"><ellipse cx="18" cy="45" rx="13" ry="3.5" fill="rgba(0,0,0,0.28)"/><rect x="15.5" y="36" width="5" height="7" fill="#2A2F3A"/><rect x="9" y="42" width="18" height="3" rx="1.5" fill="#2A2F3A"/>${on ? `<g opacity="${op}"><path d="M7.5 36 C 7.5 23, 11.5 19, 18 19 C 24.5 19, 28.5 23, 28.5 36 Z" fill="${shirt}"/><rect x="10.5" y="3.5" width="15" height="15" rx="${m.rx}" fill="${m.head}" ${m.rot ? 'transform="rotate(45 18 11)"' : ''}/></g>` : ''}<rect x="7" y="27" width="22" height="11" rx="4" fill="#323846"/></svg>`;
+  };
+  const svgStand = (shirt, look, small) => {
+    const m = LOOKS[look] || LOOKS.claude;
+    const s = small ? 0.82 : 1;
+    return `<svg class="step" width="24" height="46" viewBox="0 0 24 46"><g transform="translate(${12 - 12 * s} ${46 - 46 * s}) scale(${s})"><ellipse cx="12" cy="43.5" rx="8" ry="2.5" fill="rgba(0,0,0,0.28)"/><rect x="7.5" y="31" width="3.5" height="12" rx="1.5" fill="#2A2F3A"/><rect x="13" y="31" width="3.5" height="12" rx="1.5" fill="#2A2F3A"/><path d="M5 33 C 5 22, 8 18, 12 18 C 16 18, 19 22, 19 33 Z" fill="${shirt}"/><rect x="5.5" y="3" width="13" height="13" rx="${m.rx * 0.87}" fill="${m.head}" ${m.rot ? 'transform="rotate(45 12 9.5)"' : ''}/></g></svg>`;
+  };
+  const svgPlant = '<svg width="24" height="36" viewBox="0 0 24 36" class="sway"><path d="M6 24 L18 24 L16.5 34 L7.5 34 Z" fill="#E4E7EE"/><circle cx="12" cy="14" r="7" fill="#3FAF6B"/><circle cx="7.5" cy="18" r="5" fill="#57C27E"/><circle cx="16.5" cy="18.5" r="5" fill="#34995C"/><circle cx="12" cy="8" r="4.5" fill="#6BD08F"/></svg>';
+  const svgLamp = (glow) => `<svg width="40" height="78" viewBox="0 0 40 78"><circle cx="20" cy="12" r="${glow ? 20 : 16}" fill="#FFE3B0" fill-opacity="${glow ? 0.35 : 0.16}"/><rect x="19" y="14" width="2" height="58" fill="#2A2F3A"/><ellipse cx="20" cy="73" rx="7" ry="2.5" fill="#2A2F3A"/><circle cx="20" cy="12" r="6.5" fill="#FFF3D6"/></svg>`;
+  const svgRing = (color) => `<svg width="40" height="84" viewBox="0 0 40 84"><circle cx="20" cy="16" r="13" fill="none" stroke="#FFFFFF" stroke-width="3.5"/><circle cx="20" cy="16" r="18" fill="none" stroke="${color}" stroke-opacity="0.45" stroke-width="6"/><rect x="19" y="29" width="2" height="48" fill="#2A2F3A"/><path d="M20 76 L12 82 M20 76 L28 82" stroke="#2A2F3A" stroke-width="2"/></svg>`;
+  const svgTrophy = '<svg width="16" height="22" viewBox="0 0 16 22"><ellipse cx="8" cy="20.5" rx="5" ry="1.5" fill="rgba(0,0,0,0.3)"/><rect x="4.5" y="16" width="7" height="4" rx="1" fill="#B8862B"/><rect x="7" y="11" width="2" height="5" fill="#D9A93B"/><path d="M3 2 H13 V6 C13 9.5 10.8 11.5 8 11.5 C5.2 11.5 3 9.5 3 6 Z" fill="#F5C84B"/><path d="M5 3.5 V6" stroke="#FFF1C2" stroke-width="1.2" stroke-linecap="round"/></svg>';
+  const svgTree = (s) => `<svg width="${30 * s}" height="${54 * s}" viewBox="0 0 30 54" class="sway"><ellipse cx="15" cy="52" rx="10" ry="2.5" fill="rgba(0,0,0,0.3)"/><rect x="13.5" y="34" width="3" height="18" fill="#5B4636"/><circle cx="15" cy="22" r="12" fill="#2F8F5B"/><circle cx="9" cy="28" r="8" fill="#3BA66A"/><circle cx="21" cy="28" r="8" fill="#287A4E"/><circle cx="15" cy="13" r="8" fill="#4CB97A"/></svg>`;
+
+  const roomCenter = (role) => { const a = ROOMS[role].phi * Math.PI / 180; return { cx: R * Math.cos(a), cy: R * Math.sin(a), a }; };
+  const DESKS = [[26, 40], [112, 40]];
+  const STANDS = [[150, 104], [178, 92], [128, 128], [176, 132]];
+
+  // One room, drawn from its level: a ghost outline, then walls and a desk, a rug and lamp,
+  // a second desk and plants, a screen and bookshelf, and at the top a ring and gold trim.
+  function roomHTML(room, night) {
+    const rm = ROOMS[room.role];
+    const { cx, cy } = roomCenter(room.role);
+    const x0 = cx - W / 2, y0 = cy - D / 2;
+    const L = room.level;
+    const out = [];
+    if (L === 0) {
+      out.push(floor(x0, y0, W, D, 0, LIGHT ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.025)', { b: LIGHT ? '1.5px dashed rgba(0,0,0,0.25)' : '1.5px dashed rgba(255,255,255,0.28)', r: '6px', text: 'VACANT', tc: LIGHT ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.4)' }));
+      return out.join('');
+    }
+    const gold = L >= 5 ? '3px solid #F5C84B' : null;
+    out.push(floor(x0, y0, W, D, 0, rm.floor, { sh: `0 0 0 1px rgba(0,0,0,0.15), 0 0 40px rgba(0,0,0,0.35)${L >= 5 ? ', 0 0 70px ' + rm.color + '88' : ''}` }));
+    if (L >= 2) out.push(floor(x0 + 14, y0 + 26, W - 28, D - 40, 0.5, rm.rug, { r: '6px' }));
+    if (room.role === 'research' && L >= 3) out.push(floor(x0 + 104, y0 + 70, 92, 84, 1, 'rgba(255,255,255,0.08)', { b: '1.5px dashed rgba(255,255,255,0.85)', r: '4px', text: 'SUB-AGENT BAY' }));
+    const wallH = L === 1 ? 40 : H;
+    out.push(wallY(x0, y0, W, wallH, wallH, rm.wa, { bt: gold }));
+    out.push(wallX(x0 + W, y0, D, wallH, wallH, rm.wb, { bt: gold }));
+    if (L >= 4) {
+      out.push(wallY(x0 + 24, y0 + 0.8, 70, 30, 54, 'linear-gradient(180deg, #1B2130, #121722)', { b: '2px solid #10141C', r: '2px', sh: 'inset 0 -10px 0 -6px ' + rm.color }));
+      out.push(wallX(x0 + W - 0.8, y0 + 34, 64, 34, 50, `repeating-linear-gradient(180deg, #F4F1EA 0 6px, ${rm.color} 6px 10px, #2A2F3A 10px 14px, #E4E7EE 14px 19px)`, { r: '2px' }));
+    } else if (L >= 2) {
+      // A window on the back wall, lit at night.
+      out.push(wallY(x0 + 30, y0 + 0.8, 54, 22, 34, night ? 'linear-gradient(180deg,#FFE9B8,#F5C77A)' : 'linear-gradient(180deg,#BFE3FF,#8CC4F0)', { b: '2px solid rgba(0,0,0,0.25)', r: '2px' }));
+    }
+    const groups = [];
+    const desks = L >= 3 ? 2 : 1;
+    for (let i = 0; i < desks; i++) {
+      const [dx, dy] = DESKS[i];
+      const x = x0 + dx, y = y0 + dy, w = 64, d = 26, h = 20;
+      groups.push({ k: (y + d / 2) - (x + w / 2), html: wallX(x, y, d, h, h, '#B9BFCB') + wallY(x, y + d, w, h, h, '#9AA1AF') + floor(x, y, w, d, h, '#EEF0F5') + wallY(x + 11, y + 4, 42, 21, h + 23, 'linear-gradient(180deg, #1C2230, #141924)', { b: '2px solid #0F131B', r: '2px', sh: room.warmth >= 0.8 ? 'inset 0 0 12px ' + rm.color : 'none' }) });
+      const fx = x + 32, fy = y + d + 22;
+      groups.push({ k: fy - fx, html: at(P(fx, fy, 0), 36, 48, -18, -46, svgSeat(rm.color, 'claude', false)) });
+    }
+    if (L >= 3) { const p = P(x0 + 18, y0 + D - 14, 0); groups.push({ k: (y0 + D - 14) - (x0 + 18), html: at(p, 24, 36, -12, -34, svgPlant) }); }
+    if (L >= 4) { const p = P(x0 + W - 16, y0 + 16, 0); groups.push({ k: (y0 + 16) - (x0 + W - 16), html: at(p, 24, 36, -12, -34, svgPlant) }); }
+    if (L >= 2) {
+      const p = P(x0 + 14, y0 + 16, 0);
+      groups.push({ k: (y0 + 16) - (x0 + 14), html: L >= 5 ? at(p, 40, 84, -20, -82, svgRing(rm.color)) : at(p, 40, 78, -20, -76, svgLamp(night)) });
+    }
+    for (let i = 0; i < room.trophies; i++) {
+      const tx = x0 + 70 + i * 22, ty = y0 + 12;
+      groups.push({ k: ty - tx, html: at(P(tx, ty, 0), 16, 22, -8, -21, svgTrophy) });
+    }
+    groups.sort((a, b) => a.k - b.k).forEach((g) => out.push(g.html));
+    return out.join('');
+  }
+
+  // Who's in a room now: the live workers at the desks (then standing), or the room's regular
+  // dimmed at its desk when nobody's working.
+  function liveHTML(room, workers, tags) {
+    const rm = ROOMS[room.role];
+    const { cx, cy } = roomCenter(room.role);
+    const x0 = cx - W / 2, y0 = cy - D / 2;
+    const desks = room.level >= 3 ? 2 : room.level >= 1 ? 1 : 0;
+    const out = [];
+    const people = workers.length ? workers : (room.crew[0] && room.level > 0 ? [{ look: room.crew[0].look, idle: true }] : []);
+    people.forEach((w, i) => {
+      let p, html, z;
+      if (i < desks && w.look !== 'subagent') {
+        const [dx, dy] = DESKS[i];
+        const fx = x0 + dx + 32, fy = y0 + dy + 48;
+        p = P(fx, fy, 0); z = 70;
+        html = at(p, 36, 48, -18, -46, svgSeat(rm.color, w.look, true, w.idle ? 0.45 : 1));
+      } else {
+        const [sx, sy] = STANDS[(i - Math.min(i, desks)) % STANDS.length];
+        p = P(x0 + sx, y0 + sy, 0); z = 60;
+        html = at(p, 24, 46, -12, -44, svgStand(rm.color, w.look, w.look === 'subagent'));
+      }
+      out.push(html);
+      if (!w.idle) {
+        const q = { X: p.X, Y: p.Y - z * 0.81915 };
+        tags.push({ x: q.X, y: q.Y, color: (LOOKS[w.look] || LOOKS.claude).c, who: w.name + (w.job ? ' · job' : ''), text: w.waiting ? 'waiting for you: ' + w.doing : w.doing, wait: w.waiting });
+      }
+    });
+    return out.join('');
+  }
+
+  // The brain at the centre, bigger with each era, on a tower that grows with the commits.
+  function brainHTML(office) {
+    const e = office.era, floors = office.grounds.floors;
+    const ground = [], out = [];
+    ground.push(floor(-640, -640, 1280, 1280, -2, `repeating-linear-gradient(0deg, ${ink()} 0 1px, transparent 1px 40px), repeating-linear-gradient(90deg, ${ink()} 0 1px, transparent 1px 40px)`, { mask: `radial-gradient(circle, #000 ${20 + e * 5}%, transparent ${50 + e * 6}%)` }));
+    if (e >= 3) ground.push(floor(-300, -300, 600, 600, -1, LIGHT ? 'radial-gradient(circle, rgba(90,130,200,0.14), rgba(90,130,200,0.05) 60%, transparent 71%)' : 'radial-gradient(circle, rgba(70,110,180,0.16), rgba(40,60,100,0.06) 60%, transparent 71%)', { r: '50%' }));
+    if (e >= 4) ground.push(floor(-640, -640, 1280, 1280, -0.5, 'transparent', { r: '50%', b: LIGHT ? '22px solid rgba(150,162,185,0.45)' : '22px solid #1F2638', sh: LIGHT ? 'none' : 'inset 0 0 0 1px #2C3550, 0 0 0 1px #2C3550' }));
+    const size = [120, 200, 248, 248, 280][e];
+    out.push(floor(-size / 2, -size / 2, size, size, 0, LIGHT ? 'radial-gradient(circle, #F4F7FC, #D6DEEC 70%)' : 'radial-gradient(circle, #23304A, #161D2D 70%)', { r: '50%', sh: LIGHT ? '0 0 0 2px #B9C6DC, 0 0 60px rgba(80,170,255,0.25)' : '0 0 0 2px #2C3A58, 0 0 60px rgba(80,170,255,0.25)' }));
+    if (e >= 1) out.push(floor(-size * 0.4, -size * 0.4, size * 0.8, size * 0.8, 6, 'transparent', { r: '50%', sh: '0 0 0 2px rgba(110,220,255,0.8), 0 0 24px rgba(110,220,255,0.5), inset 0 0 24px rgba(110,220,255,0.3)', ripple: e >= 2 }));
+    out.push(floor(-70, -70, 140, 140, 10, 'radial-gradient(circle, rgba(180,235,255,0.55), rgba(60,140,255,0.15) 70%, transparent)', { r: '50%', sh: '0 0 0 1.5px rgba(150,225,255,0.7)', op: e >= 1 ? 1 : 0.5 }));
+    // The tower: a floor for every 150 commits.
+    for (let i = 0; i < floors; i++) out.push(floor(-44 + i * 2, -44 + i * 2, 88 - i * 4, 88 - i * 4, 14 + i * 14, LIGHT ? 'radial-gradient(circle, #E9EEF7, #C3CFE3)' : 'radial-gradient(circle, #31406A, #1E2842)', { r: '50%', sh: '0 0 0 1.5px rgba(150,225,255,0.55), 0 0 18px rgba(110,200,255,0.25)' }));
+    const top = 14 + floors * 14;
+    out.push(floor(-30, -30, 60, 60, top, 'radial-gradient(circle, #FFFFFF, #9FE6FF 50%, rgba(80,170,255,0.2))', { r: '50%', sh: '0 0 30px 10px rgba(140,220,255,0.6)', ripple: e >= 1 }));
+    const beamAt = P(0, 0, top);
+    if (e >= 2) out.push(`<div class="beam" style="position:absolute;left:${beamAt.X}px;top:${beamAt.Y}px;width:30px;height:${180 + e * 10}px;margin-left:-15px;margin-top:-${180 + e * 10}px;border-radius:15px;background:linear-gradient(to top, rgba(190,240,255,0.95), rgba(120,210,255,0.35) 60%, rgba(120,210,255,0));box-shadow:0 0 40px 10px rgba(110,200,255,0.25)"></div>`);
+    const orb = P(0, 0, e >= 2 ? Math.min(230, 190 + floors * 8) : 90 + floors * 14);
+    const o = [44, 56, 70, 76, 92][e];
+    out.push(`<div style="position:absolute;left:${orb.X}px;top:${orb.Y}px;width:0;height:0">`
+      + (e >= 1 ? `<div style="position:absolute;left:-95px;top:-95px;width:190px;height:190px;transform:scaleY(0.36)"><div class="spin" style="width:190px;height:190px;border-radius:50%;border:1px dashed rgba(150,225,255,0.55)"></div></div>` : '')
+      + (e >= 3 ? `<div style="position:absolute;left:-70px;top:-70px;width:140px;height:140px;transform:scaleY(0.36) rotate(14deg)"><div class="spin rev" style="width:140px;height:140px;border-radius:50%;border:1.5px solid rgba(180,160,255,0.45)"></div></div>` : '')
+      + (e >= 4 ? `<div style="position:absolute;left:-120px;top:-120px;width:240px;height:240px;transform:scaleY(0.36) rotate(-10deg)"><div class="spin" style="animation-duration:30s;width:240px;height:240px;border-radius:50%;border:1px solid rgba(245,200,75,0.4)"></div></div>` : '')
+      + `<div class="halo" style="position:absolute;left:-${o / 2}px;top:-${o / 2}px;width:${o}px;height:${o}px;border-radius:50%;background:radial-gradient(circle at 36% 32%, #FFFFFF 0%, #B3E5FC 16%, #2E9BFF 46%, #6D5DFC 74%, #3A2A8C 100%);box-shadow:0 0 ${20 + e * 8}px ${6 + e * 3}px rgba(80,160,255,0.45), 0 0 ${60 + e * 20}px ${10 + e * 6}px rgba(109,93,252,0.22)"></div></div>`);
+    return { ground: ground.join(''), html: out.join(''), orb };
+  }
+
+  function roadHTML(room, era) {
+    const rm = ROOMS[room.role];
+    const { a } = roomCenter(room.role);
+    const len = R - 128 - D / 2 + 8;
+    const t = T(128 * Math.cos(a), 128 * Math.sin(a), 0.5, `rotateZ(${rm.phi}deg) translateY(-12px)`);
+    if (room.level === 0) return `<div class="f" style="width:${len}px;height:24px;transform:${t};border-top:1.5px dotted ${LIGHT ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)'};margin-top:11px"></div>`;
+    // Worn by all the work ever done, lit by this week's.
+    const wear = 0.35 + room.wear * 0.65;
+    const bg = era === 0 ? `rgba(${LIGHT ? '160,140,115' : '70,62,52'},${0.5 + room.wear * 0.4})` : LIGHT ? `rgba(150,162,185,${wear * 0.7})` : `rgba(31,38,56,${wear})`;
+    const sh = era === 0 ? 'none' : `inset 0 0 0 1px ${LIGHT ? 'rgba(120,132,160,' + wear * 0.6 + ')' : 'rgba(44,53,80,' + wear + ')'}${room.traffic > 0.5 ? ', 0 0 14px rgba(110,200,255,' + (room.traffic * 0.25).toFixed(2) + ')' : ''}`;
+    const width = 14 + Math.round(room.wear * 10);
+    const packets = era >= 2 && room.traffic > 0
+      ? `<span class="packet" style="--len:${len}px;animation-duration:${(4.2 - room.traffic * 2).toFixed(2)}s;animation-delay:${(rm.phi / 90).toFixed(2)}s"></span>` + (era >= 4 && room.traffic > 0.4 ? `<span class="packet" style="--len:${len}px;animation-duration:${(4.2 - room.traffic * 2).toFixed(2)}s;animation-delay:${(rm.phi / 90 + 1.4).toFixed(2)}s"></span>` : '')
+      : '';
+    return `<div class="f" style="width:${len}px;height:${width}px;margin-top:${(24 - width) / 2}px;transform:${t};background:${bg};box-shadow:${sh};border-radius:3px">${era >= 1 && room.warmth >= 0.35 ? `<span class="dash" style="top:${width / 2 - 1}px;opacity:${(0.3 + room.traffic * 0.7).toFixed(2)}"></span>` : ''}${packets}</div>`;
+  }
+
+  function groundsHTML(office) {
+    const out = [];
+    const n = office.grounds.trees;
+    for (let i = 0; i < n; i++) {
+      // Between the rooms, on two rings, nearest the brain first.
+      const slot = i % 8, ring = Math.floor(i / 8);
+      const phi = (-45 + 22.5 + slot * 45) * Math.PI / 180;
+      const r = 470 + ring * 120 + (slot % 2) * 30;
+      const x = r * Math.cos(phi), y = r * Math.sin(phi);
+      out.push({ k: y - x, html: at(P(x, y, 0), 30, 54, -15, -52, svgTree(0.9 + ((i * 37) % 10) / 30)) });
+    }
+    return out;
+  }
+
+  // ---- State and rendering ----
+  let state = { office: null, live: [], ambience: 'night', seen: null, waiting: 0 };
+  let selected = null, replaying = false, keys = {}, prevLevels = {};
+
+  function render(office, live, opts = {}) {
+    const night = state.ambience === 'night' || state.ambience === 'dusk';
+    document.getElementById('sky').style.background = LIGHT
+      ? `${TINT[state.ambience] || TINT.day}, radial-gradient(ellipse at 63% 50%, ${THEME.raised} 0%, ${THEME.ground} 75%)`
+      : (SKY[state.ambience] || SKY.night);
+    document.body.classList.toggle('night', !LIGHT && state.ambience === 'night');
+    const byRole = {};
+    office.rooms.forEach((r) => { byRole[r.role] = r; });
+    const liveBy = {};
+    (live || []).forEach((w) => { (liveBy[w.role] = liveBy[w.role] || []).push(w); });
+
+    // Layers, back to front: grounds, far rooms, the brain, near rooms, labels.
+    const order = office.rooms.map((r) => { const { cx, cy } = roomCenter(r.role); return { r, depth: cy - cx }; }).sort((a, b) => a.depth - b.depth);
+    const sceneKey = JSON.stringify([office.era, office.grounds, night, office.rooms.map((r) => [r.level, r.trophies, Math.round(r.warmth * 10), Math.round(r.wear * 10), Math.round(r.traffic * 4)])]);
+    const tags = [];
+    if (keys.scene !== sceneKey) {
+      keys.scene = sceneKey;
+      const brain = brainHTML(office);
+      const trees = groundsHTML(office);
+      const roads = office.rooms.map((r) => roadHTML(r, office.era)).join('');
+      // The ground and roads lie under everything; the brain stands between the far and near rooms.
+      const parts = [`<div id="ground">${brain.ground}${roads}</div>`];
+      const farTrees = trees.filter((t) => t.k < 0).sort((a, b) => a.k - b.k).map((t) => t.html).join('');
+      const nearTrees = trees.filter((t) => t.k >= 0).sort((a, b) => a.k - b.k).map((t) => t.html).join('');
+      parts.push(`<div id="farTrees">${farTrees}</div>`);
+      order.filter((o) => o.depth < 0).forEach((o) => parts.push(`<div class="room" id="room-${o.r.role}"></div><div class="live" id="live-${o.r.role}"></div>`));
+      parts.push(`<div id="brain">${brain.html}</div><svg id="arcs" width="1600" height="980" style="position:absolute;left:0;top:0;pointer-events:none"></svg>`);
+      order.filter((o) => o.depth >= 0).forEach((o) => parts.push(`<div class="room" id="room-${o.r.role}"></div><div class="live" id="live-${o.r.role}"></div>`));
+      parts.push(`<div id="nearTrees">${nearTrees}</div><div id="labels"></div><div id="tags"></div>`);
+      world.innerHTML = parts.join('');
+      keys.rooms = {}; keys.live = {};
+      state.orb = brain.orb;
+    }
+    office.rooms.forEach((r) => {
+      const k = JSON.stringify([r.level, r.trophies, Math.round(r.warmth * 10), night]);
+      const el = document.getElementById('room-' + r.role);
+      if (keys.rooms[r.role] !== k) {
+        keys.rooms[r.role] = k;
+        el.innerHTML = roomHTML(r, night);
+        const grew = prevLevels[r.role] != null && r.level > prevLevels[r.role];
+        el.classList.remove('rise'); void el.offsetWidth;
+        if (grew) el.classList.add('rise');
+        el.style.filter = r.level === 0 ? 'none' : `saturate(${(0.3 + 0.7 * r.warmth).toFixed(2)}) brightness(${(0.6 + 0.4 * r.warmth).toFixed(2)})`;
+      }
+      prevLevels[r.role] = r.level;
+      const workers = liveBy[r.role] || [];
+      const lk = JSON.stringify([r.level, r.crew[0] && r.crew[0].look, workers]);
+      const liveEl = document.getElementById('live-' + r.role);
+      const roomTags = [];
+      const html = liveHTML(r, workers, roomTags);
+      if (keys.live[r.role] !== lk) { keys.live[r.role] = lk; liveEl.innerHTML = html; }
+      tags.push(...roomTags);
+    });
+    document.getElementById('tags').innerHTML = tags.map((t) => `<div class="tag${t.wait ? ' wait' : ''}" style="left:${t.x.toFixed(1)}px;top:${t.y.toFixed(1)}px"><i class="blink" style="background:${t.wait ? '#FF2E88' : t.color}"></i><b>${esc(t.who)} ·</b><span>${esc(t.text)}</span></div>`).join('');
+
+    // Room signs, and arcs from the brain once it's headquarters.
+    let arcs = '';
+    const labels = office.rooms.map((r) => {
+      const rm = ROOMS[r.role];
+      const { cx, cy } = roomCenter(r.role);
+      const x0 = cx - W / 2, y0 = cy - D / 2;
+      const lp = P(x0 + 4, y0 + 2, (r.level === 0 ? 0 : r.level === 1 ? 40 : H) + 16);
+      if (office.era >= 3 && r.level > 0 && state.orb) {
+        const mx = (state.orb.X + lp.X) / 2, my = Math.min(state.orb.Y, lp.Y) - 70;
+        arcs += `M${state.orb.X.toFixed(1)} ${state.orb.Y.toFixed(1)} Q${mx.toFixed(1)} ${my.toFixed(1)} ${(lp.X + 40).toFixed(1)} ${(lp.Y + 6).toFixed(1)} `;
+      }
+      const working = (liveBy[r.role] || []).length;
+      const sub = r.level === 0 ? 'vacant · first job opens it' : `${LEVELS[r.level]} · ${r.jobs} job${r.jobs === 1 ? '' : 's'}${working ? ' · ' + working + ' at work' : ''}`;
+      const dots = r.crew.slice(0, 3).map((c) => `<span style="border-radius:${(LOOKS[c.look] || LOOKS.claude).r};background:${(LOOKS[c.look] || LOOKS.claude).c}"></span>`).join('');
+      const ring = selected === r.role ? `box-shadow:inset 0 0 0 1.5px ${rm.color},0 8px 22px rgba(0,0,0,0.35)` : '';
+      return `<button class="label${r.level === 0 ? ' vacant' : ''}" data-role="${r.role}" style="left:${lp.X.toFixed(1)}px;top:${lp.Y.toFixed(1)}px;${ring}"><span class="ic" style="background:${r.level === 0 ? 'var(--text3)' : rm.color}">${r.role === 'frontend' ? 'F' : ({ research: 'R', backend: 'B', devops: 'O', quality: 'Q', docs: 'D', security: 'S', data: 'T' })[r.role]}</span><span class="tx"><span class="nm">${esc(TITLES[r.role])}${r.trophies ? `<span class="gold">${'★'.repeat(r.trophies)}</span>` : ''}${working ? '<span class="blink" style="width:6px;height:6px;border-radius:50%;background:#5AD69A"></span>' : ''}</span><span class="sub">${sub}</span>${r.level > 0 && r.level < 5 ? `<span class="bar"><span style="width:${Math.round(r.progress * 100)}%;background:${rm.color}"></span></span>` : ''}</span>${dots ? `<span class="dots">${dots}</span>` : ''}</button>`;
+    }).join('');
+    document.getElementById('labels').innerHTML = labels;
+    document.getElementById('arcs').innerHTML = arcs ? `<path class="arc" d="${arcs}" fill="none" stroke="rgba(140,220,255,0.5)" stroke-width="1.4" stroke-linecap="round"/>` : '';
+    if (!opts.keepPanel) renderPanel(office, live);
+    renderCorner(office, live);
+    renderCaption(office, live);
+  }
+
+  const TITLES = { research: 'Research', backend: 'Backend', frontend: 'Front-end', devops: 'DevOps', quality: 'Quality', docs: 'Docs', security: 'Security', data: 'Data' };
+  const ERAS = ['Garage', 'Studio', 'Office', 'Headquarters', 'Campus'];
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
+  const ago = (d) => {
+    if (!d) return '';
+    const s = (Date.now() - new Date(d).getTime()) / 1000;
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + ' h ago';
+    if (s < 86400 * 14) return Math.round(s / 86400) + ' d ago';
+    return fmtDate(d);
+  };
+
+  function renderPanel(office, live) {
+    const panel = document.getElementById('panel');
+    const room = selected && office.rooms.find((r) => r.role === selected);
+    if (room) { panel.innerHTML = teamHTML(room, live.filter((w) => w.role === room.role)); return; }
+    const seen = state.seen ? new Date(state.seen).getTime() : null;
+    const working = live.filter((w) => !w.waiting);
+    const waiting = live.filter((w) => w.waiting);
+    panel.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 35% 32%,#FFFFFF,#2E9BFF 50%,#6D5DFC);box-shadow:0 0 12px rgba(46,155,255,0.6)"></span><span style="font-size:14px;font-weight:600">Dante HQ</span><span class="muted" style="font-size:12.5px">${esc(office.project)}</span></div>
+        ${office.totalJobs > 0 ? '<button class="btn play" data-act="replay">▶ Watch it grow</button>' : ''}
+      </div>
+      <div class="era">
+        <span class="eyebrow" style="color:var(--accent)">ERA ${office.era + 1} OF 5</span>
+        <span class="name">${ERAS[office.era]}</span>
+        <span class="muted small">${office.since ? 'since ' + fmtDate(office.since) + ' · ' : ''}${office.totalJobs.toLocaleString()} job${office.totalJobs === 1 ? '' : 's'} · ${office.activeDays} day${office.activeDays === 1 ? '' : 's'} with work</span>
+        <span class="small" style="font-family:var(--mono);font-size:10px;color:var(--text3)">THE BRAIN · ${office.grounds.commits.toLocaleString()} commits · ${office.grounds.files.toLocaleString()} files</span>
+        ${office.nextEra ? `<div class="progress"><span style="width:${Math.round(office.eraProgress * 100)}%;background:linear-gradient(90deg,#2E9BFF,#8B6CF0)"></span></div><span class="muted small">${esc(office.nextEra)}</span>` : '<span class="small" style="color:#D9A21F">The whole campus is built. Rooms keep winning trophies.</span>'}
+      </div>
+      ${waiting.length ? `<span class="eyebrow" style="color:#FF8FBF">● WAITING FOR YOU · ${waiting.length}</span>` + waiting.map((w) => `<div class="row wait"><div class="col"><span class="ell" style="font-size:12.5px">${esc(w.doing)}</span><span class="small muted" style="display:flex;gap:6px;align-items:center"><span class="chip" style="background:${ROOMS[w.role].color}">${TITLES[w.role]}</span>${esc(w.name)}${w.job ? ' · ' + esc(w.job) : ''}</span></div><button class="btn hot" data-act="inbox">Open</button></div>`).join('') : ''}
+      <span class="eyebrow" style="color:var(--accent)">● AT WORK NOW · ${working.length}</span>
+      ${working.length ? working.map((w) => `<div class="row"><span style="width:22px;height:22px;border-radius:${(LOOKS[w.look] || LOOKS.claude).r};background:${(LOOKS[w.look] || LOOKS.claude).c};flex:0 0 auto" class="blink"></span><div class="col"><span class="ell" style="font-size:12.5px">${esc(w.doing)}</span><span class="small muted" style="display:flex;gap:6px;align-items:center"><span class="chip" style="background:${ROOMS[w.role].color}">${TITLES[w.role]}</span>${esc(w.name)}${w.job ? ' · ' + esc(w.job) : ''}</span></div></div>`).join('') : '<span class="muted small">Nobody’s working. Ask your agent something and watch them walk in.</span>'}
+      <span class="eyebrow">THE STORY SO FAR</span>
+      ${office.milestones.length ? `<div class="story">${office.milestones.map((m) => `<div class="ms${seen != null && new Date(m.date).getTime() > seen ? ' new' : ''}" style="--c:${m.role ? ROOMS[m.role].color : (m.kind === 'era' ? '#8FA8FF' : '#F5C84B')}"><span class="txt">${esc(m.text)}</span><span class="when">${fmtDate(m.date)} · ${ago(m.date)}</span></div>`).join('')}</div>` : '<span class="muted small">An empty lot. The first job an agent does here opens the doors.</span>'}
+    `;
+  }
+
+  function teamHTML(room, live) {
+    const rm = ROOMS[room.role];
+    const avg = room.averageSeconds;
+    const turn = room.jobs ? (avg >= 60 ? Math.round(avg / 60) + 'm' : Math.round(avg) + 's') : '—';
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:30px;height:30px;border-radius:9px;background:${room.level ? rm.color : 'var(--text3)'};display:flex;align-items:center;justify-content:center;font-weight:700;color:#0B0E15">${TITLES[room.role][0]}</span><div class="col"><span style="font-size:16px;font-weight:600">${TITLES[room.role]} ${room.trophies ? `<span class="gold" style="color:#F5C84B;font-size:12px">${'★'.repeat(room.trophies)}</span>` : ''}</span><span class="muted" style="font-size:11.5px">${LEVELS[room.level]}${room.opened ? ' · ' + esc(room.openedBy) + ' moved in ' + fmtDate(room.opened) : ''}</span></div></div>
+        <button class="close" data-act="back" aria-label="Back"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2 L10 10 M10 2 L2 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      </div>
+      <div class="stats"><div class="stat"><span>Jobs</span><span>${room.jobs}</span></div><div class="stat"><span>This week</span><span>${room.week}</span></div><div class="stat"><span>Avg job</span><span>${turn}</span></div></div>
+      <span class="eyebrow">NEXT</span>
+      ${room.next ? `<div class="progress"><span style="width:${Math.round(room.progress * 100)}%;background:${rm.color}"></span></div><span class="small muted">${esc(room.next)}</span>` : `<span class="small" style="color:#F5C84B">Top level. Every hundred jobs more wins a trophy${room.trophies >= 5 ? ' (the shelf is full)' : ''}.</span>`}
+      ${live.length ? '<span class="eyebrow" style="color:var(--accent)">AT WORK NOW</span>' + live.map((w) => `<div class="row${w.waiting ? ' wait' : ''}"><div class="col"><span class="ell" style="font-size:12.5px">${esc(w.doing)}</span><span class="small muted">${esc(w.name)}${w.job ? ' · ' + esc(w.job) : ''}</span></div>${w.waiting ? '<button class="btn hot" data-act="inbox">Open</button>' : ''}</div>`).join('') : ''}
+      <span class="eyebrow">CREW</span>
+      ${room.crew.length ? room.crew.map((c, i) => `<div class="row"><span style="width:26px;height:26px;border-radius:${(LOOKS[c.look] || LOOKS.claude).r};background:${(LOOKS[c.look] || LOOKS.claude).c};flex:0 0 auto"></span><div class="col"><span style="font-size:12.5px">${esc(c.name)} ${i === 0 ? '<span style="font-family:var(--mono);font-size:9.5px;color:#F2B061">REGULAR</span>' : ''}</span><span class="small muted">${c.jobs} job${c.jobs === 1 ? '' : 's'} here</span></div></div>`).join('') : '<span class="small muted">Nobody yet. The first job of this kind opens the room.</span>'}
+      ${room.recent.length ? '<span class="eyebrow">RECENT WORK</span>' + room.recent.map((w) => `<div style="display:flex;gap:10px;align-items:center;padding:6px 2px"><span style="width:8px;height:8px;border-radius:${(LOOKS[w.look] || LOOKS.claude).r};background:${w.failed ? '#FF7A7A' : (LOOKS[w.look] || LOOKS.claude).c};flex:0 0 auto"></span><div class="col"><span class="ell" style="font-size:12px;color:var(--text)">${esc(w.title)}</span><span class="small" style="color:var(--text3)">${esc(w.agent)} · ${ago(w.date)}</span></div></div>`).join('') : ''}
+    `;
+  }
+
+  function renderCorner(office, live) {
+    const working = live.filter((w) => !w.waiting).length;
+    document.getElementById('corner').innerHTML = `<span class="pill">${ERAS[office.era]} · ${office.rooms.filter((r) => r.level > 0).length} of 8 rooms</span><span class="pill" style="${working ? 'color:#2FA36B;box-shadow:inset 0 0 0 1px rgba(90,214,154,0.4)' : ''}"><span class="dot ${working ? 'blink' : ''}" style="background:${working ? '#5AD69A' : '#5A6578'}"></span>${working ? working + ' at work' : 'quiet'}</span>`;
+  }
+
+  function renderCaption(office, live) {
+    const el = document.getElementById('caption');
+    const w = live.find((x) => x.waiting) || live.find((x) => x.lead) || live[0];
+    if (w) {
+      el.innerHTML = `<span class="orb halo"></span><span class="k">${esc(w.name.toUpperCase())} · ${TITLES[w.role].toUpperCase()}</span><span class="v">${esc(w.waiting ? 'waiting for you: ' + w.doing : w.doing)}</span>`;
+    } else if (office.milestones[0]) {
+      el.innerHTML = `<span class="orb"></span><span class="k">LATEST</span><span class="v">${esc(office.milestones[0].text)}</span>`;
+    } else {
+      el.innerHTML = `<span class="orb"></span><span class="k">EMPTY LOT</span><span class="v">The first job opens the doors</span>`;
+    }
+  }
+
+  // ---- Fitting the scene to the view ----
+  function fit() {
+    const narrow = window.innerWidth < 900;
+    document.body.classList.toggle('narrow', narrow);
+    const left = narrow ? 0 : 344 + 14;
+    const view = document.getElementById('view');
+    view.style.left = left + 'px';
+    const vw = view.clientWidth, vh = view.clientHeight;
+    const s = Math.min(vw / BOX.w, vh / BOX.h);
+    const ox = (vw - BOX.w * s) / 2 - BOX.x * s, oy = (vh - BOX.h * s) / 2 - BOX.y * s;
+    world.style.transform = `translate(${ox.toFixed(1)}px, ${oy.toFixed(1)}px) scale(${s.toFixed(4)})`;
+    // The caption and the replay's date belong to the scene, not the panel.
+    const caption = document.getElementById('caption');
+    caption.style.left = (left + vw / 2) + 'px';
+    caption.style.maxWidth = Math.max(240, vw - 40) + 'px';
+  }
+  window.addEventListener('resize', fit);
+
+  // ---- Clicks ----
+  document.addEventListener('click', (ev) => {
+    const label = ev.target.closest('.label');
+    if (label) { selected = selected === label.dataset.role ? null : label.dataset.role; document.body.classList.add('panel'); rerender(); return; }
+    const act = ev.target.closest('[data-act]');
+    if (!act) return;
+    const a = act.dataset.act;
+    if (a === 'back') { selected = null; rerender(); }
+    else if (a === 'replay') { post('replay'); }
+    else post(a);
+  });
+  const rerender = () => { if (state.office && !replaying) render(state.office, state.live); };
+
+  // ---- Celebrations ----
+  function celebrate(text) {
+    const toast = document.getElementById('toast');
+    toast.innerHTML = `<b>THE OFFICE GREW</b>${esc(text)}`;
+    toast.classList.add('show');
+    const colors = ['#F5C84B', '#8B6CF0', '#E45FAE', '#2FB5A3', '#4F7FE8', '#F29A4A'];
+    for (let i = 0; i < 36; i++) {
+      const s = document.createElement('span');
+      s.className = 'spark';
+      s.style.left = (window.innerWidth / 2) + 'px'; s.style.top = '40px';
+      s.style.background = colors[i % colors.length];
+      const a = Math.random() * Math.PI, d = 120 + Math.random() * 220;
+      s.style.setProperty('--dx', (Math.cos(a) * d * (Math.random() < 0.5 ? -1 : 1)).toFixed(0) + 'px');
+      s.style.setProperty('--dy', (Math.sin(a) * d * 0.9 + 40).toFixed(0) + 'px');
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 1700);
+    }
+    setTimeout(() => toast.classList.remove('show'), 5200);
+  }
+
+  // ---- The replay ----
+  function replay(frames) {
+    if (!frames || !frames.length || replaying) return;
+    replaying = true;
+    document.body.classList.add('replaying');
+    selected = null;
+    prevLevels = {};
+    keys = {};
+    let i = 0;
+    const date = document.querySelector('#replayDate .d'), era = document.querySelector('#replayDate .e');
+    const step = () => {
+      const f = frames[i];
+      render(f, [], {});
+      date.textContent = fmtDate(f.now);
+      era.textContent = ERAS[f.era].toUpperCase() + ' · ' + f.totalJobs + ' JOBS';
+      i += 1;
+      if (i < frames.length) setTimeout(step, i === 1 ? 900 : 520);
+      else setTimeout(() => { replaying = false; document.body.classList.remove('replaying'); keys = {}; rerender(); }, 2200);
+    };
+    step();
+  }
+
+  function applyTheme(t) {
+    if (!t || (THEME && JSON.stringify(t) === JSON.stringify(THEME))) return;
+    THEME = t;
+    LIGHT = !t.dark;
+    const root = document.documentElement.style;
+    const glass = t.panelGlass;
+    for (const [k, v] of Object.entries({ ground: t.ground, panel: t.panel, glass, card: t.card, line: t.line, line2: t.line2, text: t.text, text2: t.text2, text3: t.text3, accent: t.accent, accentTint: t.accentTint, dotc: LIGHT ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)' })) root.setProperty('--' + k, v);
+    keys = {};
+  }
+
+  window.office = {
+    set(payload) {
+      applyTheme(payload.theme);
+      const first = !state.office;
+      state = { ...state, ...payload };
+      fit();
+      if (!replaying) render(state.office, state.live || []);
+      // Milestones since you last looked, celebrated once.
+      if (state.seen && state.office.milestones.length) {
+        const seen = new Date(state.seen).getTime();
+        const fresh = state.office.milestones.filter((m) => new Date(m.date).getTime() > seen && m.kind !== 'count');
+        if (fresh.length && first) setTimeout(() => celebrate(fresh[0].text + (fresh.length > 1 ? ` (and ${fresh.length - 1} more)` : '')), 700);
+      }
+      if (state.office.milestones.length) post('seen', { date: state.office.milestones[0].date });
+    },
+    replay
+  };
+  fit();
+  post('ready');
+})();
+</script>
+</body>
+</html>

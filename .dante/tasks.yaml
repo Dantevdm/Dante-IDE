@@ -515,8 +515,8 @@ tasks:
 - id: DI-124
   title: "Agent HQ: the agents as people in an isometric office around a glowing brain, with a task board and team panel (the design canvas's Office board)"
   phase: build
-  state: ready
-  notes: "Rooms are roles (research, backend, front-end, DevOps, quality, docs, security, data), each a job or job type; roads of light, floating labels, thought keywords from real tool calls, sub-agent bay, voice caption. Frontier models as light, cloud models as dashed light through the door, local models as pixel people; no faces. Built on the motion runtime (three.js in WebKit) with live data from jobs, the ledger and presence. Hire a role makes a job type; also on the Stage and in the menu bar panel."
+  state: review
+  notes: "Built as Agents › HQ: AgentOffice (DanteKit) grows rooms, eras, grounds and milestones from the ledger and git history; MotionLib/hq/office.html draws it in WebKit with live workers from every conversation, a replay and celebrations. Still to do: the Stage and the menu bar panel, and hiring a role as a job type."
 - id: DI-125
   title: "Discovery: a freshly opened project paints the picture of what Dante found (map, services, data, tests, security) on Home"
   phase: build
