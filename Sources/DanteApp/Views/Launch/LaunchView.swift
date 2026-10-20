@@ -50,7 +50,7 @@ struct LaunchView: View {
 
     private var brand: some View {
         VStack(spacing: 26) {
-            PhaseRing(drawn: drawn)
+            DanteLogo(size: 170, drawn: drawn)
                 .onTapGesture { replay() }
                 .help("Replay")
 

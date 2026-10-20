@@ -31,7 +31,7 @@ let package = Package(
         // the app and the `dante` command for FeatureGuide and `dante mcp`.
         .target(name: "DanteSpec", path: "spec", exclude: ["README.md", "fixtures"],
                 resources: [.copy("pages"), .copy("places.yaml")]),
-        // Models with no UI: themes, workspace, documents, lifecycle, tasks, Claude.
+        // Models with no UI: themes, workspace, documents, agents, and the data behind every place.
         .target(name: "DanteKit", dependencies: ["DanteSpec", .product(name: "Yams", package: "Yams")]),
         // The TextKit 2 code editor and syntax highlighting.
         .target(

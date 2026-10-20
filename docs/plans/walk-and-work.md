@@ -30,7 +30,7 @@ Job types are defined in the repo, in `.dante/jobs/<name>.md`: front matter for 
 
 ### The foreman
 
-You don't talk to eight agents. You talk to one voice, the foreman, which knows every job's state and the project's lifecycle. It starts and stops jobs, answers "what's going on?", and brings you the questions jobs are waiting on, one at a time. A walk starts with a standup ("Build has ten tasks in review, CI is red on main, the verifier found a broken login page") and ends with a summary of what moved.
+You don't talk to eight agents. You talk to one voice, the foreman, which knows every job's state and where the project stands. It starts and stops jobs, answers "what's going on?", and brings you the questions jobs are waiting on, one at a time. A walk starts with a standup ("Build has ten tasks in review, CI is red on main, the verifier found a broken login page") and ends with a summary of what moved.
 
 ### Waiting is Dante's job, not Claude's
 

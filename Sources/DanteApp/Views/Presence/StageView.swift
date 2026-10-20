@@ -430,7 +430,7 @@ struct StageView: View {
     private func identity(_ unit: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 8 * unit) {
             HStack(spacing: 10 * unit) {
-                DanteMark(size: 22 * unit, isWorking: model.mood == .acting || model.mood == .thinking)
+                DanteLogo(size: 22 * unit, turns: model.mood == .acting || model.mood == .thinking)
                 Text("DANTE")
                     .font(.dante(size: 15 * unit, weight: .semibold))
                     .tracking(6 * unit)
@@ -716,31 +716,3 @@ private struct StageCorners: Shape {
     }
 }
 
-/// Dante's own mark, not either agent's: a ring around a glowing core, like the orb in its
-/// rings. The arc turns while an agent works.
-private struct DanteMark: View {
-    @Environment(\.theme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var size: CGFloat
-    var isWorking: Bool
-
-    var body: some View {
-        TimelineView(.animation(paused: !isWorking || reduceMotion)) { context in
-            let turn = isWorking && !reduceMotion ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4) * 90 : 0
-            ZStack {
-                Circle()
-                    .stroke(theme.text3.color.opacity(0.45), lineWidth: size * 0.07)
-                Circle()
-                    .trim(from: 0, to: 0.28)
-                    .stroke(theme.accent.color, style: StrokeStyle(lineWidth: size * 0.1, lineCap: .round))
-                    .rotationEffect(.degrees(turn - 90))
-                Circle()
-                    .fill(RadialGradient(colors: [theme.accent.color, theme.accent.color.opacity(0.15)], center: .init(x: 0.38, y: 0.35),
-                                         startRadius: 0, endRadius: size * 0.32))
-                    .frame(width: size * 0.5, height: size * 0.5)
-            }
-            .frame(width: size, height: size)
-        }
-        .accessibilityHidden(true)
-    }
-}

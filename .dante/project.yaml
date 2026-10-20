@@ -1,11 +1,6 @@
 name: Dante IDE
-summary: A native macOS IDE organised around the whole software lifecycle, with Claude as a pair.
+summary: A native macOS IDE where Claude and Codex work beside you, and Dante shows you the whole system they're working on.
 
-lifecycle:
-  template: app@1
-  current: build
-
-# Milestone 1: app shell + editor (window, launch, themes, explorer, tabs, editor, terminal).
 # Design canvas: https://claude.ai/artifact/KFxwBAj14jL7w1MHNcc5Pi
 
 claude:
