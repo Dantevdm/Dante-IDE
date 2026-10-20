@@ -507,3 +507,25 @@ tasks:
   phase: build
   state: review
   notes: "Only models that read UI reliably are used (Qwen-VL, Gemma 3, Mistral Small 3, MiniCPM-V) and only if they fit in 60% of memory; llava, granite-vision and llama3.2-vision invent details or no longer load, so they're skipped with a reason. qwen3-vl:8b is installed and reads Dante's own screens accurately (about 50 s for a full description on an M4 Pro); answers render as markdown."
+- id: DI-123
+  title: "Motion studio: videos, decks and explainers made by the agents from the real system, in the brand, narrated, rendered to 4K"
+  phase: build
+  state: review
+  notes: "Pieces in docs/motion/<name>/, scenes drawn from seek(t), three.js, hairline and Open Peeps bundled with an import map, a frame clock for libraries in renders, four-step New piece sheet (idea, live gallery of twenty styles and illustration kits, the brief, Claude, Codex or both). Still to do: a version switcher and compare for two makers, lint findings and a partner critique in the player, HTML and PDF export, presenting decks on the Stage."
+- id: DI-124
+  title: "Agent HQ: the agents as people in an isometric office around a glowing brain, with a task board and team panel (the design canvas's Office board)"
+  phase: build
+  state: ready
+  notes: "Rooms are roles (research, backend, front-end, DevOps, quality, docs, security, data), each a job or job type; roads of light, floating labels, thought keywords from real tool calls, sub-agent bay, voice caption. Frontier models as light, cloud models as dashed light through the door, local models as pixel people; no faces. Built on the motion runtime (three.js in WebKit) with live data from jobs, the ledger and presence. Hire a role makes a job type; also on the Stage and in the menu bar panel."
+- id: DI-125
+  title: "Discovery: a freshly opened project paints the picture of what Dante found (map, services, data, tests, security) on Home"
+  phase: build
+  state: ready
+- id: DI-126
+  title: "Infra-style motion everywhere: animated links and pulses in Tests, Data, Env and Agents like the Map's Infra view"
+  phase: build
+  state: ready
+- id: DI-127
+  title: "Away budgets for jobs, and telling a failing command apart from a refused one while away"
+  phase: build
+  state: ready
