@@ -13,11 +13,14 @@ public enum DanteFonts {
 
     private static var registered = false
 
+    /// The bundled font files, for pages that load them (motion scenes).
+    public nonisolated static var folder: URL? { ResourceBundles.url(bundle: "Dante_DanteEditor", path: "Fonts") }
+
     /// Registers the bundled fonts for this process. Safe to call more than once.
     public static func register() {
         guard !registered else { return }
         registered = true
-        guard let folder = Bundle.module.url(forResource: "Fonts", withExtension: nil),
+        guard let folder,
               let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return }
         for file in files where file.pathExtension == "ttf" {
             CTFontManagerRegisterFontsForURL(file as CFURL, .process, nil)

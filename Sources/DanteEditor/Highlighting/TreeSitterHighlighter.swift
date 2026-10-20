@@ -97,25 +97,7 @@ public struct TreeSitterHighlighter: Highlighter {
         return TreeSitterHighlighter(language: tsLanguage, query: query)
     }
 
-    /// SwiftPM puts grammar resources in `<bundle>.bundle` next to the binary, and the app
-    /// bundle copies them into Contents/Resources. Under `swift test` the main bundle is
-    /// SwiftPM's helper, so the search starts from the image this code was loaded from.
     static func queryURL(bundle: String, file: String) -> URL? {
-        var folders = [Bundle.main.resourceURL, Bundle.main.executableURL?.deletingLastPathComponent()].compactMap { $0 }
-        var info = Dl_info()
-        if dladdr(#dsohandle, &info) != 0, let path = info.dli_fname {
-            var folder = URL(filePath: String(cString: path)).deletingLastPathComponent()
-            for _ in 0..<4 {
-                folders += [folder, folder.appending(path: "Resources")]
-                folder = folder.deletingLastPathComponent()
-            }
-        }
-        for folder in folders {
-            for relative in ["queries", "Contents/Resources/queries"] {
-                let url = folder.appending(path: "\(bundle).bundle/\(relative)/\(file)")
-                if FileManager.default.fileExists(atPath: url.path) { return url }
-            }
-        }
-        return nil
+        ResourceBundles.url(bundle: bundle, path: "queries/\(file)")
     }
 }
