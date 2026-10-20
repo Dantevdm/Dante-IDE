@@ -287,6 +287,7 @@ struct DocRow: View {
         case .pdf: "doc.richtext"
         case .image: "photo"
         case .slides: "rectangle.on.rectangle"
+        case .motion: "film.stack"
         default: "doc.text"
         }
     }

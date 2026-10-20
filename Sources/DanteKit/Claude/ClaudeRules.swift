@@ -106,7 +106,7 @@ public struct ClaudeRules: Equatable, Sendable {
         input["file_path"]?.string ?? input["notebook_path"]?.string ?? input["path"]?.string
     }
 
-    static func path(_ relative: String, matches pattern: String) -> Bool {
+    public static func path(_ relative: String, matches pattern: String) -> Bool {
         let pattern = pattern.hasPrefix("./") ? String(pattern.dropFirst(2)) : pattern
         if pattern.hasSuffix("/") {
             let folder = String(pattern.dropLast())

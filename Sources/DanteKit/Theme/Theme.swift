@@ -49,6 +49,11 @@ public struct RGBA: Sendable, Equatable {
 
     public var color: Color { Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha) }
     public var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha) }
+    /// For web pages drawn in the app's theme.
+    public var css: String {
+        alpha >= 1 ? String(format: "#%02x%02x%02x", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
+            : "rgba(\(Int((red * 255).rounded())),\(Int((green * 255).rounded())),\(Int((blue * 255).rounded())),\(String(format: "%.3g", alpha)))"
+    }
 }
 
 public struct SyntaxPalette: Sendable, Equatable {

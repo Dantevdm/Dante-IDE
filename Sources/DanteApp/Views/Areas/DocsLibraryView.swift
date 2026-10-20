@@ -26,6 +26,7 @@ struct DocsLibraryView: View {
             Button(action: addFiles) { Label("Add files…", systemImage: "plus") }
                 .buttonStyle(DanteButtonStyle())
         } content: {
+            MotionStudioCard(session: session, pieces: library.all.filter { $0.kind == .motion })
             if !recent.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     Eyebrow("Recently changed")
@@ -223,6 +224,7 @@ struct DocsLibraryView: View {
         case "Plan": "map"
         case "Phases": "flag"
         case "Docs": "books.vertical"
+        case "Motion": "film.stack"
         default: "folder"
         }
     }
@@ -234,6 +236,7 @@ struct DocsLibraryView: View {
         case .image: "photo"
         case .slides: "rectangle.on.rectangle"
         case .document: "doc"
+        case .motion: "film.stack"
         }
     }
 }

@@ -444,6 +444,10 @@ final class Session {
                 self?.show(feature)
                 return
             }
+            if name == "motion_frames", !finished {
+                self?.renderMotionFrames(input)
+                return
+            }
             guard let self, name == "security_report", let root = self.workspace?.url else { return }
             if finished {
                 self.security.agentScanFinished(root: root)
@@ -486,6 +490,10 @@ final class Session {
         claude.guardCall = { [weak self] tool, input, flagged in
             guard let record = self?.jobs.record(job.id) else { return nil }
             return JobGuard.verdict(for: record, toolName: tool, input: input, hasNote: flagged)
+        }
+        // A job making a motion piece looks at its own frames too.
+        claude.onDanteTool = { [weak self] name, input, finished in
+            if name == "motion_frames", !finished { self?.renderMotionFrames(input, root: job.worktreeURL) }
         }
         claude.engine = job.engine == .codex && Self.codexPath != nil ? .codex : .claude
         applyClaudePreferences(to: claude)

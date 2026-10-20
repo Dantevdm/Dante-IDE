@@ -121,7 +121,7 @@ public struct SystemMap: Equatable, Sendable {
     static let skippedFolders: Set<String> = ["node_modules", "vendor", "dist", "build", ".build", "public", "static", "target", "out", ".next", ".nuxt", "coverage", "Pods", ".venv", "venv", "__pycache__", "testdata", "fixtures"]
     static let frontendNames: Set<String> = ["frontend", "web", "webapp", "client", "ui", "app-web", "site", "www"]
 
-    static func isTest(_ path: String) -> Bool {
+    public static func isTest(_ path: String) -> Bool {
         let name = (path as NSString).lastPathComponent
         // Class-style names need the capital: "ParserTests.swift", but not "Latest.swift".
         let testNames = ["Tests.swift", "Test.swift", "Test.java", "Test.kt", "Tests.cs", "Test.cs", "_spec.rb", "_test.rb", "_test.py", "_test.exs"]

@@ -75,7 +75,7 @@ struct FilePreview: View {
                 }
             case .slides:
                 QuickLookPreview(url: url)
-            case .document, .markdown:
+            case .document, .markdown, .motion:
                 ScrollView {
                     Text(text ?? "Reading…")
                         .font(.dante(size: 14))

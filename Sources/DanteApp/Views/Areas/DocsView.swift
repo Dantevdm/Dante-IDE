@@ -17,6 +17,7 @@ struct DocsView: View {
     @State private var markdown: MarkdownDocument?
     @State private var loadError: String?
     @State private var dropTargeted = false
+    @State private var creatingMotion = false
     /// Reading width: a comfortable column, or the whole window.
     @AppStorage("docsWide") private var wide = false
     /// Read the rendered doc, edit its markdown, or both side by side.
@@ -62,7 +63,10 @@ struct DocsView: View {
                 VStack(spacing: 0) {
                     toolbar(for: selected)
                     Rectangle().fill(theme.line.color).frame(height: 1)
-                    if selected.kind != .markdown {
+                    if selected.kind == .motion {
+                        MotionView(session: session, workspace: workspace, path: selected.path)
+                            .id(selected.path)
+                    } else if selected.kind != .markdown {
                         FilePreview(url: workspace.url.appending(path: selected.path), kind: selected.kind)
                     } else {
                         switch mode {
@@ -92,6 +96,7 @@ struct DocsView: View {
                     title: "No docs yet"
                 ) {
                     Button("Add files…", action: pickFiles).buttonStyle(DanteButtonStyle())
+                    Button("New motion piece…") { creatingMotion = true }.buttonStyle(DanteButtonStyle())
                     Button("Ask Claude to draft a README") {
                         session.askClaude("Draft a README.md for this project from the code, the .dante folder and git history. Keep it short and accurate.")
                     }
@@ -102,6 +107,7 @@ struct DocsView: View {
             }
         }
         .background(theme.ground.color)
+        .sheet(isPresented: $creatingMotion) { NewMotionSheet(session: session) }
         .overlay {
             if dropTargeted {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)

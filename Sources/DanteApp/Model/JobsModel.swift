@@ -162,7 +162,9 @@ final class JobsModel {
 
     /// Makes the worktree and starts the agent on the brief.
     @discardableResult
-    func start(brief: String, engine: AgentEngine, awayMinutes: Int? = nil, type: JobType? = nil, trigger: String? = nil) async -> JobRecord? {
+    /// `prepare` writes files into the new worktree before the agent starts (a motion piece's folder).
+    func start(brief: String, engine: AgentEngine, awayMinutes: Int? = nil, type: JobType? = nil, trigger: String? = nil,
+               title explicitTitle: String? = nil, prepare: ((URL) throws -> Void)? = nil) async -> JobRecord? {
         guard let root else { return nil }
         if let unavailable {
             failures["new"] = unavailable
@@ -170,7 +172,7 @@ final class JobsModel {
         }
         // One worktree at a time; a second job (from `dante job`, say) waits its turn.
         while starting != nil { try? await Task.sleep(for: .milliseconds(200)) }
-        let title = JobPlan.title(from: brief)
+        let title = explicitTitle ?? JobPlan.title(from: brief)
         starting = title
         defer { starting = nil }
         do {
@@ -182,6 +184,7 @@ final class JobsModel {
             job.scope = type.flatMap { $0.paths.isEmpty ? nil : $0.paths }
             job.commands = type.flatMap { $0.commands.isEmpty ? nil : $0.commands }
             Self.seedSearchIndex(from: root, to: job.worktreeURL)
+            try prepare?(job.worktreeURL)
             records.append(job)
             save()
             let claude = wake(job.id)

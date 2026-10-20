@@ -30,6 +30,8 @@ public struct DelegateServer: Sendable {
     /// Runs Dante's security scan of the project, saves it for the Security page and returns
     /// the summary.
     public var securityReport: (@Sendable () async -> String)?
+    /// Waits for the app to render a motion piece's frames: the folder and times, answered in words.
+    public var motionFrames: (@Sendable (_ folder: String, _ times: [Double]) async -> (text: String, isError: Bool))?
     /// Looker's vision model, when a capable one is installed.
     public var lookerModel: (@Sendable () async -> String?)?
     /// Reads an image file (a path in the project or absolute) and answers about it with a model.
@@ -99,6 +101,7 @@ public struct DelegateServer: Sendable {
             }
         }
         let projectRoot = URL(filePath: root, directoryHint: .isDirectory)
+        server.motionFrames = { folder, times in await MotionFrames.await(root: projectRoot, folder: folder, times: times) }
         let online = environment[DelegateEnvironment.securityOnline] == "1"
         server.securityReport = {
             let report = await ProjectSecurity.refresh(root: projectRoot, onlineAdvisories: online)
@@ -152,6 +155,7 @@ public struct DelegateServer: Sendable {
 
     var instructions: String {
         var parts: [String] = ["dante_pages describes the IDE the user is in, page by page; show_page opens one for them."]
+        if motionFrames != nil { parts.append("motion_frames renders frames of a motion piece (docs/motion/…) so you can look at your own work.") }
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
         if securityReport != nil { parts.append("security_report runs Dante's security scan and returns the score and findings the user sees on the Security page: start there for any question about the project's security.") }
         if searchCode != nil { parts.append("search_code finds code by what it does, for questions grep can't answer.") }
@@ -165,6 +169,7 @@ public struct DelegateServer: Sendable {
 
     var tools: [JSONValue] {
         var tools: [JSONValue] = Self.pageTools
+        if motionFrames != nil { tools.append(Self.motionTool) }
         if offersLocal { tools += Self.localTools }
         if securityReport != nil { tools.append(Self.securityTool) }
         if searchCode != nil { tools.append(Self.searchTool) }
@@ -177,7 +182,7 @@ public struct DelegateServer: Sendable {
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page"].contains(tool["name"]?.string ?? ""), var object = tool.object,
+        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "motion_frames"].contains(tool["name"]?.string ?? ""), var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
         schema["properties"] = .object(properties)
@@ -292,6 +297,20 @@ public struct DelegateServer: Sendable {
         ],
     ]
 
+    /// Frames of a motion piece, drawn by the app.
+    static let motionTool: JSONValue = [
+        "name": "motion_frames",
+        "description": "Render frames of a motion piece you're making (a folder under docs/motion with motion.yaml and index.html) at the times you choose, and get PNG paths to read, plus any script errors. Dante draws them exactly as its renderer will. Use it after building or changing a scene, at beat starts, mid-transition and the end, then fix what looks wrong and look again.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "folder": ["type": "string", "description": "The piece's folder, project-relative, like docs/motion/anatomy-of-the-system."],
+                "times": ["type": "array", "items": ["type": "number"], "description": "Seconds into the piece, up to 12."],
+            ],
+            "required": ["folder", "times"],
+        ],
+    ]
+
     /// `dante_pages`: the list, or one page's spec.
     static func pages(_ id: String?) -> String {
         guard let id, !id.isEmpty else {
@@ -395,6 +414,14 @@ public struct DelegateServer: Sendable {
             }
             // The app sees the call go by and opens the page; this only answers.
             return Self.text("Dante is showing \(FeatureGuide.place(feature)) to the user.")
+        case "motion_frames":
+            guard let motionFrames, let folder = MotionFrames.folder(arguments["folder"]?.string) else {
+                return Self.text("motion_frames needs the piece's folder, like docs/motion/<name>.", isError: true)
+            }
+            let times = MotionFrames.times((arguments["times"]?.array ?? []).compactMap { $0.double ?? $0.int.map(Double.init) })
+            guard !times.isEmpty else { return Self.text("motion_frames needs times in seconds.", isError: true) }
+            let answer = await motionFrames(folder, times)
+            return Self.text(answer.text, isError: answer.isError)
         case "security_report":
             guard let securityReport else { return Self.text("Dante's security scan isn’t available here.", isError: true) }
             let started = Date()

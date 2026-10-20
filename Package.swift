@@ -58,7 +58,9 @@ let package = Package(
                 "DanteEditor",
                 "DanteOpen",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
-            ]
+            ],
+            // three.js, hairline and DiceBear Open Peeps for motion scenes (see MotionLib/LIBRARIES.md).
+            resources: [.copy("Resources/MotionLib")]
         ),
         .testTarget(name: "DanteKitTests", dependencies: ["DanteKit", "DanteOpen"]),
         .testTarget(name: "DanteEditorTests", dependencies: ["DanteEditor"]),

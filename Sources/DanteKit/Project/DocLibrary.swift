@@ -15,11 +15,14 @@ public struct DocLibrary: Equatable, Sendable {
             case document
             /// Slides and spreadsheets, shown by Quick Look.
             case slides
+            /// A motion piece's `motion.yaml`: a video, deck or explainer Dante plays and renders.
+            case motion
         }
 
         public init(path: String) { self.path = path }
 
         public var kind: Kind {
+            if MotionPiece.isManifest(path) { return .motion }
             let ext = (path as NSString).pathExtension.lowercased()
             if DocLibrary.markdownExtensions.contains(ext) { return .markdown }
             if ext == "pdf" { return .pdf }
@@ -30,6 +33,12 @@ public struct DocLibrary: Equatable, Sendable {
 
         /// The file name without `.md`, with dashes and underscores as spaces.
         public var title: String {
+            if kind == .motion {
+                // The piece's folder: "anatomy-of-the-api" reads "Anatomy of the api".
+                let folder = ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent
+                let spaced = folder.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
+                return spaced.prefix(1).uppercased() + spaced.dropFirst()
+            }
             let name = (path as NSString).lastPathComponent
             let base = kind == .markdown ? (name as NSString).deletingPathExtension : name
             if base.uppercased() == base || kind != .markdown { return base }
@@ -123,6 +132,7 @@ public struct DocLibrary: Equatable, Sendable {
         let root: String
         switch group {
         case "Project", "Elsewhere": return directory
+        case "Motion": return ""
         case "Docs": root = directory.split(separator: "/").first.map(String.init) ?? ""
         case "Plan": root = ".dante"
         default: root = directory.split(separator: "/").prefix(2).joined(separator: "/")
@@ -142,6 +152,7 @@ public struct DocLibrary: Equatable, Sendable {
     public static let importFolder = "docs"
 
     public static func isDoc(_ path: String) -> Bool {
+        if MotionPiece.isManifest(path) { return path.contains("/") }
         let ext = (path as NSString).pathExtension.lowercased()
         if markdownExtensions.contains(ext) { return true }
         let document = documentExtensions.contains(ext) || slideExtensions.contains(ext)
@@ -173,7 +184,7 @@ public struct DocLibrary: Equatable, Sendable {
         } + buckets.keys.sorted().map { Group(title: $0, docs: buckets[$0]!.sorted(by: Self.ordered)) }
     }
 
-    static let order = ["Project", "Specs", "Decisions", "Runbooks", "Plan", "Phases", "Docs", "Elsewhere"]
+    static let order = ["Project", "Motion", "Specs", "Decisions", "Runbooks", "Plan", "Phases", "Docs", "Elsewhere"]
 
     static func group(for path: String) -> String {
         let parts = path.split(separator: "/").map(String.init)
@@ -187,6 +198,7 @@ public struct DocLibrary: Equatable, Sendable {
             default: return "Plan"
             }
         }
+        if MotionPiece.isManifest(path) { return "Motion" }
         if parts[0].lowercased() == "docs" || parts[0].lowercased() == "documentation" { return "Docs" }
         return "Elsewhere"
     }

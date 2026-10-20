@@ -1,0 +1,420 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The New piece sheet's Look step: every style and illustration kit as a live tile.
+     Tile ids are MotionLooks ids. Dante sets window.lookSetup ({ theme, styles, kits }) before
+     this runs, calls looks.set(styles, kits) when the picks change, and hears picks through
+     webkit.messageHandlers.looks. -->
+<style>
+@font-face{font-family:"Geist";src:url("/_dante/fonts/Geist.ttf");font-weight:100 900}
+@font-face{font-family:"Geist Mono";src:url("/_dante/fonts/GeistMono.ttf");font-weight:100 900}
+:root{--bg:#141416;--card:#1c1c20;--text:#f1f1f3;--text2:#a7a7b0;--text3:#6f6f78;--line:#2c2c33;--accent:#d97757;--accentTint:rgba(217,119,87,.14)}
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent;color:var(--text);font-family:"Geist",-apple-system,sans-serif;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none}
+body{padding:2px 2px 14px}
+h2{font-size:11px;font-weight:600;letter-spacing:1.3px;text-transform:uppercase;color:var(--text3);margin:4px 2px 9px;display:flex;gap:10px;align-items:baseline}
+h2 span{letter-spacing:0;text-transform:none;font-weight:400;font-size:11.5px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.tile{position:relative;border-radius:11px;background:var(--card);border:1px solid var(--line);cursor:pointer;overflow:hidden;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.tile:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tile.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 8px 24px -10px var(--accent)}
+.art{position:relative;height:104px;overflow:hidden;border-bottom:1px solid var(--line)}
+.kits .art{height:150px}
+.name{display:flex;align-items:center;justify-content:space-between;padding:7px 10px 8px;font-size:12px;font-weight:550}
+.name small{display:block;font-size:10.5px;font-weight:400;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.badge{position:absolute;top:7px;right:7px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--accent);color:#fff;font:600 10.5px "Geist";display:none;align-items:center;justify-content:center;z-index:5;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.on .badge{display:flex}
+canvas{display:block;width:100%;height:100%}
+.center{display:flex;align-items:center;justify-content:center}
+@media (prefers-reduced-motion:reduce){*{animation-play-state:paused!important}}
+
+/* liquid */
+.liquid{background:#0e1220}
+.liquid svg{width:100%;height:100%}
+.liquid circle{fill:var(--accent)}
+.liquid .a{animation:la 4.2s ease-in-out infinite}
+.liquid .b{animation:lb 4.2s ease-in-out infinite}
+.liquid .c{animation:lc 5.6s ease-in-out infinite}
+@keyframes la{0%,100%{transform:translate(0,0)}50%{transform:translate(38px,6px)}}
+@keyframes lb{0%,100%{transform:translate(0,0)}50%{transform:translate(-36px,-4px)}}
+@keyframes lc{0%,100%{transform:translate(0,-22px)}50%{transform:translate(0,22px)}}
+
+/* holographic */
+.holo{background:#0b0b10;perspective:400px}
+.holo .card{position:absolute;left:50%;top:50%;width:120px;height:74px;margin:-37px 0 0 -60px;border-radius:9px;
+  background:linear-gradient(115deg,#ff9bd2,#9be7ff,#b6ffb0,#fff6a0,#ffb59b,#d49bff,#9be7ff);background-size:300% 300%;
+  animation:hg 5s linear infinite,ht 5s ease-in-out infinite;box-shadow:0 10px 30px -8px rgba(160,200,255,.5)}
+.holo .card::before{content:"";position:absolute;inset:0;border-radius:9px;background:repeating-linear-gradient(0deg,rgba(255,255,255,.16) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}
+.holo .card::after{content:"";position:absolute;inset:0;border-radius:9px;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.75) 48%,transparent 62%);background-size:250% 100%;animation:hs 2.5s ease-in-out infinite}
+@keyframes hg{to{background-position:300% 0}}
+@keyframes ht{0%,100%{transform:rotateY(-18deg) rotateX(8deg)}50%{transform:rotateY(18deg) rotateX(-6deg)}}
+@keyframes hs{0%{background-position:150% 0}100%{background-position:-60% 0}}
+
+/* neon */
+.neon{background:radial-gradient(ellipse at 50% 120%,#1a0d22,#07060a 70%)}
+.neon b{font:700 34px "Geist";letter-spacing:4px;color:#ffe4f4;text-shadow:0 0 4px #fff,0 0 10px #ff4fb8,0 0 22px #ff4fb8,0 0 42px #ff2fa0;animation:nf 3.2s infinite}
+.neon i{position:absolute;left:0;right:0;bottom:6px;text-align:center;font:700 34px "Geist";letter-spacing:4px;color:#ff4fb8;opacity:.18;transform:scaleY(-.5);filter:blur(2px);font-style:normal}
+@keyframes nf{0%,18%,22%,62%,64%,100%{opacity:1}20%,63%{opacity:.35}}
+
+/* glass */
+.glass{background:#120f1c}
+.glass .blob{position:absolute;border-radius:50%;filter:blur(6px)}
+.glass .b1{width:80px;height:80px;background:#7c5cff;left:18%;top:10%;animation:gb1 6s ease-in-out infinite}
+.glass .b2{width:70px;height:70px;background:var(--accent);right:16%;bottom:6%;animation:gb2 7s ease-in-out infinite}
+.glass .b3{width:46px;height:46px;background:#38d6c8;left:52%;top:50%;animation:gb1 5s ease-in-out infinite reverse}
+.glass .pane{position:absolute;left:50%;top:50%;width:118px;height:66px;margin:-33px 0 0 -59px;border-radius:12px;background:rgba(255,255,255,.12);
+  -webkit-backdrop-filter:blur(12px) saturate(1.4);backdrop-filter:blur(12px) saturate(1.4);border:1px solid rgba(255,255,255,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.glass .pane::after{content:"";position:absolute;left:12px;top:14px;width:52px;height:6px;border-radius:3px;background:rgba(255,255,255,.7);box-shadow:0 12px 0 -1px rgba(255,255,255,.35),0 24px 0 -1px rgba(255,255,255,.25)}
+@keyframes gb1{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,20px)}}
+@keyframes gb2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,-16px)}}
+
+/* kinetic */
+.kinetic{background:#f4f1ea;color:#111}
+.kinetic span{position:absolute;left:0;right:0;text-align:center;top:50%;font:800 30px/1 "Geist";letter-spacing:-1px;opacity:0;animation:kw 3.6s cubic-bezier(.2,.8,.2,1) infinite}
+.kinetic span:nth-child(2){animation-delay:1.2s;color:var(--accent)}
+.kinetic span:nth-child(3){animation-delay:2.4s;font-weight:300;font-style:italic}
+@keyframes kw{0%{opacity:0;transform:translateY(-10%) scale(2.4);filter:blur(4px)}8%{opacity:1;transform:translateY(-50%) scale(1);filter:blur(0)}28%{opacity:1;transform:translateY(-50%) scale(1)}34%,100%{opacity:0;transform:translateY(-120%) scale(.7)}}
+
+/* isometric */
+.iso{background:#eef1f6}
+.iso svg{width:100%;height:100%}
+.iso .blk{animation:ib 3s cubic-bezier(.3,1.4,.5,1) infinite}
+.iso .blk:nth-of-type(2){animation-delay:.25s}.iso .blk:nth-of-type(3){animation-delay:.5s}
+@keyframes ib{0%,10%{transform:translateY(16px);opacity:0}25%,85%{transform:translateY(0);opacity:1}100%{transform:translateY(0);opacity:0}}
+.iso .pkt{animation:ip 3s linear infinite;offset-path:path("M 52 72 L 100 48 L 148 72")}
+@keyframes ip{0%,30%{offset-distance:0%;opacity:0}35%{opacity:1}80%{offset-distance:100%;opacity:1}90%,100%{offset-distance:100%;opacity:0}}
+
+/* clay */
+.clay{background:#f2d9c9}
+.clay .ball{position:absolute;border-radius:50%;bottom:16px}
+.clay .b1{width:44px;height:44px;left:24%;background:radial-gradient(circle at 35% 30%,#ffb08f,#e07a54 60%,#b9583a);box-shadow:inset -6px -8px 14px rgba(0,0,0,.18),0 10px 14px -6px rgba(120,50,20,.45);animation:cs 1.6s cubic-bezier(.5,0,.5,1) infinite;transform-origin:50% 100%}
+.clay .b2{width:34px;height:52px;left:50%;border-radius:17px;background:radial-gradient(circle at 35% 25%,#a8d8ff,#5aa2e0 60%,#3c7ab5);box-shadow:inset -6px -8px 14px rgba(0,0,0,.18),0 10px 14px -6px rgba(30,60,120,.45);animation:cs 1.6s .3s cubic-bezier(.5,0,.5,1) infinite;transform-origin:50% 100%}
+.clay .b3{width:38px;height:38px;left:72%;border-radius:12px;background:radial-gradient(circle at 35% 30%,#ffe9a0,#f2c14e 60%,#c99a26);box-shadow:inset -6px -8px 14px rgba(0,0,0,.16),0 10px 14px -6px rgba(140,100,20,.45);animation:cs 1.6s .6s cubic-bezier(.5,0,.5,1) infinite;transform-origin:50% 100%}
+@keyframes cs{0%,100%{transform:translateY(0) scale(1.15,.85)}12%{transform:translateY(0) scale(.92,1.08)}45%{transform:translateY(-30px) scale(.96,1.04)}80%{transform:translateY(0) scale(1.05,.95)}}
+
+/* ascii */
+.ascii{background:#060906}
+.ascii pre{margin:0;font:600 7.4px/7.6px "Geist Mono",monospace;color:#8dfc9a;text-shadow:0 0 6px rgba(80,255,120,.45)}
+
+/* mesh */
+.mesh{background:#1a1030;filter:saturate(1.2)}
+.mesh .m{position:absolute;width:140px;height:140px;border-radius:50%;filter:blur(26px);opacity:.9}
+.mesh .m1{background:var(--accent);left:-20px;top:-30px;animation:mm1 8s ease-in-out infinite}
+.mesh .m2{background:#6a5cff;right:-30px;top:-10px;animation:mm2 9s ease-in-out infinite}
+.mesh .m3{background:#21c7c0;left:30%;bottom:-70px;animation:mm1 7s ease-in-out infinite reverse}
+.mesh .m4{background:#ffd36b;right:10%;bottom:-60px;width:90px;height:90px;animation:mm2 6s ease-in-out infinite reverse}
+@keyframes mm1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,30px)}}
+@keyframes mm2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,30px)}}
+
+/* comic */
+.comic{background:#ffe35a radial-gradient(circle,#f0a400 1.6px,transparent 1.8px) 0 0/7px 7px}
+.comic svg{width:100%;height:100%}
+.comic .burst{transform-origin:100px 52px;animation:cb 1.8s cubic-bezier(.3,1.6,.5,1) infinite}
+@keyframes cb{0%{transform:scale(.2) rotate(-20deg)}18%{transform:scale(1.08) rotate(4deg)}26%,86%{transform:scale(1) rotate(0)}100%{transform:scale(.2) rotate(-20deg)}}
+
+/* split-flap */
+.flap{background:#121212;gap:3px}
+.flap .f{width:20px;height:30px;border-radius:3px;background:linear-gradient(#262626 50%,#1d1d1d 50%);color:#f5f1e6;font:600 19px/30px "Geist Mono";text-align:center;position:relative;box-shadow:0 2px 0 #000}
+.flap .f::after{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:#000}
+.flap .f.flip{animation:ff .09s linear}
+@keyframes ff{50%{transform:rotateX(70deg)}}
+
+/* vhs */
+.vhs{background:#101418;overflow:hidden}
+.vhs b{font:800 26px "Geist";letter-spacing:2px;color:#e8f0ff;text-shadow:-3px 0 rgba(255,40,80,.75),3px 0 rgba(40,220,255,.75);animation:vj 2.4s steps(1) infinite}
+.vhs::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 3px);z-index:2}
+.vhs::after{content:"";position:absolute;left:0;right:0;height:16px;background:linear-gradient(transparent,rgba(255,255,255,.18),transparent);animation:vb 3s linear infinite;z-index:3}
+.vhs .rec{position:absolute;left:10px;top:8px;font:600 10px "Geist Mono";color:#fff;opacity:.85;z-index:4}
+.vhs .rec::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#ff3b3b;margin-right:5px;animation:nf 1s steps(1) infinite}
+@keyframes vj{0%,100%{transform:translate(0)}30%{transform:translate(-2px,1px) skewX(4deg)}32%{transform:translate(2px,0)}70%{transform:translate(1px,-1px)}}
+@keyframes vb{0%{top:-20px}100%{top:110%}}
+
+/* bauhaus */
+.bauhaus{background:#efe8d8}
+.bauhaus svg{width:100%;height:100%}
+.bauhaus .r{transform-box:fill-box;transform-origin:center;animation:br 4s cubic-bezier(.7,0,.2,1) infinite}
+.bauhaus .r2{animation-delay:.4s}.bauhaus .r3{animation-delay:.8s}
+@keyframes br{0%,20%{transform:rotate(0)}40%,60%{transform:rotate(90deg)}80%,100%{transform:rotate(180deg)}}
+
+/* blueprint */
+.blueprint{background:#1d4f91 linear-gradient(rgba(255,255,255,.08) 1px,transparent 1px) 0 0/12px 12px,linear-gradient(90deg,rgba(255,255,255,.08) 1px,#1d4f91 1px) 0 0/12px 12px}
+.blueprint svg{width:100%;height:100%}
+.blueprint .d{fill:none;stroke:#e8f2ff;stroke-width:1.2;stroke-dasharray:300;stroke-dashoffset:300;animation:bd 4s ease-in-out infinite}
+.blueprint .d2{animation-delay:.6s}.blueprint .d3{animation-delay:1.2s}
+.blueprint text{font:500 7px "Geist Mono";fill:#cfe2ff;opacity:0;animation:bt 4s ease-in-out infinite}
+@keyframes bd{0%{stroke-dashoffset:300}45%,85%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:0;opacity:0}}
+@keyframes bt{0%,40%{opacity:0}55%,85%{opacity:1}100%{opacity:0}}
+
+/* art deco */
+.deco{background:#0c0b09}
+.deco svg{width:100%;height:100%}
+.deco .rays{transform-origin:100px 104px;animation:dr 12s linear infinite}
+.deco .fan{transform-origin:100px 104px;animation:df 3.5s ease-in-out infinite}
+@keyframes dr{to{transform:rotate(360deg)}}
+@keyframes df{0%,100%{transform:scale(.9)}50%{transform:scale(1.04)}}
+
+/* brutal */
+.brutal{background:#fff7e0}
+.brutal .bx{position:absolute;border:3px solid #111;box-shadow:5px 5px 0 #111;font:900 18px "Geist";display:flex;align-items:center;justify-content:center;color:#111}
+.brutal .x1{left:12%;top:18%;width:78px;height:38px;background:#ff6bd6;animation:bb 2.4s cubic-bezier(.3,1.5,.6,1) infinite}
+.brutal .x2{right:12%;top:34%;width:52px;height:52px;background:#7dff8a;border-radius:50%;animation:bb 2.4s .3s cubic-bezier(.3,1.5,.6,1) infinite}
+.brutal .x3{left:30%;bottom:10%;width:64px;height:26px;background:#ffd23f;animation:bb 2.4s .6s cubic-bezier(.3,1.5,.6,1) infinite}
+@keyframes bb{0%{transform:translateY(-70px)}22%,80%{transform:translateY(0)}100%{transform:translateY(-70px)}}
+
+/* kits */
+.k-hairline{background:var(--bg);--hairline-plate:var(--bg);--hairline-edge:var(--text2);--hairline-mid:var(--text3)}
+.k-hairline .fig{position:absolute;left:50%;top:50%;width:180px;transform:translate(-50%,-50%)}
+.k-peeps{background:linear-gradient(180deg,var(--accentTint),transparent)}
+.k-peeps .row{position:absolute;inset:6px 0 0;display:flex;justify-content:center;align-items:flex-end}
+.k-peeps .p{width:96px;height:96px;margin:0 -14px;animation:pb 3s ease-in-out infinite}
+.k-peeps .p:nth-child(2){width:116px;height:116px;animation-delay:.4s;z-index:2}
+.k-peeps .p:nth-child(3){animation-delay:.8s}
+@keyframes pb{0%,100%{transform:translateY(4px)}50%{transform:translateY(-2px)}}
+.k-own svg{width:100%;height:100%}
+.k-own .d{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:400;stroke-dashoffset:400;animation:bd 4.5s ease-in-out infinite}
+.k-own .d2{stroke:var(--text2);animation-delay:.5s}
+.k-none{background:var(--bg)}
+.k-none b{font:800 52px/1 "Geist";letter-spacing:-2px;color:var(--text)}
+.k-none b i{font-style:normal;color:var(--accent)}
+.k-none .rule{position:absolute;left:30%;right:30%;bottom:30px;height:3px;border-radius:2px;background:var(--accent);transform-origin:left;animation:nr 2.6s cubic-bezier(.7,0,.2,1) infinite}
+@keyframes nr{0%{transform:scaleX(0)}40%,80%{transform:scaleX(1)}100%{transform:scaleX(1);opacity:0}}
+</style>
+</head>
+<body>
+<h2>Animation style <span id="styleHint">Pick one, or two where the first leads</span></h2>
+<div class="grid" id="styles">
+  <div class="tile" data-kind="style" data-id="particles"><div class="art" style="background:#07080d"><canvas data-draw="particles"></canvas></div><div class="name"><div>Particles<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="liquid"><div class="art liquid"><svg viewBox="0 0 200 104"><defs><filter id="goo"><feGaussianBlur stdDeviation="7"/><feColorMatrix values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 22 -9"/></filter></defs><g filter="url(#goo)"><circle class="a" cx="80" cy="52" r="22"/><circle class="b" cx="120" cy="52" r="20"/><circle class="c" cx="100" cy="52" r="13"/></g></svg></div><div class="name"><div>Liquid morph<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="holographic"><div class="art holo"><div class="card"></div></div><div class="name"><div>Holographic<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="neon"><div class="art neon center"><b>OPEN</b><i>OPEN</i></div><div class="name"><div>Neon glow<small></small></div></div><div class="badge"></div></div>
+
+  <div class="tile" data-kind="style" data-id="wireframe"><div class="art" style="background:#05070c"><canvas data-draw="wireframe"></canvas></div><div class="name"><div>Wireframe 3D<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="glass"><div class="art glass"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="pane"></div></div><div class="name"><div>Glassmorphism<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="kinetic"><div class="art kinetic"><span>SHIP</span><span>IT</span><span>today.</span></div><div class="name"><div>Kinetic type<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="isometric"><div class="art iso"><svg viewBox="0 0 200 104">
+    <g class="blk"><polygon points="52,58 70,49 88,58 70,67" fill="#ffffff"/><polygon points="52,58 70,67 70,85 52,76" fill="#c9d3e3"/><polygon points="88,58 70,67 70,85 88,76" fill="#a9b6cc"/></g>
+    <g class="blk"><polygon points="82,38 100,29 118,38 100,47" fill="#ffd9cc"/><polygon points="82,38 100,47 100,79 82,70" fill="#f0a083"/><polygon points="118,38 100,47 100,79 118,70" fill="#d97757"/></g>
+    <g class="blk"><polygon points="112,58 130,49 148,58 130,67" fill="#ffffff"/><polygon points="112,58 130,67 130,85 112,76" fill="#c9d3e3"/><polygon points="148,58 130,67 130,85 148,76" fill="#a9b6cc"/></g>
+    <path d="M 52 72 L 100 48 L 148 72" fill="none" stroke="#d97757" stroke-width="1" stroke-dasharray="2 3" opacity=".5"/>
+    <circle class="pkt" r="3" fill="#d97757"/></svg></div><div class="name"><div>Isometric<small></small></div></div><div class="badge"></div></div>
+
+  <div class="tile" data-kind="style" data-id="clay"><div class="art clay"><div class="ball b1"></div><div class="ball b2"></div><div class="ball b3"></div></div><div class="name"><div>Clay 3D<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="ascii"><div class="art ascii center"><pre data-draw="ascii"></pre></div><div class="name"><div>ASCII art<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="mesh"><div class="art mesh"><div class="m m1"></div><div class="m m2"></div><div class="m m3"></div><div class="m m4"></div></div><div class="name"><div>Gradient mesh<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="comic"><div class="art comic"><svg viewBox="0 0 200 104"><g class="burst">
+    <polygon points="100,8 112,34 140,22 128,46 160,52 128,60 142,86 112,72 100,98 88,72 58,86 72,60 40,52 72,46 60,22 88,34" fill="#ff4d4d" stroke="#111" stroke-width="3" stroke-linejoin="round"/>
+    <text x="100" y="62" text-anchor="middle" font-family="Geist" font-weight="900" font-size="24" fill="#fff" stroke="#111" stroke-width="2" paint-order="stroke">POW!</text></g></svg></div><div class="name"><div>Comic book<small></small></div></div><div class="badge"></div></div>
+
+  <div class="tile" data-kind="style" data-id="splitflap"><div class="art flap center" data-draw="flap"></div><div class="name"><div>Split-flap<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="vhs"><div class="art vhs center"><span class="rec">REC</span><b>PLAY ▶</b></div><div class="name"><div>Retro VHS<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="halftone"><div class="art" style="background:#f6f1e7"><canvas data-draw="halftone"></canvas></div><div class="name"><div>Halftone<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="bauhaus"><div class="art bauhaus"><svg viewBox="0 0 200 104">
+    <rect x="0" y="70" width="200" height="34" fill="#1d1d1b"/><circle class="r" cx="62" cy="50" r="26" fill="#e23b2e"/>
+    <rect class="r r2" x="92" y="30" width="38" height="38" fill="#1f4fa3"/><polygon class="r r3" points="160,24 184,68 136,68" fill="#f2c230"/>
+    <line x1="20" y1="84" x2="180" y2="84" stroke="#efe8d8" stroke-width="3"/></svg></div><div class="name"><div>Bauhaus<small></small></div></div><div class="badge"></div></div>
+
+  <div class="tile" data-kind="style" data-id="pixel"><div class="art" style="background:#14102a"><canvas data-draw="pixel"></canvas></div><div class="name"><div>Pixel art<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="blueprint"><div class="art blueprint"><svg viewBox="0 0 200 104">
+    <path class="d" d="M60 80 V44 H140 V80 Z M60 56 H140 M60 68 H140"/><path class="d d2" d="M72 50 h4 M72 62 h4 M72 74 h4 M118 50 h12 M118 62 h12 M118 74 h12"/>
+    <path class="d d3" d="M60 90 H140 M60 87 v6 M140 87 v6 M150 44 V80 M147 44 h6 M147 80 h6"/>
+    <text x="100" y="99" text-anchor="middle">480 MM</text><text x="168" y="64">RACK</text></svg></div><div class="name"><div>Blueprint<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="artdeco"><div class="art deco"><svg viewBox="0 0 200 104">
+    <g class="rays" stroke="#c9a24a" stroke-width=".8" opacity=".55"></g>
+    <g class="fan" fill="none" stroke="#e6c46a" stroke-width="1.4"><path d="M40 104 A60 60 0 0 1 160 104"/><path d="M56 104 A44 44 0 0 1 144 104"/><path d="M72 104 A28 28 0 0 1 128 104"/></g>
+    <rect x="58" y="8" width="84" height="22" fill="#0c0b09" stroke="#e6c46a" stroke-width="1"/><text x="100" y="24" text-anchor="middle" font-family="Geist" font-weight="300" font-size="13" letter-spacing="5" fill="#f3dc95">GATSBY</text></svg></div><div class="name"><div>Art deco<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="style" data-id="brutal"><div class="art brutal"><div class="bx x1">BOLD</div><div class="bx x2">!</div><div class="bx x3"></div></div><div class="name"><div>Neo-brutalism<small></small></div></div><div class="badge"></div></div>
+</div>
+
+<h2>Illustrations <span>Live from the kits bundled with Dante: try the pointer on the figure</span></h2>
+<div class="grid kits" id="kits">
+  <div class="tile" data-kind="kit" data-id="hairline"><div class="art k-hairline"><div class="fig" id="hairlineFig"></div></div><div class="name"><div>Hairline figures<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="kit" data-id="peeps"><div class="art k-peeps"><div class="row" id="peeps"></div></div><div class="name"><div>Open Peeps<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="kit" data-id="own"><div class="art k-own"><svg viewBox="0 0 200 150">
+    <path class="d" d="M58 96 a22 22 0 0 1 6-43 a30 30 0 0 1 56-8 a24 24 0 0 1 22 51 Z"/>
+    <path class="d d2" d="M84 112 v14 M100 112 v20 M116 112 v14 M78 126 h12 M94 132 h12 M110 126 h12"/></svg></div><div class="name"><div>Drawn by the agent<small></small></div></div><div class="badge"></div></div>
+  <div class="tile" data-kind="kit" data-id="none"><div class="art k-none center"><b>A<i>a</i></b><div class="rule"></div></div><div class="name"><div>No illustrations<small></small></div></div><div class="badge"></div></div>
+</div>
+
+<script>
+// Summaries come from Dante so the words live in one place (MotionLooks).
+const setup = window.lookSetup || { theme: {}, styles: [], kits: [], summaries: {} };
+for (const [key, value] of Object.entries(setup.theme || {})) document.documentElement.style.setProperty("--" + key, value);
+document.querySelectorAll(".tile").forEach((tile) => {
+  const summary = (setup.summaries || {})[tile.dataset.id];
+  if (summary) { tile.title = summary; tile.querySelector("small").textContent = summary; }
+  // Buttons to VoiceOver and the keyboard too.
+  tile.setAttribute("role", "button");
+  tile.setAttribute("tabindex", "0");
+  tile.setAttribute("aria-label", tile.querySelector(".name div").firstChild.textContent.trim() + (summary ? ": " + summary : ""));
+  const pick = () => { try { window.webkit.messageHandlers.looks.postMessage({ kind: tile.dataset.kind, id: tile.dataset.id }); } catch (e) {} };
+  tile.addEventListener("click", pick);
+  tile.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pick(); } });
+});
+window.looks = {
+  set(styles, kits) {
+    document.querySelectorAll(".tile").forEach((tile) => {
+      const list = tile.dataset.kind === "style" ? styles : kits;
+      const index = list.indexOf(tile.dataset.id);
+      tile.classList.toggle("on", index >= 0);
+      tile.setAttribute("aria-pressed", index >= 0 ? "true" : "false");
+      tile.querySelector(".badge").textContent = tile.dataset.kind === "style" ? (index === 0 ? (styles.length > 1 ? "1 · leads" : "✓") : "2 · accent") : "✓";
+    });
+  },
+};
+looks.set(setup.styles || [], setup.kits || []);
+
+// Art deco rays.
+const rays = document.querySelector(".deco .rays");
+for (let i = 0; i < 36; i++) {
+  const a = (i / 36) * Math.PI * 2;
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", 100); line.setAttribute("y1", 104);
+  line.setAttribute("x2", 100 + Math.cos(a) * 130); line.setAttribute("y2", 104 + Math.sin(a) * 130);
+  rays.appendChild(line);
+}
+
+// Canvas tiles share one loop.
+const drawers = [];
+// Sized as they draw: the page can load before the sheet has laid the web view out.
+function canvasFor(name, draw) {
+  const canvas = document.querySelector(`canvas[data-draw="${name}"]`);
+  const g = canvas.getContext("2d");
+  let size = "";
+  drawers.push((t) => {
+    const ratio = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    if (size !== `${w}x${h}x${ratio}`) { size = `${w}x${h}x${ratio}`; canvas.width = w * ratio; canvas.height = h * ratio; }
+    g.setTransform(ratio, 0, 0, ratio, 0, 0);
+    draw(g, w, h, t);
+  });
+}
+
+const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#d97757";
+
+// Particles: a sphere of points that breathes into a ring and back.
+const points = Array.from({ length: 420 }, (_, i) => {
+  const y = 1 - (i / 419) * 2, r = Math.sqrt(1 - y * y), phi = i * 2.39996;
+  return { x: Math.cos(phi) * r, y, z: Math.sin(phi) * r, ring: (i / 420) * Math.PI * 2 };
+});
+canvasFor("particles", (g, w, h, t) => {
+  g.clearRect(0, 0, w, h); g.globalCompositeOperation = "lighter";
+  const morph = (Math.sin(t * 0.8) + 1) / 2, spin = t * 0.6;
+  for (const p of points) {
+    const sx = p.x * (1 - morph) + Math.cos(p.ring) * morph, sy = p.y * (1 - morph) + Math.sin(p.ring * 3) * 0.12 * morph, sz = p.z * (1 - morph) + Math.sin(p.ring) * morph;
+    const x = sx * Math.cos(spin) - sz * Math.sin(spin), z = sx * Math.sin(spin) + sz * Math.cos(spin);
+    const depth = (z + 1) / 2, px = w / 2 + x * 40, py = h / 2 + sy * 40 - z * 4;
+    g.fillStyle = `rgba(255,${150 + depth * 80 | 0},${110 + depth * 90 | 0},${0.25 + depth * 0.7})`;
+    g.beginPath(); g.arc(px, py, 0.6 + depth * 1.3, 0, 7); g.fill();
+  }
+  g.globalCompositeOperation = "source-over";
+});
+
+// Wireframe: an icosahedron turning.
+const gr = (1 + Math.sqrt(5)) / 2;
+const ico = [[-1, gr, 0], [1, gr, 0], [-1, -gr, 0], [1, -gr, 0], [0, -1, gr], [0, 1, gr], [0, -1, -gr], [0, 1, -gr], [gr, 0, -1], [gr, 0, 1], [-gr, 0, -1], [-gr, 0, 1]];
+const edges = [];
+for (let i = 0; i < 12; i++) for (let j = i + 1; j < 12; j++) {
+  const d = Math.hypot(ico[i][0] - ico[j][0], ico[i][1] - ico[j][1], ico[i][2] - ico[j][2]);
+  if (Math.abs(d - 2) < 0.01) edges.push([i, j]);
+}
+canvasFor("wireframe", (g, w, h, t) => {
+  g.clearRect(0, 0, w, h);
+  const a = t * 0.5, b = t * 0.31;
+  const P = ico.map(([x, y, z]) => {
+    let X = x * Math.cos(a) - z * Math.sin(a), Z = x * Math.sin(a) + z * Math.cos(a);
+    let Y = y * Math.cos(b) - Z * Math.sin(b); Z = y * Math.sin(b) + Z * Math.cos(b);
+    const s = 3.2 / (Z + 5);
+    return [w / 2 + X * s * 26, h / 2 + Y * s * 26, Z];
+  });
+  for (const [i, j] of edges) {
+    const depth = 1 - ((P[i][2] + P[j][2]) / 2 + gr) / (2 * gr);
+    g.strokeStyle = `rgba(120,220,255,${0.15 + depth * 0.85})`; g.lineWidth = 0.6 + depth * 0.9;
+    g.beginPath(); g.moveTo(P[i][0], P[i][1]); g.lineTo(P[j][0], P[j][1]); g.stroke();
+  }
+  for (const p of P) { g.fillStyle = "#bff1ff"; g.fillRect(p[0] - 1, p[1] - 1, 2, 2); }
+});
+
+// Halftone: a moving light on a dot grid.
+canvasFor("halftone", (g, w, h, t) => {
+  g.clearRect(0, 0, w, h); g.fillStyle = "#1b1b1b";
+  const cx = w / 2 + Math.cos(t * 0.9) * w * 0.25, cy = h / 2 + Math.sin(t * 1.3) * h * 0.22, step = 7;
+  g.save(); g.translate(w / 2, h / 2); g.rotate(0.35); g.translate(-w / 2, -h / 2);
+  for (let y = -20; y < h + 20; y += step) for (let x = -20; x < w + 20; x += step) {
+    const d = Math.hypot(x - cx, y - cy), v = Math.max(0, 1 - d / 60);
+    const r = 0.4 + v * 3.2;
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  g.restore();
+});
+
+// Pixel art: a little rocket climbing through stepped stars.
+const rocket = ["..w..", ".wAw.", ".wAw.", "wwwww", "w.w.w", ".f.f."];
+canvasFor("pixel", (g, w, h, t) => {
+  const px = 4, cols = Math.ceil(w / px), rows = Math.ceil(h / px), step = Math.floor(t * 10);
+  g.imageSmoothingEnabled = false; g.clearRect(0, 0, w, h);
+  for (let i = 0; i < 26; i++) {
+    const sx = (i * 37) % cols, sy = ((i * 53) % rows + step) % rows;
+    g.fillStyle = i % 3 ? "#5a4f9a" : "#e8e2ff"; g.fillRect(sx * px, sy * px, px, px);
+  }
+  const bob = Math.floor(t * 4) % 2, ox = Math.floor(cols / 2) - 2, oy = Math.floor(rows / 2) - 3 + bob;
+  rocket.forEach((row, y) => [...row].forEach((c, x) => {
+    if (c === ".") return;
+    g.fillStyle = c === "w" ? "#f4f4f4" : c === "A" ? accent : (step % 2 ? "#ffcf3f" : "#ff7a2f");
+    g.fillRect((ox + x) * px, (oy + y) * px, px, px);
+  }));
+});
+
+// ASCII: a turning torus in characters.
+const asciiPre = document.querySelector('pre[data-draw="ascii"]');
+drawers.push((t) => {
+  const W = 40, H = 13, out = new Array(W * H).fill(" "), zb = new Array(W * H).fill(0);
+  const A = t * 0.9, B = t * 0.5, ramp = ".,-~:;=!*#$@";
+  for (let j = 0; j < 6.28; j += 0.11) for (let i = 0; i < 6.28; i += 0.04) {
+    const c = Math.sin(i), d = Math.cos(j), e = Math.sin(A), f = Math.sin(j), g2 = Math.cos(A), h2 = d + 2;
+    const D = 1 / (c * h2 * e + f * g2 + 5), l = Math.cos(i), m = Math.cos(B), n = Math.sin(B), tt = c * h2 * g2 - f * e;
+    const x = (W / 2 + 30 * D * (l * h2 * m - tt * n)) | 0, y = (H / 2 + 12 * D * (l * h2 * n + tt * m)) | 0;
+    const o = x + W * y, N = (8 * ((f * e - c * d * g2) * m - c * d * e - f * g2 - l * d * n)) | 0;
+    if (y >= 0 && y < H && x >= 0 && x < W && D > zb[o]) { zb[o] = D; out[o] = ramp[Math.max(0, Math.min(11, N))]; }
+  }
+  let s = ""; for (let k = 0; k < H; k++) s += out.slice(k * W, k * W + W).join("") + "\n";
+  asciiPre.textContent = s;
+});
+
+// Split-flap: letters turning to the next word.
+const board = document.querySelector('[data-draw="flap"]');
+const words = ["DANTE", "SHIPS", "TODAY", "12:40"], glyphs = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:";
+const flaps = Array.from({ length: 5 }, () => { const f = document.createElement("div"); f.className = "f"; f.textContent = " "; board.appendChild(f); return f; });
+let word = 0, lastFlip = 0;
+drawers.push((t) => {
+  if (t - lastFlip < 0.07) return; lastFlip = t;
+  const target = words[Math.floor(t / 2.6) % words.length];
+  flaps.forEach((f, i) => {
+    const cur = f.textContent, want = target[i];
+    if (cur === want || t % 2.6 < i * 0.08) return;
+    f.textContent = glyphs[(glyphs.indexOf(cur) + 1) % glyphs.length];
+    f.classList.remove("flip"); void f.offsetWidth; f.classList.add("flip");
+  });
+});
+
+const start = performance.now();
+function frame(now) { const t = (now - start) / 1000; drawers.forEach((d) => d(t)); requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+</script>
+<script type="module">
+import { terrain } from "@lucasmarkes/hairline";
+import { createAvatar } from "@dicebear/core";
+import * as openPeeps from "@dicebear/open-peeps";
+const dark = (window.lookSetup && window.lookSetup.dark) !== false;
+terrain(document.getElementById("hairlineFig"), { intensity: 0.7, theme: dark ? "dark" : "light" });
+const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim().replace("#", "") || "d97757";
+const row = document.getElementById("peeps");
+for (const seed of ["north", "harbour", "ember"]) {
+  const peep = document.createElement("div"); peep.className = "p";
+  peep.innerHTML = createAvatar(openPeeps, { seed, clothingColor: [accent] }).toString();
+  row.appendChild(peep);
+}
+</script>
+</body>
+</html>
