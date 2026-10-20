@@ -134,7 +134,7 @@ public struct DocLibrary: Equatable, Sendable {
         case "Project", "Elsewhere": return directory
         case "Motion": return ""
         case "Docs": root = directory.split(separator: "/").first.map(String.init) ?? ""
-        case "Plan": root = ".dante"
+        case "Notes": root = ".dante"
         default: root = directory.split(separator: "/").prefix(2).joined(separator: "/")
         }
         guard directory.count > root.count, directory.hasPrefix(root + "/") else { return "" }
@@ -184,7 +184,7 @@ public struct DocLibrary: Equatable, Sendable {
         } + buckets.keys.sorted().map { Group(title: $0, docs: buckets[$0]!.sorted(by: Self.ordered)) }
     }
 
-    static let order = ["Project", "Motion", "Specs", "Decisions", "Runbooks", "Plan", "Phases", "Docs", "Elsewhere"]
+    static let order = ["Project", "Motion", "Specs", "Decisions", "Runbooks", "Notes", "Phases", "Docs", "Elsewhere"]
 
     static func group(for path: String) -> String {
         let parts = path.split(separator: "/").map(String.init)
@@ -195,7 +195,7 @@ public struct DocLibrary: Equatable, Sendable {
             case "decisions", "adr", "adrs": return "Decisions"
             case "runbooks": return "Runbooks"
             case "phases": return "Phases"
-            default: return "Plan"
+            default: return "Notes"
             }
         }
         if MotionPiece.isManifest(path) { return "Motion" }

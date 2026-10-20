@@ -35,15 +35,9 @@ struct LinkedPanel: View {
                             .help(entry.text)
                         }
                     }
-                    Rectangle().fill(theme.line.color).frame(height: 1).padding(.vertical, 6)
+                    if !files.isEmpty { Rectangle().fill(theme.line.color).frame(height: 1).padding(.vertical, 6) }
                 }
-                Eyebrow("Linked to this doc")
-                if files.isEmpty {
-                    Text("Nothing linked")
-                        .font(.dante(size: 12))
-                        .foregroundStyle(theme.text3.color)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                if !files.isEmpty { Eyebrow("Files it mentions") }
                 ForEach(files, id: \.self) { file in
                     note(symbol: "doc.text", title: (file as NSString).lastPathComponent, subtitle: file) {
                         if DocLibrary(paths: [file]).isEmpty {

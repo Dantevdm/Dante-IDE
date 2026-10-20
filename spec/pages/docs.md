@@ -14,6 +14,7 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 ## Shows
 - The library: recently changed docs, a card per group with excerpts and thumbnails.
 - A doc: markdown rendered with Mermaid diagrams (flowchart, sequence, ER) drawn natively; PDFs, images and Word files in a viewer.
+- Beside a markdown doc: its outline (On this page) and the project files it names in `code` (Files it mentions, shown only when there are some).
 - A sidebar of groups and sections with a filter.
 - The Studio card at the top of the library, and a Motion group with every piece (docs/motion/<name>/motion.yaml).
 - A piece: the scene on a dark stage, captions of the narration, a timeline with its narration lines and a deck's slide stops, and script errors when the scene has any.

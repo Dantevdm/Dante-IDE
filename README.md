@@ -6,11 +6,12 @@
 
 Dante reads a project and draws it: screens, API routes, packages, tables, outside services, pipelines and infrastructure, straight from the code. Claude or Codex leads, the other reviews, and local models take the small jobs. Every edit arrives as a diff you approve, a whole turn can be undone, and jobs run in their own worktrees beside you.
 
-![The system map: clients, API routes, backend, data and outside services, with test coverage](docs/images/map.jpg)
+![The system map: clients and screens, API routes (open ones flagged), backend parts, tables and outside services](docs/images/map.jpg)
 
 | | |
 | --- | --- |
-| ![The editor with Claude beside it](docs/images/code.jpg) | ![Docs with a sequence diagram drawn natively](docs/images/docs.jpg) |
+| ![The editor with the agent panel beside it, Claude or Codex in charge](docs/images/code.jpg) | ![Docs with a sequence diagram drawn natively](docs/images/docs.jpg) |
+| ![Security: findings ranked and scored, with the scanners Dante uses](docs/images/security.jpg) | ![The Infra view: the pipeline, the AWS resources it deploys, and how a request travels](docs/images/infra.jpg) |
 
 ## Install
 

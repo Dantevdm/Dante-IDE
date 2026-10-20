@@ -20,7 +20,7 @@ import Testing
         #expect(docs[1].images.count == 2)
         #expect(docs[1].others.isEmpty)
         #expect(group("Specs").sections.map(\.folder) == ["", "payments"])
-        #expect(group("Plan").sections.map(\.folder) == ["", "jobs"])
+        #expect(group("Notes").sections.map(\.folder) == ["", "jobs"])
         #expect(group("Elsewhere").sections.map(\.folder) == ["api", "frontend"])
         #expect(group("Project").sections.map(\.folder) == [""])
     }

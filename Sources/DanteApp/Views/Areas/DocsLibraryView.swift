@@ -221,7 +221,7 @@ struct DocsLibraryView: View {
         case "Specs": "list.bullet.rectangle"
         case "Decisions": "signpost.right"
         case "Runbooks": "book.closed"
-        case "Plan": "map"
+        case "Notes": "map"
         case "Phases": "flag"
         case "Docs": "books.vertical"
         case "Motion": "film.stack"
