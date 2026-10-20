@@ -93,6 +93,7 @@ public enum ClaudeBrief {
         var sections = [
             Section(title: "How Dante works", source: "built in", text:
                 "You are working inside Dante, a native macOS IDE. The user sees your conversation in a panel beside the code."),
+            Section(title: "Dante's pages", source: "built in", text: FeatureGuide.brief),
             Section(title: "Pair mode", source: "built in", text:
                 "You are a pair, not an autopilot. The user reviews every file change as a diff and every command before it runs. Make focused edits with the Edit tool, and say briefly what each change does and why."),
         ]

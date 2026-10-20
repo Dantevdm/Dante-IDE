@@ -48,5 +48,6 @@ Native macOS IDE in Swift 6 / SwiftUI, built with SwiftPM (no Xcode project). De
 - The window's system title bar is hidden; `TitleBar` draws its own and leaves room for the traffic lights.
 - Menu commands reach the window's state via `@FocusedValue(\.session)`.
 - `Section` is SwiftUI's; the workspace's areas are `Session.Area`.
+- Every page and every view inside one has an entry in `FeatureGuide` (`DanteKit/Guide`): what it's for, what it shows and does, and the words people use for it. Voice opens pages from it (`VoiceCommand.navigate`, "show me the infrastructure"; a view is asked for through `Session.areaView`, which the area also sets as it switches), explains them ("what's on this page?", "what does the infra view do?") and lists them ("what can you do?"), and the agents get it in their brief (`FeatureGuide.brief`). Add or update the entry in the same change as the feature; `FeatureGuideTests` reads the `Area` cases from Session.swift and fails for one without an entry.
 - Dante's own task list is `.dante/tasks.yaml` (a plain file now that the app has no board). Move a task's state when you finish it.
 - Verify UI changes by running the bundled app, not just by compiling.

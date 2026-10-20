@@ -135,9 +135,17 @@ struct MapView: View {
         }
         .background(theme.ground.color)
         .task(id: workspace.revision) { await load() }
-        .onChange(of: source) {
-            selected = nil
-            trail = []
+        .onChange(of: source, initial: true) {
+            if source != .system || !trail.isEmpty || selected != nil {
+                selected = nil
+                trail = []
+            }
+            session.areaView = source == .system ? nil : source.rawValue.lowercased()
+        }
+        // Asked for by voice: "show me the infrastructure".
+        .onChange(of: session.areaView) {
+            let wanted = Source.allCases.first { $0.rawValue.lowercased() == session.areaView } ?? .system
+            if wanted != source { source = wanted }
         }
     }
 

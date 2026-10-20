@@ -117,6 +117,9 @@ final class Session {
     var conflicts: Set<URL> = []
 
     var area: Area = .code
+    /// The view shown inside the area when it has several ("infra" on the Map): set by the
+    /// area as it switches, and by voice to ask for one (`FeatureGuide` ids after the dot).
+    var areaView: String?
     /// Remembered across windows and launches, so a minimised terminal stays minimised.
     var showsTerminal = UserDefaults.standard.object(forKey: "showsTerminal") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showsTerminal, forKey: "showsTerminal") }

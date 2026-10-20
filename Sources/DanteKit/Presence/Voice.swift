@@ -20,6 +20,12 @@ public enum VoiceCommand: Equatable, Sendable {
     case usage
     /// Ends a spoken conversation.
     case goodbye
+    /// Go to a page or view in the frontmost project (a `FeatureGuide` id).
+    case navigate(String)
+    /// Say what a page is for: the one named, or the one on screen (nil).
+    case explain(String?)
+    /// Say what pages Dante has.
+    case overview
     case ask(String)
 
     /// `projects` are the open projects' names, matched loosely ("dante ide" finds "Dante IDE").
@@ -46,6 +52,17 @@ public enum VoiceCommand: Equatable, Sendable {
         for prefix in ["show me ", "switch to ", "open up ", "open ", "go to ", "bring up "] where request.hasPrefix(prefix) {
             let name = String(request.dropFirst(prefix.count)).replacingOccurrences(of: "the ", with: "")
             if let project = projects.first(where: { matches($0, name) }) { return .show(project: project) }
+        }
+        // A page: "open the map", "take me to security", "show me the infrastructure".
+        for prefix in ["show me ", "switch to ", "open up ", "open ", "go to ", "bring up ", "take me to ", "navigate to ", "show ", "jump to ", "let's see ", "let me see "]
+        where request.hasPrefix(prefix) {
+            if let feature = FeatureGuide.match(String(request.dropFirst(prefix.count))) { return .navigate(feature.id) }
+        }
+        if let feature = FeatureGuide.match(request), request.split(separator: " ").count <= 3 { return .navigate(feature.id) }
+        if hereQuestions.contains(core) { return .explain(nil) }
+        if overviewQuestions.contains(core) { return .overview }
+        for prefix in ["what is ", "what's ", "whats ", "explain ", "what does ", "tell me about ", "what can i do on ", "what can i do in ", "how do i use "] where core.hasPrefix(prefix) {
+            if let feature = FeatureGuide.match(String(core.dropFirst(prefix.count))) { return .explain(feature.id) }
         }
         if asksToOpenAProject(core) { return .openProject }
         return .ask(text)
@@ -76,6 +93,18 @@ public enum VoiceCommand: Equatable, Sendable {
         "minimise", "minimize", "minimise it", "minimize it", "close", "close it", "close stage", "exit",
         "exit full screen", "leave", "go back", "back", "dismiss", "hide", "hide it", "small", "shrink",
         "that's all", "thats all", "exit stage", "leave stage", "done here",
+    ]
+
+    /// About the page on screen.
+    static let hereQuestions: Set<String> = [
+        "what's this page", "whats this page", "what is this page", "what am i looking at", "explain this page", "what's on this page",
+        "whats on this page", "what can i do here", "what is this", "what's this", "whats this", "explain this screen", "what is this screen",
+        "what does this page do", "what's this for", "whats this for", "what is this for", "where am i",
+    ]
+    /// About Dante itself.
+    static let overviewQuestions: Set<String> = [
+        "what can you do", "what can dante do", "what pages are there", "what pages do you have", "help", "what can i do",
+        "what can i ask", "what can i say", "what are the pages", "show me around", "give me a tour",
     ]
 
     static let goodbyes: Set<String> = [
