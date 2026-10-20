@@ -26,16 +26,17 @@ final class PresenceModel {
     var usageReset: Date? { lead == .codex ? codexWindow?.resetsAt : usageResets }
 }
 
-/// Claude's presence in the menu bar: an orb that shows, across every window, whether Claude
-/// is resting, thinking, working, waiting for you, finished or in trouble. A click opens a
-/// panel with a bigger orb and each project's state; a right click offers to hide it.
+/// Dante in the menu bar: the Vine D, whose firefly shows, across every window, whether the
+/// agents are resting, thinking, working, waiting for you, finished or in trouble. A click opens
+/// a panel with the frontmost project's pocket HQ and each project's state; a right click
+/// offers the Stage and to hide it. The orb lives on in the pocket HQ's brain and the Stage.
 @MainActor
 final class PresenceController: NSObject {
     static let shared = PresenceController()
 
     let model = PresenceModel()
     private var statusItem: NSStatusItem?
-    private var orb: OrbView?
+    private var icon: VineIcon?
     private var popover: NSPopover?
     private var tracker = PresenceTracker()
     private var recheck: Timer?
@@ -52,6 +53,9 @@ final class PresenceController: NSObject {
     /// `DANTE_STAGE_DEMO=1`: made-up agents come and go, to see the Stage at work.
     private static let demo = ProcessInfo.processInfo.environment["DANTE_STAGE_DEMO"] == "1"
     private var demoTimer: Timer?
+    /// `DANTE_PRESENCE_WINDOW=1`: the panel in a window of its own, for checking it when the
+    /// menu bar is too full to show the item.
+    private var panelWindow: NSWindow?
     /// Orbs showing the mood: the menu bar's, the panel's and the Stage's.
     private let watchers = NSHashTable<OrbView>.weakObjects()
     weak var themeStore: ThemeStore?
@@ -61,6 +65,20 @@ final class PresenceController: NSObject {
         guard !observing else { return }
         observing = true
         update()
+        if ProcessInfo.processInfo.environment["DANTE_PRESENCE_WINDOW"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                MainActor.assumeIsolated { self?.showPanelWindow() }
+            }
+        }
+    }
+
+    private func showPanelWindow() {
+        let theme = themeStore?.theme ?? ThemeID.dark.theme
+        let window = NSWindow(contentViewController: NSHostingController(rootView: PresencePanel(model: model, controller: self).environment(\.theme, theme)))
+        window.title = "Presence"
+        window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+        window.orderFront(nil)
+        panelWindow = window
     }
 
     /// A window opened, closed, or changed project.
@@ -212,6 +230,8 @@ final class PresenceController: NSObject {
         model.presence = presence
         if model.vitality != vitality { model.vitality = vitality }
         for orb in watchers.allObjects { orb.vitality = vitality }
+        icon?.intensity = vitality.intensity
+        icon?.fatigue = vitality.fatigue
         // Intensity fades as the last minute's work ages, so look again while there's any.
         vitalityTimer?.invalidate()
         vitalityTimer = vitality.intensity > 0 ? Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
@@ -220,6 +240,7 @@ final class PresenceController: NSObject {
         let (mood, until) = tracker.mood(for: presence, at: Date())
         if model.mood != mood { model.mood = mood }
         for orb in watchers.allObjects { orb.mood = mood }
+        icon?.mood = mood
         statusItem?.button?.toolTip = "\(mood.title) · \(presence.line)"
         recheck?.invalidate()
         recheck = nil
@@ -234,26 +255,25 @@ final class PresenceController: NSObject {
 
     private func setVisible(_ visible: Bool) {
         if visible, statusItem == nil {
-            let item = NSStatusBar.system.statusItem(withLength: NSStatusBar.system.thickness + 6)
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusBar.system.thickness + 2)
             if let button = item.button {
-                let orb = OrbView(size: .menuBar, mood: model.mood)
-                orb.frame = button.bounds
-                orb.autoresizingMask = [.width, .height]
-                button.addSubview(orb)
+                let icon = VineIcon(frame: button.bounds)
+                icon.autoresizingMask = [.width, .height]
+                icon.mood = model.mood
+                icon.fatigue = model.vitality.fatigue
+                button.addSubview(icon)
                 button.target = self
                 button.action = #selector(clicked)
                 button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-                button.setAccessibilityLabel("Claude")
-                attach(orb)
-                orb.wake()
-                self.orb = orb
+                button.setAccessibilityLabel("Dante")
+                self.icon = icon
             }
             statusItem = item
         } else if !visible, let item = statusItem {
             popover?.close()
             NSStatusBar.system.removeStatusItem(item)
             statusItem = nil
-            orb = nil
+            icon = nil
         }
     }
 
@@ -347,10 +367,18 @@ final class PresenceController: NSObject {
 
     // MARK: Actions from the panel
 
-    /// The panel's orb was clicked: go full screen.
+    /// The panel's Stage button: go full screen.
     func openStage() {
         popover?.performClose(nil)
         StageController.shared.open()
+    }
+
+    /// The pocket HQ was clicked: Agent HQ in its window.
+    func openOffice(_ session: Session) {
+        popover?.performClose(nil)
+        session.area = .office
+        NSApp.activate()
+        session.window?.makeKeyAndOrderFront(nil)
     }
 
     func show(_ id: String) {

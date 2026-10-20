@@ -18,6 +18,7 @@ The Stage is Dante full screen: the orb, the agents at work, the reply as it's s
 - Space talks; Return approves; Esc leaves full screen, then closes.
 - While presenting: →, Space, Return or a click moves on, ← goes back, C toggles captions, Esc ends the presentation; "next slide" and "back" by voice.
 - Pin it on top in a window of any size.
+- Open it from the menu bar panel's Stage button, the menu bar item's right-click menu, View › Stage or by voice ("full screen").
 
 ## Acceptance
 - It keeps the display awake and hides a still pointer.

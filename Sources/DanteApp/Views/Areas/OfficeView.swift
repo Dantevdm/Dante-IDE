@@ -16,7 +16,11 @@ struct OfficeView: View {
         OfficeWeb(bridge: bridge)
             .background(theme.ground.color)
             // A new theme restarts the feed, so the page is sent the new colours at once.
-            .task(id: "\(workspace.url.path)|\(theme.id)") { await feed(theme: OfficeBridge.colours(theme)) }
+            .task(id: "\(workspace.url.path)|\(theme.id)") {
+                // What was last seen is read once, so this visit's new milestones are celebrated once.
+                let seen = UserDefaults.standard.string(forKey: OfficeBridge.seenKey(workspace.name))
+                await bridge.feed(session: session, workspace: workspace, theme: OfficeBridge.colours(theme), seen: seen)
+            }
             .onAppear { wire() }
     }
 
@@ -40,40 +44,6 @@ struct OfficeView: View {
                 break
             }
         }
-    }
-
-    private func feed(theme: [String: String]) async {
-        // What was last seen is read once, so this visit's new milestones are celebrated once.
-        let seen = UserDefaults.standard.string(forKey: OfficeBridge.seenKey(workspace.name))
-        var loadedAt = Date.distantPast
-        while !Task.isCancelled {
-            if Date().timeIntervalSince(loadedAt) > 6 {
-                await bridge.load(project: workspace.name, root: workspace.url, revision: workspace.revision)
-                loadedAt = Date()
-            }
-            let office = AgentOffice.build(jobs: bridge.jobs, project: workspace.name,
-                                           growth: .init(commits: bridge.commits, files: workspace.files.count))
-            bridge.push(office: office, live: workers(), ambience: AgentOffice.ambience(hour: Calendar.current.component(.hour, from: .now)),
-                        theme: theme, seen: seen)
-            try? await Task.sleep(for: .seconds(2))
-        }
-    }
-
-    /// Everyone working in this window: the main conversation and each open job's.
-    private func workers() -> [OfficeWorker] {
-        func tools(_ claude: ClaudeSession) -> [ToolActivity] {
-            claude.items.compactMap { if case .tool(let tool) = $0.content { tool } else { nil } }
-        }
-        var workers: [OfficeWorker] = []
-        if let claude = session.claude {
-            workers += OfficeWorker.from(tools: tools(claude), working: claude.state == .working, lead: claude.engine.title, root: workspace.url)
-        }
-        for job in session.jobs.open {
-            guard let claude = session.jobs.sessions[job.id] else { continue }
-            workers += OfficeWorker.from(tools: tools(claude), working: claude.state == .working, lead: claude.engine.title,
-                                         root: job.worktreeURL, job: job.title)
-        }
-        return workers
     }
 }
 
@@ -121,15 +91,31 @@ final class OfficeBridge {
         ]
     }
 
-    func push(office: AgentOffice, live: [OfficeWorker], ambience: String, theme: [String: String], seen: String?) {
+    /// Feeds the page until cancelled: the ledger every 6 s, the office every 2 s, with whoever
+    /// is at work now and, for the pocket office, the presence's mood.
+    func feed(session: Session, workspace: Workspace, theme: [String: String], seen: String?, mood: @escaping @MainActor () -> String? = { nil }) async {
+        var loadedAt = Date.distantPast
+        while !Task.isCancelled {
+            if Date().timeIntervalSince(loadedAt) > 6 {
+                await load(project: workspace.name, root: workspace.url, revision: workspace.revision)
+                loadedAt = Date()
+            }
+            let office = AgentOffice.build(jobs: jobs, project: workspace.name, growth: .init(commits: commits, files: workspace.files.count))
+            push(office: office, live: session.officeWorkers(), ambience: AgentOffice.ambience(hour: Calendar.current.component(.hour, from: .now)),
+                 theme: theme, seen: seen, mood: mood())
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+
+    func push(office: AgentOffice, live: [OfficeWorker], ambience: String, theme: [String: String], seen: String?, mood: String? = nil) {
         guard let web, let officeJSON = try? Self.encoder.encode(office), let liveJSON = try? Self.encoder.encode(live),
               let themeJSON = try? JSONSerialization.data(withJSONObject: theme, options: .sortedKeys) else { return }
         let themeText = String(decoding: themeJSON, as: UTF8.self)
-        let payload = "{\"office\":\(String(decoding: officeJSON, as: UTF8.self)),\"live\":\(String(decoding: liveJSON, as: UTF8.self)),\"ambience\":\"\(ambience)\",\"theme\":\(themeText),\"seen\":\(seen.map { "\"\($0)\"" } ?? "null")}"
+        let payload = "{\"office\":\(String(decoding: officeJSON, as: UTF8.self)),\"live\":\(String(decoding: liveJSON, as: UTF8.self)),\"ambience\":\"\(ambience)\",\"theme\":\(themeText),\"seen\":\(seen.map { "\"\($0)\"" } ?? "null"),\"mood\":\(mood.map { "\"\($0)\"" } ?? "null")}"
         // The office's own clock changes every push; only send when something else did.
         var still = office
         still.now = .distantPast
-        let key = (try? Self.encoder.encode(still)).map { String(decoding: $0, as: UTF8.self) + String(decoding: liveJSON, as: UTF8.self) + ambience + themeText }
+        let key = (try? Self.encoder.encode(still)).map { String(decoding: $0, as: UTF8.self) + String(decoding: liveJSON, as: UTF8.self) + ambience + themeText + (mood ?? "") }
         guard key != last else { return }
         last = key
         web.evaluateJavaScript("window.office && office.set(\(payload))")
@@ -141,8 +127,10 @@ final class OfficeBridge {
     }
 }
 
-private struct OfficeWeb: NSViewRepresentable {
+struct OfficeWeb: NSViewRepresentable {
     let bridge: OfficeBridge
+    /// The menu bar panel's pocket office: only the scene, and a click opens HQ.
+    var pocket = false
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -151,6 +139,9 @@ private struct OfficeWeb: NSViewRepresentable {
                                               forURLScheme: MotionRuntime.scheme)
         }
         let controller = WKUserContentController()
+        if pocket {
+            controller.addUserScript(WKUserScript(source: "window.OFFICE_POCKET = true", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         let bridge = bridge
         controller.add(MotionMessages { body in
             guard let action = body["action"] as? String else { return }
@@ -167,5 +158,25 @@ private struct OfficeWeb: NSViewRepresentable {
 
     func updateNSView(_ web: WKWebView, context: Context) {
         bridge.web = web
+    }
+}
+
+extension Session {
+    /// Everyone working in this window, for HQ: the main conversation and each open job's.
+    func officeWorkers() -> [OfficeWorker] {
+        guard let workspace else { return [] }
+        func tools(_ claude: ClaudeSession) -> [ToolActivity] {
+            claude.items.compactMap { if case .tool(let tool) = $0.content { tool } else { nil } }
+        }
+        var workers: [OfficeWorker] = []
+        if let claude {
+            workers += OfficeWorker.from(tools: tools(claude), working: claude.state == .working, lead: claude.engine.title, root: workspace.url)
+        }
+        for job in jobs.open {
+            guard let claude = jobs.sessions[job.id] else { continue }
+            workers += OfficeWorker.from(tools: tools(claude), working: claude.state == .working, lead: claude.engine.title,
+                                         root: job.worktreeURL, job: job.title)
+        }
+        return workers
     }
 }

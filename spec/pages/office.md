@@ -11,6 +11,7 @@ HQ is a little isometric office where the agents work, and it grows with the pro
 - Eight rooms around the brain, one per kind of work: Research, Backend, Front-end, DevOps, Quality, Docs, Security and Data.
 - Rooms open with their first job and get furnished as their work adds up. Rooms nobody has used in a while go dusty.
 - Watch it grow replays the office from the first job to now.
+- A pocket copy lives in the menu bar panel.
 
 ## Shows
 - The rooms. A job's room comes from the files it changed, from its kind (audits in Security, image reading in Front-end, triage in Quality, summaries and questions in Research) or from the words of its title (`OfficeRole.of(job:)`).
@@ -39,6 +40,16 @@ HQ is a little isometric office where the agents work, and it grows with the pro
   - Local models, Looker and reviewers go to their rooms.
   - Each worker has a tag saying what it's doing. Jobs from the Jobs board show too, marked "job".
   - An idle room shows its regular agent dimmed at the desk.
+- The pocket HQ in the menu bar's panel (`PocketOffice`, office.html with `OFFICE_POCKET`) is the frontmost project's office:
+  - It shows only the scene, cropped closer, without signs, tags, the side panel, pills, caption or celebrations.
+  - It is fed like the page, and new milestones aren't marked as seen there.
+  - The brain shows the presence's mood:
+    - Waiting for you: it pulses pink.
+    - Working: its rings turn faster.
+    - Trouble: red.
+    - Done: green.
+    - Asleep: the office fades.
+  - The project's name sits in its corner. A click opens HQ in that project's window.
 - The side panel shows:
   - The era, with progress to the next one.
   - Anything waiting for you.
@@ -51,6 +62,7 @@ HQ is a little isometric office where the agents work, and it grows with the pro
 
 ## Actions
 - Click a room's sign to open its panel. Click it again, or the cross, to close it.
+- Click the pocket HQ in the menu bar panel: the project's window comes forward on HQ.
 - Watch it grow: replays the office from the first job to now, with the date and era in the corner.
 - Open, on something waiting, shows that conversation in the agent panel.
 
@@ -71,3 +83,4 @@ HQ is a little isometric office where the agents work, and it grows with the pro
 - The level, era and milestones match `AgentOffice.build` for the project's ledger and git history.
 - Something waiting for you shows in the panel and as a pink tag in its room.
 - Watch it grow ends on the office as it is now.
+- The menu bar panel shows the frontmost project's pocket HQ. Its brain turns pink while something waits for you.

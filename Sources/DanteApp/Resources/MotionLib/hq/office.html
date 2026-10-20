@@ -107,6 +107,16 @@ aside::-webkit-scrollbar{width:0}
 .narrow.panel aside{transform:none}
 .narrow #panelToggle{display:inline-flex}
 .narrow.panel #panelToggle{left:300px}
+/* The pocket office in the menu bar panel: only the scene, and the brain shows the mood. */
+.pocket aside,.pocket #corner,.pocket #caption,.pocket #toast,.pocket #panelToggle,.pocket #replayDate,.pocket #labels,.pocket #tags{display:none !important}
+.pocket{cursor:pointer}
+[data-mood=needsYou] #brain .halo{animation:needs 1.4s ease-in-out infinite}
+@keyframes needs{0%,100%{filter:hue-rotate(118deg) saturate(1.4);transform:scale(1)}50%{filter:hue-rotate(118deg) saturate(1.6) brightness(1.25);transform:scale(1.12)}}
+[data-mood=acting] #brain .spin,[data-mood=thinking] #brain .spin{animation-duration:4s}
+[data-mood=acting] #brain .halo,[data-mood=thinking] #brain .halo{animation-duration:1.6s}
+[data-mood=trouble] #brain .halo{filter:hue-rotate(150deg) saturate(1.5)}
+[data-mood=done] #brain .halo{filter:hue-rotate(-70deg)}
+[data-mood=asleep] #world{filter:saturate(0.35) brightness(0.75)}
 @media (prefers-reduced-motion: reduce){*{animation:none !important}}
 </style>
 </head>
@@ -131,9 +141,13 @@ aside::-webkit-scrollbar{width:0}
 <div id="toast"></div>
 <script>
 (() => {
+  // Set by the panel before the page loads.
+  const POCKET = !!window.OFFICE_POCKET;
+  if (POCKET) document.body.classList.add('pocket');
   const CX = 1010, CY = 500, R = 430, W = 210, D = 170, H = 64;
   // The scene's extent in design pixels, for fitting it to the view.
-  const BOX = { x: 372, y: 36, w: 1276, h: 912 };
+  // The pocket office crops the room signs' headroom and the outer grounds.
+  const BOX = POCKET ? { x: 440, y: 130, w: 1140, h: 760 } : { x: 372, y: 36, w: 1276, h: 912 };
   const T = (x, y, z, o) => `translate(${CX}px, ${CY}px) rotateX(55deg) rotateZ(-45deg) translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, ${z.toFixed(1)}px)${o ? ' ' + o : ''}`;
   const P = (x, y, z) => ({ X: CX + 0.70711 * (x + y), Y: CY + 0.40558 * (y - x) - 0.81915 * z });
   const ROOMS = {
@@ -498,9 +512,9 @@ aside::-webkit-scrollbar{width:0}
 
   // ---- Fitting the scene to the view ----
   function fit() {
-    const narrow = window.innerWidth < 900;
+    const narrow = !POCKET && window.innerWidth < 900;
     document.body.classList.toggle('narrow', narrow);
-    const left = narrow ? 0 : 344 + 14;
+    const left = narrow || POCKET ? 0 : 344 + 14;
     const view = document.getElementById('view');
     view.style.left = left + 'px';
     const vw = view.clientWidth, vh = view.clientHeight;
@@ -516,6 +530,7 @@ aside::-webkit-scrollbar{width:0}
 
   // ---- Clicks ----
   document.addEventListener('click', (ev) => {
+    if (POCKET) return post('open');
     const label = ev.target.closest('.label');
     if (label) { selected = selected === label.dataset.role ? null : label.dataset.role; document.body.classList.add('panel'); rerender(); return; }
     const act = ev.target.closest('[data-act]');
@@ -584,9 +599,11 @@ aside::-webkit-scrollbar{width:0}
       applyTheme(payload.theme);
       const first = !state.office;
       state = { ...state, ...payload };
+      if (payload.mood) document.body.dataset.mood = payload.mood; else delete document.body.dataset.mood;
       fit();
       if (!replaying) render(state.office, state.live || []);
-      // Milestones since you last looked, celebrated once.
+      // Milestones since you last looked, celebrated once (in HQ, not the pocket office).
+      if (POCKET) return;
       if (state.seen && state.office.milestones.length) {
         const seen = new Date(state.seen).getTime();
         const fresh = state.office.milestones.filter((m) => new Date(m.date).getTime() > seen && m.kind !== 'count');

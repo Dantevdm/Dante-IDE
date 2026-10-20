@@ -34,7 +34,7 @@ The rail has seven places; some have tabs.
 - **Agents**: Jobs, Activity, Setup and HQ
 - **Docs**, in the footer: markdown, native diagrams, PDFs and Word files, and the motion studio
 
-Beside them: the agent panel, the menu bar orb, the Stage and voice. The sections below go through the big pieces.
+Beside them: the agent panel, the menu bar's Vine D, the Stage and voice. The sections below go through the big pieces.
 
 ## Agents in charge
 
@@ -98,7 +98,8 @@ Security runs on every project, offline by default, and sits between the agents 
 - **Push to talk** with ⌃⌥Space or the Talk button. Speech is recognised on the Mac. Say "stop", "yes", "no", "switch to Codex", "status" or "how much usage is left"; anything else goes to the agent in the frontmost project.
 - **Voice knows the app.** Every page has a spec, so "show me the infrastructure", "what's on this page?" and "what can you do?" work, and the agents can open pages for you as they explain.
 - **Replies are read aloud as they stream**, with code skipped, in a natural voice ([Kokoro](https://github.com/thewh1teagle/kokoro-onnx), running on the Mac) or the system voices. "Hey Dante" is there too, off by default, and works only when the Mac can recognise speech offline.
-- **The orb** in the menu bar shows what the agents are doing: thinking, acting, waiting for you, done, listening, tired as the usage window fills, asleep when the plan runs out. Sub-agents and local jobs bud off it as satellites and merge back when they finish.
+- **The Vine D** in the menu bar shows what the agents are doing: a firefly in its bowl glows orange while they work, pink when something waits for you, and the leaves sway; it fades as the usage window fills and when the plan runs out. Its panel holds a pocket copy of Agent HQ, whose brain shows the same mood.
+- **The orb** is the agents' brain, on the Stage: thinking, acting, waiting for you, done, listening, tired, asleep. Sub-agents and local jobs bud off it as satellites and merge back when they finish.
 - **The Stage** is Dante full screen on a TV, or in a window: the orb in a heads-up display, the agents at work, today's tally, the reply as it's spoken, and approvals you can answer with Return.
 
 ## Search, by text or by meaning
