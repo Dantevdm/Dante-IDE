@@ -51,7 +51,7 @@ struct EnvironmentView: View {
     var body: some View {
         AreaPage(
             eyebrow: nil,
-            title: session.remoteSync.map { "Environment on \($0.project.host)" } ?? "Local environment",
+            title: session.remoteSync.map { "Services on \($0.project.host)" } ?? "Services",
             subtitle: nil
         ) {
             if compose != nil {

@@ -20,6 +20,9 @@ struct WorkspaceView: View {
                     ResizeHandle(axis: .horizontal, value: $explorerWidth, range: 180...900)
                 }
                 VStack(spacing: 0) {
+                    if session.area.place.pages.count > 1 {
+                        PlaceTabs(session: session)
+                    }
                     Group {
                         switch session.area {
                         case .code: EditorArea(session: session, workspace: workspace)
@@ -38,6 +41,8 @@ struct WorkspaceView: View {
                         case .security: SecurityView(session: session, workspace: workspace)
                         }
                     }
+                    .environment(\.underPlaceTabs, session.area.place.pages.count > 1)
+                    .transition(.opacity)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     // The terminal stays alive when hidden so its shell keeps running.

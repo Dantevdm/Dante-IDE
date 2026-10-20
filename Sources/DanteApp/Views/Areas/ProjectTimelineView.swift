@@ -22,7 +22,7 @@ struct ProjectTimelineView: View {
     var body: some View {
         AreaPage(
             eyebrow: nil,
-            title: "Timeline",
+            title: "History",
             subtitle: nil
         ) {
             IconButton(symbol: "arrow.clockwise", label: "Reload") { Task { await load() } }

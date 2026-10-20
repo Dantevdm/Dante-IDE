@@ -15,7 +15,7 @@ struct RunView: View {
     var body: some View {
         AreaPage(
             eyebrow: nil,
-            title: "Runtime health",
+            title: "Health",
             subtitle: nil
         ) {
             if let latestTag { Chip(text: "\(latestTag) is the latest tag", symbol: "tag") }

@@ -12,17 +12,24 @@ struct AreaPage<Actions: View, Content: View>: View {
     var maxWidth: CGFloat = .infinity
     @ViewBuilder let actions: Actions
     @ViewBuilder let content: Content
+    @Environment(\.underPlaceTabs) private var underTabs
+
+    /// Under a place's tabs a page's name is already on its tab, so only titles that say more
+    /// ("No database yet", a release's version) are shown.
+    private func shows(_ text: String) -> Bool { !(underTabs && Area.allCases.contains { $0.title == text }) }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
-                    if let eyebrow { Eyebrow(eyebrow) }
+                    if let eyebrow, shows(eyebrow) { Eyebrow(eyebrow) }
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(title)
-                            .font(.dante(size: 28, weight: .semibold))
-                            .foregroundStyle(theme.text.color)
-                            .lineLimit(1)
+                        if shows(title) {
+                            Text(title)
+                                .font(.dante(size: 28, weight: .semibold))
+                                .foregroundStyle(theme.text.color)
+                                .lineLimit(1)
+                        }
                         Spacer(minLength: 12)
                         HStack(spacing: 8) { actions }
                     }

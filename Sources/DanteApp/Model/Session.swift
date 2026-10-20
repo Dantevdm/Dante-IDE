@@ -11,24 +11,14 @@ enum Area: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
-        switch self {
-        case .home: "Home"
-        case .map: "Map"
-        case .code: "Code"
-        case .tests: "Tests"
-        case .security: "Security"
-        case .environments: "Env"
-        case .data: "Data"
-        case .ship: "Ship"
-        case .run: "Run"
-        case .timeline: "Timeline"
-        case .claude: "Setup"
-        case .agents: "Agents"
-        case .jobs: "Jobs"
-        case .docs: "Docs"
-        }
-    }
+    /// The page's name, from `FeatureGuide` so voice, the agents and the rail say the same.
+    var title: String { FeatureGuide.feature(rawValue)?.title ?? rawValue.capitalized }
+
+    /// "Local › Services" for a tab, "Map" for a place of its own.
+    var fullTitle: String { place.pages.count > 1 ? "\(place.title) › \(title)" : title }
+
+    /// The rail place it's a tab of.
+    var place: RailPlace { RailPlace.all.first { $0.pages.contains(self) } ?? RailPlace.all[0] }
 
     var symbol: String {
         switch self {
@@ -37,13 +27,13 @@ enum Area: String, CaseIterable, Identifiable {
         case .code: "chevron.left.forwardslash.chevron.right"
         case .tests: "testtube.2"
         case .security: "shield.lefthalf.filled"
-        case .environments: "shippingbox"
+        case .environments: "server.rack"
         case .data: "cylinder.split.1x2"
         case .ship: "paperplane"
         case .run: "waveform.path.ecg"
         case .timeline: "clock.arrow.circlepath"
         case .claude: "slider.horizontal.3"
-        case .agents: "circle.hexagongrid"
+        case .agents: "chart.bar.doc.horizontal"
         case .jobs: "square.stack.3d.up"
         case .docs: "doc.text"
         }
@@ -69,8 +59,39 @@ enum Area: String, CaseIterable, Identifiable {
         }
     }
 
-    static let main: [Area] = [.home, .map, .code, .tests, .security, .environments, .data, .ship, .run, .timeline, .claude, .agents, .jobs]
-    static let footer: [Area] = [.docs]
+}
+
+/// A place in the rail: one page, or several shown as tabs (`FeatureGuide.places`).
+struct RailPlace: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let pages: [Area]
+
+    static let all: [RailPlace] = FeatureGuide.places.map { place in
+        RailPlace(id: place.id, title: place.title, pages: place.pages.compactMap(Area.init(rawValue:)))
+    }
+    static var main: [RailPlace] { all.filter { $0.id != "docs" } }
+    static var footer: [RailPlace] { all.filter { $0.id == "docs" } }
+
+    var symbol: String {
+        switch id {
+        case "quality": "checkmark.seal"
+        case "local": "shippingbox"
+        case "ship": "paperplane"
+        case "agents": "circle.hexagongrid"
+        default: pages.first?.symbol ?? "square"
+        }
+    }
+
+    var summary: String {
+        switch id {
+        case "quality": "Tests and security: what's covered, what fails, and what to fix."
+        case "local": "What runs on this Mac: services, databases and the app's health."
+        case "ship": "Releases, CI and the project's history."
+        case "agents": "Jobs, who did what, and how the agents are set up."
+        default: pages.first?.summary ?? ""
+        }
+    }
 }
 
 /// What the command palette searches. ⌘K opens it on everything, ⌘P on files.
@@ -116,7 +137,11 @@ final class Session {
     /// Open files that changed on disk while they had unsaved edits.
     var conflicts: Set<URL> = []
 
-    var area: Area = .code
+    var area: Area = .code {
+        didSet { lastPage[area.place.id] = area }
+    }
+    /// The tab each rail place was last on, so going back to a place returns to it.
+    var lastPage: [String: Area] = [:]
     /// The view shown inside the area when it has several ("infra" on the Map): set by the
     /// area as it switches, and by voice to ask for one (`FeatureGuide` ids after the dot).
     var areaView: String?

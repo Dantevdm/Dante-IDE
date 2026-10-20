@@ -336,7 +336,7 @@ struct CommandPalette: View {
             list.append(action("New Claude conversation", "square.and.pencil") { claude.reset() })
         }
         for area in Area.allCases where area != session.area {
-            list.append(action("Go to \(area.title)", area.symbol) { session.area = area })
+            list.append(action("Go to \(area.fullTitle)", area.symbol) { session.area = area })
         }
         return list
     }

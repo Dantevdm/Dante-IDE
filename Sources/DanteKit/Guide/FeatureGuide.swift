@@ -64,35 +64,35 @@ public enum FeatureGuide {
         DanteFeature("tests", title: "Tests",
                      summary: "Tests runs the project's tests and shows failures, flaky tests, the tests written per area and the functions no test names, which the agent can draft tests for.",
                      details: ["Run changed runs only the tests the changes touch."],
-                     phrases: ["tests", "test", "testing", "test results", "failures", "coverage"]),
+                     phrases: ["tests", "test", "testing", "test results", "failures", "coverage", "quality"]),
         DanteFeature("security", title: "Security",
                      summary: "Security scores the project out of a hundred and lists its findings, most serious first: secrets, personal information under POPIA, encryption, injection, containers, CI and dependencies.",
                      details: ["Fix with the agent sends findings to the agent in charge, and the other agent checks the fix.", "A deep audit asks for a read-only review.", "Accepted risks are kept in .dante/security.yaml."],
                      phrases: ["security", "vulnerabilities", "secrets", "popia", "audit", "score", "findings"]),
-        DanteFeature("environments", title: "Env",
-                     summary: "Env is the local environment: the docker compose services and their logs, the project's apps you can run, its other containers, and the ports in use.",
+        DanteFeature("environments", title: "Services",
+                     summary: "Services is the local environment: the docker compose services and their logs, the project's apps you can run, its other containers, and the ports in use.",
                      details: ["It says why a service isn't up and can move a port that's taken.", "Apps in this project can be run, or added to compose by the agent."],
-                     phrases: ["env", "environment", "environments", "docker", "compose", "containers", "ports", "local setup"]),
+                     phrases: ["services", "env", "environment", "environments", "local", "docker", "compose", "containers", "ports", "local setup"]),
         DanteFeature("data", title: "Data",
                      summary: "Data connects to the project's databases: browse tables, run queries, read query plans with index suggestions and preview migrations before they run.",
                      details: ["It finds databases from compose, env files and the project's containers.", "Passwords are kept in the Keychain."],
                      phrases: ["data", "database", "databases", "tables", "sql", "queries", "postgres", "schema"]),
-        DanteFeature("ship", title: "Ship",
-                     summary: "Ship is for releasing: the CI runs, pull requests and a release checklist.",
-                     phrases: ["ship", "release", "releases", "ci", "pull requests", "deploy", "shipping"]),
-        DanteFeature("run", title: "Run",
-                     summary: "Run watches the running app: its health and the errors in its logs since the window opened.",
-                     phrases: ["run", "runtime", "health", "errors", "logs", "running app", "monitoring"]),
-        DanteFeature("timeline", title: "Timeline",
-                     summary: "Timeline is the project's history in one stream: commits, the agent's conversations, test runs and CI.",
-                     phrases: ["timeline", "history", "activity", "what happened"]),
+        DanteFeature("ship", title: "Release",
+                     summary: "Release is for shipping: the CI runs, pull requests and a release checklist.",
+                     phrases: ["ship", "release", "releases", "ci", "ci runs", "pull requests", "deploy", "shipping"]),
+        DanteFeature("run", title: "Health",
+                     summary: "Health watches the running app: its health and the errors in its logs since the window opened.",
+                     phrases: ["run", "runtime", "health", "errors", "alarms", "logs", "running app", "monitoring"]),
+        DanteFeature("timeline", title: "History",
+                     summary: "History is the project's history in one stream: commits, the agent's conversations, test runs and CI.",
+                     phrases: ["timeline", "history", "what happened"]),
         DanteFeature("claude", title: "Setup",
                      summary: "Setup is how the agents are set up for this project: skills, memory files, connectors, plugins, permissions and recent conversations.",
                      details: ["It suggests skills worth adding for the project and drafts them."],
                      phrases: ["setup", "skills", "memory", "connectors", "plugins", "permissions", "claude setup", "mcp"]),
-        DanteFeature("agents", title: "Agents",
-                     summary: "Agents shows who did the work: Claude, Codex and the local models, the jobs each did, who checked whose work, and the models on this Mac.",
-                     phrases: ["agents", "models", "local models", "ollama", "who did what", "ledger"]),
+        DanteFeature("agents", title: "Activity",
+                     summary: "Activity shows who did the work: Claude, Codex and the local models, the jobs each did, who checked whose work, and the models on this Mac.",
+                     phrases: ["agents", "agent activity", "activity", "models", "local models", "ollama", "who did what", "ledger"]),
         DanteFeature("jobs", title: "Jobs",
                      summary: "Jobs are agents working beside the main conversation, each in its own git worktree, with their changes to merge or discard, and job types that start on their own when CI fails.",
                      details: ["Away mode lets a job carry on without asking for routine steps for a set time."],
@@ -107,6 +107,28 @@ public enum FeatureGuide {
                      summary: "The Stage is Dante full screen: the orb, the agents at work, the reply as it's spoken and anything waiting for approval.",
                      phrases: ["stage"]),
     ]
+
+    /// The rail's places, in order, each with its pages as tabs (the first is where it opens).
+    /// The app's rail is built from this list.
+    public struct Place: Identifiable, Equatable, Sendable {
+        public var id: String
+        public var title: String
+        public var pages: [String]
+    }
+
+    public static let places: [Place] = [
+        Place(id: "home", title: "Home", pages: ["home"]),
+        Place(id: "map", title: "Map", pages: ["map"]),
+        Place(id: "code", title: "Code", pages: ["code"]),
+        Place(id: "quality", title: "Quality", pages: ["tests", "security"]),
+        Place(id: "local", title: "Local", pages: ["environments", "data", "run"]),
+        Place(id: "ship", title: "Ship", pages: ["ship", "timeline"]),
+        Place(id: "agents", title: "Agents", pages: ["jobs", "agents", "claude"]),
+        Place(id: "docs", title: "Docs", pages: ["docs"]),
+    ]
+
+    /// The place a page is in.
+    public static func place(of page: String) -> Place? { places.first { $0.pages.contains(page) } }
 
     public static func feature(_ id: String) -> DanteFeature? { features.first { $0.id == id } }
 
@@ -123,6 +145,9 @@ public enum FeatureGuide {
         }
         let name = words.joined(separator: " ")
         guard !name.isEmpty else { return nil }
+        // A page's own title first ("services" is the Services tab, not the Map's view), then
+        // a view's words over a page's ("pipelines" is the Infra view).
+        if let page = features.first(where: { $0.view == nil && $0.title.lowercased() == name }) { return page }
         let found = features.filter { $0.title.lowercased() == name || $0.phrases.contains(name) }
         return found.first { $0.view != nil } ?? found.first
     }
@@ -132,16 +157,30 @@ public enum FeatureGuide {
         ([feature.summary] + feature.details.prefix(2)).joined(separator: " ")
     }
 
-    /// Spoken: the pages in a breath.
+    /// Spoken: the places in a breath, with the pages inside each.
     public static var overview: String {
-        let pages = features.filter { $0.view == nil && !["settings", "stage"].contains($0.id) }.map(\.title)
-        return "Dante's pages are " + pages.dropLast().joined(separator: ", ") + " and " + (pages.last ?? "") + ". Say open and a page's name, or ask what one does."
+        let spoken = places.map { place -> String in
+            let pages = place.pages.compactMap { feature($0)?.title }
+            return pages == [place.title] ? place.title : "\(place.title), with \(list(pages))"
+        }
+        return "Dante has \(spoken.count) places: " + spoken.joined(separator: "; ") + ". Say open and a page's name, or ask what one does."
+    }
+
+    private static func list(_ items: [String]) -> String {
+        items.count < 2 ? items.joined() : items.dropLast().joined(separator: ", ") + " and " + items.last!
     }
 
     /// For the agents' brief: every page and view in a line, so they can send the user there.
     public static var brief: String {
         let lines = features.map { feature -> String in
-            let place = feature.view.map { _ in "\(feature.area.capitalized) › \(feature.title)" } ?? feature.title
+            let place: String
+            if feature.view != nil {
+                place = "\(self.feature(feature.area)?.title ?? feature.area.capitalized) › \(feature.title)"
+            } else if let group = self.place(of: feature.id), group.pages.count > 1 {
+                place = "\(group.title) › \(feature.title)"
+            } else {
+                place = feature.title
+            }
             return "- \(place): \(feature.summary)"
         }
         return "Dante (the IDE the user is in) has these pages; point the user to one when it shows what they ask about:\n" + lines.joined(separator: "\n")

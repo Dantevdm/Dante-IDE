@@ -20,6 +20,8 @@ struct FeatureGuideTests {
         // Views inside a page belong to one.
         for feature in FeatureGuide.features where feature.view != nil { #expect(areas.contains(feature.area)) }
         #expect(Set(FeatureGuide.features.map(\.id)).count == FeatureGuide.features.count)
+        // The rail's places hold every area once.
+        #expect(FeatureGuide.places.flatMap(\.pages).sorted() == areas.sorted())
     }
 
     @Test func pagesAreNamedTheWayPeopleSayThem() {
@@ -29,6 +31,9 @@ struct FeatureGuideTests {
         #expect(FeatureGuide.match("the data page")?.id == "data")
         #expect(FeatureGuide.match("map")?.id == "map")
         #expect(FeatureGuide.match("docker")?.id == "environments")
+        #expect(FeatureGuide.match("services")?.id == "environments")
+        #expect(FeatureGuide.match("history")?.id == "timeline")
+        #expect(FeatureGuide.match("quality")?.id == "tests")
         #expect(FeatureGuide.match("where the data is saved") == nil)
     }
 
@@ -54,6 +59,7 @@ struct FeatureGuideTests {
         let brief = FeatureGuide.brief
         for feature in FeatureGuide.features { #expect(brief.contains(feature.summary)) }
         #expect(brief.contains("- Map › Infrastructure:"))
-        #expect(FeatureGuide.overview.hasPrefix("Dante's pages are Home, Map, Code"))
+        #expect(brief.contains("- Quality › Security:"))
+        #expect(FeatureGuide.overview.hasPrefix("Dante has 8 places: Home; Map; Code; Quality, with Tests and Security; Local, with Services, Data and Health;"))
     }
 }
