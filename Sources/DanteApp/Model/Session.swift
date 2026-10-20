@@ -120,6 +120,8 @@ final class Session {
     /// The view shown inside the area when it has several ("infra" on the Map): set by the
     /// area as it switches, and by voice to ask for one (`FeatureGuide` ids after the dot).
     var areaView: String?
+    /// A web app being opened from the Map, with its progress.
+    var webLaunch: WebLaunch?
     /// Remembered across windows and launches, so a minimised terminal stays minimised.
     var showsTerminal = UserDefaults.standard.object(forKey: "showsTerminal") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showsTerminal, forKey: "showsTerminal") }
@@ -558,6 +560,21 @@ final class Session {
     func runInTerminal(_ command: String) {
         showsTerminal = true
         terminalInput = TerminalInput(text: command + "\n", tab: selectedTerminal)
+    }
+
+    /// Runs a long-lived command (a dev server) in a terminal tab of its own, so the one in
+    /// front stays free and its output stays together.
+    func runInNewTerminal(_ command: String, title: String) {
+        var tab = TerminalTab()
+        tab.title = title
+        terminalTabs.append(tab)
+        selectedTerminal = tab.id
+        showsTerminal = true
+        // The new shell drops input sent before it exists.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(450))
+            self?.terminalInput = TerminalInput(text: command + "\n", tab: tab.id)
+        }
     }
 
     /// Types a command without running it, for ones the person should read first (installs).

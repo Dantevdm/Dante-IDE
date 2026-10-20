@@ -444,27 +444,46 @@ struct SystemInspector: View {
                     Text(part.name).font(.dante(size: 18, weight: .semibold)).foregroundStyle(theme.text.color)
                     Text(part.detail).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
+                if let web = webApp {
+                    if let launch = session.webLaunch, launch.name == web.client.name {
+                        WebLaunchCard(session: session, launch: launch)
+                    } else {
+                        Button { session.openInBrowser(folder: web.client.path ?? "", name: web.client.name, screen: web.screen) } label: {
+                            Label(web.screen == nil ? "Open in browser" : "Open \(web.screen!.name) in browser", systemImage: "safari").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(DanteButtonStyle(primary: open == nil))
+                        .help("Opens it in your browser on localhost. If its dev server isn’t running, Dante says so and starts it first.")
+                    }
+                }
                 if !part.items.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Eyebrow(part.lane == .api ? "Routes" : part.lane == .clients ? "Screens" : part.kind == .database ? "Tables"
                                 : part.kind == .table ? "Columns" : part.kind == .function || part.kind == .structure && part.path == nil ? "Declared" : "Inside")
                         ForEach(part.items, id: \.self) { item in
-                            Button {
-                                if let file = item.file { session.open(file: workspace.url.appending(path: file), line: item.line ?? 1) }
-                            } label: {
-                                HStack {
-                                    ItemLine(item: item, isRoute: part.lane == .api)
-                                    Spacer(minLength: 0)
-                                    if item.file != nil {
-                                        Image(systemName: "arrow.up.right").font(.dante(size: 9)).foregroundStyle(theme.text3.color)
+                            HStack(spacing: 6) {
+                                Button {
+                                    if let file = item.file { session.open(file: workspace.url.appending(path: file), line: item.line ?? 1) }
+                                } label: {
+                                    HStack {
+                                        ItemLine(item: item, isRoute: part.lane == .api)
+                                        Spacer(minLength: 0)
+                                        if item.file != nil {
+                                            Image(systemName: "arrow.up.right").font(.dante(size: 9)).foregroundStyle(theme.text3.color)
+                                        }
+                                    }
+                                    .padding(.vertical, 2)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(item.file == nil)
+                                .help(help(for: item))
+                                // Beside the row, not in it: a button inside a button gives the click to the row.
+                                if part.lane == .clients, part.id.hasPrefix("client:"), part.kind == .web {
+                                    IconButton(symbol: "safari", label: "Open \(item.text) in the browser", size: 10) {
+                                        session.openInBrowser(folder: part.path ?? "", name: part.name, screen: (item.text, item.file))
                                     }
                                 }
-                                .padding(.vertical, 2)
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .disabled(item.file == nil)
-                            .help(help(for: item))
                         }
                     }
                 }
@@ -518,6 +537,14 @@ struct SystemInspector: View {
             .padding(20)
         }
         .background(theme.panel.color)
+    }
+
+    /// A web frontend, or one of its screens, that can open in the browser.
+    private var webApp: (client: SystemMap.Part, screen: (name: String, file: String?)?)? {
+        guard part.lane == .clients, part.kind == .web else { return nil }
+        if part.id.hasPrefix("client:") { return (part, nil) }
+        guard let client = map.parts.first(where: { $0.id.hasPrefix("client:") && $0.items.contains { $0.file == part.path && $0.text == part.name } }) else { return nil }
+        return (client, (part.name, part.path))
     }
 
     private func help(for item: SystemMap.Item) -> String {
@@ -606,5 +633,116 @@ enum Breakable {
             previous = character
         }
         return result
+    }
+}
+
+/// Opening a web app from the Map, step by step: how it runs, starting it (once the person
+/// agrees), waiting for its port, and the page opening in the browser.
+private struct WebLaunchCard: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let launch: WebLaunch
+
+    private enum Mark { case pending, active, done, skipped, failed }
+
+    var body: some View {
+        let target = launch.target
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Eyebrow("Opening \(launch.screen ?? launch.name)")
+                Spacer()
+                IconButton(symbol: "xmark", label: launch.isDone ? "Dismiss" : "Cancel", size: 9) { session.cancelWebLaunch() }
+            }
+            row(mark(for: 0), "Find how \(launch.name) runs",
+                target.map { "Port \($0.port) (\($0.portSource)) · \($0.command)" } ?? "Reading its config…")
+            if launch.wasRunning {
+                row(.skipped, "Already running", "Port \(target?.port ?? 0) is listening, so nothing needs starting.")
+            } else {
+                row(mark(for: 1), "Start it", startDetail)
+                if launch.step == .needsStart, let target {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("\(launch.name) isn’t running: nothing is listening on port \(target.port). Dante will start it with `\(target.command)` in a new terminal tab, wait for it to come up, then open the page.")
+                            .font(.dante(size: 12))
+                            .foregroundStyle(theme.text2.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            Button { session.startAndOpen() } label: {
+                                Label("Start it", systemImage: "play.fill").frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(DanteButtonStyle(primary: true))
+                            Button("Not now") { session.cancelWebLaunch() }
+                                .buttonStyle(DanteButtonStyle())
+                        }
+                    }
+                    .padding(.leading, 28)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+                row(mark(for: 2), "Wait for port \(target?.port ?? 0)",
+                    launch.step == .waiting ? "Waiting · \(launch.waited) s" : mark(for: 2) == .done ? "Up" : "")
+            }
+            row(mark(for: 3), "Open in your browser", target.map { $0.url.absoluteString + ($0.routeFound || launch.screen == nil ? "" : " (its route wasn’t found, so the app’s home)") } ?? "")
+            if case .failed(let message) = launch.step {
+                Text(message).font(.dante(size: 12)).foregroundStyle(theme.red.color).fixedSize(horizontal: false, vertical: true)
+                Button { session.showsTerminal = true } label: { Label("Show the terminal", systemImage: "terminal").frame(maxWidth: .infinity) }
+                    .buttonStyle(DanteButtonStyle())
+            }
+            if launch.step == .opened, let target {
+                Button { NSWorkspace.shared.open(target.url) } label: { Label("Open again", systemImage: "safari").frame(maxWidth: .infinity) }
+                    .buttonStyle(DanteButtonStyle())
+            }
+        }
+        .padding(14)
+        .background(theme.card.color, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(launch.step == .opened ? theme.green.color.opacity(0.5) : theme.accentLine.color))
+        .animation(.snappy(duration: 0.25), value: launch.step)
+    }
+
+    private var startDetail: String {
+        switch launch.step {
+        case .finding, .needsStart: ""
+        case .starting: "Running it in a terminal tab…"
+        default: launch.target.map { "`\($0.command)` in the \($0.name) terminal tab" } ?? ""
+        }
+    }
+
+    /// Steps: 0 find, 1 start, 2 wait, 3 open.
+    private func mark(for index: Int) -> Mark {
+        let current: Int
+        switch launch.step {
+        case .finding: current = 0
+        case .needsStart: current = 1
+        case .starting: current = 1
+        case .waiting: current = 2
+        case .opening: current = 3
+        case .opened: return .done
+        case .failed: current = launch.target == nil ? 0 : launch.wasRunning ? 3 : 2
+            if index == current { return .failed }
+        }
+        if index < current { return .done }
+        if index == current { return launch.step == .needsStart ? .pending : .active }
+        return .pending
+    }
+
+    private func row(_ mark: Mark, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                switch mark {
+                case .active: ProgressView().controlSize(.small)
+                case .done, .skipped: Image(systemName: "checkmark.circle.fill").foregroundStyle(theme.green.color).transition(.scale.combined(with: .opacity))
+                case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(theme.red.color)
+                case .pending: Image(systemName: "circle").foregroundStyle(theme.text3.color)
+                }
+            }
+            .font(.dante(size: 14))
+            .frame(width: 18, height: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.dante(size: 12.5, weight: mark == .active ? .semibold : .medium))
+                    .foregroundStyle(mark == .pending ? theme.text3.color : theme.text.color)
+                if !detail.isEmpty {
+                    Text(detail).font(.dante(size: 11, design: detail.contains("http") || detail.contains("·") ? .monospaced : .default))
+                        .foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                }
+            }
+        }
     }
 }
