@@ -154,6 +154,8 @@ struct Chip: View {
     var symbol: String?
     var color: Color?
     var mono = false
+    /// A chip that's a filter, switched on.
+    var selected = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -163,8 +165,8 @@ struct Chip: View {
         .foregroundStyle(color ?? theme.text2.color)
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
-        .background(Capsule().fill(theme.raised.color))
-        .overlay(Capsule().strokeBorder(theme.line.color))
+        .background(Capsule().fill(selected ? (color ?? theme.accent.color).opacity(0.12) : theme.raised.color))
+        .overlay(Capsule().strokeBorder(selected ? (color ?? theme.accent.color) : theme.line.color, lineWidth: selected ? 1.5 : 1))
         .lineLimit(1)
     }
 }

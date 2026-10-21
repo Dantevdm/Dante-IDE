@@ -6,7 +6,8 @@ import Foundation
 @MainActor @Observable
 final class SecurityModel {
     var report: SecurityReport?
-    /// The report before this one, for "2 new, 3 fixed".
+    /// The last report that found something different, for "2 new, 3 fixed". A scan that
+    /// finds the same things keeps it, so the changes stay until something else changes.
     var previous: SecurityReport?
     var scanning = false
     var progress = ""
@@ -36,7 +37,7 @@ final class SecurityModel {
         }
         // Audit findings stay until the next audit.
         let fresh = ProjectSecurity.keepingAudits(scanned, from: earlier)
-        previous = earlier
+        if previous == nil || Self.differ(fresh, earlier) { previous = earlier }
         report = fresh
         fresh.save(for: root)
     }
@@ -53,8 +54,12 @@ final class SecurityModel {
         progress = ""
         loaded = true
         guard let fresh = SecurityReport.load(for: root) else { return }
-        if fresh.date != report?.date { previous = report }
+        if fresh.date != report?.date, previous == nil || Self.differ(fresh, report) { previous = report }
         report = fresh
+    }
+
+    private static func differ(_ report: SecurityReport, _ earlier: SecurityReport?) -> Bool {
+        Set(report.findings.map(\.id)) != Set(earlier?.findings.map(\.id) ?? [])
     }
 
     /// A read-only audit by Claude or Codex, outside the panel's conversation.

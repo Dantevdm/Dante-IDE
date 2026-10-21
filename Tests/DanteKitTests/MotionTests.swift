@@ -123,8 +123,8 @@ struct BrandKitTests {
         #expect(!kit.isSaved)
         #expect(kit.colors.accent == "#ff5a1f")
         #expect(kit.colors.accent2 == "#14b8a6")
-        // A light site still gets a dark stage.
-        #expect(kit.colors.background == BrandKit.Colors().background)
+        // A light site keeps its light background.
+        #expect(kit.colors.background == "#ffffff")
         #expect(kit.display == "Inter")
         #expect(kit.logo == "web/public/logo.svg")
     }
@@ -136,7 +136,7 @@ struct BrandKitTests {
         #expect(BrandKit.cssColor("red") == nil)
         #expect(BrandKit.luminance("#ffffff") > 0.99)
         #expect(BrandKit.luminance("#000000") < 0.01)
-        #expect(BrandKit().css.contains("--brand-accent: #7c8cff;"))
+        #expect(BrandKit().css.contains("--brand-accent: #3b5bdb;"))
     }
 }
 

@@ -6,7 +6,7 @@
 <style>
 @font-face{font-family:"Geist";src:url("/_dante/fonts/Geist.ttf");font-weight:100 900}
 @font-face{font-family:"Geist Mono";src:url("/_dante/fonts/GeistMono.ttf");font-weight:100 900}
-:root{--mono:"Geist Mono",ui-monospace,Menlo,monospace;--ground:#0A0D14;--panel:#0D1119;--glass:rgba(13,17,25,0.9);--card:#141A26;--line:#1F2636;--line2:#2C3550;--text:#E8EBEF;--text2:#9AA3B2;--text3:#7D8794;--accent:#8FA8FF;--accentTint:#162033;--dotc:rgba(255,255,255,0.05)}
+:root{--mono:"Geist Mono",ui-monospace,Menlo,monospace;--ground:#F5F6F8;--panel:#ECEEF2;--glass:rgba(236,238,242,0.9);--card:#FFFFFF;--line:#E1E4EA;--line2:#CDD3DC;--text:#12151A;--text2:#474F5B;--text3:#5F6875;--accent:#3B5BDB;--accentTint:#E8EDFF;--dotc:rgba(0,0,0,0.05)}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--ground);color:var(--text);font-family:"Geist",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none}
 button{font:inherit;cursor:pointer;color:inherit}
 #sky{position:absolute;inset:0;transition:background 1.2s}
@@ -107,7 +107,11 @@ aside::-webkit-scrollbar{width:0}
 .narrow.panel aside{transform:none}
 .narrow #panelToggle{display:inline-flex}
 .narrow.panel #panelToggle{left:300px}
-/* The pocket office in the menu bar panel: only the scene, and the brain shows the mood. */
+/* The pocket office in the menu bar panel: only the scene, and the brain shows the mood.
+   On the Stage the scene keeps its signs and tags, and the Stage draws the rest around it. */
+.stage aside,.stage #panelToggle,.stage #corner,.stage #caption,.stage #replayDate{display:none !important}
+.stage #view{overflow:visible}
+.stage #toast{top:40px}
 .pocket aside,.pocket #corner,.pocket #caption,.pocket #toast,.pocket #panelToggle,.pocket #replayDate,.pocket #labels,.pocket #tags{display:none !important}
 .pocket{cursor:pointer}
 [data-mood=needsYou] #brain .halo{animation:needs 1.4s ease-in-out infinite}
@@ -141,9 +145,12 @@ aside::-webkit-scrollbar{width:0}
 <div id="toast"></div>
 <script>
 (() => {
-  // Set by the panel before the page loads.
-  const POCKET = !!window.OFFICE_POCKET;
-  if (POCKET) document.body.classList.add('pocket');
+  // Set before the page loads: 'pocket' for the menu bar panel, 'stage' for the Stage.
+  const MODE = window.OFFICE_MODE || '';
+  const POCKET = MODE === 'pocket', STAGE = MODE === 'stage';
+  if (MODE) document.body.classList.add(MODE);
+  // On the Stage, the room left for the scene between the Stage's own text, in pixels.
+  let INSET = { top: 0, right: 0, bottom: 0, left: 0 };
   const CX = 1010, CY = 500, R = 430, W = 210, D = 170, H = 64;
   // The scene's extent in design pixels, for fitting it to the view.
   // The pocket office crops the room signs' headroom and the outer grounds.
@@ -512,11 +519,12 @@ aside::-webkit-scrollbar{width:0}
 
   // ---- Fitting the scene to the view ----
   function fit() {
-    const narrow = !POCKET && window.innerWidth < 900;
+    const narrow = !MODE && window.innerWidth < 900;
     document.body.classList.toggle('narrow', narrow);
-    const left = narrow || POCKET ? 0 : 344 + 14;
+    const left = STAGE ? INSET.left : narrow || POCKET ? 0 : 344 + 14;
     const view = document.getElementById('view');
     view.style.left = left + 'px';
+    if (STAGE) { view.style.top = INSET.top + 'px'; view.style.right = INSET.right + 'px'; view.style.bottom = INSET.bottom + 'px'; }
     const vw = view.clientWidth, vh = view.clientHeight;
     const s = Math.min(vw / BOX.w, vh / BOX.h);
     const ox = (vw - BOX.w * s) / 2 - BOX.x * s, oy = (vh - BOX.h * s) / 2 - BOX.y * s;
@@ -611,7 +619,8 @@ aside::-webkit-scrollbar{width:0}
       }
       if (state.office.milestones.length) post('seen', { date: state.office.milestones[0].date });
     },
-    replay
+    replay,
+    inset(v) { INSET = { ...INSET, ...v }; fit(); }
   };
   fit();
   post('ready');

@@ -4,11 +4,15 @@ import SwiftUI
 /// Security: Dante's scanner and any installed ones, a grade, findings explained, fixes by
 /// the agent in charge with the other checking, and a deep audit that reads the code.
 struct SecurityView: View {
+    enum Change { case new, fixed }
+
     @Environment(\.theme) private var theme
     let session: Session
     let workspace: Workspace
 
     @State private var category: SecurityFinding.Category?
+    /// The hero's "new" or "fixed" chip, when one is chosen.
+    @State private var change: Change?
     @State private var showsLow = true
     @State private var expanded: Set<String> = []
     @State private var limit = 120
@@ -88,8 +92,12 @@ struct SecurityView: View {
                             SeverityPill(severity: severity, count: report.count(severity))
                         }
                         if let changes = changes {
-                            if !changes.new.isEmpty { Chip(text: "\(changes.new.count) new", symbol: "plus.circle", color: theme.amber.color) }
-                            if !changes.fixed.isEmpty { Chip(text: "\(changes.fixed.count) fixed", symbol: "checkmark.circle", color: theme.green.color) }
+                            if !changes.new.isEmpty {
+                                changeChip(.new, text: "\(changes.new.count) new", symbol: "plus.circle", color: theme.amber.color)
+                            }
+                            if !changes.fixed.isEmpty {
+                                changeChip(.fixed, text: "\(changes.fixed.count) fixed", symbol: "checkmark.circle", color: theme.green.color)
+                            }
                         }
                     }
                 } else {
@@ -124,6 +132,23 @@ struct SecurityView: View {
         guard let report = model.report, let previous = model.previous else { return nil }
         return report.changes(since: previous)
     }
+
+    private func changeChip(_ kind: Change, text: String, symbol: String, color: Color) -> some View {
+        Button { change = change == kind ? nil : kind } label: {
+            Chip(text: text, symbol: symbol, color: color, selected: change == kind)
+        }
+        .buttonStyle(.plain)
+        .help(kind == .new ? "Show only what's new since \(previousScan)" : "Show what was found \(previousScan) and is gone now")
+    }
+
+    /// "the scan at 21:10", or with the day when it wasn't today.
+    private var previousScan: String {
+        guard let date = model.previous?.date else { return "the last scan" }
+        let today = Calendar.current.isDateInToday(date)
+        return "the scan " + (today ? "at \(date.formatted(date: .omitted, time: .shortened))" : "on \(date.formatted(date: .abbreviated, time: .shortened))")
+    }
+
+    private var newIDs: Set<String> { Set(changes?.new.map(\.id) ?? []) }
 
     private func headline(_ report: SecurityReport) -> String {
         if report.findings.isEmpty { return "Nothing found · \(report.score)/100" }
@@ -207,12 +232,46 @@ struct SecurityView: View {
     // MARK: Findings
 
     private func shown(_ report: SecurityReport) -> [SecurityFinding] {
-        report.findings.filter { (category == nil || $0.category == category) && (showsLow || $0.severity >= .medium) }
+        let fresh = change == .new ? newIDs : nil
+        return report.findings.filter {
+            (category == nil || $0.category == category) && (showsLow || $0.severity >= .medium) && (fresh?.contains($0.id) ?? true)
+        }
     }
 
+    @ViewBuilder
     private func findings(_ report: SecurityReport) -> some View {
+        if change == .fixed {
+            fixed(changes?.fixed ?? [])
+        } else {
+            current(report)
+        }
+    }
+
+    /// What the scan before this one found and this one didn't.
+    private func fixed(_ list: [SecurityFinding]) -> some View {
+        Card("Fixed since \(previousScan)") {
+            LinkButton("Show all findings") { change = nil }
+        } content: {
+            Text("These were in \(previousScan) and aren't any more: the code changed or the file went. A finding whose line was edited but still has the problem shows here and as new.")
+                .font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+            if list.isEmpty {
+                EmptyFindings(scanned: true)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(list) { finding in
+                    FindingRow(finding: finding, expanded: expanded.contains(finding.id), lead: lead, session: session, workspace: workspace, state: .fixed) {
+                        if expanded.contains(finding.id) { expanded.remove(finding.id) } else { expanded.insert(finding.id) }
+                    }
+                }
+            }
+            .animation(.snappy(duration: 0.22), value: expanded)
+        }
+    }
+
+    private func current(_ report: SecurityReport) -> some View {
         let list = shown(report)
-        return Card(category?.title ?? "Findings") {
+        let fresh = newIDs
+        return Card(change == .new ? "New since \(previousScan)" : category?.title ?? "Findings") {
             if !list.isEmpty {
                 Button { session.fixSecurity(Array(list.prefix(25))) } label: {
                     AgentButtonLabel(engine: lead, title: list.count > 25 ? "Fix the first 25" : "Fix all \(list.count)")
@@ -220,6 +279,9 @@ struct SecurityView: View {
                 .buttonStyle(.plain)
                 .font(.dante(size: 12, weight: .medium))
                 .foregroundStyle(theme.accent.color)
+            }
+            if change == .new {
+                LinkButton("Show all findings") { change = nil }
             }
         } content: {
             if list.isEmpty {
@@ -236,7 +298,8 @@ struct SecurityView: View {
                         }
                         .padding(.top, 10).padding(.bottom, 4)
                         ForEach(group.prefix(limit)) { finding in
-                            FindingRow(finding: finding, expanded: expanded.contains(finding.id), lead: lead, session: session, workspace: workspace) {
+                            FindingRow(finding: finding, expanded: expanded.contains(finding.id), lead: lead, session: session, workspace: workspace,
+                                       state: fresh.contains(finding.id) ? .new : .open) {
                                 if expanded.contains(finding.id) { expanded.remove(finding.id) } else { expanded.insert(finding.id) }
                             }
                             .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .bottom)), removal: .opacity))
@@ -453,8 +516,12 @@ private struct FindingRow: View {
     let lead: AgentEngine
     let session: Session
     let workspace: Workspace
+    var state = State.open
     let toggle: () -> Void
     @State private var ignoring = false
+
+    /// Still there, new since the last scan, or gone since it.
+    enum State { case open, new, fixed }
     @State private var reason = ""
     @State private var wholeRule = false
 
@@ -464,9 +531,19 @@ private struct FindingRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "chevron.right").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
-                    Image(systemName: finding.category.symbol).font(.dante(size: 11)).foregroundStyle(Severity.color(finding.severity, theme: theme))
+                    Image(systemName: state == .fixed ? "checkmark.circle.fill" : finding.category.symbol).font(.dante(size: 11))
+                        .foregroundStyle(state == .fixed ? theme.green.color : Severity.color(finding.severity, theme: theme))
                         .frame(width: 14)
-                    Text(finding.title).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
+                    Text(finding.title).font(.dante(size: 13, weight: .medium)).foregroundStyle(state == .fixed ? theme.text2.color : theme.text.color)
+                        .strikethrough(state == .fixed, color: theme.text3.color).lineLimit(1)
+                    if state == .new {
+                        Text("new").font(.dante(size: 10.5, weight: .medium)).foregroundStyle(theme.amber.color)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().strokeBorder(theme.amber.color.opacity(0.5)))
+                    }
+                    if state == .fixed {
+                        Text(finding.severity.title).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
+                    }
                     if finding.source != "Dante" {
                         Text(finding.source).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
                             .padding(.horizontal, 5).padding(.vertical, 1)
@@ -484,28 +561,42 @@ private struct FindingRow: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(finding.why).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
                     if !finding.evidence.isEmpty {
+                        if state == .fixed {
+                            Text("The line was").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                        }
                         Text(finding.evidence)
                             .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text.color)
                             .padding(8).frame(maxWidth: .infinity, alignment: .leading)
                             .background(RoundedRectangle(cornerRadius: 6).fill(theme.codeBackground.color))
                             .textSelection(.enabled)
                     }
-                    Label { Text(finding.fix).fixedSize(horizontal: false, vertical: true) } icon: { Image(systemName: "wrench.and.screwdriver") }
-                        .font(.dante(size: 12.5)).foregroundStyle(theme.text.color)
-                    HStack(spacing: 10) {
-                        Button { session.fixSecurity([finding]) } label: { AgentButtonLabel(engine: lead, title: "Fix with \(lead.title)", filled: true) }
-                            .buttonStyle(DanteButtonStyle(primary: true))
-                        if !finding.file.isEmpty, FileManager.default.fileExists(atPath: workspace.url.appending(path: finding.file).path) {
-                            Button("Open") { session.open(file: workspace.url.appending(path: finding.file), line: max(finding.line, 1)) }
-                                .buttonStyle(DanteButtonStyle(primary: false))
+                    if state == .fixed {
+                        HStack(spacing: 10) {
+                            if !finding.file.isEmpty, FileManager.default.fileExists(atPath: workspace.url.appending(path: finding.file).path) {
+                                Button("Open the file now") { session.open(file: workspace.url.appending(path: finding.file), line: max(finding.line, 1)) }
+                                    .buttonStyle(DanteButtonStyle(primary: false))
+                            } else if !finding.file.isEmpty {
+                                Text("The file is gone.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                            }
                         }
-                        Button("Accept the risk…") { ignoring = true }
-                            .buttonStyle(DanteButtonStyle(primary: false))
-                            .popover(isPresented: $ignoring, arrowEdge: .bottom) { ignorePopover }
-                        Spacer(minLength: 0)
-                        if let reference = finding.reference, let url = Self.link(for: reference) {
-                            Button { openURL(url) } label: { Label(reference, systemImage: "arrow.up.right.square") }
-                                .buttonStyle(.plain).font(.dante(size: 11.5)).foregroundStyle(theme.accent.color)
+                    } else {
+                        Label { Text(finding.fix).fixedSize(horizontal: false, vertical: true) } icon: { Image(systemName: "wrench.and.screwdriver") }
+                            .font(.dante(size: 12.5)).foregroundStyle(theme.text.color)
+                        HStack(spacing: 10) {
+                            Button { session.fixSecurity([finding]) } label: { AgentButtonLabel(engine: lead, title: "Fix with \(lead.title)", filled: true) }
+                                .buttonStyle(DanteButtonStyle(primary: true))
+                            if !finding.file.isEmpty, FileManager.default.fileExists(atPath: workspace.url.appending(path: finding.file).path) {
+                                Button("Open") { session.open(file: workspace.url.appending(path: finding.file), line: max(finding.line, 1)) }
+                                    .buttonStyle(DanteButtonStyle(primary: false))
+                            }
+                            Button("Accept the risk…") { ignoring = true }
+                                .buttonStyle(DanteButtonStyle(primary: false))
+                                .popover(isPresented: $ignoring, arrowEdge: .bottom) { ignorePopover }
+                            Spacer(minLength: 0)
+                            if let reference = finding.reference, let url = Self.link(for: reference) {
+                                Button { openURL(url) } label: { Label(reference, systemImage: "arrow.up.right.square") }
+                                    .buttonStyle(.plain).font(.dante(size: 11.5)).foregroundStyle(theme.accent.color)
+                            }
                         }
                     }
                 }

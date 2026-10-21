@@ -20,7 +20,7 @@ final class ThemeStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        id = defaults.string(forKey: "theme").flatMap(ThemeID.init(rawValue:)) ?? .dark
+        id = defaults.string(forKey: "theme").flatMap(ThemeID.init(rawValue:)) ?? .light
         let size = defaults.double(forKey: "editorFontSize")
         editorFontSize = size > 0 ? size : 13
     }

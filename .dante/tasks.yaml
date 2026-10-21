@@ -516,7 +516,7 @@ tasks:
   title: "Agent HQ: the agents as people in an isometric office around a glowing brain, with a task board and team panel (the design canvas's Office board)"
   phase: build
   state: review
-  notes: "Built as Agents › HQ: AgentOffice (DanteKit) grows rooms, eras, grounds and milestones from the ledger and git history; MotionLib/hq/office.html draws it in WebKit with live workers from every conversation, a replay and celebrations. The menu bar panel shows a pocket HQ under the Vine D. Still to do: the Stage, and hiring a role as a job type."
+  notes: "Built as Agents › HQ: AgentOffice (DanteKit) grows rooms, eras, grounds and milestones from the ledger and git history; MotionLib/hq/office.html draws it in WebKit with live workers from every conversation, a replay and celebrations. The menu bar panel shows a pocket HQ under the Vine D. The Stage shows it too. Still to do: hiring a role as a job type."
 - id: DI-125
   title: "Discovery: a freshly opened project paints the picture of what Dante found (map, services, data, tests, security) on Home"
   phase: build

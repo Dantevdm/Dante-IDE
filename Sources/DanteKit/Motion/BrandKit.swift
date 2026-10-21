@@ -6,13 +6,14 @@ import Yams
 /// Tailwind config, a logo file), so a first piece already looks like the product.
 public struct BrandKit: Equatable, Sendable {
     public struct Colors: Equatable, Sendable {
-        public var background = "#0b0d12"
-        public var surface = "#151922"
-        public var text = "#f4f5f7"
-        public var muted = "#9aa3b2"
-        public var accent = "#7c8cff"
-        public var accent2 = "#3dd6c6"
-        public var warning = "#ffb547"
+        // Light by default: a project's own colours or brand.yaml can make it dark.
+        public var background = "#f6f6f3"
+        public var surface = "#ffffff"
+        public var text = "#14161b"
+        public var muted = "#5b6472"
+        public var accent = "#3b5bdb"
+        public var accent2 = "#0f9f8f"
+        public var warning = "#b86e00"
 
         public init() {}
 
@@ -216,12 +217,11 @@ public struct BrandKit: Equatable, Sendable {
         kit.colors.text = found["text"] ?? kit.colors.text
         kit.colors.accent = found["accent"] ?? kit.colors.accent
         kit.colors.accent2 = found["accent2"] ?? kit.colors.accent2
-        // A light product still gets a dark stage unless its own background is dark: video
-        // reads better dark, and the accent carries the brand.
-        if let background = found["background"], luminance(background) > 0.5 {
-            kit.colors.background = BrandKit.Colors().background
-            kit.colors.surface = BrandKit.Colors().surface
-            kit.colors.text = BrandKit.Colors().text
+        // A dark product keeps its dark background; give it light text and surfaces when its
+        // own weren't found.
+        if let background = found["background"], luminance(background) < 0.5 {
+            if found["text"] == nil { kit.colors.text = "#f4f5f7"; kit.colors.muted = "#9aa3b2" }
+            if found["surface"] == nil { kit.colors.surface = "#151922" }
         }
         if let family = fontsSeen.first { kit.display = family; kit.body = family }
         kit.logo = lowerFiles.filter { _, lower in

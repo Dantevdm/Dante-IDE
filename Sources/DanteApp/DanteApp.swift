@@ -155,7 +155,7 @@ struct RootView: View {
 }
 
 extension EnvironmentValues {
-    @Entry var theme: Theme = .dark
+    @Entry var theme: Theme = .light
 }
 
 extension FocusedValues {

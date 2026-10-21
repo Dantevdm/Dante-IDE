@@ -22,14 +22,14 @@ final class StageController: NSObject, NSWindowDelegate {
                 StageController.shared.applyLevel()
             }
         }
-        /// A motion piece shown full screen in place of the HUD.
+        /// A motion piece shown full screen in place of HQ.
         var presenting: MotionPlayer?
         /// The Stage opened to present, so ending the presentation closes it.
         var openedToPresent = false
     }
 
     let mode = Mode()
-    private var window: StageWindow?
+    fileprivate var window: StageWindow?
     private var activity: NSObjectProtocol?
     private var keys: Any?
     private var cursorTimer: Timer?
@@ -73,8 +73,8 @@ final class StageController: NSObject, NSWindowDelegate {
 
     /// Opens on `screen`, else the one the pointer is on (where you just clicked); full screen
     /// or in a window as asked, else as it was last time.
-    func open(on screen: NSScreen? = nil, fullScreen: Bool? = nil) {
-        NSApp.activate()
+    func open(on screen: NSScreen? = nil, fullScreen: Bool? = nil, activates: Bool = true) {
+        if activates { NSApp.activate() }
         let wantsFullScreen = fullScreen ?? !UserDefaults.standard.bool(forKey: Self.windowedKey)
         if let window {
             window.makeKeyAndOrderFront(nil)
@@ -91,13 +91,13 @@ final class StageController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.isMovableByWindowBackground = true
         window.collectionBehavior = [.fullScreenPrimary, .managed]
-        window.appearance = NSAppearance(named: .darkAqua)
-        window.backgroundColor = Theme.dark.ground.nsColor
+        let theme = PresenceController.shared.themeStore?.theme ?? ThemeID.light.theme
+        window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+        window.backgroundColor = theme.ground.nsColor
         window.minSize = NSSize(width: 300, height: 420)
         window.title = "Stage"
         window.contentView = NSHostingView(rootView:
-            StageView(model: PresenceController.shared.model, mode: mode)
-                .environment(\.theme, Theme.dark)
+            StageRoot(store: PresenceController.shared.themeStore, model: PresenceController.shared.model, mode: mode)
         )
         window.setFrame(windowFrame(on: screen, chosen: asked), display: false)
         window.delegate = self
@@ -246,6 +246,24 @@ final class StageController: NSObject, NSWindowDelegate {
 }
 
 /// The Stage's window: takes keys, and Esc reaches it even when SwiftUI doesn't pass it on.
+/// The Stage in the app's theme, following it when it changes.
+private struct StageRoot: View {
+    let store: ThemeStore?
+    let model: PresenceModel
+    let mode: StageController.Mode
+
+    var body: some View {
+        let theme = store?.theme ?? ThemeID.light.theme
+        StageView(model: model, mode: mode)
+            .environment(\.theme, theme)
+            .onChange(of: theme.id, initial: true) {
+                guard let window = StageController.shared.window else { return }
+                window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+                window.backgroundColor = theme.ground.nsColor
+            }
+    }
+}
+
 final class StageWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
@@ -254,11 +272,10 @@ final class StageWindow: NSWindow {
 
 struct StageView: View {
     @Environment(\.theme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let model: PresenceModel
     var mode: StageController.Mode
     @State private var tally = StageTally()
-    @State private var track = SatelliteTrack()
+    @State private var office = OfficeBridge()
 
     /// The window with something waiting for an answer, if any.
     @MainActor static var waitingSession: Session? {
@@ -274,29 +291,28 @@ struct StageView: View {
     }
 
     /// Sizes for the Stage at any size: wide (a screen, a TV) with the projects and agents
-    /// either side, or narrow (a window beside your work) with everything stacked.
+    /// either side, or narrow (a window beside your work) with everything stacked. HQ fills
+    /// the room left between the text (`inset`).
     struct Layout {
         var unit: CGFloat
-        var orbSide: CGFloat
-        var centre: CGPoint
         var compact: Bool
+        /// The scene's height in a narrow window.
+        var sceneHeight: CGFloat = 0
+        var inset: [String: Double]
 
         init(_ size: CGSize) {
             compact = size.width < max(980, size.height * 1.3)
             if compact {
                 unit = max(0.45, min(size.width / 620, size.height / 1000))
-                orbSide = max(120, min(size.width * 0.6, size.height * 0.4))
+                sceneHeight = max(140, min(size.width * 0.75, size.height * 0.42))
                 // Below the heading, which is about 150 units tall plus the title bar.
-                centre = CGPoint(x: size.width / 2, y: 36 + 150 * unit + orbSide * 0.62)
+                let top = 36 + 160 * unit
+                inset = ["top": top, "bottom": max(0, size.height - top - sceneHeight), "left": 12, "right": 12]
             } else {
                 unit = max(0.5, min(size.width / 1920, size.height / 1080))
-                orbSide = size.height * 0.62
-                centre = CGPoint(x: size.width / 2, y: size.height * 0.45)
+                inset = ["top": 150 * unit, "bottom": 190 * unit, "left": 380 * unit, "right": 380 * unit]
             }
         }
-
-        /// The rings' outer edge, just clear of the satellites' orbits.
-        var ringRadius: CGFloat { orbSide * 0.53 }
     }
 
     var body: some View {
@@ -304,17 +320,14 @@ struct StageView: View {
             let layout = Layout(geometry.size)
             let unit = layout.unit
             ZStack {
-                StageBackdrop(tint: tint, centre: UnitPoint(x: 0.5, y: layout.centre.y / max(1, geometry.size.height)), unit: unit)
-                // The large orb sits 8% of its frame below the frame's centre, to leave room
-                // for its flames; lift the frame so the orb itself is in the rings.
-                OrbRepresentable(size: .large, framesPerSecond: mode.presenting == nil ? 120 : 1, track: track)
-                    .frame(width: layout.orbSide, height: layout.orbSide)
-                    .position(x: layout.centre.x, y: layout.centre.y - layout.orbSide * 0.08)
-                StageHUD(style: hudStyle, intensity: model.vitality.intensity, usage: model.usage,
-                         usageName: model.lead.title.uppercased(), unit: unit,
-                         centre: layout.centre, orbScale: layout.orbSide / 2, ringRadius: layout.ringRadius,
-                         callouts: !layout.compact, track: track, reduceMotion: reduceMotion)
-                    .allowsHitTesting(false)
+                // Agent HQ for the project followed, its brain showing the mood. It steps
+                // aside while a motion piece is presented.
+                if mode.presenting == nil {
+                    OfficeWeb(bridge: office, mode: .stage)
+                        .onAppear { office.inset = layout.inset }
+                        .onChange(of: layout.inset) { _, inset in office.inset = inset }
+                        .task(id: "\(focus.map { ObjectIdentifier($0).hashValue } ?? 0)|\(theme.id)") { await feedOffice() }
+                }
                 if mode.fullScreen {
                     StageCorners()
                         .stroke(theme.line2.color, lineWidth: 1.5)
@@ -339,6 +352,7 @@ struct StageView: View {
         }
         .background(theme.ground.color)
         .ignoresSafeArea()
+        .onChange(of: focus?.workspace?.url) { office.last = nil }
         .task {
             let ledger = AgentLedger.standard
             while !Task.isCancelled {
@@ -347,6 +361,33 @@ struct StageView: View {
                 try? await Task.sleep(for: .seconds(15))
             }
         }
+    }
+
+    /// Feeds HQ for the project followed until it changes. New milestones are celebrated here
+    /// too, once, wherever they're first seen.
+    private func feedOffice() async {
+        // At launch the Stage can open before any window has its project.
+        var session = focus
+        while session?.workspace == nil {
+            try? await Task.sleep(for: .seconds(1))
+            if Task.isCancelled { return }
+            session = focus
+        }
+        guard let session, let workspace = session.workspace else { return }
+        let key = OfficeBridge.seenKey(workspace.name)
+        office.handle = { [office] action, body in
+            switch action {
+            case "ready":
+                office.last = nil
+                office.sendInset()
+            case "seen":
+                if let date = body["date"] as? String { UserDefaults.standard.set(date, forKey: key) }
+            default:
+                break
+            }
+        }
+        await office.feed(session: session, workspace: workspace, theme: OfficeBridge.colours(theme),
+                          seen: UserDefaults.standard.string(forKey: key)) { [model] in model.mood.rawValue }
     }
 
     private func wide(_ unit: CGFloat) -> some View {
@@ -385,7 +426,7 @@ struct StageView: View {
                         .foregroundStyle(theme.text.color)
                 }
             }
-            Spacer(minLength: layout.ringRadius * 2.2)
+            Spacer(minLength: layout.sceneHeight + 10 * unit)
             caption(unit)
             flows(unit)
                 .padding(.top, 22 * unit)
@@ -448,21 +489,7 @@ struct StageView: View {
         .padding(.trailing, 8)
     }
 
-    private var hudStyle: StageHUD.Style {
-        StageHUD.Style(tint: nsColor(model.mood), warning: theme.amber.nsColor, alarm: theme.red.nsColor,
-                       faint: theme.text3.nsColor, text: theme.text.nsColor)
-    }
-
-    private func nsColor(_ mood: PresenceMood) -> NSColor {
-        switch mood {
-        case .needsYou: theme.amber.nsColor
-        case .done: theme.green.nsColor
-        case .trouble: theme.red.nsColor
-        case .asleep: theme.text3.nsColor
-        case .idle, .thinking, .acting, .listening: theme.accent.nsColor
-        }
-    }
-
+    /// The mood's colour, for the voice meter.
     private var tint: Color { color(model.mood) }
 
     private func color(_ mood: PresenceMood) -> Color {
@@ -570,7 +597,7 @@ struct StageView: View {
         VStack(alignment: .trailing, spacing: 14 * unit) {
             heading("AGENTS", unit)
             if model.satellites.isEmpty {
-                Text("Claude is working alone")
+                Text("\(model.lead.title) is working alone")
                     .font(.dante(size: 18 * unit))
                     .foregroundStyle(theme.text3.color)
             }
@@ -715,41 +742,6 @@ private struct StageButtonStyle: ButtonStyle {
 }
 
 // MARK: Decoration
-
-/// A glow behind the orb and a faint grid fading out towards the edges.
-private struct StageBackdrop: View {
-    @Environment(\.theme) private var theme
-    var tint: Color
-    /// Where the orb is, for the glow and the grid's fade.
-    var centre = UnitPoint(x: 0.5, y: 0.45)
-    var unit: CGFloat
-
-    var body: some View {
-        ZStack {
-            theme.ground.color
-            Canvas { context, size in
-                let step = 64 * unit
-                var grid = Path()
-                var x: CGFloat = size.width / 2 - (size.width / 2 / step).rounded(.down) * step
-                while x < size.width {
-                    grid.move(to: CGPoint(x: x, y: 0))
-                    grid.addLine(to: CGPoint(x: x, y: size.height))
-                    x += step
-                }
-                var y: CGFloat = size.height * centre.y - (size.height * centre.y / step).rounded(.down) * step
-                while y < size.height {
-                    grid.move(to: CGPoint(x: 0, y: y))
-                    grid.addLine(to: CGPoint(x: size.width, y: y))
-                    y += step
-                }
-                context.stroke(grid, with: .color(theme.line.color), lineWidth: 1)
-            }
-            .mask(RadialGradient(colors: [.white.opacity(0.9), .clear], center: centre, startRadius: 0, endRadius: 900 * unit))
-            RadialGradient(colors: [tint.opacity(0.16), .clear], center: centre, startRadius: 0, endRadius: 620 * unit)
-                .animation(.easeInOut(duration: 1.2), value: tint)
-        }
-    }
-}
 
 /// Brackets in the four corners, like a viewfinder.
 private struct StageCorners: Shape {

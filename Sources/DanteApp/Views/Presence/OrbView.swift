@@ -115,11 +115,7 @@ final class OrbView: MTKView, MTKViewDelegate {
         }
     }
     private var constellation = Constellation()
-    /// Told where the satellites are each frame, so the Stage can draw what each is doing
-    /// beside it, in step with the shader.
-    weak var track: SatelliteTrack?
-    private var publishedNone = true
-    /// Large orbs only; the Stage asks for more on fast displays.
+    /// Large orbs only.
     var framesPerSecond = 60 {
         didSet { updateFrameRate() }
     }
@@ -392,11 +388,6 @@ final class OrbView: MTKView, MTKViewDelegate {
             // Each one merging back lands with a pulse.
             if merged > 0 { kick = min(1, kick + 0.6 * Float(merged)) }
             uniforms.place(frames, beams: reduceMotion ? 0.4 : 0.7 + 0.3 * current.energy)
-            track?.moved(frames, time: satelliteClock)
-            publishedNone = frames.isEmpty
-        } else if !publishedNone {
-            track?.moved([], time: satelliteClock)
-            publishedNone = true
         }
         return uniforms
     }

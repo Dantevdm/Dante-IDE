@@ -156,12 +156,10 @@ private struct TalkButton: View {
 struct OrbRepresentable: NSViewRepresentable {
     var size: OrbView.Size
     var framesPerSecond = 60
-    var track: SatelliteTrack?
 
     func makeNSView(context: Context) -> OrbView {
         let view = OrbView(size: size)
         view.framesPerSecond = framesPerSecond
-        view.track = track
         PresenceController.shared.attach(view)
         view.wake()
         return view
@@ -188,7 +186,7 @@ private struct PocketOffice: View {
     }
 
     var body: some View {
-        OfficeWeb(bridge: bridge, pocket: true)
+        OfficeWeb(bridge: bridge, mode: .pocket)
             .frame(height: 196)
             .background(theme.ground.color)
             .clipShape(RoundedRectangle(cornerRadius: 12))

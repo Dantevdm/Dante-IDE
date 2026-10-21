@@ -53,6 +53,10 @@ final class OfficeBridge {
     weak var web: WKWebView?
     var handle: (String, [String: Any]) -> Void = { _, _ in }
     var last: String?
+    /// The Stage's room for the scene, as the page's `office.inset` takes it.
+    var inset: [String: Double] = [:] {
+        didSet { if inset != oldValue { sendInset() } }
+    }
     private(set) var jobs: [AgentJob] = []
     private(set) var commits: [Date] = []
     private var commitsRevision: Int?
@@ -121,6 +125,12 @@ final class OfficeBridge {
         web.evaluateJavaScript("window.office && office.set(\(payload))")
     }
 
+    /// Sent again when the page says it's ready.
+    func sendInset() {
+        guard let web, !inset.isEmpty, let json = try? JSONSerialization.data(withJSONObject: inset, options: .sortedKeys) else { return }
+        web.evaluateJavaScript("window.office && office.inset(\(String(decoding: json, as: UTF8.self)))")
+    }
+
     func replay(_ frames: [AgentOffice]) {
         guard let web, let json = try? Self.encoder.encode(frames) else { return }
         web.evaluateJavaScript("window.office && office.replay(\(String(decoding: json, as: UTF8.self)))")
@@ -128,9 +138,14 @@ final class OfficeBridge {
 }
 
 struct OfficeWeb: NSViewRepresentable {
+    /// HQ itself, the menu bar panel's pocket office (only the scene; a click opens HQ), or
+    /// the Stage's (the scene with its signs, inside the room the Stage leaves it).
+    enum Mode: String {
+        case page = "", pocket, stage
+    }
+
     let bridge: OfficeBridge
-    /// The menu bar panel's pocket office: only the scene, and a click opens HQ.
-    var pocket = false
+    var mode = Mode.page
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -139,8 +154,8 @@ struct OfficeWeb: NSViewRepresentable {
                                               forURLScheme: MotionRuntime.scheme)
         }
         let controller = WKUserContentController()
-        if pocket {
-            controller.addUserScript(WKUserScript(source: "window.OFFICE_POCKET = true", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        if mode != .page {
+            controller.addUserScript(WKUserScript(source: "window.OFFICE_MODE = '\(mode.rawValue)'", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         let bridge = bridge
         controller.add(MotionMessages { body in

@@ -53,8 +53,9 @@ final class PresenceController: NSObject {
     /// `DANTE_STAGE_DEMO=1`: made-up agents come and go, to see the Stage at work.
     private static let demo = ProcessInfo.processInfo.environment["DANTE_STAGE_DEMO"] == "1"
     private var demoTimer: Timer?
-    /// `DANTE_PRESENCE_WINDOW=1`: the panel in a window of its own, for checking it when the
-    /// menu bar is too full to show the item.
+    /// `DANTE_PRESENCE_WINDOW=1`: the panel in a window of its own, and the Stage in a
+    /// window, both in the background, for checking them when the menu bar is too full to
+    /// show the item.
     private var panelWindow: NSWindow?
     /// Orbs showing the mood: the menu bar's, the panel's and the Stage's.
     private let watchers = NSHashTable<OrbView>.weakObjects()
@@ -73,12 +74,13 @@ final class PresenceController: NSObject {
     }
 
     private func showPanelWindow() {
-        let theme = themeStore?.theme ?? ThemeID.dark.theme
+        let theme = themeStore?.theme ?? ThemeID.light.theme
         let window = NSWindow(contentViewController: NSHostingController(rootView: PresencePanel(model: model, controller: self).environment(\.theme, theme)))
         window.title = "Presence"
         window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         window.orderFront(nil)
         panelWindow = window
+        StageController.shared.open(fullScreen: false, activates: false)
     }
 
     /// A window opened, closed, or changed project.
@@ -355,7 +357,7 @@ final class PresenceController: NSObject {
         let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = true
-        let theme = themeStore?.theme ?? ThemeID.dark.theme
+        let theme = themeStore?.theme ?? ThemeID.light.theme
         popover.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         popover.contentViewController = NSHostingController(rootView:
             PresencePanel(model: model, controller: self)

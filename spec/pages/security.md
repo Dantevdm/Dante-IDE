@@ -14,6 +14,8 @@ Security scores the project out of a hundred and lists its findings, most seriou
 
 ## Shows
 - The score and grade (a critical finding caps it at 49), with counts by severity and category.
+- What changed since the last scan that found something different: "N new" and "N fixed" chips. Scanning again without changes keeps them. A finding is the same finding while its rule, file and line text stay the same.
+- New findings carry a "new" tag in the list.
 - Findings grouped by category, each with the file and line, what's wrong and how to fix it, and the scanners that found it.
 - Scanners: Dante's own rules plus the installed tools (Semgrep, Gitleaks, OSV-Scanner, govulncheck, npm audit, pip-audit), with install commands for missing ones.
 - In CI: the command that fails a build on serious problems (`dante scan --fail-on high`).
@@ -22,6 +24,8 @@ Security scores the project out of a hundred and lists its findings, most seriou
 
 ## Actions
 - Scan again.
+- Click "N new" to show only the findings new since the scan before. The card is titled "New since the scan at <time>". Click the chip again, or Show all findings, to go back.
+- Click "N fixed" to see what the scan before found that this one didn't. Each row is ticked and struck through. Opening a row shows why it mattered, the line as it was, and Open the file now (or "The file is gone").
 - Fix with the agent: sends chosen findings to the agent in charge; the other agent reviews the fix.
 - Deep audit: a read-only review by the agent (POPIA sections 19, 22 and 72 included).
 - Accept the risk, with a reason, saved to .dante/security.yaml for everyone on the project.
@@ -38,5 +42,6 @@ Security scores the project out of a hundred and lists its findings, most seriou
 - SA ID numbers and card numbers are checked properly (date, citizenship digit, Luhn); providers' test cards are skipped.
 
 ## Acceptance
+- After fixing a finding and scanning, "1 fixed" appears, and clicking it lists that finding with the line as it was.
 - A secret in an agent's edit stops the edit for approval at any approval level.
 - The score is the same from the page, `dante scan` and `security_report`.
