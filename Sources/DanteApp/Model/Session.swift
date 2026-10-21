@@ -244,6 +244,8 @@ final class Session {
     var claudeShowsUsage = false
     /// The Map's last build, kept while the window is open.
     @ObservationIgnored var mapCache: MapCache?
+    /// A part Home's map was clicked on, for the Map to select when it opens.
+    @ObservationIgnored var mapFocus: String?
     /// Critiques of motion pieces, by the version's folder, kept while the window is open.
     var motionCritiques: [URL: MotionCritiqueState] = [:]
     /// The Security area's report, scans and audits.

@@ -157,7 +157,9 @@ struct SystemDiagram: View {
         return related ? .related : .dimmed
     }
 
-    func hue(_ lane: SystemMap.Lane) -> Color {
+    func hue(_ lane: SystemMap.Lane) -> Color { Self.hue(lane, theme: theme) }
+
+    static func hue(_ lane: SystemMap.Lane, theme: Theme) -> Color {
         switch lane {
         case .clients: theme.accent.color
         case .api: theme.syntax.keyword.color

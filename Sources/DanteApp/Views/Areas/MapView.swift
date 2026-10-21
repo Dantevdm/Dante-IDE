@@ -147,6 +147,13 @@ struct MapView: View {
             } else {
                 session.areaView = source == .system ? nil : source.rawValue.lowercased()
             }
+            // Clicked on Home's map: open on the system with that part selected.
+            if let focus = session.mapFocus {
+                session.mapFocus = nil
+                source = .system
+                trail = []
+                Task { selected = focus }
+            }
         }
         .onChange(of: source) {
             if source != .system || !trail.isEmpty || selected != nil {
@@ -269,6 +276,18 @@ struct MapView: View {
         }
     }
 
+    /// The module graph the system map is built on: SwiftPM's description, Go modules or folders.
+    static func modules(root: URL, files: [String]) async -> ArchitectureGraph? {
+        if FileManager.default.fileExists(atPath: root.appending(path: "Package.swift").path) {
+            let output = await Shell.run(["swift", "package", "describe", "--type", "json"], in: root)
+            return output.succeeded ? ArchitectureGraph.swiftPackage(describeJSON: output.stdout) : nil
+        }
+        return await Task.detached(priority: .userInitiated) {
+            ArchitectureGraph.goModules(files: files) { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
+                ?? ArchitectureGraph.folders(files)
+        }.value
+    }
+
     private func load() async {
         // Coming back to the Map shows what was built for this revision instead of building
         // it again, which takes seconds on a big repo.
@@ -282,16 +301,7 @@ struct MapView: View {
         }
         let revision = workspace.revision
         let root = workspace.url
-        if FileManager.default.fileExists(atPath: root.appending(path: "Package.swift").path) {
-            let output = await Shell.run(["swift", "package", "describe", "--type", "json"], in: root)
-            modules = output.succeeded ? ArchitectureGraph.swiftPackage(describeJSON: output.stdout) : nil
-        } else {
-            let files = workspace.files
-            modules = await Task.detached(priority: .userInitiated) {
-                ArchitectureGraph.goModules(files: files) { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
-                    ?? ArchitectureGraph.folders(files)
-            }.value
-        }
+        modules = await Self.modules(root: root, files: workspace.files)
         let infraFiles = workspace.files
         infra = await Task.detached(priority: .userInitiated) {
             Infrastructure.detect(files: infraFiles.filter(Infrastructure.isCandidate)) { path in

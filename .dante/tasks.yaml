@@ -520,7 +520,7 @@ tasks:
 - id: DI-125
   title: "Discovery: a freshly opened project paints the picture of what Dante found (map, services, data, tests, security) on Home"
   phase: build
-  state: ready
+  state: done
 - id: DI-126
   title: "Infra-style motion everywhere: animated links and pulses in Tests, Data, Env and Agents like the Map's Infra view"
   phase: build
