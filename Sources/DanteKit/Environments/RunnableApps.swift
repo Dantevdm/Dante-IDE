@@ -46,12 +46,11 @@ public struct RunnableApp: Identifiable, Equatable, Sendable {
         return ["npm", "pnpm", "yarn", "bun"].contains(first) ? first : nil
     }
 
-    /// A Node app with a package.json and no node_modules: its dependencies were never
-    /// installed, so the command would stop at once. `exists` takes a path from the repo root.
+    /// A Node app with a package.json and no node_modules where Node would look: its
+    /// dependencies were never installed, so the command would stop at once. `exists` takes a
+    /// path from the repo root.
     public func needsInstall(exists: (String) -> Bool) -> Bool {
-        guard nodeTool != nil else { return false }
-        let prefix = folder.isEmpty ? "" : folder + "/"
-        return exists(prefix + "package.json") && !exists(prefix + "node_modules")
+        nodeTool != nil && WebPreview.needsInstall(folder: folder, exists: exists)
     }
 
     /// `cd web && pnpm install && pnpm dev`.

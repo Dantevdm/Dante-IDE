@@ -23,7 +23,7 @@ Services is the local environment: the docker compose services and their logs, t
 - Start all, stop all, rebuild; start, stop or restart one service.
 - Find the cause: a note on why a service isn't up, from its health check and the ports.
 - Move a service to a free port when its port is taken; stop the process holding it.
-- Run an app in a terminal tab (a Node app with a package.json and no node_modules shows Install and run instead, which installs its dependencies with its package manager first); add an app, or all of them, to compose with the agent.
+- Run an app in a terminal tab (a Node app with a package.json and no node_modules in its folder or above it shows Install and run instead, which installs its dependencies with its package manager first); add an app, or all of them, to compose with the agent.
 - Open a service's logs or a shell in it.
 
 ## States

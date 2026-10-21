@@ -34,9 +34,20 @@ public enum WebPreview {
     /// Checked before starting; `exists` takes a path from the repo root, `which` a tool's name.
     public static func missing(_ target: Target, exists: (String) -> Bool, which: (String) -> String?) -> Missing? {
         if which(target.tool) == nil { return .tool(target.tool) }
-        let prefix = target.folder.isEmpty ? "" : target.folder + "/"
-        if exists(prefix + "package.json"), !exists(prefix + "node_modules") { return .dependencies }
-        return nil
+        return needsInstall(folder: target.folder, exists: exists) ? .dependencies : nil
+    }
+
+    /// A package.json with no node_modules in its folder or any folder above it, up to the repo
+    /// root, where Node would look: a workspace member's packages are often at the root.
+    public static func needsInstall(folder: String, exists: (String) -> Bool) -> Bool {
+        let prefix = folder.isEmpty ? "" : folder + "/"
+        guard exists(prefix + "package.json") else { return false }
+        var parts = folder.split(separator: "/").map(String.init)
+        while true {
+            if exists((parts.isEmpty ? "" : parts.joined(separator: "/") + "/") + "node_modules") { return false }
+            if parts.isEmpty { return true }
+            parts.removeLast()
+        }
     }
 
     /// Why a dev command stopped, from the shell's exit status.

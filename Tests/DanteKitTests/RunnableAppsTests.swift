@@ -80,6 +80,7 @@ struct RunnableAppsTests {
         let web = RunnableApp(folder: "web", name: "web", kind: .frontend, stack: "Vite", command: "pnpm dev")
         #expect(web.needsInstall(exists: ["web/package.json"].contains))
         #expect(!web.needsInstall(exists: ["web/package.json", "web/node_modules"].contains))
+        #expect(!web.needsInstall(exists: ["web/package.json", "node_modules"].contains))
         #expect(web.installingCommandFromRoot == "cd web && pnpm install && pnpm dev")
         let api = RunnableApp(folder: "api", name: "api", kind: .backend, stack: "Go", command: "go run ./cmd/api")
         #expect(!api.needsInstall(exists: { _ in false }) && api.installingCommandFromRoot == api.commandFromRoot)

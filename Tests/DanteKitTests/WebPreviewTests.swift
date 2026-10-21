@@ -73,6 +73,10 @@ struct WebPreviewTests {
         #expect(WebPreview.missing(target, exists: installed.contains, which: { _ in "/usr/local/bin/pnpm" }) == nil)
         #expect(WebPreview.missing(target, exists: ["web/package.json"].contains, which: { _ in "/usr/local/bin/pnpm" }) == .dependencies)
         #expect(WebPreview.missing(target, exists: installed.contains, which: { _ in nil }) == .tool("pnpm"))
+        // A workspace member: its packages are hoisted to the repo root.
+        #expect(WebPreview.missing(target, exists: ["web/package.json", "node_modules"].contains, which: { _ in "/usr/local/bin/pnpm" }) == nil)
+        #expect(WebPreview.needsInstall(folder: "apps/web", exists: ["apps/web/package.json", "apps/node_modules"].contains) == false)
+        #expect(WebPreview.needsInstall(folder: "", exists: ["package.json"].contains))
         #expect(WebPreview.stopped(127, tool: "pnpm").contains("pnpm install"))
     }
 }
