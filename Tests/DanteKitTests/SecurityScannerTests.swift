@@ -47,6 +47,11 @@ import Testing
     @Test func findsPersonalInformation() {
         #expect(rules("console.log('user', user.idNumber, user.id_number)", "api/users.ts") == ["pii.log"])
         #expect(rules("logger.info(request.json)", "app.py") == ["pii.request-log"])
+        // A message that says what happened isn't personal information; logging the value is.
+        #expect(rules(#"slog.Info("password changed by its owner", "user_id", user.ID)"#, "api/users.go").isEmpty)
+        #expect(rules(#"slog.Info("password changed", "password", body.Password)"#, "api/users.go") == ["pii.log"])
+        #expect(rules(#"log.Printf("password: %s", pw)"#, "api/users.go") == ["pii.log"])
+        #expect(rules(#"print(f"reset for {user.email}, password={password}")"#, "auth.py") == ["pii.log"])
         #expect(rules("  id_number VARCHAR(13) NOT NULL,", "db/schema.sql") == ["pii.plain-column"])
         #expect(rules("  id_number_encrypted BYTEA,", "db/schema.sql").isEmpty)
         #expect(rules("  password TEXT NOT NULL,", "migrations/001.sql") == ["pii.password-column"])
@@ -142,6 +147,40 @@ import Testing
         let changes = after.changes(since: before)
         #expect(changes.new.map(\.rule) == ["c"])
         #expect(changes.fixed.map(\.rule) == ["a"])
+        #expect(changes.edited.isEmpty)
+    }
+
+    @Test func repeatedLinesAreEachAFinding() {
+        let text = "fn a() {\n  log.Println(user.passport)\n}\nfn b() {\n  log.Println(user.passport)\n}"
+        let found = SecurityScanner.scan(text: text, path: "api/users.go").filter { $0.rule == "pii.log" }
+        #expect(found.map(\.line) == [2, 5])
+        #expect(Set(found.map(\.id)).count == 2 && Set(found.map(\.lineID)).count == 1)
+        // A line added above shifts the repeats; nothing is new or fixed.
+        let shifted = SecurityScanner.scan(text: "// header\n" + text, path: "api/users.go")
+        #expect(SecurityReport(findings: shifted).changes(since: SecurityReport(findings: found)) == SecurityChanges(new: [], fixed: [], edited: []))
+        // A third line edited into the same text is the new one, not the last repeat.
+        let more = text + "\nfn c() {\n  log.Println(user.passport)\n}"
+        let changes = SecurityReport(findings: SecurityScanner.scan(text: more, path: "api/users.go")).changes(since: SecurityReport(findings: found))
+        #expect(changes.new.map(\.line) == [8] && changes.fixed.isEmpty)
+        // One edited between two repeats into the same text pairs with neither of them.
+        let between = "fn a() {\n  log.Println(user.passport)\n  log.Println(user.passport, 1)\n  log.Println(user.passport)\n}"
+        let edited = between.replacingOccurrences(of: "user.passport, 1", with: "user.passport")
+        let before = SecurityReport(findings: SecurityScanner.scan(text: between, path: "a.go"))
+        let after = SecurityReport(findings: SecurityScanner.scan(text: edited, path: "a.go")).changes(since: before)
+        #expect(after.new.isEmpty && after.fixed.isEmpty && after.edited.map(\.after.line) == [3])
+    }
+
+    @Test func anEditedLineThatStillHasTheProblemIsNeitherNewNorFixed() {
+        func logged(_ text: String, line: Int) -> SecurityFinding {
+            SecurityFinding(rule: "pii.log", category: .privacy, severity: .medium, title: "", why: "", fix: "", file: "api/users.go", line: line, evidence: text)
+        }
+        let before = SecurityReport(findings: [logged("log(user.email)", line: 40), logged("log(user.phone)", line: 90)])
+        let after = SecurityReport(findings: [logged("log(user.email, user.dob)", line: 41), logged("log.Println(user.passport)", line: 200)])
+        let changes = after.changes(since: before)
+        #expect(changes.edited.map(\.before.line) == [40])
+        #expect(changes.before(changes.edited[0].after.id)?.evidence == "log(user.email)")
+        #expect(changes.new.map(\.line) == [200])
+        #expect(changes.fixed.map(\.line) == [90])
     }
 
     @Test func savesPerProject() throws {

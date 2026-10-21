@@ -79,10 +79,35 @@ public struct SecurityReport: Codable, Equatable, Sendable {
     public func count(_ category: SecurityFinding.Category) -> Int { findings.filter { $0.category == category }.count }
 
     /// What appeared and what went away since an earlier report.
-    public func changes(since earlier: SecurityReport) -> (new: [SecurityFinding], fixed: [SecurityFinding]) {
-        let before = Set(earlier.findings.map(\.id))
-        let now = Set(findings.map(\.id))
-        return (findings.filter { !before.contains($0.id) }, earlier.findings.filter { !now.contains($0.id) && !ignored.map(\.id).contains($0.id) })
+    public func changes(since earlier: SecurityReport) -> SecurityChanges {
+        // Findings with the same rule, file and line text are matched nearest line first, so
+        // repeats ("#2") that shift when a line above is added or removed still count as the same.
+        let ignored = Set(ignored.map(\.lineID))
+        let earlierByLine = Dictionary(grouping: earlier.findings, by: \.lineID)
+        var matchedNow = Set<String>(), matchedBefore = Set<String>()
+        for (lineID, now) in Dictionary(grouping: findings, by: \.lineID) {
+            guard let before = earlierByLine[lineID] else { continue }
+            let pairs = now.flatMap { a in before.map { b in (a, b) } }.sorted { abs($0.0.line - $0.1.line) < abs($1.0.line - $1.1.line) }
+            for (a, b) in pairs where !matchedNow.contains(a.id) && !matchedBefore.contains(b.id) {
+                matchedNow.insert(a.id)
+                matchedBefore.insert(b.id)
+            }
+        }
+        var new = findings.filter { !matchedNow.contains($0.id) }
+        let left = Set(earlier.findings.map(\.id)).subtracting(matchedBefore)
+        var fixed = earlier.findings.filter { left.contains($0.id) && !ignored.contains($0.lineID) }
+        // A finding's id includes its line's text, so editing a line that still has the problem
+        // reads as one fixed and one new. Pair those up: same rule, same file, nearest line.
+        var edited: [SecurityChanges.Edit] = []
+        for finding in new {
+            let candidates = fixed.enumerated().filter { $0.element.rule == finding.rule && $0.element.file == finding.file && abs($0.element.line - finding.line) <= 3 }
+            guard let match = candidates.min(by: { abs($0.element.line - finding.line) < abs($1.element.line - finding.line) }) else { continue }
+            edited.append(.init(before: match.element, after: finding))
+            fixed.remove(at: match.offset)
+        }
+        let paired = Set(edited.map(\.after.id))
+        new.removeAll { paired.contains($0.id) }
+        return SecurityChanges(new: new, fixed: fixed, edited: edited)
     }
 
     // MARK: Saved reports
@@ -136,7 +161,7 @@ public struct SecurityIgnores: Equatable, Sendable {
         }
 
         func matches(_ finding: SecurityFinding) -> Bool {
-            if let id, id != finding.id { return false }
+            if let id, id != finding.id, id != finding.lineID { return false }
             if let rule, rule != finding.rule { return false }
             if let path, !(finding.file == path || finding.file.hasPrefix(path.hasSuffix("/") ? path : path + "/")) { return false }
             return id != nil || rule != nil || path != nil
@@ -200,4 +225,20 @@ public struct SecurityIgnores: Equatable, Sendable {
     private static func quoted(_ value: String) -> String {
         "\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
+}
+
+/// What changed between two scans: findings that appeared, ones that went, and ones whose line
+/// was edited but still has the problem.
+public struct SecurityChanges: Sendable, Equatable {
+    public struct Edit: Sendable, Equatable {
+        public let before: SecurityFinding
+        public let after: SecurityFinding
+    }
+
+    public let new: [SecurityFinding]
+    public let fixed: [SecurityFinding]
+    public let edited: [Edit]
+
+    /// The line before the edit, by the current finding's id.
+    public func before(_ id: String) -> SecurityFinding? { edited.first { $0.after.id == id }?.before }
 }

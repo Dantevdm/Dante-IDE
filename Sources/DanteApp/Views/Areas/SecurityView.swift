@@ -4,7 +4,7 @@ import SwiftUI
 /// Security: Dante's scanner and any installed ones, a grade, findings explained, fixes by
 /// the agent in charge with the other checking, and a deep audit that reads the code.
 struct SecurityView: View {
-    enum Change { case new, fixed }
+    enum Change { case new, edited, fixed }
 
     @Environment(\.theme) private var theme
     let session: Session
@@ -95,6 +95,9 @@ struct SecurityView: View {
                             if !changes.new.isEmpty {
                                 changeChip(.new, text: "\(changes.new.count) new", symbol: "plus.circle", color: theme.amber.color)
                             }
+                            if !changes.edited.isEmpty {
+                                changeChip(.edited, text: "\(changes.edited.count) edited, still flagged", symbol: "pencil.circle", color: theme.accent.color)
+                            }
                             if !changes.fixed.isEmpty {
                                 changeChip(.fixed, text: "\(changes.fixed.count) fixed", symbol: "checkmark.circle", color: theme.green.color)
                             }
@@ -128,7 +131,7 @@ struct SecurityView: View {
         return report.findings.first?.severity ?? .info
     }
 
-    private var changes: (new: [SecurityFinding], fixed: [SecurityFinding])? {
+    private var changes: SecurityChanges? {
         guard let report = model.report, let previous = model.previous else { return nil }
         return report.changes(since: previous)
     }
@@ -138,7 +141,15 @@ struct SecurityView: View {
             Chip(text: text, symbol: symbol, color: color, selected: change == kind)
         }
         .buttonStyle(.plain)
-        .help(kind == .new ? "Show only what's new since \(previousScan)" : "Show what was found \(previousScan) and is gone now")
+        .help(chipHelp(kind))
+    }
+
+    private func chipHelp(_ kind: Change) -> String {
+        switch kind {
+        case .new: "Show only what's new since \(previousScan)"
+        case .edited: "Lines changed since \(previousScan) that still have the same problem"
+        case .fixed: "Show what was found \(previousScan) and is gone now"
+        }
     }
 
     /// "the scan at 21:10", or with the day when it wasn't today.
@@ -149,6 +160,7 @@ struct SecurityView: View {
     }
 
     private var newIDs: Set<String> { Set(changes?.new.map(\.id) ?? []) }
+    private var editedIDs: Set<String> { Set(changes?.edited.map(\.after.id) ?? []) }
 
     private func headline(_ report: SecurityReport) -> String {
         if report.findings.isEmpty { return "Nothing found · \(report.score)/100" }
@@ -232,7 +244,7 @@ struct SecurityView: View {
     // MARK: Findings
 
     private func shown(_ report: SecurityReport) -> [SecurityFinding] {
-        let fresh = change == .new ? newIDs : nil
+        let fresh = change == .new ? newIDs : change == .edited ? editedIDs : nil
         return report.findings.filter {
             (category == nil || $0.category == category) && (showsLow || $0.severity >= .medium) && (fresh?.contains($0.id) ?? true)
         }
@@ -252,7 +264,7 @@ struct SecurityView: View {
         Card("Fixed since \(previousScan)") {
             LinkButton("Show all findings") { change = nil }
         } content: {
-            Text("These were in \(previousScan) and aren't any more: the code changed or the file went. A finding whose line was edited but still has the problem shows here and as new.")
+            Text("These were in \(previousScan) and aren't any more: the code changed or the file went. A line that was edited but still has the problem isn't here; it's under edited.")
                 .font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
             if list.isEmpty {
                 EmptyFindings(scanned: true)
@@ -271,7 +283,12 @@ struct SecurityView: View {
     private func current(_ report: SecurityReport) -> some View {
         let list = shown(report)
         let fresh = newIDs
-        return Card(change == .new ? "New since \(previousScan)" : category?.title ?? "Findings") {
+        let title = switch change {
+        case .new: "New since \(previousScan)"
+        case .edited: "Edited since \(previousScan), still flagged"
+        default: category?.title ?? "Findings"
+        }
+        return Card(title) {
             if !list.isEmpty {
                 Button { session.fixSecurity(Array(list.prefix(25))) } label: {
                     AgentButtonLabel(engine: lead, title: list.count > 25 ? "Fix the first 25" : "Fix all \(list.count)")
@@ -280,7 +297,7 @@ struct SecurityView: View {
                 .font(.dante(size: 12, weight: .medium))
                 .foregroundStyle(theme.accent.color)
             }
-            if change == .new {
+            if change == .new || change == .edited {
                 LinkButton("Show all findings") { change = nil }
             }
         } content: {
@@ -299,7 +316,7 @@ struct SecurityView: View {
                         .padding(.top, 10).padding(.bottom, 4)
                         ForEach(group.prefix(limit)) { finding in
                             FindingRow(finding: finding, expanded: expanded.contains(finding.id), lead: lead, session: session, workspace: workspace,
-                                       state: fresh.contains(finding.id) ? .new : .open) {
+                                       state: fresh.contains(finding.id) ? .new : changes?.before(finding.id).map { .edited(before: $0.evidence) } ?? .open) {
                                 if expanded.contains(finding.id) { expanded.remove(finding.id) } else { expanded.insert(finding.id) }
                             }
                             .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .bottom)), removal: .opacity))
@@ -520,8 +537,8 @@ private struct FindingRow: View {
     let toggle: () -> Void
     @State private var ignoring = false
 
-    /// Still there, new since the last scan, or gone since it.
-    enum State { case open, new, fixed }
+    /// Still there, new since the last scan, edited since it but still flagged, or gone.
+    enum State: Equatable { case open, new, edited(before: String), fixed }
     @State private var reason = ""
     @State private var wholeRule = false
 
@@ -540,6 +557,11 @@ private struct FindingRow: View {
                         Text("new").font(.dante(size: 10.5, weight: .medium)).foregroundStyle(theme.amber.color)
                             .padding(.horizontal, 5).padding(.vertical, 1)
                             .background(Capsule().strokeBorder(theme.amber.color.opacity(0.5)))
+                    }
+                    if case .edited = state {
+                        Text("edited, still flagged").font(.dante(size: 10.5, weight: .medium)).foregroundStyle(theme.accent.color)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().strokeBorder(theme.accent.color.opacity(0.5)))
                     }
                     if state == .fixed {
                         Text(finding.severity.title).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
@@ -563,6 +585,15 @@ private struct FindingRow: View {
                     if !finding.evidence.isEmpty {
                         if state == .fixed {
                             Text("The line was").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                        }
+                        if case .edited(let before) = state, !before.isEmpty {
+                            Text("Before the edit").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                            Text(before)
+                                .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color).strikethrough(color: theme.text3.color)
+                                .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                                .background(RoundedRectangle(cornerRadius: 6).fill(theme.codeBackground.color))
+                                .textSelection(.enabled)
+                            Text("Now").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                         }
                         Text(finding.evidence)
                             .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text.color)

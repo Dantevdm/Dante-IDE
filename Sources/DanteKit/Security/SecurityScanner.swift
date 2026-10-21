@@ -61,6 +61,11 @@ public enum SecurityScanner {
                 guard let match = rule.pattern.firstMatch(in: line, range: range),
                       let matched = Range(match.range, in: line) else { continue }
                 if let unless = rule.unless, unless.firstMatch(in: line, range: range) != nil { continue }
+                // "password changed by its owner" says what happened; it doesn't log a password.
+                if rule.id == "pii.log" {
+                    let probe = withoutProse(line)
+                    if rule.pattern.firstMatch(in: probe, range: NSRange(probe.startIndex..., in: probe)) == nil { continue }
+                }
                 if rule.category == .secrets, isPlaceholder(String(line[matched])) { continue }
                 if rule.id == "secret.connection", isLocal(line[matched.upperBound...]) { continue }
                 var severity = rule.severity
@@ -69,12 +74,11 @@ public enum SecurityScanner {
                 let finding = SecurityFinding(rule: rule.id, category: rule.category, severity: severity, title: rule.title,
                                               why: rule.why, fix: rule.fix, file: path, line: lineNumber, evidence: evidence,
                                               reference: rule.reference)
-                // A line repeated in a file is one finding.
-                if seen.insert(finding.id).inserted { findings.append(finding) }
+                findings.append(numbered(finding, &seen))
             }
             if line.contains(where: \.isNumber) {
-                for finding in identityNumbers(in: line, path: path, lineNumber: lineNumber, inTest: inTest) where seen.insert(finding.id).inserted {
-                    findings.append(finding)
+                for finding in identityNumbers(in: line, path: path, lineNumber: lineNumber, inTest: inTest) {
+                    findings.append(numbered(finding, &seen))
                 }
             }
         }
@@ -99,6 +103,47 @@ public enum SecurityScanner {
         let letters = lower.filter { $0.isLetter || $0.isNumber }
         if let first = letters.first, letters.count >= 6, letters.allSatisfy({ $0 == first }) { return true }
         return false
+    }
+
+    /// The same line again further down a file is its own finding, "#2" and on, so each place
+    /// shows and an edit that makes one line match another isn't lost in it.
+    static func numbered(_ finding: SecurityFinding, _ seen: inout Set<String>) -> SecurityFinding {
+        var finding = finding
+        let base = finding.id
+        var count = 1
+        while !seen.insert(finding.id).inserted {
+            count += 1
+            finding.id = "\(base)#\(count)"
+        }
+        return finding
+    }
+
+    /// The line with prose string literals emptied: a message with spaces and no placeholder
+    /// (%s, {name}, ${x}, =) only describes what happened. Keys and format strings stay.
+    static func withoutProse(_ line: String) -> String {
+        var out = ""
+        var literal: String?
+        var quote: Character = "\""
+        var escaped = false
+        for character in line {
+            guard var text = literal else {
+                if character == "\"" || character == "'" || character == "`" { literal = ""; quote = character }
+                out.append(character)
+                continue
+            }
+            if escaped { escaped = false; text.append(character); literal = text; continue }
+            if character == "\\" { escaped = true; text.append(character); literal = text; continue }
+            if character == quote {
+                let prose = text.contains(" ") && !text.contains(where: { "%{=:".contains($0) })
+                out += prose ? "" : text
+                out.append(character)
+                literal = nil
+                continue
+            }
+            text.append(character)
+            literal = text
+        }
+        return out + (literal ?? "")
     }
 
     /// A connection string's host on this machine: a development setting.

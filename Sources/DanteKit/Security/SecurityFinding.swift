@@ -67,7 +67,8 @@ public struct SecurityFinding: Codable, Equatable, Hashable, Sendable, Identifia
         }
     }
 
-    /// Stable across edits that move the line: the rule, the file and the line's text.
+    /// Stable across edits that move the line: the rule, the file and the line's text, with
+    /// "#2", "#3" for the same text again further down the file.
     public var id: String
     public var rule: String
     public var category: Category
@@ -106,6 +107,12 @@ public struct SecurityFinding: Codable, Equatable, Hashable, Sendable, Identifia
 
     public static func id(rule: String, file: String, text: String) -> String {
         "\(rule):\(file):\(String(fnv(text.trimmingCharacters(in: .whitespaces)), radix: 16))"
+    }
+
+    /// The id without its repeat number: every line with the same text shares it.
+    public var lineID: String {
+        guard let hash = id.lastIndex(of: "#"), id[id.index(after: hash)...].allSatisfy(\.isNumber) else { return id }
+        return String(id[..<hash])
     }
 
     /// FNV-1a, so ids stay the same from run to run (Swift's `hashValue` doesn't).
