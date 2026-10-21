@@ -3,12 +3,16 @@ import DanteKit
 import Observation
 
 /// Opening a web app's screen from the Map: find how it runs, say so and start it when it
-/// isn't up, wait for its port, then open the page in the default browser. Every step shows.
+/// isn't up (installing its dependencies first when they're missing, once asked), wait for its
+/// port, then open the page in the default browser. Every step shows, and a command that stops
+/// says why at once instead of waiting out the port.
 @MainActor
 @Observable
 final class WebLaunch {
     enum Step: Equatable {
         case finding, needsStart, starting, waiting, opening, opened
+        /// It has a package.json but nothing installed: install, then start, once asked.
+        case needsInstall
         case failed(String)
     }
 
@@ -19,6 +23,10 @@ final class WebLaunch {
     /// It was already running, so nothing was started.
     var wasRunning = false
     var waited = 0
+    /// Its dependencies are being installed before it starts.
+    var installing = false
+    /// The failure can be fixed by installing its dependencies.
+    var canInstall = false
     @ObservationIgnored var task: Task<Void, Never>?
 
     init(name: String, screen: String?) {
@@ -58,26 +66,52 @@ extension Session {
             if await Self.isListening(target.port) {
                 launch.wasRunning = true
                 await open(launch)
-            } else {
+                return
+            }
+            let missing = await Task.detached(priority: .userInitiated) {
+                WebPreview.missing(target, exists: { FileManager.default.fileExists(atPath: root.appending(path: $0).path) }, which: Shell.which)
+            }.value
+            switch missing {
+            case .tool(let tool):
+                launch.step = .failed("\(tool) isn’t installed on this Mac, so \(name) can’t start. Settings › Tools has the command to install Node.js and its package managers.")
+            case .dependencies:
+                launch.step = .needsInstall
+            case nil:
                 launch.step = .needsStart
             }
         }
     }
 
-    /// After the person agrees: start it in a terminal tab and open the page once it listens.
-    func startAndOpen() {
-        guard let launch = webLaunch, let target = launch.target, launch.step == .needsStart else { return }
+    /// After the person agrees: start it in a terminal tab (installing its dependencies first
+    /// when `installing`) and open the page once it listens. The shell writes the command's exit
+    /// status to a file when it stops, so a failure shows at once.
+    func startAndOpen(installing: Bool = false) {
+        guard let launch = webLaunch, let target = launch.target else { return }
+        guard launch.step == .needsStart || launch.step == .needsInstall || launch.canInstall else { return }
         launch.step = .starting
-        runInNewTerminal(target.command, title: target.name)
+        launch.installing = installing
+        launch.canInstall = false
+        launch.waited = 0
+        let status = "/tmp/dante-run-" + UUID().uuidString.prefix(8).lowercased()
+        let shell = (ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh").hasSuffix("fish") ? "$status" : "$?"
+        runInNewTerminal(Self.launchCommand(target, installing: installing) + "; echo \(shell) > \(status)", title: target.name)
         let started = Date()
+        // A first install can take minutes; a start alone shouldn't.
+        let limit = installing ? 900 : 150
         launch.task = Task {
+            defer { try? FileManager.default.removeItem(atPath: status) }
             try? await Task.sleep(for: .milliseconds(600))
             launch.step = .waiting
             while !Task.isCancelled {
                 if await Self.isListening(target.port) { break }
+                if let text = try? String(contentsOfFile: status, encoding: .utf8), let code = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    launch.canInstall = code != 130 && code != 143 && FileManager.default.fileExists(atPath: workspace?.url.appending(path: target.folder).appending(path: "package.json").path ?? "")
+                    launch.step = .failed(WebPreview.stopped(code, tool: target.tool))
+                    return
+                }
                 launch.waited = Int(Date().timeIntervalSince(started))
-                if launch.waited >= 150 {
-                    launch.step = .failed("Port \(target.port) didn’t open within \(launch.waited) seconds. The terminal tab shows what happened; it may need installing first, or it listens on another port.")
+                if launch.waited >= limit {
+                    launch.step = .failed("Port \(target.port) didn’t open within \(launch.waited) seconds. The terminal tab shows what happened; it may listen on another port.")
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(700))
@@ -87,6 +121,14 @@ extension Session {
             try? await Task.sleep(for: .milliseconds(700))
             await open(launch)
         }
+    }
+
+    /// `cd web && pnpm install && pnpm dev`, or the start command alone.
+    static func launchCommand(_ target: WebPreview.Target, installing: Bool) -> String {
+        guard installing else { return target.command }
+        let cd = target.folder.isEmpty ? "" : "cd \(Shell.quote(target.folder)) && "
+        let run = target.command.hasPrefix(cd) ? String(target.command.dropFirst(cd.count)) : target.command
+        return cd + "\(target.tool) install && " + run
     }
 
     func cancelWebLaunch() {

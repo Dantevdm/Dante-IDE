@@ -31,7 +31,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Click a box to select it and dim everything it isn't linked to.
 - Open a box with an expand mark (or double-click it): parts open into folders, folders into files or classes, a class into its methods; the breadcrumb leads back out.
 - Open a table to trace it back: the code that reads or writes it, up to the routes that reach that code, with its columns and the tables its foreign keys name.
-- Open in browser on a web app or a screen: finds the dev server's port and the screen's route, starts the dev server in a terminal tab when it isn't listening (after asking), waits for the port and opens the page.
+- Open in browser on a web app or a screen: finds the dev server's port and the screen's route, starts the dev server in a terminal tab when it isn't listening (after asking), waits for the port and opens the page. Before asking it checks the app can start: its package manager (npm, pnpm, yarn or bun, from the lockfile) must be installed, else it says so and points to Settings › Tools; a package.json without node_modules shows "Install and start", which runs `<tool> install` and then the start command in one terminal tab, waiting up to 15 minutes instead of 150 seconds. The command's exit status is written to a file in /tmp when it stops, so a dev server that stops shows why at once ("A command it needs wasn't found…" for 127) with Install dependencies and try again and Show the terminal.
 - Open a file or method in Code.
 - The container chip on a database box opens it in Local › Data; Browse in Data on a table opens that table there (with a note when migrations haven't created it yet).
 - Copy a table as CREATE TABLE (with later ALTERs), Markdown, a SELECT query or its column names; a database as the whole schema, a Mermaid ER diagram, Markdown or table names; right-click a column to copy it.
@@ -57,6 +57,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Dynamic route segments end the path, since there's no id to fill in.
 
 ## Acceptance
+- Starting a frontend whose node_modules is missing offers Install and start rather than failing; one whose start command isn't found reports it within a few seconds and offers to install its dependencies.
 - A 6,000-file repo maps in a few seconds.
 - Every link on the map can be explained by a line of code the inspector can open.
 - Opening then backing out returns to the same selection.

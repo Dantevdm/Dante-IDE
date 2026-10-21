@@ -40,6 +40,26 @@ public struct RunnableApp: Identifiable, Equatable, Sendable {
         folder.isEmpty ? command : "cd \(Shell.quote(folder)) && \(command)"
     }
 
+    /// The package manager a Node app's command runs with, nil for anything else.
+    public var nodeTool: String? {
+        let first = command.split(separator: " ").first.map(String.init) ?? ""
+        return ["npm", "pnpm", "yarn", "bun"].contains(first) ? first : nil
+    }
+
+    /// A Node app with a package.json and no node_modules: its dependencies were never
+    /// installed, so the command would stop at once. `exists` takes a path from the repo root.
+    public func needsInstall(exists: (String) -> Bool) -> Bool {
+        guard nodeTool != nil else { return false }
+        let prefix = folder.isEmpty ? "" : folder + "/"
+        return exists(prefix + "package.json") && !exists(prefix + "node_modules")
+    }
+
+    /// `cd web && pnpm install && pnpm dev`.
+    public var installingCommandFromRoot: String {
+        guard let tool = nodeTool else { return commandFromRoot }
+        return (folder.isEmpty ? "" : "cd \(Shell.quote(folder)) && ") + "\(tool) install && \(command)"
+    }
+
     /// Frontends first, then backends, each by folder.
     public static func detect(files: [String], read: (String) -> String?, compose: ComposeFile? = nil) -> [RunnableApp] {
         let skipped = SystemMap.skippedFolders

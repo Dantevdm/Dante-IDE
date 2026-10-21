@@ -732,9 +732,15 @@ private struct AppsCard: View {
                         Label("in compose as \(service)", systemImage: "checkmark")
                             .font(.dante(size: 11.5)).foregroundStyle(theme.green.color)
                     } else {
-                        Button("Run") { session.runInTerminal(app.commandFromRoot) }
-                            .buttonStyle(DanteButtonStyle())
-                            .help("Runs \(app.commandFromRoot) in the terminal, on this Mac.")
+                        if let root = session.workspace?.url, app.needsInstall(exists: { FileManager.default.fileExists(atPath: root.appending(path: $0).path) }) {
+                            Button("Install and run") { session.runInTerminal(app.installingCommandFromRoot) }
+                                .buttonStyle(DanteButtonStyle())
+                                .help("Its dependencies aren’t installed (no node_modules), so it would stop at once. Runs \(app.installingCommandFromRoot) in the terminal, which downloads the packages its lockfile lists first.")
+                        } else {
+                            Button("Run") { session.runInTerminal(app.commandFromRoot) }
+                                .buttonStyle(DanteButtonStyle())
+                                .help("Runs \(app.commandFromRoot) in the terminal, on this Mac.")
+                        }
                         Button("Add to Compose") { add([app]) }
                             .buttonStyle(DanteButtonStyle(primary: missing.count == 1))
                             .help("\(session.agentName) adds \(app.name) to \(composeName)\(app.hasDockerfile ? "" : " and writes its Dockerfile"); you approve each edit.")

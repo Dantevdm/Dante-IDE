@@ -815,14 +815,32 @@ private struct WebLaunchCard: View {
                 IconButton(symbol: "xmark", label: launch.isDone ? "Dismiss" : "Cancel", size: 9) { session.cancelWebLaunch() }
             }
             row(mark(for: 0), "Find how \(launch.name) runs",
-                target.map { "Port \($0.port) (\($0.portSource)) · \($0.command)" } ?? "Reading its config…")
+                target.map { "Port \(String($0.port)) (\($0.portSource)) · \($0.command)" } ?? "Reading its config…")
             if launch.wasRunning {
-                row(.skipped, "Already running", "Port \(target?.port ?? 0) is listening, so nothing needs starting.")
+                row(.skipped, "Already running", "Port \(String(target?.port ?? 0)) is listening, so nothing needs starting.")
             } else {
-                row(mark(for: 1), "Start it", startDetail)
+                row(mark(for: 1), launch.installing ? "Install and start it" : "Start it", startDetail)
+                if launch.step == .needsInstall, let target {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Its dependencies aren’t installed yet (no node_modules), so it would stop at once. Dante can run `\(target.tool) install` first, which downloads the packages its lockfile lists, then start it.")
+                            .font(.dante(size: 12))
+                            .foregroundStyle(theme.text2.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            Button { session.startAndOpen(installing: true) } label: {
+                                Label("Install and start", systemImage: "arrow.down.circle").lineLimit(1).frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(DanteButtonStyle(primary: true))
+                            Button("Not now") { session.cancelWebLaunch() }
+                                .buttonStyle(DanteButtonStyle())
+                        }
+                    }
+                    .padding(.leading, 28)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
                 if launch.step == .needsStart, let target {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("\(launch.name) isn’t running: nothing is listening on port \(target.port). Dante will start it with `\(target.command)` in a new terminal tab, wait for it to come up, then open the page.")
+                        Text("\(launch.name) isn’t running: nothing is listening on port \(String(target.port)). Dante will start it with `\(target.command)` in a new terminal tab, wait for it to come up, then open the page.")
                             .font(.dante(size: 12))
                             .foregroundStyle(theme.text2.color)
                             .fixedSize(horizontal: false, vertical: true)
@@ -838,12 +856,19 @@ private struct WebLaunchCard: View {
                     .padding(.leading, 28)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                row(mark(for: 2), "Wait for port \(target?.port ?? 0)",
-                    launch.step == .waiting ? "Waiting · \(launch.waited) s" : mark(for: 2) == .done ? "Up" : "")
+                row(mark(for: 2), "Wait for port \(String(target?.port ?? 0))",
+                    launch.step == .waiting ? (launch.installing ? "Installing and starting · \(launch.waited) s" : "Waiting · \(launch.waited) s") : mark(for: 2) == .done ? "Up" : "")
             }
             row(mark(for: 3), "Open in your browser", target.map { $0.url.absoluteString + ($0.routeFound || launch.screen == nil ? "" : " (its route wasn’t found, so the app’s home)") } ?? "")
             if case .failed(let message) = launch.step {
                 Text(message).font(.dante(size: 12)).foregroundStyle(theme.red.color).fixedSize(horizontal: false, vertical: true)
+                if launch.canInstall, let target {
+                    Button { session.startAndOpen(installing: true) } label: {
+                        Label("Install dependencies and try again", systemImage: "arrow.down.circle").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+                    .help("Runs `\(target.installCommand)`, then starts it again")
+                }
                 Button { session.showsTerminal = true } label: { Label("Show the terminal", systemImage: "terminal").frame(maxWidth: .infinity) }
                     .buttonStyle(DanteButtonStyle())
             }
@@ -860,9 +885,9 @@ private struct WebLaunchCard: View {
 
     private var startDetail: String {
         switch launch.step {
-        case .finding, .needsStart: ""
-        case .starting: "Running it in a terminal tab…"
-        default: launch.target.map { "`\($0.command)` in the \($0.name) terminal tab" } ?? ""
+        case .finding, .needsStart, .needsInstall: ""
+        case .starting: launch.installing ? "Installing, then starting, in a terminal tab…" : "Running it in a terminal tab…"
+        default: launch.target.map { "`\(Session.launchCommand($0, installing: launch.installing))` in the \($0.name) terminal tab" } ?? ""
         }
     }
 
@@ -871,7 +896,7 @@ private struct WebLaunchCard: View {
         let current: Int
         switch launch.step {
         case .finding: current = 0
-        case .needsStart: current = 1
+        case .needsStart, .needsInstall: current = 1
         case .starting: current = 1
         case .waiting: current = 2
         case .opening: current = 3
@@ -880,7 +905,7 @@ private struct WebLaunchCard: View {
             if index == current { return .failed }
         }
         if index < current { return .done }
-        if index == current { return launch.step == .needsStart ? .pending : .active }
+        if index == current { return launch.step == .needsStart || launch.step == .needsInstall ? .pending : .active }
         return .pending
     }
 

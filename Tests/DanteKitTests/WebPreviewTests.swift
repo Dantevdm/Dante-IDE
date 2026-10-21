@@ -64,4 +64,15 @@ struct WebPreviewTests {
         let unknown = target("admin", "Missing", nil)
         #expect(unknown.path == "/" && !unknown.routeFound)
     }
+
+    @Test func saysWhatHasToHappenBeforeStarting() {
+        let files = ["web/package.json", "web/pnpm-lock.yaml", "web/src/main.tsx"]
+        let target = WebPreview.target(folder: "web", name: "web", files: files) { $0 == "web/package.json" ? #"{"scripts":{"dev":"vite"}}"# : nil }
+        #expect(target.command == "cd web && pnpm dev" && target.installCommand == "cd web && pnpm install" && target.tool == "pnpm")
+        let installed: Set<String> = ["web/package.json", "web/node_modules"]
+        #expect(WebPreview.missing(target, exists: installed.contains, which: { _ in "/usr/local/bin/pnpm" }) == nil)
+        #expect(WebPreview.missing(target, exists: ["web/package.json"].contains, which: { _ in "/usr/local/bin/pnpm" }) == .dependencies)
+        #expect(WebPreview.missing(target, exists: installed.contains, which: { _ in nil }) == .tool("pnpm"))
+        #expect(WebPreview.stopped(127, tool: "pnpm").contains("pnpm install"))
+    }
 }

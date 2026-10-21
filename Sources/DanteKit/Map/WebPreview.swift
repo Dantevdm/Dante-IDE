@@ -15,8 +15,38 @@ public enum WebPreview {
         public var routeFound: Bool
         /// From the repo root: `cd web && npm run dev`.
         public var command: String
+        /// The package manager it runs with: npm, pnpm, yarn or bun.
+        public var tool: String = "npm"
+        /// From the repo root: `cd web && npm install`.
+        public var installCommand: String = "npm install"
 
         public var url: URL { URL(string: "http://localhost:\(port)" + path) ?? URL(string: "http://localhost:\(port)/")! }
+    }
+
+    /// What has to happen before a frontend can start.
+    public enum Missing: Equatable, Sendable {
+        /// Its package manager isn't installed on this Mac.
+        case tool(String)
+        /// It has a package.json but no node_modules: nothing has been installed yet.
+        case dependencies
+    }
+
+    /// Checked before starting; `exists` takes a path from the repo root, `which` a tool's name.
+    public static func missing(_ target: Target, exists: (String) -> Bool, which: (String) -> String?) -> Missing? {
+        if which(target.tool) == nil { return .tool(target.tool) }
+        let prefix = target.folder.isEmpty ? "" : target.folder + "/"
+        if exists(prefix + "package.json"), !exists(prefix + "node_modules") { return .dependencies }
+        return nil
+    }
+
+    /// Why a dev command stopped, from the shell's exit status.
+    public static func stopped(_ code: Int32, tool: String) -> String {
+        switch code {
+        case 127: "A command it needs wasn’t found. Usually its dependencies aren’t installed (or are out of date), so `\(tool) install` comes first."
+        case 126: "A command it needs couldn’t run (permission denied). Installing its dependencies again usually fixes the file modes."
+        case 130, 143: "It was stopped."
+        default: "It stopped with exit code \(code). The terminal tab shows why; often its dependencies need installing or updating."
+        }
     }
 
     /// The target for a frontend, and for one of its screens (its name and file, as the map
@@ -37,10 +67,12 @@ public enum WebPreview {
             path = base.hasSuffix("/") ? base + path.dropFirst() : base + path
         }
         let script = scripts(package)["dev"] != nil ? "dev" : scripts(package)["start"] != nil ? "start" : "dev"
-        let runner = files.contains(prefix + "pnpm-lock.yaml") ? "pnpm" : files.contains(prefix + "yarn.lock") ? "yarn" : files.contains(prefix + "bun.lockb") ? "bun run" : "npm run"
-        let run = "\(runner) \(script)"
-        let command = root.isEmpty ? run : "cd \(Shell.quote(root)) && \(run)"
-        return Target(folder: root, name: name, port: port, portSource: source, path: path, routeFound: found, command: command)
+        let tool = files.contains(prefix + "pnpm-lock.yaml") ? "pnpm" : files.contains(prefix + "yarn.lock") ? "yarn"
+            : files.contains(prefix + "bun.lockb") || files.contains(prefix + "bun.lock") ? "bun" : "npm"
+        let run = "\(tool == "pnpm" || tool == "yarn" ? tool : tool + " run") \(script)"
+        let cd = root.isEmpty ? "" : "cd \(Shell.quote(root)) && "
+        return Target(folder: root, name: name, port: port, portSource: source, path: path, routeFound: found, command: cd + run,
+                      tool: tool, installCommand: cd + "\(tool) install")
     }
 
     // MARK: Port
