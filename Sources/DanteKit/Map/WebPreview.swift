@@ -50,6 +50,46 @@ public enum WebPreview {
         }
     }
 
+    /// A lockfile changed after the packages were last installed, from the repo root.
+    public struct Lockfile: Equatable, Sendable {
+        public var path: String
+        public var modified: Date
+        public init(path: String, modified: Date) {
+            self.path = path
+            self.modified = modified
+        }
+    }
+
+    static let lockfiles = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"]
+    /// What each package manager writes on every install, from the folder holding node_modules:
+    /// npm 7+, pnpm, Yarn 1, Yarn 2+ with node_modules, Yarn 2+.
+    static let installMarkers = ["node_modules/.package-lock.json", "node_modules/.modules.yaml", "node_modules/.yarn-integrity",
+                                 "node_modules/.yarn-state.yml", ".yarn/install-state.gz"]
+
+    /// A lockfile (in the app's folder or beside the node_modules Node finds) written more than a
+    /// minute after the last install, as after pulling a branch that changed dependencies: some
+    /// packages may be missing or out of date. Nil without an install marker to compare with,
+    /// rather than guessing from the folder's own date. `modified` takes a path from the repo root.
+    public static func outdated(folder: String, modified: (String) -> Date?) -> Lockfile? {
+        func prefix(_ parts: [String]) -> String { parts.isEmpty ? "" : parts.joined(separator: "/") + "/" }
+        var parts = folder.split(separator: "/").map(String.init)
+        let own = prefix(parts)
+        while modified(prefix(parts) + "node_modules") == nil {
+            if parts.isEmpty { return nil }
+            parts.removeLast()
+        }
+        let base = prefix(parts)
+        guard let installed = installMarkers.lazy.compactMap({ modified(base + $0) }).first else { return nil }
+        for place in own == base ? [own] : [own, base] {
+            for name in lockfiles {
+                if let date = modified(place + name), date.timeIntervalSince(installed) > 60 {
+                    return Lockfile(path: place + name, modified: date)
+                }
+            }
+        }
+        return nil
+    }
+
     /// Why a dev command stopped, from the shell's exit status.
     public static func stopped(_ code: Int32, tool: String) -> String {
         switch code {

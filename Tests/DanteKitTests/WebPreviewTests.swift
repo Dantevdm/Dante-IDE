@@ -79,4 +79,22 @@ struct WebPreviewTests {
         #expect(WebPreview.needsInstall(folder: "", exists: ["package.json"].contains))
         #expect(WebPreview.stopped(127, tool: "pnpm").contains("pnpm install"))
     }
+
+    @Test func noticesALockfileChangedSinceTheLastInstall() {
+        let installed = Date(timeIntervalSince1970: 1_000_000)
+        func dates(_ pairs: [String: Double]) -> (String) -> Date? { { pairs[$0].map { installed.addingTimeInterval($0) } } }
+        // Pulled a branch that changed the lockfile an hour after installing.
+        let pulled = dates(["web/node_modules": 0, "web/node_modules/.modules.yaml": 0, "web/pnpm-lock.yaml": 3600])
+        #expect(WebPreview.outdated(folder: "web", modified: pulled) == WebPreview.Lockfile(path: "web/pnpm-lock.yaml", modified: installed.addingTimeInterval(3600)))
+        // Written during the install itself, a few seconds apart.
+        #expect(WebPreview.outdated(folder: "web", modified: dates(["web/node_modules": 0, "web/node_modules/.package-lock.json": 0, "web/package-lock.json": 5])) == nil)
+        // No marker to compare with: don't guess.
+        #expect(WebPreview.outdated(folder: "web", modified: dates(["web/node_modules": 0, "web/yarn.lock": 3600])) == nil)
+        // Nothing installed is `needsInstall`'s case, not this one.
+        #expect(WebPreview.outdated(folder: "web", modified: dates(["web/yarn.lock": 3600])) == nil)
+        // A workspace: node_modules and the lockfile at the root.
+        let workspace = dates(["node_modules": 0, "node_modules/.yarn-integrity": 0, "yarn.lock": 7200, "apps/web/package.json": 0])
+        #expect(WebPreview.outdated(folder: "apps/web", modified: workspace)?.path == "yarn.lock")
+        #expect(WebPreview.outdated(folder: "", modified: workspace)?.path == "yarn.lock")
+    }
 }

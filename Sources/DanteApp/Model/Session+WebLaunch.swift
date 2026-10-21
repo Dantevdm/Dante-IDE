@@ -11,7 +11,8 @@ import Observation
 final class WebLaunch {
     enum Step: Equatable {
         case finding, needsStart, starting, waiting, opening, opened
-        /// It has a package.json but nothing installed: install, then start, once asked.
+        /// It has a package.json but nothing installed, or its lockfile changed since the last
+        /// install (`lockfile`): install, then start, once asked.
         case needsInstall
         case failed(String)
     }
@@ -27,6 +28,8 @@ final class WebLaunch {
     var installing = false
     /// The failure can be fixed by installing its dependencies.
     var canInstall = false
+    /// Installed, but this lockfile changed since.
+    var lockfile: WebPreview.Lockfile?
     @ObservationIgnored var task: Task<Void, Never>?
 
     init(name: String, screen: String?) {
@@ -68,8 +71,12 @@ extension Session {
                 await open(launch)
                 return
             }
-            let missing = await Task.detached(priority: .userInitiated) {
-                WebPreview.missing(target, exists: { FileManager.default.fileExists(atPath: root.appending(path: $0).path) }, which: Shell.which)
+            let (missing, lockfile) = await Task.detached(priority: .userInitiated) { () -> (WebPreview.Missing?, WebPreview.Lockfile?) in
+                let missing = WebPreview.missing(target, exists: { FileManager.default.fileExists(atPath: root.appending(path: $0).path) }, which: Shell.which)
+                guard missing == nil else { return (missing, nil) }
+                return (nil, WebPreview.outdated(folder: target.folder) { path in
+                    (try? root.appending(path: path).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                })
             }.value
             switch missing {
             case .tool(let tool):
@@ -77,7 +84,12 @@ extension Session {
             case .dependencies:
                 launch.step = .needsInstall
             case nil:
-                launch.step = .needsStart
+                if let lockfile, !Self.isAccepted(lockfile, in: root) {
+                    launch.lockfile = lockfile
+                    launch.step = .needsInstall
+                } else {
+                    launch.step = .needsStart
+                }
             }
         }
     }
@@ -90,6 +102,8 @@ extension Session {
         guard launch.step == .needsStart || launch.step == .needsInstall || launch.canInstall else { return }
         launch.step = .starting
         launch.installing = installing
+        // Started anyway: don't ask again until the lockfile changes once more.
+        if let lockfile = launch.lockfile, !installing, let root = workspace?.url { Self.accept(lockfile, in: root) }
         launch.canInstall = false
         launch.waited = 0
         let status = "/tmp/dante-run-" + UUID().uuidString.prefix(8).lowercased()
@@ -117,6 +131,7 @@ extension Session {
                 try? await Task.sleep(for: .milliseconds(700))
             }
             guard !Task.isCancelled else { return }
+            if installing, let lockfile = launch.lockfile, let root = workspace?.url { Self.accept(lockfile, in: root) }
             // The first page build takes a moment after the port opens.
             try? await Task.sleep(for: .milliseconds(700))
             await open(launch)
@@ -129,6 +144,21 @@ extension Session {
         let cd = target.folder.isEmpty ? "" : "cd \(Shell.quote(target.folder)) && "
         let run = target.command.hasPrefix(cd) ? String(target.command.dropFirst(cd.count)) : target.command
         return cd + "\(target.tool) install && " + run
+    }
+
+    private static let acceptedLockfilesKey = "webLaunch.acceptedLockfiles"
+
+    /// Lockfiles installed from, or started anyway with, per Mac: a package manager that finds
+    /// nothing to do may leave its install marker as it was, and Dante shouldn't keep asking.
+    static func isAccepted(_ lockfile: WebPreview.Lockfile, in root: URL) -> Bool {
+        let saved = UserDefaults.standard.dictionary(forKey: acceptedLockfilesKey) as? [String: Double] ?? [:]
+        return (saved[root.appending(path: lockfile.path).path] ?? 0) >= lockfile.modified.timeIntervalSince1970 - 1
+    }
+
+    static func accept(_ lockfile: WebPreview.Lockfile, in root: URL) {
+        var saved = UserDefaults.standard.dictionary(forKey: acceptedLockfilesKey) as? [String: Double] ?? [:]
+        saved[root.appending(path: lockfile.path).path] = lockfile.modified.timeIntervalSince1970
+        UserDefaults.standard.set(saved, forKey: acceptedLockfilesKey)
     }
 
     func cancelWebLaunch() {

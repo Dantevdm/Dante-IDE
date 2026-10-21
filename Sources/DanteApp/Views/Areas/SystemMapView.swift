@@ -822,17 +822,29 @@ private struct WebLaunchCard: View {
                 row(mark(for: 1), launch.installing ? "Install and start it" : "Start it", startDetail)
                 if launch.step == .needsInstall, let target {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Its dependencies aren’t installed yet (no node_modules), so it would stop at once. Dante can run `\(target.tool) install` first, which downloads the packages its lockfile lists, then start it.")
-                            .font(.dante(size: 12))
-                            .foregroundStyle(theme.text2.color)
-                            .fixedSize(horizontal: false, vertical: true)
+                        Group {
+                            if let lockfile = launch.lockfile {
+                                Text("`\(lockfile.path)` changed after its packages were last installed (\(lockfile.modified.formatted(.relative(presentation: .named)))), so some may be missing or out of date. Dante can run `\(target.tool) install` first, then start it.")
+                            } else {
+                                Text("Its dependencies aren’t installed yet (no node_modules), so it would stop at once. Dante can run `\(target.tool) install` first, which downloads the packages its lockfile lists, then start it.")
+                            }
+                        }
+                        .font(.dante(size: 12))
+                        .foregroundStyle(theme.text2.color)
+                        .fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: 8) {
                             Button { session.startAndOpen(installing: true) } label: {
                                 Label("Install and start", systemImage: "arrow.down.circle").lineLimit(1).frame(maxWidth: .infinity)
                             }
                             .buttonStyle(DanteButtonStyle(primary: true))
-                            Button("Not now") { session.cancelWebLaunch() }
-                                .buttonStyle(DanteButtonStyle())
+                            if launch.lockfile != nil {
+                                Button("Start anyway") { session.startAndOpen() }
+                                    .buttonStyle(DanteButtonStyle())
+                                    .help("Starts it with the packages already installed. Dante won’t ask again until the lockfile changes.")
+                            } else {
+                                Button("Not now") { session.cancelWebLaunch() }
+                                    .buttonStyle(DanteButtonStyle())
+                            }
                         }
                     }
                     .padding(.leading, 28)
