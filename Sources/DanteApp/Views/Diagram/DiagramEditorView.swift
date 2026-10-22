@@ -78,9 +78,10 @@ struct DiagramEditorView: View {
     private var bar: some View {
         HStack(spacing: 8) {
             Button { session.showDoc(DocLibrary.libraryPath) } label: {
-                Label("Docs", systemImage: "chevron.left").font(.dante(size: 12.5))
+                Label("Docs", systemImage: "chevron.left").font(.dante(size: 12.5)).lineLimit(1)
             }
             .buttonStyle(.plain)
+            .fixedSize()
             .foregroundStyle(theme.text3.color)
             .help("Back to the library")
             Image(systemName: "point.3.filled.connected.trianglepath.dotted")
@@ -96,6 +97,7 @@ struct DiagramEditorView: View {
             .fixedSize(horizontal: true, vertical: false)
             Text(document.isSaved ? "Saved" : "Saving…")
                 .font(.dante(size: 11))
+                .fixedSize()
                 .foregroundStyle(theme.text3.color)
                 .help(path)
             Spacer(minLength: 8)
