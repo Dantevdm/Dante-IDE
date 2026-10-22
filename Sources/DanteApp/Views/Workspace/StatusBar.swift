@@ -11,6 +11,7 @@ struct StatusBar: View {
         HStack(spacing: 16) {
             TerminalToggle(session: session)
             SecurityStatus(session: session, workspace: workspace)
+            PipelineStatus(session: session)
             Spacer()
             if let document = workspace.activeDocument, document.kind.opensAsText {
                 LanguageStatus(session: session, document: document)
@@ -28,6 +29,31 @@ struct StatusBar: View {
         .frame(height: 26)
         .background(theme.panel.color)
         .overlay(alignment: .top) { Rectangle().fill(theme.line.color).frame(height: 1) }
+    }
+}
+
+/// A pipeline that's running (its stage) or whose latest run failed; a click opens Release.
+private struct PipelineStatus: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+
+    var body: some View {
+        let runs = session.pipelines.runs
+        if let run = runs.first(where: { $0.status.isActive }) ?? session.pipelines.history.lanes.map(\.latest).first(where: { $0.status == .failed }) {
+            Button { session.area = .ship } label: {
+                HStack(spacing: 5) {
+                    RunDot(status: run.status)
+                    Text(run.status.isActive
+                         ? "\(run.pipeline) · \(run.stages.first { $0.state == .running }?.name ?? run.status.title.lowercased())"
+                         : "\(run.environment == .prod ? "Prod" : run.pipeline) failed")
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(run.status == .failed ? theme.red.color : theme.text2.color)
+            .help(run.status.isActive ? "\(run.pipeline) \(run.number) is running on \(run.branch). Open Release." : "\(run.pipeline) \(run.number) failed. Open Release to heal it.")
+        }
     }
 }
 

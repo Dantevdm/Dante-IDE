@@ -573,3 +573,8 @@ tasks:
   phase: build
   state: review
   notes: "Tidy orders each column by what it links to in the columns before. EvenGrid (AreaPage) gives Home equal columns and row heights. A website piece: t is scroll progress; the exported page turns the reader's scroll into t. DictationButton uses on-device speech. Checked in a test copy on a sample umbrella project; the right-click menu and the mic weren't pressed there (background tools can't open context menus, and the mic asks for permission)."
+- id: DI-138
+  title: "Pipelines: live runs from Azure DevOps (or GitHub Actions), non-prod and prod lanes, history per Mac, and healing a failed run"
+  phase: build
+  state: review
+  notes: "DanteKit/Release/Pipelines.swift (remote parsing, environments, runs, timelines, logs, retry, history, heal brief), PipelineMonitor per window (20 s while running, 90 s otherwise), PipelinesCard on Ship › Release and a status bar chip. The token is the user's own PAT in the Keychain. Checked in a test copy with seeded history; not yet against a live organisation, since that needs the user's token."

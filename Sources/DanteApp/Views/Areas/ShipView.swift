@@ -48,7 +48,11 @@ struct ShipView: View {
                         .buttonStyle(DanteButtonStyle())
                 }
             } else {
-                CICard(session: session, ci: ci)
+                if session.pipelines.source != nil {
+                    PipelinesCard(session: session)
+                } else {
+                    CICard(session: session, ci: ci)
+                }
                 HStack(alignment: .top, spacing: 16) {
                     ChangelogCard(session: session, workspace: workspace, draft: draft, git: git)
                     ReleaseChecklist(session: session, workspace: workspace, git: git, draft: draft)

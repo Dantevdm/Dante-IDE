@@ -92,6 +92,8 @@ public final class Preferences {
     public var usesGeist: Bool { didSet { defaults.set(usesGeist, forKey: Keys.usesGeist) } }
     /// A macOS notification when a monitoring alarm starts firing. Off until asked for.
     public var notifiesOnAlarms: Bool { didSet { defaults.set(notifiesOnAlarms, forKey: Keys.notifiesOnAlarms) } }
+    /// A notification when a pipeline run starts or finishes. Off until asked for.
+    public var notifiesOnPipelines: Bool { didSet { defaults.set(notifiesOnPipelines, forKey: Keys.notifiesOnPipelines) } }
     /// A notification when Claude finishes or waits for approval while Dante isn't in front.
     public var notifiesOnClaude: Bool { didSet { defaults.set(notifiesOnClaude, forKey: Keys.notifiesOnClaude) } }
     /// The orb in the menu bar that shows what Claude is doing.
@@ -131,6 +133,7 @@ public final class Preferences {
         usesGeist = bool(Keys.usesGeist, true)
         notifiesOnAlarms = bool(Keys.notifiesOnAlarms, false)
         notifiesOnClaude = bool(Keys.notifiesOnClaude, false)
+        notifiesOnPipelines = bool(Keys.notifiesOnPipelines, false)
         showsPresence = bool(Keys.showsPresence, true)
     }
 
@@ -184,6 +187,7 @@ public final class Preferences {
         static let usesGeist = "usesGeist"
         static let notifiesOnAlarms = "notifiesOnAlarms"
         static let notifiesOnClaude = "notifiesOnClaude"
+        static let notifiesOnPipelines = "notifiesOnPipelines"
         static let showsPresence = "showsPresence"
     }
 }

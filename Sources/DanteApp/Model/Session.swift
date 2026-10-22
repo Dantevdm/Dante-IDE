@@ -241,6 +241,8 @@ final class Session {
     let health = HealthMonitor()
     /// Monitoring alarms from `operate.alarms`, polled while the window is open.
     let alarms = AlarmMonitor()
+    /// The project's CI/CD pipelines, watched while the window is open.
+    let pipelines = PipelineMonitor()
     var logWatch: LogWatch?
 
     func showDoc(_ path: String) {

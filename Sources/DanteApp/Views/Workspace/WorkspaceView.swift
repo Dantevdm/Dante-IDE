@@ -78,6 +78,10 @@ struct WorkspaceView: View {
         .task(id: "\(workspace.revision)#\(session.gitRevision)") { await session.git.load(workspace.url) }
         // Alarms are watched for the whole window, so one that starts firing can notify.
         .task(id: workspace.info.alarms) { session.watchAlarms() }
+        .task(id: workspace.url) {
+            session.pipelines.session = session
+            await session.pipelines.watch(workspace.url)
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             session.autoSaveOnFocusChange()
         }
