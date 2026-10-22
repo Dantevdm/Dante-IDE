@@ -16,7 +16,7 @@ The Infra view on the Map shows how a change is delivered and where it runs: the
 ## Shows
 - A summary: how many pipelines, stacks and resources, and the clouds they're on.
 - How it works: a short story in sentences, from a push to running code and from a user's request to the data.
-- Delivery band: each pipeline's source, then its stages in order, with the environments they deploy to.
+- Delivery band: each pipeline in a lane of its own, non-prod first, then prod, then any other: the lane has a coloured edge and a label (NON-PROD in the accent colour, PROD in red, as on Ship's Pipelines card) with the branches it deploys from, then the pipeline's source and its stages in order. Azure template conditions (`${{ if … }}:` around stages, jobs, steps or dependsOn) are opened up, so stages switched on by a parameter's default show.
 - Cloud band: users, then tiers (edge, compute, data), with images, security and observability resources beside them; animated links show traffic between tiers.
 - An inspector for the selected stage or resource: steps or properties, the template file and line.
 

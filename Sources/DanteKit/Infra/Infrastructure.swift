@@ -555,9 +555,25 @@ extension Infrastructure {
 
         static func strings(_ value: Any?) -> [String] {
             if let string = value as? String { return [string] }
-            if let list = value as? [Any] { return list.compactMap { $0 as? String } }
+            if value is [Any] { return flattened(value).compactMap { $0 as? String } }
             return []
         }
+
+        /// A list's items with Azure template conditions (`- ${{ if … }}:`, `${{ else }}`, `${{ each … }}`,
+        /// read as `expr:` since `pipeline` swaps the expressions out) opened up: the items under
+        /// them count, as they do with the parameters' defaults.
+        static func flattened(_ value: Any?) -> [Any] {
+            guard let list = value as? [Any] else { return [] }
+            return list.flatMap { item -> [Any] in
+                if let object = item as? [String: Any], object.count == 1, let key = object.keys.first,
+                   key == "expr" || key.hasPrefix("${{"), let inner = object[key] as? [Any] {
+                    return flattened(inner)
+                }
+                return [item]
+            }
+        }
+
+        static func objects(_ value: Any?) -> [[String: Any]] { flattened(value).compactMap { $0 as? [String: Any] } }
 
         static func branches(_ trigger: Any?) -> [String] {
             if let list = trigger as? [Any] { return list.compactMap { $0 as? String } }
@@ -575,10 +591,10 @@ extension Infrastructure {
                 let name = (body["displayName"] as? String) ?? (body["job"] as? String) ?? (body["deployment"] as? String) ?? "job"
                 var environment = body["environment"] as? String ?? (body["environment"] as? [String: Any])?["name"] as? String
                 if environment?.hasPrefix("$(") == true { environment = nil }
-                var steps = body["steps"] as? [[String: Any]] ?? []
+                var steps = objects(body["steps"])
                 if let strategy = body["strategy"] as? [String: Any] {
                     for (_, value) in strategy {
-                        for (_, phase) in (value as? [String: Any]) ?? [:] { steps += ((phase as? [String: Any])?["steps"] as? [[String: Any]]) ?? [] }
+                        for (_, phase) in (value as? [String: Any]) ?? [:] { steps += objects((phase as? [String: Any])?["steps"]) }
                     }
                 }
                 return (name, environment, steps)
@@ -595,20 +611,20 @@ extension Infrastructure {
                 }
                 return Stage(id: id, name: name, jobs: names, dependsOn: dependsOn, environment: environment, steps: steps, line: line)
             }
-            if let list = root["stages"] as? [[String: Any]] {
+            if root["stages"] is [Any] {
                 var previous: String?
-                for body in list {
+                for body in objects(root["stages"]) {
                     guard let id = body["stage"] as? String else { continue }
                     // No dependsOn means the stage before it; an empty one means none.
                     let depends = body.keys.contains("dependsOn") ? strings(body["dependsOn"]) : previous.map { [$0] } ?? []
                     stages.append(stage(id: id, name: (body["displayName"] as? String) ?? words(id), dependsOn: depends,
-                                        jobs: body["jobs"] as? [[String: Any]] ?? [], line: line(of: "stage: \(id)", in: lines)))
+                                        jobs: objects(body["jobs"]), line: line(of: "stage: \(id)", in: lines)))
                     previous = id
                 }
-            } else if let jobs = root["jobs"] as? [[String: Any]] {
-                stages = [stage(id: "jobs", name: "Jobs", dependsOn: [], jobs: jobs, line: line(of: "jobs:", in: lines))]
-            } else if let steps = root["steps"] as? [[String: Any]] {
-                stages = [stage(id: "steps", name: "Steps", dependsOn: [], jobs: [["steps": steps]], line: line(of: "steps:", in: lines))]
+            } else if root["jobs"] is [Any] {
+                stages = [stage(id: "jobs", name: "Jobs", dependsOn: [], jobs: objects(root["jobs"]), line: line(of: "jobs:", in: lines))]
+            } else if root["steps"] is [Any] {
+                stages = [stage(id: "steps", name: "Steps", dependsOn: [], jobs: [["steps": root["steps"] as Any]], line: line(of: "steps:", in: lines))]
             }
             guard !stages.isEmpty || root["extends"] != nil else { return nil }
             return Pipeline(id: file, name: stem, system: "Azure DevOps", file: file, branches: branches(root["trigger"]), stages: stages,

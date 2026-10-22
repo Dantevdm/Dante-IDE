@@ -138,6 +138,50 @@ struct InfrastructureTests {
         #expect(infra.resource("outside/database")?.isOutside == true)
     }
 
+    @Test func stagesUnderTemplateConditionsCount() throws {
+        let yaml = """
+        parameters:
+          - name: runMigrations
+            type: boolean
+            default: true
+        trigger:
+          branches:
+            include: [develop]
+        stages:
+          - stage: Build
+            jobs:
+              - job: Build
+                steps:
+                  - script: docker build -t shop .
+          - ${{ if eq(parameters.runMigrations, true) }}:
+            - stage: Migrate
+              dependsOn: Build
+              jobs:
+                - deployment: Migrate
+                  strategy:
+                    runOnce:
+                      deploy:
+                        steps:
+                          - ${{ if eq(parameters.runMigrations, true) }}:
+                            - script: flyway migrate
+          - ${{ if eq(parameters.deploy, true) }}:
+            - stage: Deploy
+              dependsOn:
+                - Build
+                - ${{ if eq(parameters.runMigrations, true) }}:
+                  - Migrate
+              jobs:
+                - job: Deploy
+                  steps:
+                    - script: aws ecs update-service --force-new-deployment
+        """
+        let infra = Infrastructure.detect(files: ["pipelines/azure-pipelines-release-nonprod.yml"], read: { _ in yaml })
+        let pipeline = try #require(infra.pipelines.first)
+        #expect(pipeline.stages.map(\.id) == ["Build", "Migrate", "Deploy"])
+        #expect(pipeline.stages[2].dependsOn == ["Build", "Migrate"])
+        #expect(pipeline.stages[1].steps.count == 1)
+    }
+
     @Test func tellsHowItWorks() {
         let story = InfraStory(detect())
         let text = story.lines.map(\.text).joined(separator: "\n")

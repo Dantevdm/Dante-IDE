@@ -243,19 +243,58 @@ private struct InfraCanvas: View {
         VStack(alignment: .leading, spacing: 12) {
             BandTitle(symbol: "arrow.triangle.branch", title: "Delivery", note: Set(infra.pipelines.map(\.system)).sorted().joined(separator: " · "))
                 .anchorPreference(key: FrameKey.self, value: .bounds) { ["band:delivery": $0] }
-            ForEach(infra.pipelines) { pipeline in
-                HStack(alignment: .center, spacing: 40) {
-                    SourceFace(title: pipeline.name, system: pipeline.system, branches: pipeline.branches, environment: pipeline.environment ?? "")
-                        .help(pipeline.file)
-                        .anchorPreference(key: FrameKey.self, value: .bounds) { ["source:" + pipeline.id: $0] }
-                    ForEach(pipeline.stages) { stage in
-                        let id = pipeline.id + "#" + stage.id
-                        StageNode(stage: stage, state: state(id)) { toggle(id) }
-                            .anchorPreference(key: FrameKey.self, value: .bounds) { [id: $0] }
+            ForEach(pipelinesByEnvironment, id: \.pipeline.id) { pipeline, environment in
+                environmentLane(environment, branches: pipeline.branches) {
+                    HStack(alignment: .center, spacing: 40) {
+                        SourceFace(title: pipeline.name, system: pipeline.system, branches: pipeline.branches, environment: pipeline.environment ?? "")
+                            .help(pipeline.file)
+                            .anchorPreference(key: FrameKey.self, value: .bounds) { ["source:" + pipeline.id: $0] }
+                        ForEach(pipeline.stages) { stage in
+                            let id = pipeline.id + "#" + stage.id
+                            StageNode(stage: stage, state: state(id)) { toggle(id) }
+                                .anchorPreference(key: FrameKey.self, value: .bounds) { [id: $0] }
+                        }
                     }
                 }
             }
         }
+    }
+
+    /// Non-prod first, then prod, then anything Dante can't place.
+    private var pipelinesByEnvironment: [(pipeline: Infrastructure.Pipeline, environment: PipelineEnvironment)] {
+        infra.pipelines.enumerated()
+            .map { index, pipeline in
+                (index, pipeline, PipelineEnvironment.classify([pipeline.environment ?? "", pipeline.name, pipeline.file] + pipeline.stages.map(\.id)))
+            }
+            .sorted { ($0.2, $0.0) < ($1.2, $1.0) }
+            .map { ($0.1, $0.2) }
+    }
+
+    /// A pipeline's lane, tinted like the Pipelines card's chips: accent for non-prod, red for prod.
+    private func environmentLane<Content: View>(_ environment: PipelineEnvironment, branches: [String], @ViewBuilder content: () -> Content) -> some View {
+        let tint = environment == .prod ? theme.red.color : environment == .nonProd ? theme.accent.color : theme.text3.color
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(environment == .other ? "OTHER" : environment.title.uppercased())
+                    .font(.dante(size: 11, weight: .bold)).tracking(1.1).foregroundStyle(tint)
+                    .padding(.horizontal, 8).frame(height: 20)
+                    .background(Capsule().fill(tint.opacity(0.12)))
+                if !branches.isEmpty {
+                    Text("from " + branches.joined(separator: ", "))
+                        .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                }
+            }
+            content()
+        }
+        .padding(.leading, 18).padding([.vertical, .trailing], 12)
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.05))
+                Rectangle().fill(tint).frame(width: 4)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(tint.opacity(0.3)))
     }
 
     // MARK: Cloud
