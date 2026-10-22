@@ -344,4 +344,44 @@ struct DiagramTests {
         #expect(DiagramLibrary.components.contains { $0.title == "Load balancer" })
         #expect(DiagramLibrary.sections.last == "Apps and services")
     }
+
+    // MARK: Tidying
+
+    @Test func tidyingSpreadsLabelledColumnsAndKeepsTheArrangement() throws {
+        var d = Self.sample()
+        // Crowd it: compute hard against edge, a gap in the middle of the stack.
+        d.nodes[d.nodes.firstIndex { $0.id == "compute" }!].frame = .init(x: 350, y: 80, width: 220, height: 260)
+        d.nodes[d.nodes.firstIndex { $0.id == "grc" }!].frame = .init(x: 362, y: 112, width: 196, height: 54)
+        d.nodes[d.nodes.firstIndex { $0.id == "risk" }!].frame = .init(x: 362, y: 260, width: 196, height: 54)
+        let t = d.tidied()
+        func r(_ id: String) -> CGRect { t.node(id)!.rect }
+        // Same order, left to right and top to bottom.
+        #expect(r("users").maxX < r("edge").minX)
+        #expect(r("edge").maxX < r("compute").minX)
+        #expect(r("grc").maxY < r("risk").minY)
+        // Labelled links cross edge → compute, so the gap fits a label; users → edge has none.
+        #expect(r("compute").minX - r("edge").maxX == Diagram.labelledColumnGap)
+        #expect(r("edge").minX - r("users").maxX == Diagram.columnGap)
+        // The stack closes up, and the long title gets a wider column shared by both cards.
+        #expect(r("risk").minY - r("grc").maxY == 12)
+        #expect(r("grc").width > 196)
+        #expect(r("grc").width == r("risk").width)
+        // Containers hold what's in them.
+        for node in t.nodes where node.parent != nil {
+            #expect(t.node(node.parent!)!.rect.contains(node.rect), "\(node.id) inside \(node.parent!)")
+        }
+        // Tidying a tidy picture changes nothing.
+        #expect(t.tidied() == t)
+    }
+
+    @Test func tidyingKeepsCardsSizedForTheirLines() {
+        var d = Diagram(title: "Cards")
+        d.nodes = [
+            .init(id: "a", kind: .card, title: "Bare", frame: .init(x: 40, y: 40, width: 196, height: 90)),
+            .init(id: "b", kind: .card, title: "Full", subtitle: "ECS service", detail: "/risk", frame: .init(x: 40, y: 140, width: 196, height: 40)),
+        ]
+        let t = d.tidied()
+        #expect(t.node("a")!.rect.height == 48)
+        #expect(t.node("b")!.rect.height == 64)
+    }
 }

@@ -17,7 +17,7 @@ Diagrams are pictures you draw in the Map's own style: cards, groups and moving 
 ## Shows
 - In the Docs library, a thumbnail of each diagram in the Diagrams and motion strip; a Diagrams group in the sidebar lists them by title.
 - A diagram: a dotted canvas with the picture, a bar of things to add on its left, and an inspector on the right.
-- The bar above: back to Docs, the title (editable), Saved or Saving…, zoom out, the zoom level (click for 100%), zoom in, zoom to fit, Export, Ask the agent in charge, and the inspector button.
+- The bar above: back to Docs, the title (editable), Saved or Saving…, Tidy, zoom out, the zoom level (click for 100%), zoom in, zoom to fit, Export, Ask the agent in charge, and the inspector button.
 - The building blocks: card (an icon tile, a name, what it is and a monospaced detail), part (the System view's box with chips and a tag), group (a coloured header with an icon and a count of what's inside), boundary (a dashed outer panel such as a cloud, titled above), people, pipeline stage, pipeline source, band title and note text.
 - Links: solid, dashed or flowing, with a label in a white capsule, a pulse, an arrowhead, a colour, a width, and a direct or looping route.
 - Nothing selected: the inspector shows the title, a note, a count of items, groups and links, and how to use the canvas.
@@ -38,8 +38,10 @@ Diagrams are pictures you draw in the Map's own style: cards, groups and moving 
 - ⌘Z and ⇧⌘Z undo and redo every change, including edits read back from the file.
 - Pinch or the zoom buttons to zoom; scroll to pan.
 - Export: PNG (twice the size), PDF, SVG or Mermaid through a save panel next to the diagram, Copy as Image, Copy Mermaid, Show the File in Code, Show in Finder.
-- Ask the agent (the bar's menu): Draw from a description… (Describe a change… once there's something drawn) and Draw a future version of this… each open a box for your own words with Draw it (⌘↩); Review it against the code, Tidy the layout and Explain it in a paragraph go straight away. The agent saves to the same file (a future version beside it) and the canvas follows.
+- Ask the agent (the bar's menu): Draw from a description… (Describe a change… once there's something drawn) and Draw a future version of this… each open a box for your own words with Draw it (⌘↩); Review it against the code and Explain it in a paragraph go straight away. The agent saves to the same file (a future version beside it) and the canvas follows.
 - What you typed is what the transcript shows ("Draw docs/diagrams/x.dante-diagram.json: …"); the diagram format and the ground rules go with it unseen. The agent draws what you described, takes names from the repo only where they fit it, adds nothing you didn't ask for, and asks when something is unclear.
+
+- Tidy (the bar): evens out the spacing of the whole diagram as one undoable change, then zooms to fit. What's side by side stays side by side and what's stacked stays stacked, in the same order (things share a column when their middles line up); columns are 56 points apart, or 120 where a link between them has a label; cards stack 12 apart and groups 32; the cards in a column share one width, wide enough for the longest title on one line (up to 280), and are 48, 56 or 64 tall for a title alone, with one line under it or two; containers fit what they hold. The agent's guide has the same numbers, so what it draws starts tidy.
 
 ## States
 - An empty diagram: a card saying what to do, with a box for what it should show and Draw it (off until something is typed), and Open the Map.
@@ -57,6 +59,7 @@ Diagrams are pictures you draw in the Map's own style: cards, groups and moving 
 - Exports saved under docs/ are listed as docs too.
 
 ## Acceptance
+- Tidying a tidy diagram changes nothing, and after a tidy every node is inside its container and no link label sits on a card between labelled columns.
 - Copy and edit on the Infra view gives a diagram with every stage, resource, tier group, the cloud boundary, users and their links, at the positions the Map drew them.
 - A diagram saved, closed and reopened draws the same.
 - PNG, PDF and SVG exports look like the canvas in the current theme, and the Mermaid export parses as a flowchart.

@@ -99,6 +99,16 @@ struct DiagramEditorView: View {
                 .foregroundStyle(theme.text3.color)
                 .help(path)
             Spacer(minLength: 8)
+            Button {
+                document.change("Tidy Layout") { $0 = $0.tidied() }
+                fit()
+            } label: {
+                Label("Tidy", systemImage: "wand.and.rays")
+            }
+            .buttonStyle(DanteButtonStyle())
+            .fixedSize()
+            .disabled(document.diagram.isEmpty)
+            .help("Even out the spacing: columns spread so link labels fit between them, stacks closed up, cards sized for their text and groups fitted round them. The arrangement stays; ⌘Z undoes it.")
             zoomControls
             Menu {
                 ForEach(DiagramExporter.Format.allCases) { format in
@@ -124,7 +134,6 @@ struct DiagramEditorView: View {
                 Button("Draw a future version of this…") { describing = .future }
                 Divider()
                 Button("Review it against the code") { ask(.review) }
-                Button("Tidy the layout") { ask(.tidy) }
                 Button("Explain it in a paragraph") { ask(.explain) }
             } label: {
                 ClaudeLabel("Ask \(session.agentName)")
@@ -292,7 +301,7 @@ struct DiagramEditorView: View {
         }
     }
 
-    private enum Request { case review, tidy, explain }
+    private enum Request { case review, explain }
 
     private func ask(_ request: Request) {
         document.save()
@@ -301,8 +310,6 @@ struct DiagramEditorView: View {
         switch request {
         case .review:
             session.askClaude("Review \(file) against the code", instructions: "Compare the diagram in \(file) with the code and infrastructure in this repo. Tell me what it gets wrong, leaves out or shows that isn't there. Don't change the file yet." + guide)
-        case .tidy:
-            session.askClaude("Tidy the layout of \(file)", instructions: "Tidy the layout of the diagram in \(file): line up rows and columns, even out the gaps, keep cards inside their groups and links short, without changing what's in it. Edit the file in place." + guide)
         case .explain:
             session.askClaude("Explain the diagram in \(file) in a paragraph I could say while presenting it: what's there, how a request travels through it and what's new or planned (dashed).")
         }
