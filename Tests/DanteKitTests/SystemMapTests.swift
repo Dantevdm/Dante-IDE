@@ -273,4 +273,20 @@ struct SystemMapTests {
         #expect(!map.parts.contains { $0.lane == .outside })
         #expect(!map.parts.contains { $0.kind == .table })
     }
+
+    @Test func aServiceIsItsPackageNotItsName() {
+        // A list of design references names Stripe; only a dependency or an import uses it.
+        let named: [String: String] = [
+            "go.mod": "module example.com/x\n",
+            "looks.go": "package main\nvar looks = []string{\"Apple keynote\", \"Stripe\", \"Linear\"}",
+        ]
+        let quiet = SystemMap.build(files: Array(named.keys), read: { named[$0] })
+        #expect(!quiet.parts.contains { $0.id.contains("stripe") })
+
+        let stripe = try! #require(SystemMap.outsideServices.first { $0.id == "stripe" })
+        let uses = { (text: String) in stripe.patterns.contains { SystemMap.has(text.lowercased(), $0.lowercased()) } }
+        #expect(uses(#"{ "dependencies": { "stripe": "^14.0.0" } }"#))
+        #expect(uses("import Stripe from 'stripe'"))
+        #expect(!uses(#"options: ["Apple keynote", "Stripe", "Linear"]"#))
+    }
 }
