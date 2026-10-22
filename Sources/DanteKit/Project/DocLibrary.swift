@@ -55,7 +55,16 @@ public struct DocLibrary: Equatable, Sendable {
     public struct Group: Equatable, Sendable, Identifiable {
         public var title: String
         public var docs: [Doc]
-        public var id: String { title }
+        /// The top-level folder a group of docs kept beside the code is named after
+        /// ("infrastructure"); nil for the other groups.
+        public var root: String?
+        public var id: String { root.map { "folder:" + $0 } ?? title }
+
+        public init(title: String, docs: [Doc], root: String? = nil) {
+            self.title = title
+            self.docs = docs
+            self.root = root
+        }
 
         /// The group's docs by folder: its own folder's first, then each subfolder's.
         /// Under `docs/`, `docs/plans/x.md` is in "plans"; elsewhere a doc's folder is its path.
@@ -63,13 +72,13 @@ public struct DocLibrary: Equatable, Sendable {
             var order: [String] = []
             var byFolder: [String: [Doc]] = [:]
             for doc in docs {
-                let folder = DocLibrary.folder(of: doc.path, in: title)
+                let folder = DocLibrary.folder(of: doc.path, in: self)
                 if byFolder[folder] == nil { order.append(folder) }
                 byFolder[folder, default: []].append(doc)
             }
             return order
                 .sorted { a, b in a.isEmpty != b.isEmpty ? a.isEmpty : a.localizedStandardCompare(b) == .orderedAscending }
-                .map { Section(group: title, folder: $0, docs: byFolder[$0]!) }
+                .map { Section(group: id, folder: $0, docs: byFolder[$0]!) }
         }
     }
 
@@ -81,11 +90,26 @@ public struct DocLibrary: Equatable, Sendable {
         public var docs: [Doc]
         public var id: String { "\(group)/\(folder)" }
 
-        /// "plans" reads "Plans"; nested folders and names with capitals stay as they are.
+        /// What the docs belong to: "plans" reads "Plans"; deeper down it's the last folder
+        /// that isn't only for docs, so `aws/cloudformation/portal-alb-stack/documentation`
+        /// reads "portal-alb-stack".
         public var title: String {
-            guard !folder.contains("/"), folder.lowercased() == folder else { return folder }
-            let spaced = folder.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
+            let parts = owner
+            guard let name = parts.name else { return "" }
+            guard parts.context == nil, !folder.contains("/"), name.lowercased() == name else { return name }
+            let spaced = name.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
             return spaced.prefix(1).uppercased() + spaced.dropFirst()
+        }
+
+        /// The folders above `title` ("aws/cloudformation"), or nil.
+        public var context: String? { owner.context }
+
+        private var owner: (name: String?, context: String?) {
+            var parts = folder.split(separator: "/").map(String.init)
+            guard !parts.isEmpty else { return (nil, nil) }
+            while parts.count > 1, let last = parts.last, DocLibrary.docFolderNames.contains(last.lowercased()) { parts.removeLast() }
+            let name = parts.removeLast()
+            return (name, parts.isEmpty ? nil : parts.joined(separator: "/"))
         }
 
         /// Images, shown as thumbnails rather than rows.
@@ -126,25 +150,37 @@ public struct DocLibrary: Equatable, Sendable {
             let docs = group.docs.filter { doc in
                 words.allSatisfy { doc.title.range(of: $0, options: options) != nil || doc.path.range(of: $0, options: options) != nil }
             }
-            return docs.isEmpty ? nil : Group(title: group.title, docs: docs)
+            guard !docs.isEmpty else { return nil }
+            var copy = group
+            copy.docs = docs
+            return copy
         }
         return copy
     }
 
     /// A doc's folder within its group: see `Group.sections`.
-    static func folder(of path: String, in group: String) -> String {
+    static func folder(of path: String, in group: Group) -> String {
         let directory = (path as NSString).deletingLastPathComponent
         let root: String
-        switch group {
-        case "Project", "Elsewhere": return directory
-        case "Motion", "Diagrams": return ""
-        case "Docs": root = directory.split(separator: "/").first.map(String.init) ?? ""
-        case "Notes": root = ".dante"
-        default: root = directory.split(separator: "/").prefix(2).joined(separator: "/")
+        if let top = group.root {
+            root = top
+        } else {
+            switch group.title {
+            case "Project", Self.aroundTheCode: return directory
+            case "Motion", "Diagrams": return ""
+            case "Docs": root = directory.split(separator: "/").first.map(String.init) ?? ""
+            case "Notes": root = ".dante"
+            default: root = directory.split(separator: "/").prefix(2).joined(separator: "/")
+            }
         }
         guard directory.count > root.count, directory.hasPrefix(root + "/") else { return "" }
         return String(directory.dropFirst(root.count + 1))
     }
+
+    /// Folders that only hold docs, named past to say what the docs are about.
+    static let docFolderNames: Set<String> = ["documentation", "docs", "doc"]
+    /// Docs beside the code, from top-level folders with only one doc each.
+    public static let aroundTheCode = "Around the code"
 
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdx"]
     static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "tiff"]
@@ -183,20 +219,47 @@ public struct DocLibrary: Equatable, Sendable {
 
     public init(paths: [String]) {
         var buckets: [String: [Doc]] = [:]
+        var beside: [String: [Doc]] = [:]
         let all = Set(paths)
         // Another agent's version of a piece is opened from the piece, not listed beside it.
         for path in paths where Self.isDoc(path) && !MotionPiece.isOtherVersion(path, among: all) {
-            buckets[Self.group(for: path), default: []].append(Doc(path: path))
+            if let group = Self.group(for: path) {
+                buckets[group, default: []].append(Doc(path: path))
+            } else {
+                beside[String(path.split(separator: "/")[0]), default: []].append(Doc(path: path))
+            }
+        }
+        // A top-level folder with several docs is a group of its own, named after it.
+        var around: [Doc] = []
+        var folders: [Group] = []
+        for (top, docs) in beside {
+            if docs.count > 1 {
+                folders.append(Group(title: Self.title(ofFolder: top), docs: docs.sorted(by: Self.ordered), root: top))
+            } else {
+                around += docs
+            }
         }
         groups = Self.order.compactMap { title in
-            guard let docs = buckets.removeValue(forKey: title), !docs.isEmpty else { return nil }
+            guard let docs = buckets[title], !docs.isEmpty else { return nil }
             return Group(title: title, docs: docs.sorted(by: Self.ordered))
-        } + buckets.keys.sorted().map { Group(title: $0, docs: buckets[$0]!.sorted(by: Self.ordered)) }
+        }
+        groups += folders.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        if !around.isEmpty { groups.append(Group(title: Self.aroundTheCode, docs: around.sorted(by: Self.ordered))) }
     }
 
-    static let order = ["Project", "Motion", "Diagrams", "Specs", "Decisions", "Runbooks", "Notes", "Phases", "Docs", "Elsewhere"]
+    static let order = ["Project", "Motion", "Diagrams", "Specs", "Decisions", "Runbooks", "Notes", "Phases", "Docs"]
 
-    static func group(for path: String) -> String {
+    /// "infrastructure" reads "Infrastructure", "build-tools" "Build tools"; dot folders stay, and
+    /// a folder named like one of the groups above reads "notes/".
+    static func title(ofFolder folder: String) -> String {
+        if order.contains(where: { $0.lowercased() == folder.lowercased() }) || folder == aroundTheCode { return folder + "/" }
+        guard !folder.hasPrefix("."), folder.lowercased() == folder else { return folder }
+        let spaced = folder.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
+        return spaced.prefix(1).uppercased() + spaced.dropFirst()
+    }
+
+    /// The named group a doc belongs to, or nil for a doc kept beside the code.
+    static func group(for path: String) -> String? {
         let parts = path.split(separator: "/").map(String.init)
         if parts.count == 1 { return "Project" }
         if parts[0] == ".dante" {
@@ -211,7 +274,7 @@ public struct DocLibrary: Equatable, Sendable {
         if MotionPiece.isManifest(path) { return "Motion" }
         if Diagram.isDiagram(path) { return "Diagrams" }
         if parts[0].lowercased() == "docs" || parts[0].lowercased() == "documentation" { return "Docs" }
-        return "Elsewhere"
+        return nil
     }
 
     /// README first, then by path. Phases keep lifecycle order.

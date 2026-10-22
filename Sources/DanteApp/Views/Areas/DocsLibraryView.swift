@@ -2,14 +2,16 @@ import DanteKit
 import QuickLookThumbnailing
 import SwiftUI
 
-/// Docs' front page: what changed lately, then each group as a card: its folders, a line
-/// about each doc, and images as thumbnails.
+/// Docs' front page: what changed lately, the diagrams and motion pieces made here, then every
+/// doc as a directory: a section per group, a heading per thing the docs belong to, and a row
+/// per doc with its first line and age. Groups and headings fold. New starts any kind of doc.
 struct DocsLibraryView: View {
     @Environment(\.theme) private var theme
     let session: Session
     let workspace: Workspace
     let library: DocLibrary
     let addFiles: () -> Void
+    let create: (DocCreation) -> Void
     @State private var details: [String: Details] = [:]
     @State private var expanded: Set<String> = []
 
@@ -18,36 +20,53 @@ struct DocsLibraryView: View {
         var modified: Date?
     }
 
-    /// Rows a card shows before "Show all".
+    /// Rows a heading shows before "Show all".
     private let rowLimit = 6
 
+    private var folderCount: Int { library.groups.reduce(0) { $0 + $1.sections.count } }
+
     var body: some View {
-        AreaPage(eyebrow: nil, title: "Docs", subtitle: nil) {
-            Button(action: addFiles) { Label("Add files…", systemImage: "plus") }
+        AreaPage(eyebrow: nil, title: "Docs",
+                 subtitle: "\(library.all.count) doc\(library.all.count == 1 ? "" : "s") in \(folderCount) folder\(folderCount == 1 ? "" : "s")",
+                 maxWidth: 1240) {
+            Button { session.writeBrandKit() } label: { Label("Brand kit", systemImage: "paintpalette") }
                 .buttonStyle(DanteButtonStyle())
+                .help("Open .dante/brand.yaml: colours, fonts, logo, motion and voice for diagrams, decks and videos (written from the project’s own styles the first time)")
+            Button(action: addFiles) { Label("Add files…", systemImage: "tray.and.arrow.down") }
+                .buttonStyle(DanteButtonStyle())
+                .help("Copy PDFs, Word files, slides and images into docs/")
+            Button { create(.doc(nil)) } label: { Label("New", systemImage: "plus") }
+                .buttonStyle(DanteButtonStyle(primary: true))
         } content: {
-            MotionStudioCard(session: session, pieces: library.all.filter { $0.kind == .motion })
-            DiagramsCard(session: session, workspace: workspace, diagrams: library.all.filter { $0.kind == .diagram })
             if !recent.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     Eyebrow("Recently changed")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
-                        ForEach(recent) { doc in recentTile(doc) }
+                    // One row: as many as fit, never a row and a straggler.
+                    ViewThatFits(in: .horizontal) {
+                        ForEach([4, 3, 2], id: \.self) { count in
+                            HStack(alignment: .top, spacing: 12) {
+                                ForEach(recent.prefix(count)) { doc in recentTile(doc).frame(minWidth: 190, idealWidth: 190, maxWidth: .infinity) }
+                            }
+                        }
                     }
                 }
             }
-            CardGrid(minimum: 340) {
-                ForEach(library.groups) { group in groupCard(group) }
-            }
+            MadeInDante(session: session, workspace: workspace,
+                        diagrams: library.all.filter { $0.kind == .diagram }, pieces: library.all.filter { $0.kind == .motion })
+            ForEach(library.groups.filter { !Self.madeHere.contains($0.title) }) { group in groupSection(group) }
         }
         .task(id: workspace.revision) { await loadDetails() }
     }
+
+    /// Groups shown in the strip above rather than the directory.
+    private static let madeHere: Set<String> = ["Motion", "Diagrams"]
 
     // MARK: Recent
 
     private var recent: [DocLibrary.Doc] {
         guard library.all.count > 6 else { return [] }
         return library.all
+            .filter { $0.kind != .motion && $0.kind != .diagram }
             .compactMap { doc in details[doc.path]?.modified.map { (doc, $0) } }
             .sorted { $0.1 > $1.1 }
             .prefix(4)
@@ -58,10 +77,10 @@ struct DocsLibraryView: View {
         Tile {
             session.showDoc(doc.path)
         } content: {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Image(systemName: Self.symbol(for: doc)).font(.dante(size: 11)).foregroundStyle(theme.accent.color)
-                    Text(folder(of: doc)).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.head)
+                    Text(owner(of: doc)).font(.dante(size: 11, weight: .medium)).foregroundStyle(theme.text3.color).lineLimit(1)
                     Spacer(minLength: 4)
                     if let modified = details[doc.path]?.modified {
                         Text(modified.relative).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1)
@@ -70,7 +89,7 @@ struct DocsLibraryView: View {
                 Text(doc.title).font(.dante(size: 13.5, weight: .semibold)).foregroundStyle(theme.text.color).lineLimit(1)
                 if doc.kind == .image {
                     DocThumbnail(url: workspace.url.appending(path: doc.path), side: 200)
-                        .frame(height: 64)
+                        .frame(height: 48)
                         .frame(maxWidth: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 } else if let excerpt = details[doc.path]?.excerpt {
@@ -78,116 +97,133 @@ struct DocsLibraryView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
-        }
-    }
-
-    // MARK: Groups
-
-    private func groupCard(_ group: DocLibrary.Group) -> some View {
-        let showsAll = expanded.contains(group.id)
-        let sections = visibleSections(group, all: showsAll)
-        let hidden = group.docs.count - sections.reduce(0) { $0 + $1.docs.count }
-        return Card {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: Self.symbol(for: group.title))
-                        .font(.dante(size: 12, weight: .medium))
-                        .foregroundStyle(theme.accent.color)
-                        .frame(width: 24, height: 24)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(theme.accentTint.color))
-                    Text(group.title).font(.dante(size: 14, weight: .semibold)).foregroundStyle(theme.text.color)
-                    Spacer(minLength: 8)
-                    Text("\(group.docs.count)").font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text3.color)
-                }
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(sections) { section in
-                        VStack(alignment: .leading, spacing: 2) {
-                            if !section.folder.isEmpty {
-                                Label(section.title, systemImage: section.images.count == section.docs.count ? "photo.on.rectangle" : "folder")
-                                    .font(.dante(size: 11, weight: .medium))
-                                    .foregroundStyle(theme.text3.color)
-                                    .padding(.bottom, 2)
-                            }
-                            ForEach(section.others) { doc in docLine(doc) }
-                            if !section.images.isEmpty {
-                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 68, maximum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
-                                    ForEach(section.images) { doc in
-                                        Button { session.showDoc(doc.path) } label: {
-                                            DocThumbnail(url: workspace.url.appending(path: doc.path), side: 96)
-                                                .aspectRatio(1, contentMode: .fill)
-                                                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                                                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(theme.line.color))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .help(doc.path)
-                                    }
-                                }
-                                .padding(.top, 2)
-                            }
-                        }
-                    }
-                }
-                if hidden > 0 || showsAll && group.docs.count > rowLimit {
-                    LinkButton(showsAll ? "Show fewer" : "Show all \(group.docs.count)") {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            if showsAll { expanded.remove(group.id) } else { expanded.insert(group.id) }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// The group's sections cut to about `rowLimit` rows; a grid of images counts as one row.
-    private func visibleSections(_ group: DocLibrary.Group, all: Bool) -> [DocLibrary.Section] {
-        guard !all else { return group.sections }
-        var budget = rowLimit
-        var result: [DocLibrary.Section] = []
-        for section in group.sections where budget > 0 {
-            var cut = section
-            let others = Array(section.others.prefix(budget))
-            budget -= others.count
-            var images: [DocLibrary.Doc] = []
-            if budget > 0, !section.images.isEmpty {
-                images = Array(section.images.prefix(8))
-                budget -= 1
-            }
-            cut.docs = others + images
-            if !cut.docs.isEmpty { result.append(cut) }
-        }
-        return result
-    }
-
-    private func docLine(_ doc: DocLibrary.Doc) -> some View {
-        Tile(plain: true) {
-            session.showDoc(doc.path)
-        } content: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: Self.symbol(for: doc))
-                    .font(.dante(size: 10.5))
-                    .foregroundStyle(theme.text3.color)
-                    .frame(width: 13)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(doc.title).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
-                        if let folder = library.folder(distinguishing: doc) {
-                            Text(folder).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.head)
-                        }
-                    }
-                    if let excerpt = details[doc.path]?.excerpt {
-                        Text(excerpt).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
+            .frame(maxWidth: .infinity, minHeight: 74, maxHeight: .infinity, alignment: .topLeading)
         }
         .help(doc.path)
     }
 
-    private func folder(of doc: DocLibrary.Doc) -> String {
-        let folder = (doc.path as NSString).deletingLastPathComponent
-        return folder.isEmpty ? workspace.name : folder
+    /// What a doc belongs to: its folder's name past any docs-only folder, else the project.
+    private func owner(of doc: DocLibrary.Doc) -> String {
+        let parts = (doc.path as NSString).deletingLastPathComponent.split(separator: "/").map(String.init)
+        return parts.last { !["documentation", "docs", "doc"].contains($0.lowercased()) } ?? parts.last ?? workspace.name
+    }
+
+    // MARK: Directory
+
+    private func groupSection(_ group: DocLibrary.Group) -> some View {
+        let open = !session.docsFolded.contains(group.id)
+        return VStack(alignment: .leading, spacing: 10) {
+            FoldHeader(open: open) { toggle(group.id) } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: Self.symbol(for: group.title)).font(.dante(size: 11, weight: .medium)).foregroundStyle(theme.text3.color)
+                    Eyebrow(group.title)
+                    Text("\(group.docs.count)").font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color)
+                    if let root = group.root {
+                        Text(root + "/").font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color.opacity(0.7))
+                    }
+                }
+            }
+            if open {
+                VStack(spacing: 0) {
+                    let sections = group.sections
+                    ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                        if index > 0 { Rectangle().fill(theme.line.color).frame(height: 1) }
+                        sectionView(section)
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
+            }
+        }
+        .padding(.top, 6)
+    }
+
+    private func toggle(_ id: String) {
+        withAnimation(.snappy(duration: 0.2)) {
+            if session.docsFolded.contains(id) { session.docsFolded.remove(id) } else { session.docsFolded.insert(id) }
+        }
+    }
+
+    private func sectionView(_ section: DocLibrary.Section) -> some View {
+        let showsAll = expanded.contains(section.id)
+        let others = showsAll ? section.others : Array(section.others.prefix(rowLimit))
+        // A group's loose docs have no heading, so they can't fold.
+        let open = section.folder.isEmpty || !session.docsFolded.contains(section.id)
+        return VStack(alignment: .leading, spacing: 2) {
+            if !section.folder.isEmpty {
+                FoldHeader(open: open) { toggle(section.id) } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: section.images.count == section.docs.count ? "photo.on.rectangle" : "folder")
+                        .font(.dante(size: 11.5)).foregroundStyle(theme.accent.color)
+                    Text(section.title).font(.dante(size: 13.5, weight: .semibold)).foregroundStyle(theme.text.color).lineLimit(1)
+                    if let context = section.context {
+                        Text(context).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            .lineLimit(1).truncationMode(.head)
+                    }
+                    Spacer(minLength: 8)
+                    Text("\(section.docs.count)").font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                }
+                }
+                .padding(.horizontal, 2)
+                .padding(.bottom, open ? 4 : 0)
+                .help(section.folder)
+            }
+            if open { sectionRows(section, others: others, showsAll: showsAll) }
+        }
+        .padding(10)
+    }
+
+    @ViewBuilder
+    private func sectionRows(_ section: DocLibrary.Section, others: [DocLibrary.Doc], showsAll: Bool) -> some View {
+            ForEach(others) { doc in docRow(doc) }
+            if section.others.count > rowLimit {
+                LinkButton(showsAll ? "Show fewer" : "Show all \(section.others.count)") {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        if showsAll { expanded.remove(section.id) } else { expanded.insert(section.id) }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 2)
+            }
+            if !section.images.isEmpty {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 68, maximum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
+                    ForEach(showsAll ? section.images : Array(section.images.prefix(12))) { doc in
+                        Button { session.showDoc(doc.path) } label: {
+                            DocThumbnail(url: workspace.url.appending(path: doc.path), side: 96)
+                                .aspectRatio(1, contentMode: .fill)
+                                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(theme.line.color))
+                        }
+                        .buttonStyle(.plain)
+                        .help(doc.path)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
+            }
+    }
+
+    private func docRow(_ doc: DocLibrary.Doc) -> some View {
+        Tile(plain: true) {
+            session.showDoc(doc.path)
+        } content: {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: Self.symbol(for: doc))
+                    .font(.dante(size: 11))
+                    .foregroundStyle(theme.text3.color)
+                    .frame(width: 14)
+                Text(doc.title).font(.dante(size: 13, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
+                    .frame(width: 230, alignment: .leading)
+                Text(details[doc.path]?.excerpt ?? "")
+                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let modified = details[doc.path]?.modified {
+                    Text(modified.relative).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        .frame(minWidth: 70, alignment: .trailing)
+                }
+            }
+        }
+        .help(doc.path)
     }
 
     // MARK: Loading
@@ -227,6 +263,7 @@ struct DocsLibraryView: View {
         case "Docs": "books.vertical"
         case "Motion": "film.stack"
         case "Diagrams": "point.3.filled.connected.trianglepath.dotted"
+        case DocLibrary.aroundTheCode: "chevron.left.forwardslash.chevron.right"
         default: "folder"
         }
     }
@@ -242,6 +279,29 @@ struct DocsLibraryView: View {
         case .motion: "film.stack"
         case .diagram: "point.3.filled.connected.trianglepath.dotted"
         }
+    }
+}
+
+/// A heading that folds what's under it: a chevron, then the label, the whole row clickable.
+private struct FoldHeader<Label: View>: View {
+    @Environment(\.theme) private var theme
+    let open: Bool
+    let action: () -> Void
+    @ViewBuilder let label: Label
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.dante(size: 9, weight: .semibold))
+                    .foregroundStyle(theme.text3.color)
+                    .rotationEffect(.degrees(open ? 90 : 0))
+                    .frame(width: 12)
+                label
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -15,7 +15,7 @@ Diagrams are pictures you draw in the Map's own style: cards, groups and moving 
 - The agent in charge can draw or change a diagram: it reads the format through Dante's diagram_guide tool and writes the file.
 
 ## Shows
-- In the Docs library, a Diagrams card with New diagram and a thumbnail of each diagram; a Diagrams group in the sidebar lists them by title.
+- In the Docs library, a thumbnail of each diagram in the Diagrams and motion strip; a Diagrams group in the sidebar lists them by title.
 - A diagram: a dotted canvas with the picture, a bar of things to add on its left, and an inspector on the right.
 - The bar above: back to Docs, the title (editable), Saved or Saving…, zoom out, the zoom level (click for 100%), zoom in, zoom to fit, Export, Ask the agent in charge, and the inspector button.
 - The building blocks: card (an icon tile, a name, what it is and a monospaced detail), part (the System view's box with chips and a tag), group (a coloured header with an icon and a count of what's inside), boundary (a dashed outer panel such as a cloud, titled above), people, pipeline stage, pipeline source, band title and note text.
@@ -27,7 +27,7 @@ Diagrams are pictures you draw in the Map's own style: cards, groups and moving 
 - While moving: guides where edges and middles line up with other nodes.
 
 ## Actions
-- New diagram (the Docs card or an empty library): a name, then Blank, Infrastructure or System map; it's saved as docs/diagrams/<name>.dante-diagram.json (numbered when the name is taken) and opens.
+- New diagram (Docs' New sheet, Diagram, or an empty library): a name, then Blank, Infrastructure or System map; it's saved as docs/diagrams/<name>.dante-diagram.json (numbered when the name is taken) and opens.
 - Copy and edit (Map, Infra or System view, and inside an opened part): a name, then the view as a diagram, opened in Docs. The Map itself doesn't change.
 - Add from the bar (it goes to free space near the middle of the view), or from the component library (cloud services by tier, and apps and services like an identity provider, access governance or single sign-on); double-click empty canvas for a card there.
 - Drag to move (snapping to an 8-point grid and to other nodes' edges and middles; ⌥ moves freely); drag a corner to resize; a group moves by its header, or anywhere once selected.

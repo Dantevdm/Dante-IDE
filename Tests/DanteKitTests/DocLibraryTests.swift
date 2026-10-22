@@ -21,8 +21,30 @@ import Testing
         #expect(docs[1].others.isEmpty)
         #expect(group("Specs").sections.map(\.folder) == ["", "payments"])
         #expect(group("Notes").sections.map(\.folder) == ["", "jobs"])
-        #expect(group("Elsewhere").sections.map(\.folder) == ["api", "frontend"])
+        #expect(group(DocLibrary.aroundTheCode).sections.map(\.folder) == ["api", "frontend"])
         #expect(group("Project").sections.map(\.folder) == [""])
+    }
+
+    @Test func docsBesideTheCodeAreNamedAfterWhatTheyDescribe() {
+        let library = DocLibrary(paths: [
+            "infrastructure/aws/cloudformation/portal-alb-stack/documentation/README.md",
+            "infrastructure/aws/cloudformation/portal-alb-stack/documentation/naming-reference-notes.md",
+            "infrastructure/aws/cloudformation/portal-ecr-stack/documentation/README.md",
+            "pipelines/azure-devops/orders-portal/documentation/naming-reference-notes.md",
+            "pipelines/documentation/overview.md",
+            "tools/lint/README.md",
+        ])
+        #expect(library.groups.map(\.title) == ["Infrastructure", "Pipelines", DocLibrary.aroundTheCode])
+        let infra = library.groups[0].sections
+        #expect(infra.map(\.title) == ["portal-alb-stack", "portal-ecr-stack"])
+        #expect(infra.map(\.context) == ["aws/cloudformation", "aws/cloudformation"])
+        #expect(infra[0].docs.count == 2)
+        let pipelines = library.groups[1].sections
+        #expect(pipelines.map(\.title) == ["orders-portal", "Documentation"])
+        #expect(pipelines.map(\.context) == ["azure-devops", nil])
+        // A folder named like a group keeps its own group.
+        let named = DocLibrary(paths: ["notes/a.md", "notes/b.md", ".dante/notes.md"])
+        #expect(named.groups.map(\.title) == ["Notes", "notes/"])
     }
 
     @Test func sectionIDsAreUniqueAcrossGroups() {

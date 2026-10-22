@@ -1,13 +1,15 @@
 ---
 id: docs
 title: Docs
-phrases: [docs, documentation, readme, library, documents, motion, studio, video, videos, deck, slides, presentation, animation, explainer, brand kit]
+phrases: [docs, documentation, readme, library, documents, new document, decision record, runbook, how-to guide, architecture overview, motion, studio, video, videos, deck, slides, presentation, animation, explainer, brand kit]
 ---
 # Docs
 
-Docs is the project's documentation library: markdown with diagrams, PDFs and Word files, grouped by folder, the Studio, where the agent makes videos, decks and explainers that move, and diagrams drawn in the Map's style.
+Docs is the project's documentation library: markdown with diagrams, PDFs and Word files, grouped by what they describe, where New starts a document from a template (written by you or drafted by the agent from the code), the Studio, where the agent makes videos, decks and explainers that move, and diagrams drawn in the Map's style.
 
 ## Highlights
+- New document: a README, decision record, runbook, how-to guide or architecture overview with its outline, in the folder the project keeps them in, written by you or drafted by the agent from the code.
+- The library reads like a directory: docs kept beside the code are named after what they describe (portal-alb-stack, orders-portal), and every group and folder folds.
 - Diagrams: draw in the Map's style, or copy the Map's Infra or System view and change it; export as PNG, PDF, SVG or Mermaid.
 - Studio: describe a piece and the agent in charge storyboards it, builds it as a scene drawn from the real system map and infrastructure in the project's brand, looks at its own frames and fixes them.
 - A piece plays in Docs with its narration in Dante's natural voice, and renders frame by frame to a 1080p or 4K MP4.
@@ -15,17 +17,23 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 - Share a piece as one HTML file that plays in any browser, or a PDF of its slides or storyboard; present a deck full screen on the Stage.
 
 ## Shows
-- The library: recently changed docs, a card per group with excerpts and thumbnails.
-- The Diagrams card, with New diagram and a thumbnail of each diagram; a diagram opens in its editor (see docs.diagrams).
+- The library, top to bottom: the header (the doc and folder counts; Brand kit, Add files… and New), Recently changed (one row of as many as fit, two to four, each with what it belongs to, its age and first line; only past six docs), the Diagrams and motion strip (a thumbnail per diagram and per motion piece; only when there are some), then a section per group.
+- Groups: the project's own (Project, Docs, Specs, Decisions, Runbooks, Notes, Phases), then one per top-level folder holding two or more docs (Infrastructure, Pipelines; titled from the folder, with the folder as `infrastructure/` beside it; a folder named like a built-in group shows as `notes/`), then Around the code for top-level folders with a single doc.
+- In a group, a heading per folder named after what the docs belong to: the last folder that isn't documentation/, docs/ or doc/ (portal-alb-stack), with the folders above it in monospace (aws/cloudformation) and a count; under it a row per doc: title, first line and age, six before Show all N, images as a grid of thumbnails.
+- Group and folder headings have a chevron and fold on a click; folds last while the window is open.
+- The New document sheet: eight kinds in a grid (Document, README, Decision, Runbook, How-to, Architecture, Diagram, Video or deck) with a line each; Title (not for a README); Save in (the kind's usual folder, docs/, the project folder and every folder that holds docs, most docs first); the Draft it with <agent> from the code switch (remembered), with an About field when it's on; the path it will write; Cancel and Create (Create and draft when drafting).
+- A diagram opens in its editor (see docs.diagrams).
 - A doc: markdown rendered with Mermaid diagrams (flowchart, sequence, ER) drawn natively; PDFs, images and Word files in a viewer; HTML reports and slides in a built-in web preview.
 - When an agent opens an HTML file for you (`open_file`), it shows in a sheet over the window, with Open in Code and Done.
 - Beside a markdown doc: its outline (On this page) and the project files it names in `code` (Files it mentions, shown only when there are some).
 - A sidebar of groups and sections with a filter.
-- The Studio card at the top of the library, and a Motion group with every piece (docs/motion/<name>/motion.yaml).
+- Every motion piece (docs/motion/<name>/motion.yaml) in the Diagrams and motion strip and the sidebar's Motion group.
 - A piece: the scene on a dark stage, captions of the narration, a timeline with its narration lines and a deck's slide stops, and script errors when the scene has any.
 
 ## Actions
 - Open a doc; filter; edit a markdown doc in Code.
+- New (the header, or an empty library): the sheet starts on README when the project has none at its root, else Document. Picking Diagram or Video or deck swaps to that sheet. Create writes the file with its outline (never over an existing file) and opens it Side by Side for writing; Create and draft opens it to read and asks the agent in charge to fill in the outline from the code, configuration, other docs and git history, writing TODOs where it can't tell.
+- Fold or unfold a group or a folder by clicking its heading.
 - Back and forward between docs.
 - New piece, in four steps (the step chips in the header jump between them once there's an idea; Next is the default button, Cancel the cancel one):
   1. Idea: pick one of four ideas or describe one; title, kind (video, slide deck, animated explainer), length (15 s to 2 min) and shape (16:9, 9:16, 1:1, 4:5).
@@ -41,11 +49,14 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 - Brand kit opens .dante/brand.yaml (written from the project's own colours, fonts and logo the first time); Refresh project data rebuilds data.json from the code.
 
 ## States
-- No docs: says where it looks (docs/, documentation/, .dante/ and markdown anywhere), with New motion piece.
+- No docs: says where it looks (docs/, documentation/, .dante/ and markdown anywhere), with New document…, New diagram… and New motion piece….
+- New document: a README in a folder that already has one can't be created (the path line says so in amber and Create is off).
 - A piece loading, playing, paused, voicing its narration, rendering or drawing a PDF (with progress and Cancel), saved, or failed with the reason; an export that couldn't carry a file names it.
 - A critique: not asked (says what the critic will do), running (with seconds), done, or failed with the reason.
 
 ## Edge cases
+- Names: a decision is numbered after the highest in its folder (`docs/decisions/0008-share-one-certificate.md`, its heading `# 0008. …`); a README is named by its folder; any other doc is its title as a file name, with -2, -3 when taken. The kind's folder is the one the project already uses (.dante/decisions, docs/decisions, docs/adr…; docs/runbooks; docs/guides), else that default.
+- Templates' placeholder lines are italic and say what goes there; the architecture overview starts with a Mermaid flowchart.
 - PDFs, images, HTML and Word files count as docs only under docs/, documentation/ and .dante/; elsewhere they're app assets.
 - The HTML preview loads only static files (pages, styles, scripts, images, fonts, media) from inside the project, never dot folders, env files or the rules' never paths, and nothing from the network; links elsewhere don't navigate. A file that can't load says why, with Try again.
 - An agent can only open files inside the project (symlinks are followed and checked), never a URL or a never path.
@@ -61,6 +72,8 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 - Narration needs the natural voice (Settings › Claude); without it pieces play and render silent, with captions.
 
 ## Acceptance
+- In a project whose docs sit in infrastructure/aws/cloudformation/<stack>/documentation/, the library shows an Infrastructure group with a heading per stack, not one Elsewhere pile.
+- Each kind in the New sheet writes a file at the path the sheet showed and opens it.
 - Every Mermaid diagram the parser supports draws without a browser.
 - A rendered frame matches the preview at the same time.
 - 4K renders at 3840×2160 without upscaling.

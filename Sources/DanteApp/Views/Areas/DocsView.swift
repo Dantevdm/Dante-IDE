@@ -17,8 +17,8 @@ struct DocsView: View {
     @State private var markdown: MarkdownDocument?
     @State private var loadError: String?
     @State private var dropTargeted = false
-    @State private var creatingMotion = false
-    @State private var creatingDiagram = false
+    /// The New sheet showing: a document, a diagram or a motion piece.
+    @State private var creating: DocCreation?
     /// Reading width: a comfortable column, or the whole window.
     @AppStorage("docsWide") private var wide = false
     /// Read the rendered doc, edit its markdown, or both side by side.
@@ -97,27 +97,37 @@ struct DocsView: View {
                 }
                 .environment(\.openURL, OpenURLAction { url in open(url, from: selected) })
             } else if !library.isEmpty {
-                DocsLibraryView(session: session, workspace: workspace, library: library, addFiles: pickFiles)
+                DocsLibraryView(session: session, workspace: workspace, library: library, addFiles: pickFiles) { creating = $0 }
             } else {
                 EmptyState(
                     symbol: "doc.text",
                     title: "No docs yet"
                 ) {
                     Button("Add files…", action: pickFiles).buttonStyle(DanteButtonStyle())
-                    Button("New motion piece…") { creatingMotion = true }.buttonStyle(DanteButtonStyle())
-                    Button("New diagram…") { creatingDiagram = true }.buttonStyle(DanteButtonStyle())
-                    Button("Ask Claude to draft a README") {
-                        session.askClaude("Draft a README.md for this project from the code, the .dante folder and git history. Keep it short and accurate.")
-                    }
-                    .buttonStyle(DanteButtonStyle(primary: true))
+                    Button("New diagram…") { creating = .diagram }.buttonStyle(DanteButtonStyle())
+                    Button("New motion piece…") { creating = .motion }.buttonStyle(DanteButtonStyle())
+                    Button("New document…") { creating = .doc(nil) }.buttonStyle(DanteButtonStyle(primary: true))
                 }
                 .padding(28)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .background(theme.ground.color)
-        .sheet(isPresented: $creatingMotion) { NewMotionSheet(session: session) }
-        .sheet(isPresented: $creatingDiagram) { NewDiagramSheet(session: session) }
+        .sheet(item: $creating) { kind in
+            switch kind {
+            case .doc(let template):
+                NewDocSheet(session: session, workspace: workspace, library: library, switchTo: switchCreation,
+                            template: template ?? (library.all.contains { $0.path.lowercased() == "readme.md" } ? .document : .readme))
+            case .diagram: NewDiagramSheet(session: session)
+            case .motion: NewMotionSheet(session: session)
+            }
+        }
+        // A doc just made from a template opens for writing.
+        .onChange(of: selected?.path) { _, path in
+            guard path != nil, session.docOpensEditing else { return }
+            session.docOpensEditing = false
+            mode = .split
+        }
         // "Show me the diagrams": the library, where the Diagrams card is.
         .task(id: session.areaView) {
             if session.areaView == "diagrams", !showsLibrary { session.showDoc(DocLibrary.libraryPath) }
@@ -231,6 +241,15 @@ struct DocsView: View {
         } catch {
             session.errorMessage = error.localizedDescription
             mode = .preview
+        }
+    }
+
+    /// From the New document sheet to a diagram's or a motion piece's, once it has closed.
+    private func switchCreation(_ kind: DocCreation) {
+        creating = nil
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            creating = kind
         }
     }
 

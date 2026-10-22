@@ -99,7 +99,7 @@ import Testing
 @Suite struct DocTitleTests {
     @Test func sameTitlesShowTheirFolder() {
         let library = DocLibrary(paths: ["frontend/README.md", "api/README.md", "tools/setup.md"])
-        let elsewhere = library.groups.first { $0.title == "Elsewhere" }!.docs
+        let elsewhere = library.groups.first { $0.title == DocLibrary.aroundTheCode }!.docs
         let readme = elsewhere.first { $0.path == "api/README.md" }!
         #expect(library.folder(distinguishing: readme) == "api")
         #expect(library.folder(distinguishing: elsewhere.first { $0.path == "tools/setup.md" }!) == nil)

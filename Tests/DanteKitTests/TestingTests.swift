@@ -125,7 +125,7 @@ import Testing
             "Sources/App.swift", "CLAUDE.md", "README.md", ".dante/phases/test.md", ".dante/phases/build.md",
             ".dante/specs/limits.md", ".dante/decisions/0001-money.md", "docs/setup.md", "Sources/Notes.md",
         ])
-        #expect(library.groups.map(\.title) == ["Project", "Specs", "Decisions", "Phases", "Docs", "Elsewhere"])
+        #expect(library.groups.map(\.title) == ["Project", "Specs", "Decisions", "Phases", "Docs", DocLibrary.aroundTheCode])
         #expect(library.groups[0].docs.map(\.path) == ["README.md", "CLAUDE.md"])
         #expect(library.groups[3].docs.map(\.path) == [".dante/phases/build.md", ".dante/phases/test.md"])
         #expect(DocLibrary.Doc(path: "docs/getting-started.md").title == "Getting started")

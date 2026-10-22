@@ -189,74 +189,60 @@ struct NewDiagramSheet: View {
     }
 }
 
-/// Docs' Diagrams card: what they are, a thumbnail of each, and New diagram.
-struct DiagramsCard: View {
+/// Docs' strip of what was made in Dante: each diagram as a thumbnail and each motion piece,
+/// shown only when there are some.
+struct MadeInDante: View {
     @Environment(\.theme) private var theme
     let session: Session
     let workspace: Workspace
     let diagrams: [DocLibrary.Doc]
-    @State private var creating = false
+    let pieces: [DocLibrary.Doc]
     @State private var pictures: [String: Diagram] = [:]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 18) {
-                Image(systemName: "point.3.filled.connected.trianglepath.dotted")
-                    .font(.dante(size: 30, weight: .light))
-                    .foregroundStyle(theme.accent.color)
-                    .frame(width: 60)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Diagrams").font(.dante(size: 11, weight: .semibold)).tracking(1.4).textCase(.uppercase).foregroundStyle(theme.accent.color)
-                    Text("Draw it in the Map’s style").font(.dante(size: 18, weight: .semibold)).foregroundStyle(theme.text.color)
-                    Text(diagrams.isEmpty
-                         ? "Cards, groups and moving links like the Infra and System views. Start blank, or use Copy and edit on the Map to change what the code shows into what's next."
-                         : "\(diagrams.count) diagram\(diagrams.count == 1 ? "" : "s") in the repo. Export as PNG, PDF, SVG or Mermaid.")
-                        .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                Button { creating = true } label: { Label("New diagram", systemImage: "plus") }
-                    .buttonStyle(DanteButtonStyle(primary: true))
-            }
-            if !diagrams.isEmpty {
+        if !diagrams.isEmpty || !pieces.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow("Diagrams and motion")
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(diagrams) { doc in thumbnail(doc) }
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(diagrams) { doc in
+                            thumbnail(doc, title: pictures[doc.path]?.title ?? doc.title, symbol: "point.3.filled.connected.trianglepath.dotted") {
+                                if let picture = pictures[doc.path], !picture.isEmpty {
+                                    let still = DiagramStill(diagram: picture, padding: 20)
+                                    let frame = still.frame
+                                    let scale = min(180 / frame.width, 100 / frame.height)
+                                    still.scaleEffect(scale)
+                                        .frame(width: frame.width * scale, height: frame.height * scale)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                        }
+                        ForEach(pieces) { doc in
+                            thumbnail(doc, title: doc.title, symbol: "film.stack") {
+                                Image(systemName: "play.rectangle").font(.dante(size: 26, weight: .light)).foregroundStyle(theme.accent.color)
+                            }
+                        }
                     }
                 }
             }
+            .task(id: workspace.revision) { load() }
         }
-        .padding(18)
-        .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(LinearGradient(colors: [theme.accentTint.color, theme.card.color], startPoint: .topLeading, endPoint: .bottomTrailing))
-        }
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(theme.accentLine.color))
-        .sheet(isPresented: $creating) { NewDiagramSheet(session: session) }
-        .task(id: workspace.revision) { load() }
     }
 
-    private func thumbnail(_ doc: DocLibrary.Doc) -> some View {
+    private func thumbnail(_ doc: DocLibrary.Doc, title: String, symbol: String, @ViewBuilder picture: () -> some View) -> some View {
         Button { session.showDoc(doc.path) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack {
                     theme.panel.color
-                    if let picture = pictures[doc.path], !picture.isEmpty {
-                        let still = DiagramStill(diagram: picture, padding: 20)
-                        let frame = still.frame
-                        let scale = min(200 / frame.width, 112 / frame.height)
-                        still.scaleEffect(scale)
-                            .frame(width: frame.width * scale, height: frame.height * scale)
-                            .allowsHitTesting(false)
-                    } else {
-                        Image(systemName: "point.3.filled.connected.trianglepath.dotted").font(.dante(size: 22)).foregroundStyle(theme.text3.color)
-                    }
+                    picture()
                 }
-                .frame(width: 200, height: 112)
+                .frame(width: 180, height: 100)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.line.color))
-                Text(pictures[doc.path]?.title ?? doc.title).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
+                Label(title, systemImage: symbol)
+                    .font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
             }
-            .frame(width: 200)
+            .frame(width: 180)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
