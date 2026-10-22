@@ -233,3 +233,69 @@ import Testing
     }
 
 }
+
+@Suite("Code places")
+struct CodePlaceTests {
+    @Test func eachLanguageMarksItsTests() {
+        let tests = [
+            "backend/cmd/server/api/orders_handler_test.go", "internal/store/mock_store.go", "pkg/testdata/users.json",
+            "app/tests/test_orders.py", "app/orders_test.py", "conftest.py",
+            "web/src/cart.test.tsx", "web/src/cart.spec.ts", "web/src/__tests__/cart.ts", "web/cypress/login.cy.ts",
+            "src/test/java/shop/OrderServiceTest.java", "src/main/java/shop/OrderServiceIT.java", "src/OrderSpec.groovy",
+            "Tests/ShopTests/CartTests.swift", "Shop.Api.Tests/OrdersControllerTests.cs", "spec/models/order_spec.rb",
+            "crates/shop/tests/orders.rs", "lib/cart_test.dart", "src/cart_unittest.cc",
+        ]
+        for path in tests { #expect(CodePlace.of(path) == .tests, "\(path)") }
+        let shipped = [
+            "backend/cmd/server/api/orders_handler.go", "src/main/java/shop/Latest.java", "Sources/Shop/PageSpec.swift",
+            "src/main/java/shop/AUDIT.java", "web/src/contest.ts", "Sources/Shop/Testing.swift", "requirements.txt",
+        ]
+        for path in shipped { #expect(CodePlace.of(path) == .shipped, "\(path)") }
+        #expect(CodePlace.of("Documentation/Design/screens/support.js") == .docs)
+        #expect(CodePlace.of("examples/client.py") == .docs)
+        #expect(CodePlace.of("qa/load.go", tests: ["qa/"]) == .tests)
+        #expect(CodePlace.of("api/orders_it.go", tests: ["*_it.go"]) == .tests)
+    }
+
+    @Test func findingsInTestsAndDocsAreNotGraded() {
+        func finding(_ rule: String, _ file: String, _ category: SecurityFinding.Category = .secrets) -> SecurityFinding {
+            SecurityFinding(rule: rule, category: category, severity: .high, title: rule, why: "", fix: "", file: file, line: 3, evidence: rule)
+        }
+        let report = SecurityReport(findings: [
+            finding("secret.password", "api/users_test.go"),
+            finding("semgrep.eval", "docs/design/support.js", .code),
+            finding("secret.aws", "api/users_test.go"),
+            finding("secret.password", "api/users.go"),
+            finding("deps.GHSA-1", "web/tests/package-lock.json", .dependencies),
+        ])
+        #expect(Set(report.findings.map(\.rule)) == ["secret.aws", "secret.password", "deps.GHSA-1"])
+        #expect(report.findings.allSatisfy { $0.rule != "secret.password" || $0.file == "api/users.go" })
+        #expect(report.aside.map(\.file).sorted() == ["api/users_test.go", "docs/design/support.js"])
+        let shippedOnly = SecurityReport(findings: report.findings.filter { $0.file == "api/users.go" || $0.rule == "secret.aws" || $0.rule.hasPrefix("deps") })
+        #expect(report.score == shippedOnly.score)
+    }
+
+    @Test func movingAsideIsNotAFix() {
+        let test = SecurityFinding(rule: "secret.password", category: .secrets, severity: .high, title: "", why: "", fix: "",
+                                   file: "qa/load.go", line: 4, evidence: "pass = x")
+        let before = SecurityReport(findings: [test])
+        let after = SecurityReport(findings: [test], testPaths: ["qa/"])
+        #expect(before.findings.count == 1 && after.findings.isEmpty && after.aside.count == 1)
+        let changes = after.changes(since: before)
+        #expect(changes.fixed.isEmpty && changes.new.isEmpty)
+    }
+
+    @Test func securityYamlNamesMoreTestPaths() {
+        let ignores = SecurityIgnores.parse("tests:\n  - qa/\n  - \"*_it.go\"\n")
+        #expect(ignores.tests == ["qa/", "*_it.go"] && ignores.entries.isEmpty)
+        #expect(SecurityIgnores.parse("ignore:\n  - rule: x\ntests: e2e-suite/\n").tests == ["e2e-suite/"])
+    }
+
+    @Test func savedReportsFromBeforeStillLoad() throws {
+        let json = #"{"date":"2026-10-01T10:00:00Z","findings":[{"id":"a","rule":"secret.password","category":"secrets","severity":"high","title":"","why":"","fix":"","file":"api/a_test.go","line":1,"evidence":"","source":"Dante"}],"ignored":[],"scanners":["Dante"],"files":3,"seconds":1}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let report = try decoder.decode(SecurityReport.self, from: Data(json.utf8))
+        #expect(report.findings.isEmpty && report.aside.count == 1)
+    }
+}

@@ -39,8 +39,9 @@ if CommandLine.arguments.dropFirst().first == "mcp" {
     exit(0)
 }
 
-// `dante scan [folder] [--json] [--online] [--fail-on high]`: the Security area's scan, for a
-// terminal or CI. Exits 2 when a finding is at least as bad as --fail-on.
+// `dante scan [folder] [--json] [--online] [--all] [--fail-on high]`: the Security area's scan,
+// for a terminal or CI. Exits 2 when a graded finding (not one in tests, docs or examples) is at
+// least as bad as --fail-on; --all lists those too.
 if CommandLine.arguments.dropFirst().first == "scan" {
     var arguments = Array(CommandLine.arguments.dropFirst(2))
     func flag(_ name: String) -> Bool {
@@ -56,6 +57,7 @@ if CommandLine.arguments.dropFirst().first == "scan" {
     let json = flag("--json")
     let online = flag("--online")
     let noTools = flag("--no-tools")
+    let all = flag("--all")
     let threshold = value("--fail-on").map { SecurityFinding.Severity(rawValue: $0.lowercased()) }
     if case .some(nil) = threshold { fail("--fail-on takes critical, high, medium, low or info") }
     let root = URL(filePath: arguments.first ?? ".", directoryHint: .isDirectory,
@@ -68,7 +70,7 @@ if CommandLine.arguments.dropFirst().first == "scan" {
         encoder.dateEncodingStrategy = .iso8601
         print(String(decoding: (try? encoder.encode(report)) ?? Data(), as: UTF8.self))
     } else {
-        print(ProjectSecurity.summary(report, root: root))
+        print(ProjectSecurity.summary(report, root: root, all: all))
     }
     if let threshold = threshold ?? nil, report.findings.contains(where: { $0.severity >= threshold }) { exit(2) }
     exit(0)

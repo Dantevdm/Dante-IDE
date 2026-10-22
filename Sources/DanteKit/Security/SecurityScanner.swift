@@ -401,14 +401,7 @@ public enum SecurityScanner {
 
     /// Tests, fixtures and examples: problems there are one step milder.
     public static func isTest(_ path: String) -> Bool {
-        let parts = path.lowercased().split(separator: "/")
-        if parts.dropLast().contains(where: { ["test", "tests", "__tests__", "spec", "specs", "fixtures", "testdata", "__mocks__", "e2e", "examples", "example"].contains($0) }) {
-            return true
-        }
-        let name = (path as NSString).lastPathComponent
-        let lower = name.lowercased()
-        return lower.contains("_test.") || lower.contains(".test.") || lower.contains(".spec.") || lower.hasPrefix("test_")
-            || name.hasSuffix("Tests.swift") || name.hasSuffix("Test.java") || name.hasSuffix("Test.kt")
+        CodePlace.of(path) != .shipped
     }
 
     /// Example and template files whose values are meant to be replaced.

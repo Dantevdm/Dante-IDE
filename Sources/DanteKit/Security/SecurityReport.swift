@@ -4,22 +4,63 @@ import Yams
 /// One scan of a project: what was found, by what, and how the project scores.
 public struct SecurityReport: Codable, Equatable, Sendable {
     public var date: Date
-    /// Open findings, worst first; ignored ones are in `ignored`.
+    /// Open findings in code that ships, worst first: these make the grade. Ignored ones are in
+    /// `ignored`, and those in tests, docs and examples in `aside`.
     public var findings: [SecurityFinding]
     public var ignored: [SecurityFinding]
+    /// Open findings in tests, docs and examples: listed on request, never graded.
+    public var aside: [SecurityFinding]
+    /// The project's own test paths, from `tests:` in `.dante/security.yaml`.
+    public var testPaths: [String]
     /// The scanners that ran: "Dante", "Semgrep", "OSV".
     public var scanners: [String]
     public var files: Int
     public var seconds: Double
 
-    public init(date: Date = Date(), findings: [SecurityFinding], ignored: [SecurityFinding] = [], scanners: [String] = ["Dante"],
-                files: Int = 0, seconds: Double = 0) {
+    /// `findings` and `aside` are sorted again into the two lists, so a copy can pass both back.
+    public init(date: Date = Date(), findings: [SecurityFinding], aside: [SecurityFinding] = [], ignored: [SecurityFinding] = [],
+                scanners: [String] = ["Dante"], files: Int = 0, seconds: Double = 0, testPaths: [String] = []) {
         self.date = date
-        self.findings = SecurityScanner.sorted(Self.merged(findings))
+        let all = SecurityScanner.sorted(Self.merged(findings + aside))
+        self.findings = all.filter { !Self.isAside($0, testPaths: testPaths) }
+        self.aside = all.filter { Self.isAside($0, testPaths: testPaths) }
+        self.testPaths = testPaths
         self.ignored = ignored
         self.scanners = scanners
         self.files = files
         self.seconds = seconds
+    }
+
+    enum CodingKeys: String, CodingKey { case date, findings, ignored, aside, testPaths, scanners, files, seconds }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        // Reports saved before tests were set aside have everything in `findings`.
+        self.init(date: try values.decode(Date.self, forKey: .date), findings: try values.decode([SecurityFinding].self, forKey: .findings),
+                  aside: try values.decodeIfPresent([SecurityFinding].self, forKey: .aside) ?? [],
+                  ignored: try values.decode([SecurityFinding].self, forKey: .ignored), scanners: try values.decode([String].self, forKey: .scanners),
+                  files: try values.decode(Int.self, forKey: .files), seconds: try values.decode(Double.self, forKey: .seconds),
+                  testPaths: try values.decodeIfPresent([String].self, forKey: .testPaths) ?? [])
+    }
+
+    /// Where a finding's file is: shipped code, tests, or docs and examples.
+    public func place(of finding: SecurityFinding) -> CodePlace {
+        finding.file.isEmpty ? .shipped : CodePlace.of(finding.file, tests: testPaths)
+    }
+
+    /// Credentials for a real service, which leak from a test file as much as from anywhere.
+    static let realCredentials: Set<String> = [
+        "secret.aws", "secret.private-key", "secret.anthropic", "secret.openai", "secret.github", "secret.slack", "secret.stripe", "secret.google",
+    ]
+
+    /// Findings in tests, docs and examples are set aside: a fixture's password or a docs page's
+    /// `eval` isn't in what ships. A real service's key is graded wherever it is.
+    static func isAside(_ finding: SecurityFinding, testPaths: [String]) -> Bool {
+        guard !finding.file.isEmpty, CodePlace.of(finding.file, tests: testPaths) != .shipped else { return false }
+        if realCredentials.contains(finding.rule) { return false }
+        if finding.rule.hasPrefix("gitleaks.") { return ["generic", "password", "jwt"].contains { finding.rule.contains($0) } }
+        // Dependency advisories are about the lockfile, wherever it sits.
+        return finding.category != .dependencies
     }
 
     /// One finding per place and problem: when two scanners report the same line, the
@@ -83,7 +124,9 @@ public struct SecurityReport: Codable, Equatable, Sendable {
         // Findings with the same rule, file and line text are matched nearest line first, so
         // repeats ("#2") that shift when a line above is added or removed still count as the same.
         let ignored = Set(ignored.map(\.lineID))
-        let earlierByLine = Dictionary(grouping: earlier.findings, by: \.lineID)
+        // Sorted by this report's test paths, so a finding that moved aside isn't "fixed".
+        let before = (earlier.findings + earlier.aside).filter { !Self.isAside($0, testPaths: testPaths) }
+        let earlierByLine = Dictionary(grouping: before, by: \.lineID)
         var matchedNow = Set<String>(), matchedBefore = Set<String>()
         for (lineID, now) in Dictionary(grouping: findings, by: \.lineID) {
             guard let before = earlierByLine[lineID] else { continue }
@@ -94,8 +137,8 @@ public struct SecurityReport: Codable, Equatable, Sendable {
             }
         }
         var new = findings.filter { !matchedNow.contains($0.id) }
-        let left = Set(earlier.findings.map(\.id)).subtracting(matchedBefore)
-        var fixed = earlier.findings.filter { left.contains($0.id) && !ignored.contains($0.lineID) }
+        let left = Set(before.map(\.id)).subtracting(matchedBefore)
+        var fixed = before.filter { left.contains($0.id) && !ignored.contains($0.lineID) }
         // A finding's id includes its line's text, so editing a line that still has the problem
         // reads as one fixed and one new. Pair those up: same rule, same file, nearest line.
         var edited: [SecurityChanges.Edit] = []
@@ -146,6 +189,9 @@ public struct SecurityReport: Codable, Equatable, Sendable {
 ///         reason: "Sanitised with DOMPurify"
 ///       - rule: gha.unpinned
 ///       - path: examples/
+///     tests:            # test code Dante can't tell by its name or folder
+///       - qa/
+///       - "*_it.go"
 public struct SecurityIgnores: Equatable, Sendable {
     public struct Entry: Equatable, Sendable {
         public var id: String?
@@ -169,19 +215,26 @@ public struct SecurityIgnores: Equatable, Sendable {
     }
 
     public var entries: [Entry]
+    /// More paths that hold only tests, besides each language's own conventions (`CodePlace`).
+    public var tests: [String]
 
-    public init(entries: [Entry] = []) { self.entries = entries }
+    public init(entries: [Entry] = [], tests: [String] = []) {
+        self.entries = entries
+        self.tests = tests
+    }
 
     public static let path = ".dante/security.yaml"
 
     public static func parse(_ text: String) -> SecurityIgnores {
-        guard let root = (try? Yams.load(yaml: text)) as? [String: Any], let list = root["ignore"] as? [Any] else { return SecurityIgnores() }
+        guard let root = (try? Yams.load(yaml: text)) as? [String: Any] else { return SecurityIgnores() }
+        let tests = (root["tests"] as? [Any])?.map { "\($0)" } ?? (root["tests"] as? String).map { [$0] } ?? []
+        let list = root["ignore"] as? [Any] ?? []
         return SecurityIgnores(entries: list.compactMap { item in
             if let id = item as? String { return Entry(id: id) }
             guard let map = item as? [String: Any] else { return nil }
             let entry = Entry(id: map["id"] as? String, rule: map["rule"] as? String, path: map["path"] as? String, reason: map["reason"] as? String)
             return entry.id ?? entry.rule ?? entry.path == nil ? nil : entry
-        })
+        }, tests: tests.filter { !$0.isEmpty })
     }
 
     public static func load(root: URL) -> SecurityIgnores {

@@ -14,6 +14,8 @@ struct SecurityView: View {
     /// The hero's "new" or "fixed" chip, when one is chosen.
     @State private var change: Change?
     @State private var showsLow = true
+    /// Findings in tests, docs and examples, which aren't graded, listed too.
+    @State private var showsAside = false
     @State private var expanded: Set<String> = []
     @State private var limit = 120
     @State private var tools: [(tool: SecurityTool, path: String?)] = []
@@ -171,6 +173,7 @@ struct SecurityView: View {
 
     private func details(_ report: SecurityReport) -> String {
         "\(report.files) files · \(report.scanners.joined(separator: ", ")) · scanned \(report.date.relative)"
+            + (report.aside.isEmpty ? "" : " · \(report.aside.count) in tests and docs not graded")
     }
 
     @ViewBuilder
@@ -228,14 +231,19 @@ struct SecurityView: View {
     private func categories(_ report: SecurityReport) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                CategoryChip(title: "All", symbol: "square.grid.2x2", count: report.findings.count, selected: category == nil) { category = nil }
-                ForEach(SecurityFinding.Category.allCases.filter { report.count($0) > 0 }, id: \.self) { item in
-                    CategoryChip(title: item.title, symbol: item.symbol, count: report.count(item), selected: category == item) {
+                let pool = pool(report)
+                CategoryChip(title: "All", symbol: "square.grid.2x2", count: pool.count, selected: category == nil) { category = nil }
+                ForEach(SecurityFinding.Category.allCases.filter { item in pool.contains { $0.category == item } }, id: \.self) { item in
+                    CategoryChip(title: item.title, symbol: item.symbol, count: pool.filter { $0.category == item }.count, selected: category == item) {
                         category = category == item ? nil : item
                     }
                 }
                 Spacer(minLength: 12)
                 Toggle("Low and info", isOn: $showsLow).toggleStyle(.checkbox).font(.dante(size: 12))
+                if !report.aside.isEmpty {
+                    Toggle("Tests and docs (\(report.aside.count))", isOn: $showsAside).toggleStyle(.checkbox).font(.dante(size: 12))
+                        .help("Findings in tests, fixtures, mocks, docs and examples: listed here but not graded, since they aren't in what ships. A real service's key counts wherever it is. Add more test paths under tests: in .dante/security.yaml.")
+                }
             }
         }
         .animation(.snappy(duration: 0.25), value: category)
@@ -243,9 +251,14 @@ struct SecurityView: View {
 
     // MARK: Findings
 
+    /// The graded findings, and with the toggle on those in tests, docs and examples.
+    private func pool(_ report: SecurityReport) -> [SecurityFinding] {
+        showsAside && change == nil ? SecurityScanner.sorted(report.findings + report.aside) : report.findings
+    }
+
     private func shown(_ report: SecurityReport) -> [SecurityFinding] {
         let fresh = change == .new ? newIDs : change == .edited ? editedIDs : nil
-        return report.findings.filter {
+        return pool(report).filter {
             (category == nil || $0.category == category) && (showsLow || $0.severity >= .medium) && (fresh?.contains($0.id) ?? true)
         }
     }
@@ -303,6 +316,11 @@ struct SecurityView: View {
         } content: {
             if list.isEmpty {
                 EmptyFindings(scanned: !report.findings.isEmpty)
+                if report.findings.isEmpty, !report.aside.isEmpty, !showsAside {
+                    Text("\(report.aside.count) in tests, docs and examples aren't graded.")
+                        .font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                    LinkButton("Show them") { showsAside = true }
+                }
             }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(SecurityFinding.Severity.allCases, id: \.self) { severity in
@@ -316,7 +334,8 @@ struct SecurityView: View {
                         .padding(.top, 10).padding(.bottom, 4)
                         ForEach(group.prefix(limit)) { finding in
                             FindingRow(finding: finding, expanded: expanded.contains(finding.id), lead: lead, session: session, workspace: workspace,
-                                       state: fresh.contains(finding.id) ? .new : changes?.before(finding.id).map { .edited(before: $0.evidence) } ?? .open) {
+                                       state: fresh.contains(finding.id) ? .new : changes?.before(finding.id).map { .edited(before: $0.evidence) } ?? .open,
+                                       place: report.aside.contains(finding) ? report.place(of: finding) : nil) {
                                 if expanded.contains(finding.id) { expanded.remove(finding.id) } else { expanded.insert(finding.id) }
                             }
                             .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .bottom)), removal: .opacity))
@@ -534,6 +553,8 @@ private struct FindingRow: View {
     let session: Session
     let workspace: Workspace
     var state = State.open
+    /// Tests or docs, for a finding that isn't graded.
+    var place: CodePlace? = nil
     let toggle: () -> Void
     @State private var ignoring = false
 
@@ -565,6 +586,12 @@ private struct FindingRow: View {
                     }
                     if state == .fixed {
                         Text(finding.severity.title).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
+                    }
+                    if let place {
+                        Text(place == .tests ? "in tests" : "in docs").font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().fill(theme.line.color))
+                            .help("Not graded: this file is \(place == .tests ? "test code" : "docs or examples"), not in what ships.")
                     }
                     if finding.source != "Dante" {
                         Text(finding.source).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)

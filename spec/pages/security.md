@@ -11,14 +11,17 @@ Security scores the project out of a hundred and lists its findings, most seriou
 - Fix with the agent sends findings to the agent in charge, and the other agent checks the fix.
 - A deep audit asks for a read-only review.
 - Accepted risks are kept in .dante/security.yaml.
+- Findings in tests, docs and examples aren't graded: they're set aside, and a checkbox lists them.
 
 ## Shows
-- The score and grade (a critical finding caps it at 49), with counts by severity and category.
+- The score and grade (a critical finding caps it at 49), with counts by severity and category. Only code that ships is graded.
+- Set aside: findings in tests (each language's own convention: Go's `_test.go` and generated mocks, Python's `test_*.py`, `*_test.py` and `conftest.py`, JS/TS `.test.`, `.spec.`, `.cy.`, Java/Kotlin `…Test`, `…Tests`, `…IT`, Spock/Kotest `…Spec`, Swift and C# `…Tests`, Ruby `_spec.rb`, Dart `_test.dart`, C/C++ `_test.cc`; folders such as tests/, __tests__/, src/test/, testdata/, fixtures/, mocks/, e2e/, cypress/, `…Tests` and `.Tests`), and in docs and examples (docs/, documentation/, examples/, samples/, Markdown). The details line says "N in tests and docs not graded", and the "Tests and docs (N)" checkbox beside "Low and info" adds them to the list, each tagged "in tests" or "in docs". A real service's key (AWS, GitHub, Stripe, OpenAI, Anthropic, Slack, Google, a private key) and dependency advisories are graded wherever they are.
+- A project can name more test paths in .dante/security.yaml: `tests:` with folders ("qa/") or globs ("*_it.go").
 - What changed since the last scan that found something different: "N new", "N edited, still flagged" and "N fixed" chips. Scanning again without changes keeps them. A finding is the same finding while its rule, file and line text stay the same; the same text again further down a file is a finding of its own, and repeats are matched nearest line first, so moving code doesn't make them new. A line edited so it still has the same problem (same rule, same file, within three lines) is one edited finding, never one fixed and one new.
 - New findings carry a "new" tag in the list.
 - Findings grouped by category, each with the file and line, what's wrong and how to fix it, and the scanners that found it.
 - Scanners: Dante's own rules plus the installed tools (Semgrep, Gitleaks, OSV-Scanner, govulncheck, npm audit, pip-audit), with install commands for missing ones.
-- In CI: the command that fails a build on serious problems (`dante scan --fail-on high`).
+- In CI: the command that fails a build on serious problems (`dante scan --fail-on high`, graded findings only; `--all` also lists those set aside).
 - What the audit says: the last deep audit's findings.
 - Accepted risks, with their reasons.
 
@@ -39,6 +42,9 @@ Security scores the project out of a hundred and lists its findings, most seriou
 
 ## Edge cases
 - Comments, placeholders, example files, binaries, data files and `never` paths are skipped; tests are one step milder except for secrets.
+- A class-style test name needs its capital: `OrderServiceTest.java` is a test, `Latest.java` isn't; `…Spec` only counts on the JVM, so Swift's `PageSpec.swift` is code.
+- A finding that becomes set aside (a new `tests:` path, or after updating Dante) is neither fixed nor new.
+- No graded findings but some set aside: the card says how many aren't graded, with Show them.
 - `nosec`, `dante:ignore` and `gitleaks:allow` on a line suppress it.
 - SA ID numbers and card numbers are checked properly (date, citizenship digit, Luhn); providers' test cards are skipped.
 
@@ -48,3 +54,4 @@ Security scores the project out of a hundred and lists its findings, most seriou
 - A log call whose only sensitive word is in its message ("password changed by its owner") isn't flagged; one that logs the value, or formats it in ("password: %s"), is.
 - A secret in an agent's edit stops the edit for approval at any approval level.
 - The score is the same from the page, `dante scan` and `security_report`.
+- A hard-coded password in `api/users_test.go` doesn't lower the grade and shows only with "Tests and docs" ticked, tagged "in tests"; the same line in `api/users.go` does lower it. An AWS key in the test file lowers it too.

@@ -91,7 +91,7 @@ Security runs on every project, offline by default, and sits between the agents 
 - **The agents fix and check.** Fix hands findings to the agent in charge and asks the other to check the work. Audit asks for a read-only review against POPIA (sections 19, 22 and 72).
 - **Edits are scanned before you approve them.** If an agent's edit adds a high or critical finding, it asks you at any approval level, and Apply all skips it.
 - **The agents see the report** through Dante's MCP server, so a security question starts from what Dante found.
-- **In CI too**: `dante scan --fail-on high` exits non-zero when it finds something at that level (`--json` for the full report, `--online` for dependency advisories).
+- **In CI too**: `dante scan --fail-on high` exits non-zero when it finds something at that level (`--json` for the full report, `--online` for dependency advisories). Findings in tests, docs and examples are listed apart and never graded, by each language's own test conventions (`_test.go`, `test_*.py`, `.spec.ts`, `src/test/`…).
 
 ## Voice, the orb and the Stage
 

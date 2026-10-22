@@ -58,7 +58,7 @@ public enum ProjectSecurity {
         let ignores = SecurityIgnores.load(root: root)
         let split = ignores.apply(findings)
         let report = SecurityReport(findings: split.open, ignored: split.ignored, scanners: scanners, files: files.count,
-                                    seconds: Date().timeIntervalSince(started))
+                                    seconds: Date().timeIntervalSince(started), testPaths: ignores.tests)
         if options.save { report.save(for: root) }
         return report
     }
@@ -90,12 +90,13 @@ public enum ProjectSecurity {
     public static func keepingAudits(_ fresh: SecurityReport, from earlier: SecurityReport?) -> SecurityReport {
         let audit = earlier?.findings.filter { $0.rule.hasPrefix("audit.") } ?? []
         guard !audit.isEmpty else { return fresh }
-        return SecurityReport(date: fresh.date, findings: fresh.findings + audit, ignored: fresh.ignored, scanners: fresh.scanners,
-                              files: fresh.files, seconds: fresh.seconds)
+        return SecurityReport(date: fresh.date, findings: fresh.findings + audit, aside: fresh.aside, ignored: fresh.ignored, scanners: fresh.scanners,
+                              files: fresh.files, seconds: fresh.seconds, testPaths: fresh.testPaths)
     }
 
     /// A short text summary for the terminal.
-    public static func summary(_ report: SecurityReport, root: URL, limit: Int = 40) -> String {
+    /// `all` lists the findings in tests, docs and examples too, after the graded ones.
+    public static func summary(_ report: SecurityReport, root: URL, limit: Int = 40, all: Bool = false) -> String {
         var lines = ["Security: \(report.grade) (\(report.score)/100) · \(report.findings.count) finding\(report.findings.count == 1 ? "" : "s") in \(report.files) files · \(report.scanners.joined(separator: ", "))"]
         let counts = SecurityFinding.Severity.allCases.compactMap { severity -> String? in
             let count = report.count(severity)
@@ -109,6 +110,15 @@ public enum ProjectSecurity {
             lines.append("    Fix: \(finding.fix)")
         }
         if report.findings.count > limit { lines.append("\n… and \(report.findings.count - limit) more.") }
+        if all, !report.aside.isEmpty {
+            lines.append("\nIn tests, docs and examples (not graded):")
+            for finding in report.aside.prefix(limit) {
+                lines.append("[\(finding.severity.rawValue)] \(finding.title) — \(finding.location)")
+            }
+            if report.aside.count > limit { lines.append("… and \(report.aside.count - limit) more.") }
+        } else if !report.aside.isEmpty {
+            lines.append("\n\(report.aside.count) more in tests, docs and examples, not graded (dante scan --all lists them).")
+        }
         if !report.ignored.isEmpty { lines.append("\n\(report.ignored.count) ignored in \(SecurityIgnores.path).") }
         return lines.joined(separator: "\n")
     }

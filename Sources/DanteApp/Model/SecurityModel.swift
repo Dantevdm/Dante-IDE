@@ -103,8 +103,9 @@ final class SecurityModel {
             let split = ignores.apply(parsed.findings)
             // This agent's earlier audit is replaced; another agent's stays, so both can be compared.
             let kept = base.findings.filter { $0.rule != "audit.\(engine.title.lowercased())" }
-            let merged = SecurityReport(date: Date(), findings: kept + split.open, ignored: base.ignored + split.ignored,
-                                        scanners: Array(Set(base.scanners + ["\(engine.title) audit"])).sorted(), files: base.files, seconds: base.seconds)
+            let merged = SecurityReport(date: Date(), findings: kept + split.open, aside: base.aside.filter { $0.rule != "audit.\(engine.title.lowercased())" },
+                                        ignored: base.ignored + split.ignored, scanners: Array(Set(base.scanners + ["\(engine.title) audit"])).sorted(),
+                                        files: base.files, seconds: base.seconds, testPaths: ignores.tests)
             report = merged
             merged.save(for: root)
         } catch {
@@ -128,9 +129,11 @@ final class SecurityModel {
             return
         }
         guard var report else { return }
-        let moved = report.findings.filter { wholeRule ? $0.rule == finding.rule : $0.id == finding.id }
-        report = SecurityReport(date: report.date, findings: report.findings.filter { !moved.contains($0) }, ignored: report.ignored + moved,
-                                scanners: report.scanners, files: report.files, seconds: report.seconds)
+        let matches = { (other: SecurityFinding) in wholeRule ? other.rule == finding.rule : other.id == finding.id }
+        let moved = (report.findings + report.aside).filter(matches)
+        report = SecurityReport(date: report.date, findings: report.findings.filter { !matches($0) }, aside: report.aside.filter { !matches($0) },
+                                ignored: report.ignored + moved, scanners: report.scanners, files: report.files, seconds: report.seconds,
+                                testPaths: report.testPaths)
         self.report = report
         report.save(for: root)
     }
