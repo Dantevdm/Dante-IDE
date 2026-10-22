@@ -29,6 +29,8 @@ public struct DelegateServer: Sendable {
     public var fileRoot: URL?
     /// Hands: apps, folders, the keyboard and mouse (`DANTE_HANDS=1`).
     public var hands = false
+    /// The agents' own browser (`DANTE_BROWSER=1`).
+    public var browser: BrowserTools?
     /// Searches the project by meaning: the question and how many pieces, as text for the agent.
     public var searchCode: (@Sendable (_ question: String, _ limit: Int) async throws -> String)?
     /// Runs Dante's security scan of the project, saves it for the Security page and returns
@@ -65,6 +67,10 @@ public struct DelegateServer: Sendable {
         }
         server.offersLocal = environment[DelegateEnvironment.local] != "0"
         server.hands = environment[Hands.environment] == "1"
+        if environment[BrowserTools.environment] == "1" {
+            let rootURL = URL(filePath: root, directoryHint: .isDirectory)
+            server.browser = BrowserTools(hosts: BrowserHosts.load(projectRoot: rootURL), shots: AgentBrowser.shotsFolder(project: project))
+        }
         if let key = environment[CloudAgent.jev.environmentVariable], !key.isEmpty {
             let jev = Jev(key: key)
             server.decide = { state, questions in try await jev.decide(state: state, questions: questions) }
@@ -173,6 +179,7 @@ public struct DelegateServer: Sendable {
         if askCodex != nil { parts.append("Codex (OpenAI) reads the project itself, read-only, for a second opinion.") }
         if askClaude != nil { parts.append("Claude (Anthropic) reads the project itself, read-only, for a second opinion.") }
         if hands { parts.append(Self.handsInstructions) }
+        if browser != nil { parts.append(Self.browserInstructions) }
         return parts.joined(separator: " ")
     }
 
@@ -188,13 +195,14 @@ public struct DelegateServer: Sendable {
         if askCodex != nil { tools.append(Self.codexTool) }
         if askClaude != nil { tools.append(Self.claudeTool) }
         if hands { tools += Self.handsTools }
+        if browser != nil { tools += Self.browserTools }
         return tools.map(Self.askingWhy)
     }
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
         guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "open_file", "diagram_guide", "motion_frames"].contains(tool["name"]?.string ?? ""),
-              Hands.Tool(rawValue: tool["name"]?.string ?? "") == nil, var object = tool.object,
+              Hands.Tool(rawValue: tool["name"]?.string ?? "") == nil, BrowserTools.Tool(rawValue: tool["name"]?.string ?? "") == nil, var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
         schema["properties"] = .object(properties)
@@ -409,6 +417,10 @@ public struct DelegateServer: Sendable {
         if let tool = Hands.Tool(rawValue: name) {
             guard hands else { return Self.text("Hands are off in Dante's Settings.", isError: true) }
             return await callHands(tool, arguments: arguments)
+        }
+        if let tool = BrowserTools.Tool(rawValue: name) {
+            guard let browser else { return Self.text("The browser is off in Dante's Settings.", isError: true) }
+            return await browser.call(tool, arguments: arguments)
         }
         switch name {
         case "delegate":

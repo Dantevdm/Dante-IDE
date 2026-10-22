@@ -559,6 +559,8 @@ final class Session {
         if Preferences.shared.checksDependenciesOnline { environment[DelegateEnvironment.securityOnline] = "1" }
         // Hands only for a window's main conversation on this Mac; jobs are refused them anyway.
         if Preferences.shared.handsEnabled, claude.projectName == nil, claude.remote == nil { environment[Hands.environment] = "1" }
+        // Its own browser, for the main conversation and jobs alike; it only visits the app here.
+        if Preferences.shared.agentsBrowse, claude.remote == nil { environment[BrowserTools.environment] = "1" }
         // The server always carries the Security page's scan; with Codex in charge, also Claude
         // for second opinions.
         claude.delegateCommand = Self.danteCommand

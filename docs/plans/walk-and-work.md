@@ -74,6 +74,10 @@ A job waiting on a pipeline shouldn't keep a model polling. Dante watches CI run
 
 `Mobile/DanteCompanion.xcodeproj` (see Mobile/README.md) compiles `Sources/DanteCore` into the app, so the voice helpers moved there too (`PushToTalk`, `SpokenReply`, `SpokenStream`, `SpeechQueue`, `MarkdownText`; DanteKit re-exports DanteCore). The foreman is Dante, not a Claude session: `CompanionForeman` (DanteCore, tested) compares snapshots for what's worth saying (a reply finished, a step waits, a job is ready or stopped), words an approval as a question, answers "status" from the snapshot, and parses what you say into approve, decline, stop, status, say that again, switch project, start a job or a question for the lead. On the phone, `CompanionConnection` keeps the socket (challenge, back-off reconnects, resumed when the app comes forward), `VoiceLoop` listens on-device and speaks with the best installed voice, and walk mode keeps a silent audio session running so an AirPods stem press (the remote play/pause command) starts listening with the screen locked.
 
+### The Verifier (built)
+
+The browser lives in `dante mcp` itself (`AgentBrowser`: WebKit in a window nobody sees, private storage, the main run loop running while stdin is read on another thread), so every conversation and job has its own and nothing is installed. `browser_open`, `browser_read`, `browser_click`, `browser_type`, `browser_back`, `browser_resize` and `browser_screenshot` read pages as text with numbered controls, page errors and failed requests; `BrowserHosts` keeps the page on localhost, `.localhost`, `.test` and hosts under `browser: hosts:` in `.dante/project.yaml`. The built-in `verifier` job type uses them to check the running app and report findings with screenshots.
+
 ## Order
 
 1. Jobs on the Mac: several Claude sessions at once, each in a worktree, a jobs board in the Claude area, and one inbox for every job's questions and approvals. Useful at the desk on its own.
@@ -83,9 +87,9 @@ A job waiting on a pipeline shouldn't keep a model polling. Dante watches CI run
 5. iPhone: the voice loop with AirPods push-to-talk and the foreman.
 6. iPhone: Live Activity and actionable notifications.
 7. iPad: the desk layout.
-8. Verifier: a browser MCP server passed to the job's `claude`, so it drives its own browser instead of yours.
+8. Verifier: a browser MCP server passed to the job's `claude`, so it drives its own browser instead of yours. (Built: see below.)
 
 ## Open questions
 
 - How many jobs at once before the plan's five-hour window runs dry? Measure with real tasks.
-- What the Verifier is allowed to log in to.
+- What the Verifier is allowed to log in to. For now: only the app on this Mac and test hosts the project lists, with test accounts from the project's own seed or fixture files, in a browser that keeps nothing between runs.

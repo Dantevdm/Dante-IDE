@@ -173,6 +173,9 @@ private struct ClaudePreferencesPane: View {
                 Toggle("Automatically manage task effort and local routing", isOn: $preferences.automaticTaskRouting)
                     .help("Uses low reasoning for routine tasks and normal reasoning for harder work. Self-contained prose can run locally. Turn off to use your selected effort for every task.")
                     .onChange(of: preferences.automaticTaskRouting) { Sessions.all.forEach { $0.applyClaudePreferences() } }
+                Toggle("Give the agents a browser of their own to check the app", isOn: $preferences.agentsBrowse)
+                    .help("The agent in charge and every job get a private browser inside Dante for trying the app as a user would: it visits only the app on this Mac (localhost, *.localhost, *.test) and test hosts listed under browser: hosts: in .dante/project.yaml, keeps no cookies or sign-ins, and never uses your browser. Screenshots are kept for a week in Application Support.")
+                    .onChange(of: preferences.agentsBrowse) { Sessions.all.forEach { $0.applyClaudePreferences() } }
                 Toggle("Let the agent in charge delegate small jobs to local models", isOn: $preferences.delegatesToLocalModels)
                     .help("The agent in charge gets a delegate tool backed by Ollama on this Mac, for summaries, triage, drafts and commit messages. It checks what comes back.")
                     .onChange(of: preferences.delegatesToLocalModels) { Sessions.all.forEach { $0.applyClaudePreferences() } }

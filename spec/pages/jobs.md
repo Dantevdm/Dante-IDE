@@ -14,7 +14,7 @@ Jobs are agents working beside the main conversation, each in its own git worktr
 - New job: a brief, a type and a task to work on.
 - Waiting for you: jobs with an approval or question.
 - Running and finished jobs: their phase, changes (files, lines, commits) and outcome.
-- Job types: the built-in ones (builder, pipeline-watcher) and the project's own in .dante/jobs, with Watch CI for ci-failed types.
+- Job types: the built-in ones (builder, pipeline-watcher, verifier: tries the running app in its own browser, starting it if needed, at desktop and phone width, and reports findings as `- [blocker|issue|nit] page: what's wrong` with screenshots, without changing code) and the project's own in .dante/jobs, with Watch CI for ci-failed types.
 
 ## Actions
 - Start a job; open it in the panel; answer its approvals.

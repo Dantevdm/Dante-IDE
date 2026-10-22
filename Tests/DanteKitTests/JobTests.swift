@@ -351,7 +351,7 @@ import Testing
     @Test func projectFilesReplaceBuiltInOnes() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: "job-types-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        #expect(JobType.load(projectRoot: root).map(\.id) == ["builder", "pipeline-watcher"])
+        #expect(JobType.load(projectRoot: root).map(\.id) == ["builder", "pipeline-watcher", "verifier"])
         let file = try JobType.builder.copy(into: root)
         #expect(file.path.hasSuffix(".dante/jobs/builder.md"))
         try "---\nname: My builder\n---\nMine.".write(to: file, atomically: true, encoding: .utf8)
@@ -359,7 +359,7 @@ import Testing
         // Copying again leaves the project's changes alone.
         _ = try JobType.builder.copy(into: root)
         let types = JobType.load(projectRoot: root)
-        #expect(types.map(\.id) == ["builder", "reviewer", "pipeline-watcher"])
+        #expect(types.map(\.id) == ["builder", "reviewer", "pipeline-watcher", "verifier"])
         #expect(types[0].name == "My builder" && types[0].file != nil)
     }
 

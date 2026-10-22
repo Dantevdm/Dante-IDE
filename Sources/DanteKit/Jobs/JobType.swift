@@ -242,7 +242,28 @@ public struct JobType: Identifiable, Equatable, Sendable {
         """
     )
 
-    public static let builtIn: [JobType] = [builder, pipelineWatcher]
+    public static let verifier = JobType(
+        id: "verifier",
+        name: "Verifier",
+        summary: "Tries the running app in its own browser and reports what's broken, with screenshots",
+        awayMinutes: 30,
+        commands: ["curl", "lsof -i", "npm run", "pnpm run", "pnpm dev", "yarn dev", "yarn run", "bun run", "docker compose up", "docker compose ps"],
+        brief: """
+        Check the app as a user would, in your own browser (the browser_ tools), and report what's wrong. Don't change the code.
+
+        1. Find how the app runs (README, package.json scripts, docker-compose, CLAUDE.md) and its address. If nothing answers there, start it in the background with the project's own dev command, wait for the port, and stop it when you're done.
+        2. Open it and go through what this request names; with no particular flow, the main screens: the first page, navigation, lists, detail pages and the main form.
+        3. On each page look for page errors and failed requests (every read lists them), broken links, empty or stuck loading states, forms that accept bad input or lose what was typed, and text that doesn't make sense.
+        4. Check the main screens at phone width too (browser_resize to 390 wide).
+        5. Take a screenshot of each problem.
+        6. Sign in only with test accounts from the project's seed, fixture or example files. If a page needs anything else, say so and move on.
+
+        Finish with one line per finding, worst first, then a sentence on what you covered:
+        - [blocker|issue|nit] page or address: what's wrong, how to see it, and the screenshot's path
+        """
+    )
+
+    public static let builtIn: [JobType] = [builder, pipelineWatcher, verifier]
 }
 
 /// When Dante starts jobs by itself. Waiting is Dante's job, not the agent's: Dante watches

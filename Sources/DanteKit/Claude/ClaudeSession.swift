@@ -82,6 +82,7 @@ public struct ToolActivity: Equatable, Sendable {
         case "mcp__dante__look": return resolved ? "Looker read an image" : "Looker is reading an image"
         default:
             if let hands = Hands.Tool.of(mcpName: name) { return hands.describe(input, done: resolved) }
+            if let browser = BrowserTools.Tool.of(mcpName: name) { return browser.describe(input, done: resolved) }
             if let tool = Self.mcpTool(name) { return tool.action }
             return name
         }
@@ -112,7 +113,7 @@ public struct ToolActivity: Equatable, Sendable {
             return ClarifyingQuestion.parse(input).map { $0.header.isEmpty ? $0.question : $0.header }.joined(separator: ", ")
         }
         if name.hasPrefix("mcp__dante__") {
-            return input["title"]?.string ?? input["prompt"]?.string.map { String($0.prefix(60)) } ?? ""
+            return input["title"]?.string ?? input["prompt"]?.string.map { String($0.prefix(60)) } ?? input["url"]?.string ?? ""
         }
         if name == "Skill", let skill = input["skill"]?.string ?? input["command"]?.string { return skill }
         let detail = input["pattern"]?.string ?? input["url"]?.string ?? input["query"]?.string ?? input["description"]?.string ?? ""
@@ -1151,9 +1152,11 @@ public final class ClaudeSession {
                     } else if Hands.Tool.of(mcpName: request.toolName)?.controls == true {
                         // The keyboard, mouse and screen ask every time, at any approval level.
                         onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input)))
-                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames"].contains(request.toolName) {
-                        // Dante's own local-model tools: nothing leaves the Mac. Grok and Jev
-                        // send material away, so they follow the approval level.
+                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames"].contains(request.toolName)
+                                || BrowserTools.Tool.of(mcpName: request.toolName) != nil {
+                        // Dante's own local tools: nothing leaves the Mac (the browser only
+                        // visits the app here). Grok and Jev send material away, so they
+                        // follow the approval level.
                         approve(id)
                     } else if guarded == .approve {
                         approve(id)

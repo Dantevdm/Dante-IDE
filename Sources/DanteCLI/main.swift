@@ -31,12 +31,24 @@ func danteApp() -> URL? {
     return output.split(separator: "\n").first.map { URL(filePath: String($0)) }
 }
 
+/// Runs the main run loop for good. Main-actor work still runs: the main run loop drains the
+/// main queue.
+func runMainLoop() -> Never {
+    CFRunLoopRun()
+    exit(0)
+}
+
 // `dante mcp`: the MCP server Claude Code starts so it can delegate jobs to local models.
 if CommandLine.arguments.dropFirst().first == "mcp" {
     let project = ProcessInfo.processInfo.environment[DelegateEnvironment.project]
         ?? URL(filePath: FileManager.default.currentDirectoryPath).lastPathComponent
-    await DelegateServer.live(project: project).serve()
-    exit(0)
+    let server = DelegateServer.live(project: project)
+    // The agents' browser (WebKit) needs the main run loop, so stdin is read off the main thread.
+    Task.detached {
+        await server.serve()
+        exit(0)
+    }
+    runMainLoop()
 }
 
 // `dante scan [folder] [--json] [--online] [--all] [--fail-on high]`: the Security area's scan,
