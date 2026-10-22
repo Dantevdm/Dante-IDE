@@ -84,6 +84,40 @@ struct MapAccessTests {
         #expect(try Self.access(files, "DELETE /api/orders/{id}").level == .secured)
     }
 
+    @Test func controllerFolderKeepsProjectSecurity() throws {
+        // Configuration is a sibling of controllers; the build file is higher still.
+        let controllers = "\(Self.java)/controllers"
+        var files: [String: String] = [:]
+        for (path, text) in Self.spring {
+            let target = path.hasSuffix("Controller.java")
+                ? "\(controllers)/\((path as NSString).lastPathComponent)"
+                : path.replacingOccurrences(of: "/SecurityConfig.java", with: "/configuration/SecurityConfig.java")
+            files[target] = text
+        }
+        let paths = Array(files.keys).sorted()
+        let folder = SystemMap.Part(id: "controllers", name: "controllers", lane: .backend,
+                                    kind: .package, path: controllers)
+        func check(_ files: [String: String]) throws {
+            let whole = SystemMap.build(files: paths, read: { files[$0] })
+            let inside = try #require(SystemMap.inside(folder, files: paths, read: { files[$0] }))
+            let routes = inside.parts.filter { $0.lane == .api }.flatMap(\.items)
+            #expect(routes.count == 5)
+            for route in routes {
+                let original = try #require(whole.parts.flatMap(\.items).first { $0.text == route.text })
+                #expect(route.access == original.access)
+            }
+            let orders = try #require(routes.first { $0.text == "GET /api/orders" })
+            #expect(orders.access?.level == .secured)
+            let ping = try #require(routes.first { $0.text == "GET /ping" })
+            #expect(ping.access?.level == (files.keys.contains { $0.hasSuffix("SecurityConfig.java") } ? .open : .secured))
+            #expect(inside.parts.allSatisfy { $0.path?.contains("configuration") != true })
+        }
+        try check(files)
+        // A dependency alone still supplies Spring's default authentication policy.
+        files["\(Self.java)/configuration/SecurityConfig.java"] = nil
+        try check(files)
+    }
+
     @Test func middlewareAndDependencies() throws {
         let files = [
             "server/package.json": #"{"dependencies":{"express":"4"}}"#,

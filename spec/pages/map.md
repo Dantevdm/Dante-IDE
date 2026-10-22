@@ -53,6 +53,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Migrations apply in name order, so ALTERs and later CREATE INDEX statements change the table they name.
 - Suggestions are static: table sizes are unknown, so index advice is for when tables grow.
 - Tests and test folders aren't parts.
+- Opening a backend folder retains project-wide security rules, including configuration and build files outside that folder; route access stays the same as in the whole-system map.
 - A hash router's screens open at /#/path; a Vite base path is put in front.
 - Dynamic route segments end the path, since there's no id to fill in.
 

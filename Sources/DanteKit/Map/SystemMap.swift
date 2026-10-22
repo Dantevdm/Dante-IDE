@@ -171,7 +171,7 @@ public struct SystemMap: Equatable, Sendable {
         return !parts.dropLast().contains { skippedFolders.contains($0) || $0.hasPrefix(".") } && !isTest(path)
     }
 
-    public static func build(files: [String], read: (String) -> String?, compose: ComposeFile? = nil, modules: ArchitectureGraph? = nil, findsClients: Bool = true) -> SystemMap {
+    public static func build(files: [String], read: (String) -> String?, compose: ComposeFile? = nil, modules: ArchitectureGraph? = nil, findsClients: Bool = true, accessRules projectAccessRules: AccessRules? = nil) -> SystemMap {
         let code = files.filter(isCode)
         var parts: [Part] = []
         var links: [String: Link] = [:]
@@ -256,7 +256,7 @@ public struct SystemMap: Equatable, Sendable {
         // API routes, grouped by their first meaningful path segment.
         var webhookFiles: [(group: String, file: String)] = []
         var groups: [String: (items: [Item], owners: [String: Int])] = [:]
-        var accessRules: AccessRules?
+        var accessRules: AccessRules? = projectAccessRules
         for file in backendFiles {
             let found = isJVM(file) ? annotatedRoutes(in: text(file)) : routes(in: text(file))
             guard !found.isEmpty else { continue }

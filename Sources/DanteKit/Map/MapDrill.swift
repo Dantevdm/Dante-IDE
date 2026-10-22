@@ -269,7 +269,9 @@ extension SystemMap {
         guard let graph = ArchitectureGraph.inner(files: files, root: root, read: read) else { return nil }
         // Its own files, plus SQL anywhere (schemas often live in a folder of their own).
         let subset = files.filter { $0.hasPrefix(prefix) || ($0 as NSString).pathExtension.lowercased() == "sql" }
-        var map = build(files: subset, read: read, modules: graph, findsClients: false)
+        // Narrow the picture, but keep security configuration outside the opened folder.
+        let accessRules = AccessRules.load(files: files, read: read)
+        var map = build(files: subset, read: read, modules: graph, findsClients: false, accessRules: accessRules)
         map.laneTitles[.backend] = "Inside \(part.name)"
         if let base = graph.base { map.entries = Set(map.parts.filter { $0.lane == .backend && ($0.path == base || $0.path == nil) }.map(\.id)) }
         // Only what these pieces touch: the whole schema beside a folder of controllers is noise.
