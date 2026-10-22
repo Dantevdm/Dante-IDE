@@ -546,7 +546,7 @@ struct AwayMenu: View {
     }
 
     var body: some View {
-        Menu(job.isAway ? (job.outOfTime() ? "Away time’s up: give it more" : "Away for longer") : "Go ahead without asking") {
+        Menu(job.isAway ? (job.outOfTime() ? "\(job.awayEnded()?.sentence ?? "Away time’s up"): give it more" : "Away for longer") : "Go ahead without asking") {
             ForEach(Self.choices, id: \.self) { minutes in
                 Button("For \(Self.label(minutes))") { session.jobs.setAway(job.id, minutes: minutes) }
             }
@@ -566,8 +566,11 @@ struct AwayChip: View {
     var body: some View {
         if let until = job.awayUntil, let minutes = job.awayMinutes {
             let left = max(0, until.timeIntervalSince(now))
-            let fraction = left / Double(minutes * 60)
-            let color = left > 0 ? theme.accent.color : theme.amber.color
+            let ended = job.awayEnded(at: now)
+            // The ring empties with whichever of time, steps or tokens is going fastest.
+            let fraction = ended != nil ? 0 : min(left / Double(minutes * 60), Self.share(job.awayStepsUsed, of: job.awaySteps), Self.share(job.awayTokensUsed, of: job.awayTokens))
+            let stepsLeft = job.awaySteps.map { max(0, $0 - (job.awayStepsUsed ?? 0)) }
+            let color = ended == nil ? theme.accent.color : theme.amber.color
             HStack(spacing: 5) {
                 ZStack {
                     Circle().stroke(color.opacity(0.2), lineWidth: 2)
@@ -577,7 +580,7 @@ struct AwayChip: View {
                         .animation(.smooth(duration: 0.8), value: fraction)
                 }
                 .frame(width: 11, height: 11)
-                Text(left > 0 ? "Away · \(Self.remaining(left))" : "Away time’s up")
+                Text(ended.map(\.sentence) ?? "Away · \(Self.remaining(left))\(stepsLeft.map { " · \($0) steps" } ?? "")")
                     .font(.dante(size: 11, weight: .medium))
                     .monospacedDigit()
                     .contentTransition(.numericText(countsDown: true))
@@ -586,10 +589,16 @@ struct AwayChip: View {
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background(Capsule().fill(color.opacity(0.1)))
             .fixedSize()
-            .help(left > 0 ? "Going ahead without asking until \(until.formatted(date: .omitted, time: .shortened)), within this project’s rules"
-                           : "Each step now waits for you. Give it more time from the job’s menu.")
+            .help(ended == nil ? "Going ahead without asking until \(until.formatted(date: .omitted, time: .shortened))\(job.awaySteps.map { ", for up to \($0) steps" } ?? "")\(job.awayTokens.map { " and \(ClaudeUsage.short($0)) output tokens (a quarter of your busiest five-hour window)" } ?? ""), within this project’s rules. \(job.awayStepsUsed ?? 0) steps so far."
+                           : "Each step now waits for you. Give it more from the job’s Away menu.")
             .transition(.scale(scale: 0.7).combined(with: .opacity))
         }
+    }
+
+    /// What's left of a budget, 0 to 1; 1 without one.
+    static func share(_ used: Int?, of budget: Int?) -> Double {
+        guard let budget, budget > 0 else { return 1 }
+        return max(0, 1 - Double(used ?? 0) / Double(budget))
     }
 
     static func remaining(_ seconds: TimeInterval) -> String {

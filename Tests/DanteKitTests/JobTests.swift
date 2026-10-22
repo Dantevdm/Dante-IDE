@@ -252,6 +252,52 @@ import Testing
         #expect(!asking.isAway && asking.awaySince == nil && !asking.outOfTime(at: start.addingTimeInterval(99_999)))
         #expect(JobGuard.verdict(for: asking, toolName: "Edit", input: edit, hasNote: false) == nil)
     }
+
+    @Test func stepsAndTokensEndAwayModeToo() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        var away = JobRecord(title: "Fix", brief: "", branch: "dante/fix", worktree: "/home/me/wt/fix", base: "abc", baseBranch: "main", engine: .claude)
+        away.setAway(60, steps: 2, tokens: 1000, now: start)
+        let soon = start.addingTimeInterval(60)
+        #expect(away.awayEnded(at: soon) == nil)
+        away.countAwayStep()
+        away.countAwayTokens(400)
+        #expect(away.awayEnded(at: soon) == nil)
+        away.countAwayStep()
+        #expect(away.awayEnded(at: soon) == .steps && away.outOfTime(at: soon))
+        #expect(JobGuard.verdict(for: away, toolName: "Edit", input: ["file_path": "app.py"], hasNote: false, now: soon) == .ask)
+        // Going away again starts the counts afresh.
+        away.setAway(60, steps: 10, tokens: 500, now: soon)
+        #expect(away.awayStepsUsed == 0 && away.awayEnded(at: soon) == nil)
+        away.countAwayTokens(600)
+        #expect(away.awayEnded(at: soon) == .tokens)
+        // Asking again clears the budgets; counting does nothing while asking.
+        away.setAway(nil)
+        away.countAwayStep()
+        #expect(away.awaySteps == nil && away.awayStepsUsed == nil && away.awayEnded() == nil)
+    }
+
+    @Test func oldRecordsWithoutBudgetsStillRead() throws {
+        let json = #"{"id":"a1","title":"Fix","brief":"","branch":"dante/fix","worktree":"/w","base":"abc","engine":"claude","created":0,"outcome":"open","awayMinutes":30,"awaySince":0}"#
+        let job = try JSONDecoder().decode(JobRecord.self, from: Data(json.utf8))
+        #expect(job.isAway && job.awaySteps == nil && job.awayEnded(at: Date(timeIntervalSinceReferenceDate: 60)) == nil)
+    }
+
+    @Test func aFailedCommandIsToldApartFromARefusedOne() {
+        var failed = ToolActivity(id: "1", name: "Bash", input: ["command": "npm test"], status: .failed("Exit code 1\nFAIL src/cart.test.ts\n  expected 3"))
+        failed.ruleNote = nil
+        var refused = ToolActivity(id: "2", name: "Bash", input: ["command": "git push"], status: .declined)
+        refused.blockedByRule = true
+        refused.ruleNote = "Jobs don’t push."
+        let declinedByPerson = ToolActivity(id: "3", name: "Bash", input: ["command": "rm -rf build"], status: .declined)
+        let done = ToolActivity(id: "4", name: "Edit", input: ["file_path": "a.ts"], status: .done)
+        let waiting = ToolActivity(id: "5", name: "WebFetch", input: [:], status: .awaitingApproval(requestID: "r"))
+        let report = JobStepReport([failed, refused, declinedByPerson, done, waiting].map { TranscriptItem(id: $0.id, content: .tool($0)) })
+        #expect(report.done == 1 && report.waiting == 1)
+        #expect(report.failed.map(\.what) == ["npm test"] && report.failed[0].why == "FAIL src/cart.test.ts")
+        #expect(report.refused.map(\.what) == ["git push"] && report.refused[0].why == "Jobs don’t push.")
+        #expect(report.summary == "1 step done · 1 failed · 1 refused · 1 waiting for you")
+        #expect(JobGuard.toAgent("Jobs don’t push.").contains("not an error in the command"))
+    }
 }
 
 @Suite struct JobTypeTests {

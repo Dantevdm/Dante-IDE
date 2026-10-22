@@ -177,7 +177,7 @@ final class JobsModel {
         defer { starting = nil }
         do {
             var job = try await JobWorktree.create(title: title, brief: brief, engine: engine, repo: root)
-            job.setAway(awayMinutes)
+            job.setAway(awayMinutes, steps: awayMinutes.map(Self.steps(for:)), tokens: awayTokenBudget?())
             if awayMinutes != nil { watchTime() }
             job.kind = type?.id
             job.trigger = trigger
@@ -233,7 +233,7 @@ final class JobsModel {
     /// Lets the job go ahead on its own for `minutes` from now, or (nil) back to asking.
     func setAway(_ id: String, minutes: Int?) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
-        records[index].setAway(minutes)
+        records[index].setAway(minutes, steps: minutes.map(Self.steps(for:)), tokens: minutes == nil ? nil : awayTokenBudget?())
         reportedTimeUp.remove(id)
         save()
         if minutes != nil { watchTime() }
@@ -269,6 +269,31 @@ final class JobsModel {
     }
 
     /// Claude's latest words in the job, for the board.
+    /// Away mode's step budget for a time: enough for real work, not for a loop to spin.
+    static func steps(for minutes: Int) -> Int { max(20, minutes * JobRecord.stepsPerMinute) }
+
+    /// The output tokens an away job may use: set by the window from the busiest five-hour
+    /// window it has seen (a quarter of it); nil when that isn't known yet.
+    @ObservationIgnored var awayTokenBudget: (() -> Int?)?
+
+    /// A step that went ahead without asking.
+    func countAwayStep(_ id: String) {
+        guard let index = records.firstIndex(where: { $0.id == id }), records[index].isAway else { return }
+        records[index].countAwayStep()
+        save()
+    }
+
+    func countAwayTokens(_ id: String, _ tokens: Int) {
+        guard let index = records.firstIndex(where: { $0.id == id }), records[index].isAway else { return }
+        records[index].countAwayTokens(tokens)
+        save()
+    }
+
+    /// What the job's steps came to: done, failed, refused, waiting.
+    func steps(of id: String) -> JobStepReport? {
+        sessions[id].map { JobStepReport($0.items) }
+    }
+
     func lastReply(of id: String) -> String? {
         guard let claude = sessions[id] else { return nil }
         for item in claude.items.reversed() {

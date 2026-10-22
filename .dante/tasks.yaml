@@ -528,7 +528,8 @@ tasks:
 - id: DI-127
   title: "Away budgets for jobs, and telling a failing command apart from a refused one while away"
   phase: build
-  state: ready
+  state: review
+  notes: "JobRecord.awaySteps/awayTokens with counts (JobGuard approvals and ClaudeSession.onTurnFinished), awayEnded says which ran out; JobStepReport on the card; JobGuard.toAgent tells the agent a refusal isn't an error. Tested in DanteKit; the card wasn't seen with a live job."
 - id: DI-128
   title: "Security: findings in tests, docs and examples are set aside, never graded, by each language's own test conventions"
   phase: build

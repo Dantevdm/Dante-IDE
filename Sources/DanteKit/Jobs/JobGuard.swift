@@ -40,6 +40,12 @@ public enum JobGuard {
         return away && !ApprovalPolicy.questionTools.contains(toolName) ? .ask : nil
     }
 
+    /// What the agent is told when a step is refused, so it doesn't read it as the command
+    /// failing and try another way round.
+    public static func toAgent(_ reason: String) -> String {
+        "Dante refused this before it ran: it's a rule for jobs, not an error in the command, so don't retry it or find another way to do it. \(reason) Carry on without it, and say at the end what's left for the person."
+    }
+
     /// Why a command is off limits for a job, if it is.
     public static func forbidden(_ command: String) -> String? {
         let plain = withPlainMessages(command)

@@ -8,7 +8,7 @@ phrases: [jobs, job, background jobs, worktrees, board]
 Jobs are agents working beside the main conversation, each in its own git worktree, with their changes to merge or discard, and job types that start on their own when CI fails.
 
 ## Highlights
-- Away mode lets a job carry on without asking for routine steps for a set time.
+- Away mode lets a job carry on without asking for routine steps, within a budget: a time, a number of steps and a share of the plan.
 
 ## Shows
 - New job: a brief, a type and a task to work on.
@@ -19,7 +19,8 @@ Jobs are agents working beside the main conversation, each in its own git worktr
 ## Actions
 - Start a job; open it in the panel; answer its approvals.
 - Merge (commits what's left and merges the branch into the main checkout) or discard (removes the worktree and branch); both are confirmed.
-- Away mode: let a job carry on for a set number of minutes without asking for edits, builds, tests and local git steps.
+- Away mode: let a job carry on for a set number of minutes without asking for edits, builds, tests and local git steps. Its budget is three limits, whichever runs out first: the time; steps (four a minute, at least 20: each step that goes ahead without asking counts); and output tokens, a quarter of the busiest five-hour window Dante has seen (none until it has seen one). The away chip's ring empties with whichever is going fastest and says the steps left; when one runs out the chip says which ("Away time’s up", "Away steps used up", "Away share of the plan used up"), every step waits, and a notification says so. Going away again starts the counts afresh.
+- The card's step line: "N steps done · N failed · N refused · N waiting for you". Opened, failed steps (a red mark: the command ran and its own error is shown, its first meaningful line) are listed apart from refused ones (an amber hand: Dante's rule for jobs stopped it before it ran, with the rule). An agent whose step is refused is told it's a rule, not an error, so it carries on without it rather than retrying another way, and says at the end what's left for you.
 - Make a new job type, or copy a built-in one to edit.
 - Watch CI: start a job for each new CI failure.
 

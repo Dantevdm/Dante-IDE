@@ -351,7 +351,11 @@ final class Session {
             return self.makeJobClaude(for: job, in: workspace)
         }
         jobs.onAwayTimeUp = { [weak self] job in
-            self?.notifyClaude(.needsApproval("Its away time is up; from here on each step waits for you."), job: job.title)
+            let ended = job.awayEnded()?.sentence ?? "Away time’s up"
+            self?.notifyClaude(.needsApproval("\(ended); from here on each step waits for you."), job: job.title)
+        }
+        jobs.awayTokenBudget = { [weak self] in
+            (self?.claudeUsage?.busiestWindow?.output).flatMap { $0 > 0 ? $0 / 4 : nil }
         }
         jobs.currentBranch = { [weak self] in self?.branch }
         jobs.onTriggered = { [weak self] job in
@@ -510,8 +514,12 @@ final class Session {
         // Every job stays on its branch; away mode and its time decide the rest.
         claude.guardCall = { [weak self] tool, input, flagged in
             guard let record = self?.jobs.record(job.id) else { return nil }
-            return JobGuard.verdict(for: record, toolName: tool, input: input, hasNote: flagged)
+            let verdict = JobGuard.verdict(for: record, toolName: tool, input: input, hasNote: flagged)
+            // Away mode's step budget counts what went ahead without asking.
+            if verdict == .approve, record.isAway { self?.jobs.countAwayStep(job.id) }
+            return verdict
         }
+        claude.onTurnFinished = { [weak self] tokens in self?.jobs.countAwayTokens(job.id, tokens) }
         // A job making a motion piece looks at its own frames too.
         claude.onDanteTool = { [weak self] name, input, finished in
             if name == "open_file", !finished { self?.openAgentFile(input, root: job.worktreeURL); return }

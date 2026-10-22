@@ -165,6 +165,8 @@ public final class ClaudeSession {
 
     /// Called after Claude changes a file, so open editors can reload it.
     public var onFileChanged: (URL) -> Void = { _ in }
+    /// A turn ended, with the output tokens it used (for away budgets).
+    public var onTurnFinished: (_ outputTokens: Int) -> Void = { _ in }
     /// Something the person should look at: a finished turn, or a change or question waiting.
     public var onAttention: (Attention) -> Void = { _ in }
     /// One of Dante's own MCP tools started or finished (`security_report`, without the
@@ -1138,7 +1140,7 @@ public final class ClaudeSession {
                     let hasNote = activity(id)?.ruleNote != nil || activity(id)?.securityBlocks == true
                     let guarded = guardCall?(request.toolName, request.input, hasNote)
                     if case .refuse(let message)? = guarded {
-                        decline(id, message: message)
+                        decline(id, message: JobGuard.toAgent(message))
                         updateTool(id) {
                             $0.ruleNote = message
                             $0.blockedByRule = true
@@ -1202,6 +1204,7 @@ public final class ClaudeSession {
                                     seconds: Double(result.durationMS ?? 0) / 1000, outcome: result.isError ? .failed : .done,
                                     requestedBy: "you", title: turnUsage.title,
                                     gist: AgentJob.gist(of: result.isError ? result.text : lastReply), files: turnFiles))
+            onTurnFinished(turnUsage.output.values.reduce(0, +))
             turnUsage = (0, [:], "")
             if result.isError, Vitality.isLimitMessage(result.text) {
                 limitReachedAt = Date()
@@ -1302,7 +1305,7 @@ public final class ClaudeSession {
     }
 
     /// "Edit Mailer.swift", "Run go test ./...", "Answer a question".
-    static func attentionLabel(_ toolName: String, input: JSONValue) -> String {
+    nonisolated static func attentionLabel(_ toolName: String, input: JSONValue) -> String {
         if toolName == "AskUserQuestion" { return "Claude has a question" }
         if toolName == "ExitPlanMode" { return "Claude's plan is ready" }
         if let path = input["file_path"]?.string ?? input["notebook_path"]?.string {

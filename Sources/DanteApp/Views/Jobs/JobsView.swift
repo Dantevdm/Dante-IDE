@@ -192,6 +192,9 @@ private struct JobCard: View {
                 }
             }
             .animation(.snappy(duration: 0.3), value: jobs.activity(of: job.id))
+            if let report = jobs.steps(of: job.id), !report.isEmpty {
+                StepReportView(report: report)
+            }
             ChangeBar(changes: changes)
             HStack(spacing: 8) {
                 Button("Open") { session.showJob(job.id) }
@@ -233,6 +236,46 @@ private struct JobCard: View {
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { session.showJob(job.id) }
         .jobConfirmations(session: session, job: job, merge: $confirmsMerge, discard: $confirmsDiscard)
+    }
+}
+
+/// What the job's steps came to, failures (the command's own error) kept apart from refusals
+/// (a rule for jobs, before it ran).
+private struct StepReportView: View {
+    @Environment(\.theme) private var theme
+    let report: JobStepReport
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Button { withAnimation(.snappy) { open.toggle() } } label: {
+                HStack(spacing: 5) {
+                    if !report.failed.isEmpty || !report.refused.isEmpty {
+                        Image(systemName: open ? "chevron.down" : "chevron.right").font(.dante(size: 8.5, weight: .bold))
+                    }
+                    Text(report.summary)
+                }
+                .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(report.failed.isEmpty && report.refused.isEmpty)
+            if open {
+                ForEach(report.failed) { step in row(step, symbol: "xmark.octagon", color: theme.red.color, kind: "Failed") }
+                ForEach(report.refused) { step in row(step, symbol: "hand.raised", color: theme.amber.color, kind: "Refused") }
+            }
+        }
+    }
+
+    private func row(_ step: JobStepReport.Step, symbol: String, color: Color, kind: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: symbol).font(.dante(size: 10)).foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(step.what).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color).lineLimit(1).truncationMode(.middle)
+                Text(step.why).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(2)
+            }
+        }
+        .help(kind == "Failed" ? "It ran and failed: the error is the command's own." : "Dante refused it before it ran: a rule for jobs, not an error.")
     }
 }
 

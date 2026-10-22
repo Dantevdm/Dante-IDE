@@ -34,6 +34,12 @@ public struct JobRecord: Codable, Identifiable, Equatable, Sendable {
     /// as the window's approval level says.
     public var awayMinutes: Int?
     public var awaySince: Date?
+    /// Away mode's other limits: how many steps may go ahead without asking, and how many
+    /// output tokens its turns may use (a share of the plan's five-hour window). nil: no limit.
+    public var awaySteps: Int?
+    public var awayStepsUsed: Int?
+    public var awayTokens: Int?
+    public var awayTokensUsed: Int?
     /// The job type's id (`JobType`), when it was started as one.
     public var kind: String?
     /// What started it by itself, such as a failed CI run (`JobTrigger.ci`).
@@ -70,15 +76,54 @@ public struct JobRecord: Codable, Identifiable, Equatable, Sendable {
         return awaySince.addingTimeInterval(TimeInterval(awayMinutes * 60))
     }
 
-    /// Away time is up: from here on every step waits for the person.
-    public func outOfTime(at now: Date = Date()) -> Bool {
-        awayUntil.map { now >= $0 } ?? false
+    /// What ended away mode, if something has: its time, its steps or its tokens.
+    public enum AwayEnd: String, Equatable, Sendable {
+        case time, steps, tokens
+
+        public var sentence: String {
+            switch self {
+            case .time: "Away time’s up"
+            case .steps: "Away steps used up"
+            case .tokens: "Away share of the plan used up"
+            }
+        }
     }
 
-    /// Goes away for `minutes` from now; nil comes back to asking.
-    public mutating func setAway(_ minutes: Int?, now: Date = Date()) {
+    public func awayEnded(at now: Date = Date()) -> AwayEnd? {
+        guard isAway else { return nil }
+        if let until = awayUntil, now >= until { return .time }
+        if let steps = awaySteps, (awayStepsUsed ?? 0) >= steps { return .steps }
+        if let tokens = awayTokens, (awayTokensUsed ?? 0) >= tokens { return .tokens }
+        return nil
+    }
+
+    /// Away mode has run out (time, steps or tokens): from here on every step waits for the person.
+    public func outOfTime(at now: Date = Date()) -> Bool {
+        awayEnded(at: now) != nil
+    }
+
+    /// Goes away for `minutes` from now, with at most `steps` steps going ahead and `tokens`
+    /// output tokens; nil comes back to asking. The counts start again each time.
+    public mutating func setAway(_ minutes: Int?, steps: Int? = nil, tokens: Int? = nil, now: Date = Date()) {
         awayMinutes = minutes
         awaySince = minutes == nil ? nil : now
+        awaySteps = minutes == nil ? nil : steps
+        awayTokens = minutes == nil ? nil : tokens
+        awayStepsUsed = minutes == nil ? nil : 0
+        awayTokensUsed = minutes == nil ? nil : 0
+    }
+
+    /// Steps per minute away by default: enough for real work, not for a loop to spin all hour.
+    public static let stepsPerMinute = 4
+
+    public mutating func countAwayStep() {
+        guard isAway else { return }
+        awayStepsUsed = (awayStepsUsed ?? 0) + 1
+    }
+
+    public mutating func countAwayTokens(_ tokens: Int) {
+        guard isAway, tokens > 0 else { return }
+        awayTokensUsed = (awayTokensUsed ?? 0) + tokens
     }
 
     public static func newID() -> String {
@@ -409,4 +454,54 @@ public enum JobWorktree {
 
 private extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
+}
+
+/// What a job's steps came to, for its card: how many went ahead, which commands ran and
+/// failed (the command's own error) apart from which Dante refused before they ran (a rule),
+/// and how many wait for the person.
+public struct JobStepReport: Equatable, Sendable {
+    public struct Step: Equatable, Sendable, Identifiable {
+        public var id: String
+        public var what: String
+        public var why: String
+    }
+
+    public var done = 0
+    public var failed: [Step] = []
+    public var refused: [Step] = []
+    public var waiting = 0
+
+    public init(_ items: [TranscriptItem]) {
+        for item in items {
+            guard case .tool(let tool) = item.content else { continue }
+            let what = tool.name == "Bash" ? (tool.input["command"]?.string ?? "a command") : ClaudeSession.attentionLabel(tool.name, input: tool.input)
+            switch tool.status {
+            case .done: done += 1
+            case .failed(let message):
+                failed.append(Step(id: tool.id, what: what, why: Self.firstLine(message)))
+            case .declined where tool.blockedByRule:
+                refused.append(Step(id: tool.id, what: what, why: tool.ruleNote ?? "A rule for jobs."))
+            case .awaitingApproval: waiting += 1
+            default: break
+            }
+        }
+    }
+
+    public var isEmpty: Bool { done == 0 && failed.isEmpty && refused.isEmpty && waiting == 0 }
+
+    /// "14 steps done · 2 failed · 1 refused · 1 waiting for you"
+    public var summary: String {
+        var parts = ["\(done) step\(done == 1 ? "" : "s") done"]
+        if !failed.isEmpty { parts.append("\(failed.count) failed") }
+        if !refused.isEmpty { parts.append("\(refused.count) refused") }
+        if waiting > 0 { parts.append("\(waiting) waiting for you") }
+        return parts.joined(separator: " · ")
+    }
+
+    static func firstLine(_ text: String) -> String {
+        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        // An exit code line says less than the error before it.
+        let line = lines.first { !$0.lowercased().hasPrefix("exit code") } ?? lines.first ?? ""
+        return String(line.prefix(160))
+    }
 }
