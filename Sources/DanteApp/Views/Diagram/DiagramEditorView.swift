@@ -19,6 +19,7 @@ struct DiagramEditorView: View {
     @State private var viewport: CGSize = .zero
     @State private var fitted = false
     @State private var showsLibrary = false
+    @State private var describing: Session.DiagramDrawing?
     @AppStorage("diagramInspector") private var showsInspector = true
 
     init(session: Session, workspace: Workspace, path: String) {
@@ -36,7 +37,7 @@ struct DiagramEditorView: View {
                 EmptyState(symbol: "exclamationmark.triangle", title: "This diagram can’t be read", message: error) {
                     Button("Open in Code") { session.open(file: document.url) }.buttonStyle(DanteButtonStyle())
                     Button {
-                        session.askClaude("Fix \(path) so it's a valid Dante diagram. The error: \(error)\n\n\(DiagramGuide.format)")
+                        session.askClaude("Fix \(path) so it's a valid Dante diagram. The error: \(error)", instructions: DiagramGuide.format)
                     } label: { ClaudeLabel("Ask \(session.agentName) to fix it") }
                     .buttonStyle(DanteButtonStyle(primary: true))
                 }
@@ -119,7 +120,9 @@ struct DiagramEditorView: View {
             .fixedSize()
             .help("Save it as PNG, PDF, SVG or Mermaid, in the theme you're using")
             Menu {
-                Button("Draw a future version of this…") { ask(.future) }
+                Button(document.diagram.isEmpty ? "Draw from a description…" : "Describe a change…") { describing = document.diagram.isEmpty ? .draw : .change }
+                Button("Draw a future version of this…") { describing = .future }
+                Divider()
                 Button("Review it against the code") { ask(.review) }
                 Button("Tidy the layout") { ask(.tidy) }
                 Button("Explain it in a paragraph") { ask(.explain) }
@@ -129,6 +132,23 @@ struct DiagramEditorView: View {
             .menuStyle(.button)
             .fixedSize()
             .help("The agent edits the diagram's file; you see each change here and can undo it")
+            .popover(item: $describing, arrowEdge: .bottom) { drawing in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(drawing == .future ? "A future version" : drawing == .change ? "Change it" : "Draw it")
+                        .font(.dante(size: 14, weight: .semibold)).foregroundStyle(theme.text.color)
+                    DiagramDescriptionField(
+                        placeholder: drawing == .future ? "What changes? e.g. move the catalogue to its own ALB, add a Redis cache (planned)…"
+                            : drawing == .change ? "What to change, in your words…" : "What should it show, in your words…",
+                        button: drawing == .future ? "Draw the future version" : "Draw it") { words in
+                        describing = nil
+                        document.save()
+                        session.drawDiagram(path, description: words, as: drawing)
+                    }
+                }
+                .padding(16)
+                .frame(width: 400)
+                .background(theme.panel.color)
+            }
             IconButton(symbol: "sidebar.right", label: showsInspector ? "Hide the inspector" : "Show the inspector") {
                 withAnimation(.snappy(duration: 0.2)) { showsInspector.toggle() }
             }
@@ -172,20 +192,23 @@ struct DiagramEditorView: View {
                 .font(.dante(size: 28))
                 .foregroundStyle(theme.accent.color)
             Text("An empty canvas").font(.dante(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
-            Text("Add cards and groups from the bar on the left or double-click to add a card. Or start from what the code says: open the Map and use Copy and edit.")
+            Text("Describe what to draw and \(session.agentName) draws it here. Or add cards from the bar on the left, or copy the Map (Copy and edit).")
                 .font(.dante(size: 12.5))
                 .foregroundStyle(theme.text2.color)
                 .multilineTextAlignment(.center)
-                .frame(width: 340)
-            HStack(spacing: 8) {
-                Button("Open the Map") { session.area = .map }.buttonStyle(DanteButtonStyle())
-                Button { ask(.draft) } label: { ClaudeLabel("Ask \(session.agentName) to draw it") }
-                    .buttonStyle(DanteButtonStyle(primary: true))
+            DiagramDescriptionField(placeholder: "What should it show? e.g. users sign in through Cognito, one shared ALB routes to the four ECS apps, each with its own database…",
+                                    button: "Draw it") { words in
+                document.save()
+                session.drawDiagram(path, description: words, as: .draw)
             }
+            LinkButton("Open the Map") { session.area = .map }
         }
+        .frame(maxWidth: 400)
         .padding(24)
         .background(theme.card.color, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(theme.line.color))
+        .padding(.leading, DiagramCanvas.paletteRoom)
+        .padding(.trailing, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -269,23 +292,19 @@ struct DiagramEditorView: View {
         }
     }
 
-    private enum Request { case future, review, tidy, explain, draft }
+    private enum Request { case review, tidy, explain }
 
     private func ask(_ request: Request) {
         document.save()
         let file = path
         let guide = "\n\n" + DiagramGuide.format
         switch request {
-        case .future:
-            session.askClaude("I want a picture of a future version of the architecture in \(file). Ask me what should change if I haven't said, then save the new picture as a copy beside it (keep the original), in the same style, and open it with open_file. Keep the positions of what doesn't change." + guide)
         case .review:
-            session.askClaude("Compare the diagram in \(file) with the code and infrastructure in this repo. Tell me what it gets wrong, leaves out or shows that isn't there. Don't change the file yet." + guide)
+            session.askClaude("Review \(file) against the code", instructions: "Compare the diagram in \(file) with the code and infrastructure in this repo. Tell me what it gets wrong, leaves out or shows that isn't there. Don't change the file yet." + guide)
         case .tidy:
-            session.askClaude("Tidy the layout of the diagram in \(file): line up rows and columns, even out the gaps, keep cards inside their groups and links short, without changing what's in it. Edit the file in place." + guide)
+            session.askClaude("Tidy the layout of \(file)", instructions: "Tidy the layout of the diagram in \(file): line up rows and columns, even out the gaps, keep cards inside their groups and links short, without changing what's in it. Edit the file in place." + guide)
         case .explain:
             session.askClaude("Explain the diagram in \(file) in a paragraph I could say while presenting it: what's there, how a request travels through it and what's new or planned (dashed).")
-        case .draft:
-            session.askClaude("Draw the diagram in \(file) (\(document.diagram.title)). Ask me what it should show if it isn't clear from the title, use what you can find in this repo, write the file and open it with open_file." + guide)
         }
     }
 }

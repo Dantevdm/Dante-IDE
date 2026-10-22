@@ -2,12 +2,16 @@ import DanteKit
 import SwiftUI
 
 extension Session {
-    /// Saves a new diagram into docs/diagrams/ and opens it in Docs.
-    func createDiagram(_ diagram: Diagram) {
+    /// Saves a new diagram into docs/diagrams/ and opens it in Docs; with a description, the
+    /// agent then draws it (or changes what it started from) to match.
+    func createDiagram(_ diagram: Diagram, describing description: String = "") {
         guard let workspace else { return }
         do {
             let path = try DiagramDocument.create(diagram, in: workspace)
             showDoc(path)
+            if !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                drawDiagram(path, description: description, as: diagram.isEmpty ? .draw : .change)
+            }
         } catch {
             errorMessage = "Couldn’t create the diagram: \(error.localizedDescription)"
         }
@@ -15,19 +19,78 @@ extension Session {
 
     /// A new diagram from the Map's last build for this window, or read from the project's files
     /// when the Map hasn't been opened yet.
-    func createDiagram(from start: NewDiagramSheet.Start, title: String) {
+    func createDiagram(from start: NewDiagramSheet.Start, title: String, describing description: String = "") {
         let cached: Diagram? = switch start {
         case .blank: Diagram(title: title)
         case .system: mapCache?.system.flatMap { $0.isUseful ? Diagram.system($0, title: title) : nil }
         case .infra: mapCache?.infra.flatMap { $0.isEmpty ? nil : Diagram.infrastructure($0, title: title) }
         }
-        if let cached { return createDiagram(cached) }
+        if let cached { return createDiagram(cached, describing: description) }
         guard let root = workspace?.url else { return }
         let system = start == .system
         Task {
             let found = await Task.detached { Diagram.fromProject(root, system: system, title: title) }.value
-            if let found { createDiagram(found) } else {
+            if let found { createDiagram(found, describing: description) } else {
                 errorMessage = system ? "Dante found no system map in this project's code." : "Dante found no pipelines or infrastructure templates in this project."
+            }
+        }
+    }
+}
+
+extension Session {
+    enum DiagramDrawing: String, Identifiable { case draw, change, future; var id: String { rawValue } }
+
+    /// Asks the agent in charge to draw what you described. The transcript shows your words;
+    /// the format and the ground rules go with them unseen.
+    func drawDiagram(_ path: String, description: String, as drawing: DiagramDrawing) {
+        let what = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !what.isEmpty else { return }
+        let shown: String
+        let steps: String
+        switch drawing {
+        case .draw:
+            shown = "Draw \(path): \(what)"
+            steps = "Draw the diagram in \(path) as I described it. Use names and details from this repo where they fit what I described, but don't add parts I didn't ask for. Write the file in place; the editor shows it as you save."
+        case .change:
+            shown = "Change \(path): \(what)"
+            steps = "Change the diagram in \(path) as I described, editing the file in place and keeping the positions of what doesn't change."
+        case .future:
+            shown = "Draw a future version of \(path): \(what)"
+            steps = "Save a future version of the diagram in \(path) with the change I described as a copy beside it (keep the original), in the same style with what doesn't change where it is, and open it with open_file."
+        }
+        askClaude(shown, instructions: steps + " If something I said is unclear, ask before guessing.\n\n" + DiagramGuide.format)
+    }
+}
+
+/// Where you say what to draw: a few lines of your own words, then the agent draws them.
+struct DiagramDescriptionField: View {
+    @Environment(\.theme) private var theme
+    let placeholder: String
+    let button: String
+    let send: (String) -> Void
+    @State private var text = ""
+
+    private var words: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            // A rounded-border field stays one line high on macOS; this one shows room to write.
+            TextField(placeholder, text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.dante(size: 13))
+                .foregroundStyle(theme.text.color)
+                .lineLimit(3...8)
+                .padding(8)
+                .frame(minHeight: 72, alignment: .topLeading)
+                .background(theme.raised.color, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(theme.line2.color))
+            HStack {
+                Text("⌘↩ to send").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                Spacer()
+                Button { if !words.isEmpty { send(words) } } label: { ClaudeLabel(button) }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .disabled(words.isEmpty)
             }
         }
     }
@@ -96,6 +159,7 @@ struct NewDiagramSheet: View {
     let session: Session
     @State private var title = "Target architecture"
     @State private var start: Start = .blank
+    @State private var description = ""
 
     enum Start: String, CaseIterable, Identifiable {
         case blank, infra, system
@@ -168,15 +232,24 @@ struct NewDiagramSheet: View {
                     }
                 }
             }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(start == .blank ? "What should it show? (optional)" : "What should change? (optional)").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                TextField(start == .blank ? "In your words, for \(session.agentName) to draw: the parts, how they connect, what's new…"
+                                          : "In your words, for \(session.agentName) to change after copying: what to add, remove or show as planned…",
+                          text: $description, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.dante(size: 13))
+                    .lineLimit(3...6)
+            }
             Text("Saved as docs/diagrams/\(Diagram.slug(title).isEmpty ? "diagram" : Diagram.slug(title)).dante-diagram.json, so it's reviewed in git like any doc.")
                 .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.buttonStyle(DanteButtonStyle()).keyboardShortcut(.cancelAction)
-                Button("Create") {
+                Button(description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Create" : "Create and draw") {
                     let name = title.trimmingCharacters(in: .whitespaces)
                     dismiss()
-                    session.createDiagram(from: start, title: name)
+                    session.createDiagram(from: start, title: name, describing: description)
                 }
                 .buttonStyle(DanteButtonStyle(primary: true))
                 .keyboardShortcut(.defaultAction)

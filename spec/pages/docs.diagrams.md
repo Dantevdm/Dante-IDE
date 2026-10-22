@@ -27,7 +27,7 @@ Diagrams are pictures you draw in the Map's own style: cards, groups and moving 
 - While moving: guides where edges and middles line up with other nodes.
 
 ## Actions
-- New diagram (Docs' New sheet, Diagram, or an empty library): a name, then Blank, Infrastructure or System map; it's saved as docs/diagrams/<name>.dante-diagram.json (numbered when the name is taken) and opens.
+- New diagram (Docs' New sheet, Diagram, or an empty library): a name, then Blank, Infrastructure or System map, and an optional description in your own words ("What should it show?" for Blank, "What should change?" after copying the Map); it's saved as docs/diagrams/<name>.dante-diagram.json (numbered when the name is taken) and opens. With a description the button reads Create and draw, and the agent draws it (or changes the copy) to match.
 - Copy and edit (Map, Infra or System view, and inside an opened part): a name, then the view as a diagram, opened in Docs. The Map itself doesn't change.
 - Add from the bar (it goes to free space near the middle of the view), or from the component library (cloud services by tier, and apps and services like an identity provider, access governance or single sign-on); double-click empty canvas for a card there.
 - Drag to move (snapping to an 8-point grid and to other nodes' edges and middles; ⌥ moves freely); drag a corner to resize; a group moves by its header, or anywhere once selected.
@@ -38,10 +38,11 @@ Diagrams are pictures you draw in the Map's own style: cards, groups and moving 
 - ⌘Z and ⇧⌘Z undo and redo every change, including edits read back from the file.
 - Pinch or the zoom buttons to zoom; scroll to pan.
 - Export: PNG (twice the size), PDF, SVG or Mermaid through a save panel next to the diagram, Copy as Image, Copy Mermaid, Show the File in Code, Show in Finder.
-- Ask the agent: draw the next version of it, review it, tidy the layout, explain it, or draw it from a description; the agent saves to the same file and the canvas follows.
+- Ask the agent (the bar's menu): Draw from a description… (Describe a change… once there's something drawn) and Draw a future version of this… each open a box for your own words with Draw it (⌘↩); Review it against the code, Tidy the layout and Explain it in a paragraph go straight away. The agent saves to the same file (a future version beside it) and the canvas follows.
+- What you typed is what the transcript shows ("Draw docs/diagrams/x.dante-diagram.json: …"); the diagram format and the ground rules go with it unseen. The agent draws what you described, takes names from the repo only where they fit it, adds nothing you didn't ask for, and asks when something is unclear.
 
 ## States
-- An empty diagram: a note with Open the Map and Ask the agent to draw it.
+- An empty diagram: a card saying what to do, with a box for what it should show and Draw it (off until something is typed), and Open the Map.
 - Saving shortly after each change, Saved after; a save that fails says why.
 - A file that isn't a valid diagram: the reason, Open in Code, and Ask the agent to fix it.
 - New diagram's Infrastructure or System map greyed out when the Map found nothing like it; before the Map has been opened they're read from the project on Create, with a message when there's nothing.
