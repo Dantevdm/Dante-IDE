@@ -94,6 +94,8 @@ public final class Preferences {
     public var notifiesOnAlarms: Bool { didSet { defaults.set(notifiesOnAlarms, forKey: Keys.notifiesOnAlarms) } }
     /// A notification when a pipeline run starts or finishes. Off until asked for.
     public var notifiesOnPipelines: Bool { didSet { defaults.set(notifiesOnPipelines, forKey: Keys.notifiesOnPipelines) } }
+    /// The companion server for the iPhone and iPad app, on the tailnet. Off until asked for.
+    public var companionEnabled: Bool { didSet { defaults.set(companionEnabled, forKey: Keys.companionEnabled) } }
     /// A notification when Claude finishes or waits for approval while Dante isn't in front.
     public var notifiesOnClaude: Bool { didSet { defaults.set(notifiesOnClaude, forKey: Keys.notifiesOnClaude) } }
     /// The orb in the menu bar that shows what Claude is doing.
@@ -134,6 +136,7 @@ public final class Preferences {
         notifiesOnAlarms = bool(Keys.notifiesOnAlarms, false)
         notifiesOnClaude = bool(Keys.notifiesOnClaude, false)
         notifiesOnPipelines = bool(Keys.notifiesOnPipelines, false)
+        companionEnabled = bool(Keys.companionEnabled, false)
         showsPresence = bool(Keys.showsPresence, true)
     }
 
@@ -188,6 +191,7 @@ public final class Preferences {
         static let notifiesOnAlarms = "notifiesOnAlarms"
         static let notifiesOnClaude = "notifiesOnClaude"
         static let notifiesOnPipelines = "notifiesOnPipelines"
+        static let companionEnabled = "companionEnabled"
         static let showsPresence = "showsPresence"
     }
 }

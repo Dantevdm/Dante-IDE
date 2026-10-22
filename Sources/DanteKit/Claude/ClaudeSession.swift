@@ -1305,7 +1305,7 @@ public final class ClaudeSession {
     }
 
     /// "Edit Mailer.swift", "Run go test ./...", "Answer a question".
-    nonisolated static func attentionLabel(_ toolName: String, input: JSONValue) -> String {
+    public nonisolated static func attentionLabel(_ toolName: String, input: JSONValue) -> String {
         if toolName == "AskUserQuestion" { return "Claude has a question" }
         if toolName == "ExitPlanMode" { return "Claude's plan is ready" }
         if let path = input["file_path"]?.string ?? input["notebook_path"]?.string {

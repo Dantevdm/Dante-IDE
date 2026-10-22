@@ -1,0 +1,161 @@
+import AppKit
+import DanteCore
+import DanteKit
+import Foundation
+
+/// The companion server for the whole app (docs/plans/walk-and-work.md, step 4): off until
+/// turned on in Settings › Agents, it listens on this Mac's tailnet address, sends paired
+/// devices every window's conversations, jobs and waiting approvals (looked at once a second,
+/// sent when they change), and carries out what the devices send: messages, answers, new jobs and stops.
+@MainActor @Observable
+final class CompanionHub {
+    static let shared = CompanionHub()
+
+    private(set) var state: CompanionServer.State = .stopped
+    private(set) var devices: [CompanionServer.Device] = []
+    /// What the QR code carries, while listening.
+    private(set) var pairing: CompanionPairing?
+    /// Why it can't listen: no Tailscale address.
+    private(set) var problem: String?
+
+    @ObservationIgnored private var server: CompanionServer?
+    @ObservationIgnored private var ticker: Task<Void, Never>?
+
+    var isOn: Bool { Preferences.shared.companionEnabled }
+
+    func install() {
+        if isOn { start() }
+    }
+
+    func setOn(_ on: Bool) {
+        Preferences.shared.companionEnabled = on
+        on ? start() : stop()
+    }
+
+    func start() {
+        stop()
+        guard let host = CompanionAddress.listening() else {
+            problem = "No Tailscale address on this Mac. Install Tailscale on the Mac and the phone, sign both in, then try again."
+            return
+        }
+        problem = nil
+        let name = Host.current().localizedName ?? "Mac"
+        let key = CompanionKey.current()
+        pairing = CompanionPairing(host: host, port: Companion.defaultPort, name: name, key: key)
+        let server = CompanionServer(host: host, port: Companion.defaultPort, name: name, key: key,
+                                     onState: Self.stateHandler(), onDevices: Self.devicesHandler(), onMessage: Self.messageHandler())
+        self.server = server
+        server.start()
+        ticker = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.publish()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    func stop() {
+        ticker?.cancel()
+        ticker = nil
+        server?.stop()
+        server = nil
+        pairing = nil
+        devices = []
+        state = .stopped
+    }
+
+    /// A new key: every paired device has to scan the code again.
+    func unpairAll() {
+        CompanionKey.renew()
+        if server != nil { start() }
+    }
+
+    // Closures the server calls on its own queue are made here, outside the main actor.
+    private nonisolated static func stateHandler() -> @Sendable (CompanionServer.State) -> Void {
+        { state in Task { @MainActor in CompanionHub.shared.state = state } }
+    }
+
+    private nonisolated static func devicesHandler() -> @Sendable ([CompanionServer.Device]) -> Void {
+        { devices in Task { @MainActor in CompanionHub.shared.devices = devices } }
+    }
+
+    private nonisolated static func messageHandler() -> @Sendable (String, ClientMessage) -> Void {
+        { device, message in Task { @MainActor in CompanionHub.shared.handle(message, from: device) } }
+    }
+
+    // MARK: Snapshot
+
+    private func publish() {
+        // Also with no device yet, so a device's welcome already carries everything.
+        server?.publish(snapshot())
+    }
+
+    func snapshot() -> CompanionSnapshot {
+        let projects = Sessions.all.compactMap { session -> CompanionSnapshot.Project? in
+            guard let workspace = session.workspace else { return nil }
+            let jobs = session.jobs.open.map { job in
+                CompanionSnapshot.Job(job, phase: session.jobs.phase(of: job.id),
+                                      lastReply: TranscriptItem.lastReply(in: session.jobs.sessions[job.id]?.items ?? []))
+            }
+            let working = session.claude?.state == .working
+            return CompanionSnapshot.Project(id: CompanionSnapshot.Project.id(for: workspace.url), name: workspace.url.lastPathComponent,
+                                             lead: session.agentName, working: working,
+                                             lastReply: CompanionSnapshot.Job.trimmed(TranscriptItem.lastReply(in: session.claude?.items ?? [])),
+                                             jobs: jobs, approvals: session.inbox.map(CompanionSnapshot.Approval.init))
+        }
+        return CompanionSnapshot(server: pairing?.name ?? "Mac", projects: projects)
+    }
+
+    // MARK: Acting
+
+    private func session(_ project: String) -> Session? {
+        Sessions.all.first { $0.workspace.map { CompanionSnapshot.Project.id(for: $0.url) } == project }
+    }
+
+    private func handle(_ message: ClientMessage, from device: String) {
+        guard let id = message.id else { return }
+        let result = act(on: message)
+        server?.reply(to: device, id: id, ok: result == nil, message: result ?? "Done.")
+        publish()
+    }
+
+    /// Nil when done, else why not.
+    private func act(on message: ClientMessage) -> String? {
+        switch message {
+        case .hello:
+            return nil
+        case .ask(_, let project, let job, let text, let spoken):
+            guard let session = session(project) else { return "That project isn’t open on the Mac any more." }
+            let target = job.flatMap { session.jobs.wake($0) }
+            if job != nil, target == nil { return "That job isn’t running." }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return "Nothing to send." }
+            session.askClaude(trimmed, instructions: spoken ? SpokenReply.conversationInstructions : nil, in: target)
+            return nil
+        case .answer(_, let project, let approval, let allow, let note, let answers):
+            guard let session = session(project) else { return "That project isn’t open on the Mac any more." }
+            guard let item = session.inbox.first(where: { $0.id == approval }), let claude = session.conversation(of: item) else {
+                return "That was already answered."
+            }
+            if !allow {
+                let reason = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if reason.isEmpty { claude.decline(item.tool.id) } else { claude.decline(item.tool.id, message: "The user declined this: \(reason)") }
+            } else if item.isQuestion {
+                claude.answer(item.tool.id, answers: answers ?? [:])
+            } else {
+                claude.approve(item.tool.id)
+            }
+            return nil
+        case .startJob(_, let project, let brief, let awayMinutes):
+            guard let session = session(project) else { return "That project isn’t open on the Mac any more." }
+            if let reason = session.jobs.unavailable { return reason }
+            session.startJob(brief, engine: Preferences.shared.agentEngine, awayMinutes: awayMinutes, reportsFailure: true)
+            return nil
+        case .stop(_, let project, let job):
+            guard let session = session(project) else { return "That project isn’t open on the Mac any more." }
+            guard let claude = job.map({ session.jobs.sessions[$0] }) ?? session.claude else { return "Nothing to stop." }
+            claude.interrupt()
+            return nil
+        }
+    }
+}

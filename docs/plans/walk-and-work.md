@@ -2,7 +2,7 @@
 
 Hand Dante jobs, go for a walk, and talk to it through earbuds. The Mac does the work; the iPhone is a voice in your ear; the iPad is a desk away from the desk.
 
-Status: steps 1 (jobs on the Mac), 2 (away mode with a time budget, the job guard and `dante job`) and 3 (job types, with the Builder and the pipeline watcher) are built; turn and plan-share budgets and the rest are a plan.
+Status: steps 1 (jobs on the Mac), 2 (away mode with a time budget, the job guard and `dante job`) and 3 (job types, with the Builder and the pipeline watcher) and 4 (`DanteCore` and the companion server with QR pairing) are built; turn and plan-share budgets and the rest are a plan.
 
 ## Decisions so far
 
@@ -65,6 +65,10 @@ A job waiting on a pipeline shouldn't keep a model polling. Dante watches CI run
 - `Package.swift` and `Sources/` stay as they are for the Mac app.
 - `Sources/DanteCore`: a new target that builds for macOS and iOS: job definitions, job and Claude event models, the companion wire protocol, diffs and tasks. Pieces of `DanteKit` move here when the companion needs them; anything that runs a process stays in `DanteKit`.
 - `Mobile/`: one universal app for iPhone and iPad, built with Xcode (it has to be, to install on a device). `Mobile/Common` for the connection and shared views, `Mobile/Phone` for the voice screens, `Mobile/Pad` for the desk layout.
+
+### The companion protocol (built)
+
+`DanteCore` (Foundation and CryptoKit, macOS and iOS) holds `CompanionPairing` (the QR code's `dante-companion://pair` URL: host, port 47823, the Mac's name and a 256-bit key), `CompanionAuth` (the Mac sends a nonce, the device answers HMAC-SHA256(key, nonce), so the key never crosses the wire), `ServerMessage`/`ClientMessage` (JSON over a WebSocket at `/companion`) and `CompanionSnapshot` (each open project: lead, working, latest reply, open jobs and every waiting approval with its diff or command and any questions). The device sends `ask` (to the main conversation or a job; `spoken` asks for a reply fit for the ear), `answer` (approve, decline with a note, or answer questions), `startJob` and `stop`, and gets a `result` for each. `CompanionServer` (DanteKit, Network framework) listens on the tailnet address only (`DANTE_COMPANION_HOST` overrides it for tests), and `CompanionHub` (the app) builds the snapshot from every window once a second and sends it when it changes. The key is in the Keychain; Settings › Agents › iPhone and iPad turns it on and shows the code.
 
 ## Order
 

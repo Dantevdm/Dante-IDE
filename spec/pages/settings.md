@@ -9,8 +9,9 @@ phrases: [settings, preferences, options, configuration]
 Settings holds the appearance, editor, keyboard shortcuts, language servers, files, agents and voice, tools and the project's own settings.
 
 ## Shows
-- Appearance (theme, font size, Geist fonts), Editor, Keyboard (every shortcut, recordable), Languages (each language server: off, command, options), Files, Agents (who leads, Claude's model, Codex, automatic task effort and local routing, voice, cloud agents and their keys), Tools (versions and install commands) and Project.
+- Appearance (theme, font size, Geist fonts), Editor, Keyboard (every shortcut, recordable), Languages (each language server: off, command, options), Files, Agents (who leads, Claude's model, Codex, automatic task effort and local routing, voice, cloud agents and their keys, and iPhone and iPad: the companion server), Tools (versions and install commands) and Project.
 - Agents says when Claude Code isn't installed, under Claude's model.
+- iPhone and iPad (off by default): when on, where Dante listens (this Mac's Tailscale address and port 47823), Show Pairing Code… (a QR code in a sheet, with Unpair All Devices…) and each connected device; without a Tailscale address it says to install Tailscale instead.
 
 ## Actions
 - Change any setting; record a shortcut; reset to defaults.
@@ -30,3 +31,4 @@ Settings holds the appearance, editor, keyboard shortcuts, language servers, fil
 
 ## Acceptance
 - Settings apply without a restart unless they say otherwise.
+- The companion server listens only on the Tailscale address and refuses any device that can't prove it holds the pairing key; unpairing makes a new key.

@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Dante",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v15), .iOS(.v17)],
     products: [
         .executable(name: "Dante", targets: ["DanteApp"]),
         // The `dante` command, bundled into the app as Contents/Resources/bin/dante.
@@ -31,8 +31,11 @@ let package = Package(
         // the app and the `dante` command for FeatureGuide and `dante mcp`.
         .target(name: "DanteSpec", path: "spec", exclude: ["README.md", "fixtures"],
                 resources: [.copy("pages"), .copy("places.yaml")]),
+        // What the Mac and the iPhone and iPad companion share: the wire protocol and pairing
+        // (docs/plans/walk-and-work.md). Foundation and CryptoKit only, so it builds for iOS.
+        .target(name: "DanteCore"),
         // Models with no UI: themes, workspace, documents, agents, and the data behind every place.
-        .target(name: "DanteKit", dependencies: ["DanteSpec", .product(name: "Yams", package: "Yams")]),
+        .target(name: "DanteKit", dependencies: ["DanteSpec", "DanteCore", .product(name: "Yams", package: "Yams")]),
         // The TextKit 2 code editor and syntax highlighting.
         .target(
             name: "DanteEditor",
@@ -55,6 +58,7 @@ let package = Package(
             name: "DanteApp",
             dependencies: [
                 "DanteKit",
+                "DanteCore",
                 "DanteEditor",
                 "DanteOpen",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
@@ -62,7 +66,7 @@ let package = Package(
             // three.js, hairline and DiceBear Open Peeps for motion scenes (see MotionLib/LIBRARIES.md).
             resources: [.copy("Resources/MotionLib")]
         ),
-        .testTarget(name: "DanteKitTests", dependencies: ["DanteKit", "DanteOpen"]),
+        .testTarget(name: "DanteKitTests", dependencies: ["DanteKit", "DanteOpen", "DanteCore"]),
         .testTarget(name: "DanteEditorTests", dependencies: ["DanteEditor"]),
     ]
 )
