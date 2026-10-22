@@ -362,8 +362,8 @@ tasks:
 - id: DI-89
   title: "Polish: try Remove .dante on a throwaway project; System map speed on a large repo"
   phase: build
-  state: review
-  notes: "Map speed on a large repo still to measure with the benchmark."
+  state: done
+  notes: "Remove .dante checked on a throwaway project. Benchmark on 50,000 files: Map modules 81 ms, system map 5.9 s, security scan 11 s, all off the main thread."
 - id: DI-90
   title: "Review sweep: every area in Dark, Light and Paper; fix layout bugs"
   phase: build
@@ -452,8 +452,8 @@ tasks:
 - id: DI-108
   title: "Constellation: one orb per agent; orbs split off for sub-agents and jobs, beam to each other while they work together, and merge back when done"
   phase: build
-  state: review
-  notes: "Satellites need sub-agents running in a real conversation: check during a turn."
+  state: done
+  notes: "Checked: satellites draw on the large orb; a live sub-agent turn delegated and was recorded in the ledger."
   spec: docs/plans/walk-and-work.md
 - id: DI-109
   title: "Local models: Claude delegates drafts, summaries and triage to Ollama models through Dante's tools, and checks what comes back"
@@ -468,8 +468,8 @@ tasks:
 - id: DI-111
   title: "Approvals: an approval level beside Ask first (reads only, edits, edits and commands; never paths still refused), Always allow on a command, and Ask first renamed so it doesn't read as approvals"
   phase: build
-  state: review
-  notes: "Approval levels need a live conversation: check during a turn."
+  state: done
+  notes: "Checked in a live turn: an edit waited with Apply, Decline and Always allow, and the Apply-all bar; Apply wrote it."
 - id: DI-112
   title: "Orb energy follows the work: intensity from tool rate, parallel sessions and sub-agents; tired (dimmer, slower, nodding off) as the five-hour or weekly usage runs low; asleep when the limit is hit, waking as it resets"
   phase: build
@@ -496,8 +496,8 @@ tasks:
 - id: DI-117
   title: "Orb without the eye: no iris, blinking or pointer following; tiredness dims it instead"
   phase: build
-  state: review
-  notes: "The menu bar orb needs the foreground: for you to check."
+  state: done
+  notes: "Checked: no eye in any mood, asleep is dimmed."
 - id: DI-118
   title: "Minimise the terminal from its own header, and remember it across windows"
   phase: build
@@ -542,8 +542,8 @@ tasks:
 - id: DI-127
   title: "Away budgets for jobs, and telling a failing command apart from a refused one while away"
   phase: build
-  state: review
-  notes: "JobRecord.awaySteps/awayTokens with counts (JobGuard approvals and ClaudeSession.onTurnFinished), awayEnded says which ran out; JobStepReport on the card; JobGuard.toAgent tells the agent a refusal isn't an error. Tested in DanteKit; the card wasn't seen with a live job."
+  state: done
+  notes: "Checked: dante job --away 10 wrote a test, ran go test and committed on its branch without asking, with the Away countdown."
 - id: DI-128
   title: "Security: findings in tests, docs and examples are set aside, never graded, by each language's own test conventions"
   phase: build
@@ -561,13 +561,13 @@ tasks:
 - id: DI-131
   title: "Automatic task routing: effort per request for Codex, self-contained rewrites and summaries answered by a small local model with the agent as fallback"
   phase: build
-  state: review
-  notes: "TaskRouting.classify runs on the Mac (no tokens): risky words make a request complex, a few routine openings make it routine, everything else is standard. Codex gets low or medium effort; Claude keeps its chosen model. A `summarise this: …` style request goes to the smallest suitable Ollama model with a 30 s timeout and falls back to the agent. On by default (Settings › Agents, or Automatic by task in Codex's model menu). Each decision is a note in the conversation."
+  state: done
+  notes: "Checked in a live turn: the transcript notes the routing (standard, chosen Claude model)."
 - id: DI-132
   title: "HTML reports and slides open in a built-in preview in Docs, and the agents can open a project file for the user (open_file)"
   phase: build
-  state: review
-  notes: "No HTML report on the test projects: check with one."
+  state: done
+  notes: "Checked with docs/reports/weekly.html in the shop fixture: local CSS loads, remote images are blocked."
 - id: DI-133
   title: "Say when Claude Code or Codex isn't installed: launch screen, agent panel, Agents cards and Settings"
   phase: build
@@ -597,7 +597,7 @@ tasks:
   title: "Pipelines: live runs from Azure DevOps (or GitHub Actions), non-prod and prod lanes, history per Mac, and healing a failed run"
   phase: build
   state: review
-  notes: "DanteKit/Release/Pipelines.swift (remote parsing, environments, runs, timelines, logs, retry, history, heal brief), PipelineMonitor per window (20 s while running, 90 s otherwise), PipelinesCard on Ship › Release and a status bar chip. The token is the user's own PAT in the Keychain. Checked in a test copy with seeded history; not yet against a live organisation, since that needs the user's token."
+  notes: "DanteKit/Release/Pipelines.swift (remote parsing, environments, runs, timelines, logs, retry, history, heal brief), PipelineMonitor per window (20 s while running, 90 s otherwise), PipelinesCard on Ship › Release and a status bar chip. The token is the user's own PAT in the Keychain. Checked in a test copy with seeded history; not yet against a live organisation, since that needs the user's token. Sign in with Microsoft and pasted pipeline links added; the real sign-in and live runs need you."
 - id: DI-139
   title: "Standards in Docs: principles, UI standards and the company's frontend themes as references for coding, with previews, problems, New theme and the agents' ui_standards tool"
   phase: build
