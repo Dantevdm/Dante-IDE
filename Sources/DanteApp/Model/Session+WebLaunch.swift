@@ -21,6 +21,11 @@ final class WebLaunch {
     /// Open it with this theme: the query parameter the app reads and the theme's name.
     var theme: (query: String, name: String)?
     var target: WebPreview.Target?
+    /// The page it opens: the target's, with the theme when there is one.
+    var pageURL: URL? {
+        guard let target else { return nil }
+        return theme.flatMap { ThemeSwap(query: $0.query).url(target.url, theme: $0.name) } ?? target.url
+    }
     var step: Step = .finding
     /// It was already running, so nothing was started.
     var wasRunning = false
@@ -143,8 +148,7 @@ extension Session {
         guard let target = launch.target else { return }
         launch.step = .opening
         try? await Task.sleep(for: .milliseconds(350))
-        let url = launch.theme.flatMap { ThemeSwap(query: $0.query).url(target.url, theme: $0.name) } ?? target.url
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.open(launch.pageURL ?? target.url)
         launch.step = .opened
     }
 

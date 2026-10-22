@@ -772,7 +772,7 @@ struct WebLaunchCard: View {
                 row(mark(for: 2), "Wait for port \(String(target?.port ?? 0))",
                     launch.step == .waiting ? (launch.installing ? "Installing and starting · \(launch.waited) s" : "Waiting · \(launch.waited) s") : mark(for: 2) == .done ? "Up" : "")
             }
-            row(mark(for: 3), "Open in your browser", target.map { $0.url.absoluteString + ($0.routeFound || launch.screen == nil ? "" : " (its route wasn’t found, so the app’s home)") } ?? "")
+            row(mark(for: 3), "Open in your browser", target.map { (launch.pageURL ?? $0.url).absoluteString + ($0.routeFound || launch.screen == nil ? "" : " (its route wasn’t found, so the app’s home)") } ?? "")
             if case .failed(let message) = launch.step {
                 Text(message).font(.dante(size: 12)).foregroundStyle(theme.red.color).fixedSize(horizontal: false, vertical: true)
                 if launch.canInstall, let target {

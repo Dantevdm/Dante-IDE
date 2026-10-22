@@ -53,8 +53,10 @@ struct ThemeMark: View {
     var size: CGFloat = 22
 
     var body: some View {
-        if theme.url(of: "markReversed") != nil {
+        if exists("markReversed") {
             ThemeAsset(theme: theme, asset: "markReversed").frame(width: size, height: size)
+        } else if exists("logoReversed") {
+            ThemeAsset(theme: theme, asset: "logoReversed").frame(maxWidth: size * 2.4, maxHeight: size)
         } else {
             Text(theme.initials)
                 .font(ThemeFonts.font(theme, size: size * 0.42, weight: .bold))
@@ -62,6 +64,11 @@ struct ThemeMark: View {
                 .frame(width: size, height: size)
                 .background(RoundedRectangle(cornerRadius: size * 0.22).fill(Color.white.opacity(0.16)))
         }
+    }
+
+    /// Whether a picture is named and its file is there (a missing one falls through to the next).
+    private func exists(_ asset: String) -> Bool {
+        theme.url(of: asset).map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     }
 }
 

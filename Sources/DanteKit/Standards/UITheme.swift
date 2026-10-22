@@ -339,12 +339,19 @@ public struct UITheme: Identifiable, Equatable, Sendable {
         case .array(let items):
             return items.isEmpty ? "[]" : "[\n" + items.map { inner + write($0, indent: inner) }.joined(separator: ",\n") + "\n" + indent + "]"
         default:
-            let data = (try? JSONEncoder().encode(value)) ?? Data("null".utf8)
+            let data = (try? encoder.encode(value)) ?? Data("null".utf8)
             return String(decoding: data, as: UTF8.self)
         }
     }
 
+    /// Paths stay readable: "fonts/x.woff2", not "fonts\/x.woff2".
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        return encoder
+    }()
+
     private static func quote(_ text: String) -> String {
-        String(decoding: (try? JSONEncoder().encode(text)) ?? Data("\"\"".utf8), as: UTF8.self)
+        String(decoding: (try? encoder.encode(text)) ?? Data("\"\"".utf8), as: UTF8.self)
     }
 }

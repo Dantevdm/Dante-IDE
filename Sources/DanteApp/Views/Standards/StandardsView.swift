@@ -208,6 +208,7 @@ struct ThemeCard: View {
                             .help("\(problems) problem\(problems == 1 ? "" : "s"): open it to see")
                     }
                 }
+                .frame(height: 22)
                 HStack(spacing: 6) {
                     ForEach(["primary", "secondary", "accent"], id: \.self) { key in
                         if let color = theme_.color(key) {
@@ -322,7 +323,7 @@ struct FrontendThemeLine: View {
                 Circle().fill((item.color("primary") ?? ThemeColor("#888888")!).color).frame(width: 8, height: 8)
                     .overlay(Circle().strokeBorder(theme.line.color, lineWidth: 0.5))
             }
-            Text("\(sets.first?.defaultName ?? themes.first?.name ?? "") · \(themes.count) theme\(themes.count == 1 ? "" : "s")")
+            Text((sets.first?.defaultName ?? themes.first?.name ?? "") + (themes.count > 1 ? " +\(themes.count - 1)" : ""))
                 .font(.dante(size: 10, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
             if sets.contains(where: { $0.swap?.isLive == true }) {
                 Image(systemName: "bolt.fill").font(.dante(size: 8.5)).foregroundStyle(theme.green.color)
@@ -352,15 +353,16 @@ struct FrontendThemesCard: View {
             }
             ForEach(sets) { set in
                 if case .project(let path) = set.place {
-                    Text(path + "/" + (set.swap?.isLive == true ? " · swaps live" : "")).font(.dante(size: 10.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                    Text(path + "/" + (set.swap?.isLive == true ? " · swaps live" : "")).font(.dante(size: 10.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.middle)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], alignment: .leading, spacing: 8) {
                     ForEach(set.themes) { item in
                         let resolved = set.resolved(item)
                         Button { pick(item.name, in: set) } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                ThemeShell(theme: resolved, scale: 0.55)
-                                    .frame(height: 64)
+                                // Over a clear space, so the shell's own width never widens the inspector.
+                                Color.clear.frame(maxWidth: .infinity).frame(height: 64)
+                                    .overlay(alignment: .leading) { ThemeShell(theme: resolved, scale: 0.55) }
                                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                                     .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(theme.line.color))
                                 HStack(spacing: 4) {

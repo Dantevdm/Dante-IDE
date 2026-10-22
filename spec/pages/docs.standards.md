@@ -21,7 +21,7 @@ Standards are the house rules every app the team builds follows: principles and 
 - A section per themes folder: its folder (or Company library), the default theme, how the app picks a theme (a Live chip with `?theme=`, or the build variable's name), "Copy all to the library" and "New theme here"; then a card per theme: a small sign-in page, the name, the customer, the primary colours as dots, a Default chip and a problem count.
 - The theme sheet: the sign-in page and app shell side by side, the running app's launch card when it's opening in this theme, problems, every colour with its hex and contrast, the font, corners, product, copyright and pictures (reversed ones on the primary colour), with "from <default>" beside each field the theme leaves to its default.
 - The Docs library's Standards strip (after Diagrams and motion) and a Standards row in the Docs sidebar.
-- On the Map's System view: a theme line on a frontend box (a primary-colour dot per theme, up to seven, the default's name and the count, and a green bolt when it swaps live); in the inspector, a Themes card listing them, each with Open in it when the app swaps live, else the build variable to copy.
+- On the Map's System view: a theme line on a frontend box (a primary-colour dot per theme, up to seven, the default's name with +N for the others, and a green bolt when it swaps live); in the inspector, a Themes card listing them, each with Open in it when the app swaps live, else the build variable to copy.
 
 ## Actions
 - Open a theme card for its sheet; Open the app in it; Copy VAR=name; New theme from this…; Copy to the company library (or, from the library, Copy into a project's themes folder); Open theme.json (in Code inside the project, else the default app); Show in Finder.
@@ -48,5 +48,5 @@ Standards are the house rules every app the team builds follows: principles and 
 - A project with web/themes/{base,acme}/theme.json and a `?theme=` reader shows both themes, base as Default, with the Live chip; Open the app in it opens `http://localhost:<port>/?theme=acme` (before any `#` route).
 - A theme with an unreadable colour and a missing logo shows two problems.
 - New theme with a customer "Kelp & Co." writes kelp-co/theme.json that reads back the same and shows as a card at once.
-- The Map's frontend box for that app shows its themes' dots, base and a count of 2, with the bolt.
+- The Map's frontend box for that app shows its themes' dots and base +1, with the bolt.
 - Previews look right in the Light, Dark and Paper themes (the mock pages stay the customer's own colours).

@@ -153,7 +153,7 @@ struct ThemeSheet: View {
             row("Copyright", theme_.copyrightHolder ?? "None shown", own: true, key: "copyrightHolder")
             HStack(spacing: 10) {
                 ForEach(UITheme.assetKeys, id: \.self) { key in
-                    if theme_.url(of: key) != nil {
+                    if let url = theme_.url(of: key), FileManager.default.fileExists(atPath: url.path) {
                         VStack(spacing: 3) {
                             ThemeAsset(theme: theme_, asset: key, fill: key == "loginArtwork")
                                 .frame(width: 54, height: 34)

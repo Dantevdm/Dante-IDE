@@ -227,7 +227,7 @@ struct NewThemeSheet: View {
         made.folder = nil
         let fontSource = standards.themeSets.flatMap(\.themes).first { $0.name == startName }
         do {
-            let folder = try ThemeMaker.write(made, into: chosen.folder, assets: pictures, fontsFrom: fontSource.map { theme -> UITheme in
+            try ThemeMaker.write(made, into: chosen.folder, assets: pictures, fontsFrom: fontSource.map { theme -> UITheme in
                 var source = theme
                 if source.fontFamily == nil, let set = standards.themeSets.first(where: { $0.themes.contains { $0.id == theme.id } }) {
                     source.fontFamily = set.resolved(theme).fontFamily
@@ -237,7 +237,6 @@ struct NewThemeSheet: View {
             })
             Task { await workspace.reloadStandards(library: Preferences.shared.standardsLibraryURL) }
             dismiss()
-            if folder.path.hasPrefix(workspace.url.path + "/") { session.open(file: folder.appending(path: "theme.json")) }
         } catch {
             problem = error.localizedDescription
         }

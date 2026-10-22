@@ -148,6 +148,7 @@ import Testing
         let read = try #require(UITheme.read(folder: folder))
         #expect(read.assets == ["markReversed": "mark-reversed.png"])
         #expect(read.fontFiles.map(\.src) == ["fonts/work-sans.woff2"])
+        #expect(read.json.contains("\"fonts/work-sans.woff2\""))
         #expect(FileManager.default.fileExists(atPath: folder.appending(path: "fonts/OFL.txt").path))
         #expect(throws: ThemeMaker.Failure.self) { try ThemeMaker.write(made, into: set.folder) }
 
