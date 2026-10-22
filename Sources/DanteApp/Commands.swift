@@ -194,6 +194,9 @@ struct DanteCommands: Commands {
             Divider()
             Button("Stage in a Window") { StageController.shared.open(fullScreen: false) }
             Button("Stage Full Screen") { StageController.shared.open(fullScreen: true) }
+            Toggle("Listen for “Hey Dante”", isOn: Binding(
+                get: { Preferences.shared.listensForWakeWord },
+                set: { VoiceController.shared.setWakeWord($0) }))
             Divider()
         }
     }

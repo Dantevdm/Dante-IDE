@@ -445,6 +445,13 @@ final class VoiceController {
 
     // MARK: Hey Dante
 
+    /// Turns "Hey Dante" on or off from the menu bar, the panel or the View menu; off closes
+    /// the microphone at once unless you're talking.
+    func setWakeWord(_ on: Bool) {
+        Preferences.shared.listensForWakeWord = on
+        updateWakeListening()
+    }
+
     /// Listens for the wake word when it's on and nothing else is using the microphone or
     /// speaker; stops when that changes.
     func updateWakeListening() {

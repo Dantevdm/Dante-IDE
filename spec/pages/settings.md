@@ -14,6 +14,7 @@ Settings holds the appearance, editor, keyboard shortcuts, language servers, fil
 
 ## Actions
 - Change any setting; record a shortcut; reset to defaults.
+- “Hey Dante” (off by default): while it's on the microphone stays open and speech is recognised on this Mac. Turn it on or off in Settings › Agents (Listen for “Hey Dante”), with the menu bar panel's Hey Dante button (filled while listening), the menu bar item's right-click menu or View › Listen for “Hey Dante”; turning it off closes the microphone at once unless you're talking.
 - Hold ⌃⌥Space in any app to talk; release to send. Repeated key-down events don't restart recording. A quick release during permission/startup cancels the hold without opening the microphone later. Click Talk for the separate pause-to-send conversation mode.
 - Paste a cloud agent's key (kept in the Keychain).
 - Type a tool's install command into the terminal (never run by Dante).

@@ -295,6 +295,10 @@ final class PresenceController: NSObject {
         let talk = NSMenuItem(title: "Talk (hold \(VoiceController.keyLabel) anywhere)", action: #selector(talk), keyEquivalent: "")
         talk.target = self
         menu.addItem(talk)
+        let wake = NSMenuItem(title: "Listen for “Hey Dante”", action: #selector(toggleWakeWord), keyEquivalent: "")
+        wake.target = self
+        wake.state = Preferences.shared.listensForWakeWord ? .on : .off
+        menu.addItem(wake)
         // The Stage, on any screen: a TV shows up here once it's connected or AirPlayed to.
         let screens = NSScreen.screens
         if screens.count > 1 {
@@ -331,6 +335,8 @@ final class PresenceController: NSObject {
     @objc private func hide() { Preferences.shared.showsPresence = false }
 
     @objc private func talk() { VoiceController.shared.toggle() }
+
+    @objc private func toggleWakeWord() { VoiceController.shared.setWakeWord(!Preferences.shared.listensForWakeWord) }
 
     @objc private func toggleStage() { StageController.shared.toggle() }
 

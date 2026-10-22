@@ -57,6 +57,7 @@ struct PresencePanel: View {
                 }
                 .buttonStyle(DanteButtonStyle())
                 .help("Open the Stage: Dante full screen. Esc or “minimise” leaves it.")
+                WakeWordButton()
             }
             .padding(.top, 12)
 
@@ -139,6 +140,19 @@ private struct TalkButton: View {
                     .padding(.horizontal, 20)
             }
         }
+    }
+}
+
+/// "Hey Dante" on or off. While it's on the microphone stays open, so it says so.
+private struct WakeWordButton: View {
+    var body: some View {
+        let on = Preferences.shared.listensForWakeWord
+        Button { VoiceController.shared.setWakeWord(!on) } label: {
+            Label("Hey Dante", systemImage: on ? "ear" : "ear.trianglebadge.exclamationmark")
+        }
+        .buttonStyle(DanteButtonStyle(primary: on))
+        .help(on ? "Listening for “Hey Dante”: the microphone stays open (recognised on this Mac only). Click to stop listening and close it."
+                 : "Not listening for “Hey Dante”; the microphone is only open while you talk. Click to listen for it.")
     }
 }
 
