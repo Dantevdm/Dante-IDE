@@ -71,6 +71,7 @@ extension AreaPage where Actions == EmptyView {
 /// A rounded panel with an optional header row.
 struct Card<Trailing: View, Content: View>: View {
     @Environment(\.theme) private var theme
+    @Environment(\.cardFillsRow) private var fillsRow
     let title: String?
     var accent = false
     var spacing: CGFloat = 12
@@ -89,10 +90,15 @@ struct Card<Trailing: View, Content: View>: View {
             content
         }
         .padding(16)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: fillsRow ? .infinity : nil, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(accent ? theme.accentLine.color : theme.line.color))
     }
+}
+
+extension EnvironmentValues {
+    /// Set by `EvenGrid`: a card stretches to the tallest in its row.
+    @Entry var cardFillsRow = false
 }
 
 extension Card where Trailing == EmptyView {
@@ -211,6 +217,54 @@ struct CardGrid<Content: View>: View {
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
             content
+        }
+    }
+}
+
+/// Equal columns as many as fit, rows split evenly (five tiles that don't fit in a row go
+/// three and two, not four and one), and every cell in a row as tall as the tallest, so
+/// edges line up both ways.
+struct EvenGrid: Layout {
+    var minimum: CGFloat = 300
+    var spacing: CGFloat = 16
+
+    private func columns(_ count: Int, width: CGFloat) -> Int {
+        guard count > 0 else { return 1 }
+        guard width.isFinite else { return count }
+        let fit = max(1, min(count, Int((width + spacing) / (minimum + spacing))))
+        let rows = (count + fit - 1) / fit
+        return (count + rows - 1) / rows
+    }
+
+    private func grid(_ subviews: Subviews, width: CGFloat) -> (columns: Int, cell: CGFloat, heights: [CGFloat]) {
+        let columns = columns(subviews.count, width: width)
+        let cell = max(0, (width - spacing * CGFloat(columns - 1)) / CGFloat(columns))
+        let heights = stride(from: 0, to: subviews.count, by: columns).map { start in
+            subviews[start..<min(start + columns, subviews.count)]
+                .map { $0.sizeThatFits(ProposedViewSize(width: cell, height: nil)).height }.max() ?? 0
+        }
+        return (columns, cell, heights)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        // Asked for its ideal or largest size, it's every cell at the minimum, in one row.
+        let natural = CGFloat(max(1, subviews.count)) * (minimum + spacing) - spacing
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? natural
+        let heights = grid(subviews, width: width).heights
+        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(0, heights.count - 1)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let (columns, cell, heights) = grid(subviews, width: bounds.width)
+        var y = bounds.minY
+        for (row, height) in heights.enumerated() {
+            for column in 0..<columns {
+                let index = row * columns + column
+                guard index < subviews.count else { break }
+                subviews[index].place(at: CGPoint(x: bounds.minX + CGFloat(column) * (cell + spacing), y: y),
+                                      proposal: ProposedViewSize(width: cell, height: height))
+            }
+            y += height + spacing
         }
     }
 }

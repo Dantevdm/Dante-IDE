@@ -84,6 +84,9 @@ struct DiagramNodeView: View {
     let count: Int
     var hovered = false
 
+    /// A title taller than this is drawn as a note, its words wrapping under it.
+    static let oneLine: CGFloat = 30
+
     var body: some View {
         let hue = node.hue.rgba(theme).color
         let rect = node.rect
@@ -150,14 +153,38 @@ struct DiagramNodeView: View {
             SourceFace(symbol: node.icon, title: node.title, system: node.subtitle, branches: node.chips, environment: node.tag,
                        width: rect.width, height: rect.height)
         case .title:
-            BandTitle(symbol: node.icon, title: node.title, note: node.subtitle)
-                .frame(width: rect.width, height: rect.height, alignment: .leading)
-        case .text:
-            Text(node.text.isEmpty ? node.title : node.text)
-                .font(.dante(size: 12.5))
-                .foregroundStyle(theme.text2.color)
-                .lineSpacing(2)
+            // One line high it's a band title; taller, a note: the title on top, its words
+            // wrapping under it, from the top left.
+            if rect.height > Self.oneLine {
+                VStack(alignment: .leading, spacing: 6) {
+                    BandTitle(symbol: node.icon, title: node.title, note: "")
+                    if !node.subtitle.isEmpty {
+                        Text(node.subtitle)
+                            .font(.dante(size: 12))
+                            .foregroundStyle(theme.text3.color)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 .frame(width: rect.width, height: rect.height, alignment: .topLeading)
+                .clipped()
+            } else {
+                BandTitle(symbol: node.icon, title: node.title, note: node.subtitle)
+                    .frame(width: rect.width, height: rect.height, alignment: .leading)
+            }
+        case .text:
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if !node.icon.isEmpty {
+                    Image(systemName: node.icon).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text3.color)
+                }
+                Text(node.text.isEmpty ? node.title : node.text)
+                    .font(.dante(size: 12.5))
+                    .foregroundStyle(theme.text2.color)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(width: rect.width, height: rect.height, alignment: .topLeading)
+            .clipped()
         }
     }
 }

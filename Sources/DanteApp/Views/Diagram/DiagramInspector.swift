@@ -66,7 +66,7 @@ private struct FieldBox: View {
             .textFieldStyle(.plain)
             .font(.dante(size: 12.5, design: mono ? .monospaced : .default))
             .foregroundStyle(theme.text.color)
-            .lineLimit(axis == .vertical ? 2...6 : 1...1)
+            .lineLimit(axis == .vertical ? 2...12 : 1...1)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(theme.card.color, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -74,7 +74,7 @@ private struct FieldBox: View {
     }
 }
 
-/// The seven theme colours as swatches, with "none" for a quiet link.
+/// Every colour as swatches, in rows of eight, with "none" for a quiet link.
 struct HueSwatches: View {
     @Environment(\.theme) private var theme
     let selected: Diagram.Hue?
@@ -82,7 +82,7 @@ struct HueSwatches: View {
     let pick: (Diagram.Hue?) -> Void
 
     var body: some View {
-        HStack(spacing: 7) {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(25), spacing: 6), count: 8), alignment: .leading, spacing: 6) {
             if allowsNone {
                 swatch(nil) {
                     Circle().strokeBorder(theme.line2.color, lineWidth: 1.5)
@@ -231,7 +231,8 @@ private struct NodeInspector: View {
             }
         }
         if [.card, .box, .stage, .source, .boundary, .title].contains(node.kind) {
-            Field(subtitleLabel) { FieldBox(placeholder: subtitleLabel, text: text("Change \(subtitleLabel)", \.subtitle)) }
+            // A title's note can run to several lines; it wraps once the title is made taller.
+            Field(subtitleLabel) { FieldBox(placeholder: subtitleLabel, text: text("Change \(subtitleLabel)", \.subtitle), axis: node.kind == .title ? .vertical : .horizontal) }
         }
         if node.kind == .card {
             Field("Detail (monospaced)") { FieldBox(placeholder: "stack or path", text: text("Change Detail", \.detail), mono: true) }

@@ -38,6 +38,8 @@ struct NewMotionSheet: View {
         ("What we shipped", "A launch film for what changed recently: the new features in motion, with the numbers that matter.", .video, "45 s"),
         ("The pitch", "A deck that says what this project is, who it's for and why it's different, ending on the architecture.", .deck, "90 s"),
         ("How a change ships", "An explainer of the path from a commit to production: the pipeline stages, checks and where it runs.", .explainer, "30 s"),
+        ("The project's site", "A one-page site for the project that flows as you scroll: what it is, what it does and how it's built, with the system map coming together on the way down.", .website, "60 s"),
+        ("A launch page", "A launch page for what shipped recently that tells the story as you scroll: the problem, the new features in motion and the numbers, ending on how to try it.", .website, "45 s"),
     ]
 
     /// The brief step leaves out what the look step asks.
@@ -183,6 +185,7 @@ struct NewMotionSheet: View {
                     .frame(height: 120)
                     .background(theme.card.color, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line.color))
+                    .overlay(alignment: .bottomTrailing) { DictationButton(text: $ask).padding(8) }
             }
             HStack(spacing: 14) {
                 TextField("Title", text: $title).textFieldStyle(.roundedBorder).frame(maxWidth: 260)
@@ -191,7 +194,7 @@ struct NewMotionSheet: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(maxWidth: 300)
+                .frame(maxWidth: 420)
             }
             question(MotionQuestions.all.first { $0.id == "length" }!, compact: true)
             question(MotionQuestions.all.first { $0.id == "aspect" }!, compact: true)

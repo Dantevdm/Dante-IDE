@@ -384,4 +384,42 @@ struct DiagramTests {
         #expect(t.node("a")!.rect.height == 48)
         #expect(t.node("b")!.rect.height == 64)
     }
+
+    @Test func tidyingOnlyTheSelectionLeavesTheRestAlone() {
+        var d = Self.sample()
+        d.nodes[d.nodes.firstIndex { $0.id == "risk" }!].frame = .init(x: 412, y: 300, width: 196, height: 64)
+        let t = d.tidied(only: ["compute"])
+        // Inside compute the stack closes up…
+        #expect(t.node("risk")!.rect.minY - t.node("grc")!.rect.maxY == 12)
+        // …and nothing outside it moves.
+        for id in ["edge", "alb", "users"] { #expect(t.node(id)!.rect == d.node(id)!.rect, "\(id) stayed") }
+        #expect(t.node("compute")!.rect.origin == d.node("compute")!.rect.origin)
+    }
+
+    @Test func tidyingPutsThingsNextToWhatTheyLinkTo() {
+        var d = Diagram(title: "Order")
+        d.nodes = [
+            .init(id: "a", kind: .card, title: "A", frame: .init(x: 40, y: 40, width: 196, height: 48)),
+            .init(id: "b", kind: .card, title: "B", frame: .init(x: 40, y: 100, width: 196, height: 48)),
+            .init(id: "y", kind: .card, title: "Y", frame: .init(x: 400, y: 40, width: 196, height: 48)),
+            .init(id: "x", kind: .card, title: "X", frame: .init(x: 400, y: 100, width: 196, height: 48)),
+        ]
+        // a links to x and b to y: crossed as drawn.
+        d.links = [.init(id: "ax", from: "a", to: "x"), .init(id: "by", from: "b", to: "y")]
+        let t = d.tidied()
+        #expect(t.node("x")!.rect.minY < t.node("y")!.rect.minY)
+    }
+
+    @Test func arrangingByFlowPutsWhatLinksFirstOnTheLeft() {
+        var d = Diagram(title: "Flow")
+        d.nodes = [
+            .init(id: "db", kind: .card, title: "Database", frame: .init(x: 40, y: 40, width: 196, height: 48)),
+            .init(id: "api", kind: .card, title: "API", frame: .init(x: 300, y: 300, width: 196, height: 48)),
+            .init(id: "users", kind: .person, title: "Users", frame: .init(x: 600, y: 40, width: 64, height: 72)),
+        ]
+        d.links = [.init(id: "u", from: "users", to: "api"), .init(id: "d", from: "api", to: "db")]
+        let t = d.arrangedByFlow()
+        #expect(t.node("users")!.rect.maxX < t.node("api")!.rect.minX)
+        #expect(t.node("api")!.rect.maxX < t.node("db")!.rect.minX)
+    }
 }

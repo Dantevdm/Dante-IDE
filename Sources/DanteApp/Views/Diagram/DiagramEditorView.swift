@@ -99,16 +99,7 @@ struct DiagramEditorView: View {
                 .foregroundStyle(theme.text3.color)
                 .help(path)
             Spacer(minLength: 8)
-            Button {
-                document.change("Tidy Layout") { $0 = $0.tidied() }
-                fit()
-            } label: {
-                Label("Tidy", systemImage: "wand.and.rays")
-            }
-            .buttonStyle(DanteButtonStyle())
-            .fixedSize()
-            .disabled(document.diagram.isEmpty)
-            .help("Even out the spacing: columns spread so link labels fit between them, stacks closed up, cards sized for their text and groups fitted round them. The arrangement stays; ⌘Z undoes it.")
+            tidyMenu
             zoomControls
             Menu {
                 ForEach(DiagramExporter.Format.allCases) { format in
@@ -143,12 +134,15 @@ struct DiagramEditorView: View {
             .help("The agent edits the diagram's file; you see each change here and can undo it")
             .popover(item: $describing, arrowEdge: .bottom) { drawing in
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(drawing == .future ? "A future version" : drawing == .change ? "Change it" : "Draw it")
+                    Text(drawing == .future ? "A future version" : drawing == .change ? "Change it" : drawing == .rearrange ? "Rearrange it" : "Draw it")
                         .font(.dante(size: 14, weight: .semibold)).foregroundStyle(theme.text.color)
                     DiagramDescriptionField(
                         placeholder: drawing == .future ? "What changes? e.g. move the catalogue to its own ALB, add a Redis cache (planned)…"
-                            : drawing == .change ? "What to change, in your words…" : "What should it show, in your words…",
-                        button: drawing == .future ? "Draw the future version" : "Draw it") { words in
+                            : drawing == .change ? "What to change, in your words…"
+                            : drawing == .rearrange ? "How should it read? e.g. a request left to right, identity on top, data at the bottom… (or leave it to \(session.agentName))"
+                            : "What should it show, in your words…",
+                        button: drawing == .future ? "Draw the future version" : drawing == .rearrange ? "Rearrange it" : "Draw it",
+                        allowsEmpty: drawing == .rearrange) { words in
                         describing = nil
                         document.save()
                         session.drawDiagram(path, description: words, as: drawing)
@@ -165,6 +159,36 @@ struct DiagramEditorView: View {
         .padding(.horizontal, 14)
         .frame(height: 44)
         .background(theme.panel.color)
+    }
+
+    /// Tidy: the selection when there is one, else everything. Clicking tidies the spacing and
+    /// order; the menu also lays it out again by the links, or asks the agent to rethink it.
+    private var tidyMenu: some View {
+        let selected = document.selection.filter { document.diagram.node($0) != nil }
+        let scope: Set<String>? = selected.isEmpty ? nil : selected
+        return Menu {
+            Button(selected.isEmpty ? "Tidy Spacing and Order" : "Tidy the Selection") { tidy(scope, byFlow: false) }
+            Button(selected.isEmpty ? "Arrange by Flow" : "Arrange the Selection by Flow") { tidy(scope, byFlow: true) }
+            Divider()
+            Button("Ask \(session.agentName) to Rearrange It…") { describing = .rearrange }
+        } label: {
+            Label(selected.isEmpty ? "Tidy" : "Tidy Selection", systemImage: "wand.and.rays")
+        } primaryAction: {
+            tidy(scope, byFlow: false)
+        }
+        .menuStyle(.button)
+        .fixedSize()
+        .disabled(document.diagram.isEmpty)
+        .help(selected.isEmpty
+              ? "Even out the spacing, and put things next to what they link to so fewer links cross; the arrangement stays. The menu can also lay it out again by the links, or ask the agent. ⌘Z undoes it."
+              : "Tidy only what's selected: inside a selected group, or among the selected things. The rest stays put. ⌘Z undoes it.")
+    }
+
+    private func tidy(_ scope: Set<String>?, byFlow: Bool) {
+        document.change(byFlow ? "Arrange by Flow" : "Tidy Layout") { diagram in
+            diagram = byFlow ? diagram.arrangedByFlow(only: scope) : diagram.tidied(only: scope)
+        }
+        if scope == nil { fit() }
     }
 
     private var zoomControls: some View {

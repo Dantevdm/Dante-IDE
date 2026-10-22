@@ -45,12 +45,13 @@ struct HomeView: View {
             if let since = session.sinceLastVisit {
                 SinceLastVisitCard(session: session, since: since)
             }
-            CardGrid(minimum: 300) {
+            EvenGrid(minimum: 340) {
                 GitCard(git: git) { session.area = .ship }
                 EnvironmentCard(compose: compose, containers: containers) { session.area = .environments }
                 ClaudeKnowsCard(session: session, workspace: workspace)
                 DocsCard(session: session, workspace: workspace)
             }
+            .environment(\.cardFillsRow, true)
         }
         .task(id: workspace.revision) { await load() }
     }
@@ -79,7 +80,7 @@ struct HomeView: View {
         let report = session.security.report
         let grid = HomePulse.commitGrid(commits)
         let thisWeek = grid.last?.filter { $0 > 0 }.reduce(0, +) ?? 0
-        return CardGrid(minimum: 160) {
+        return EvenGrid(minimum: 150) {
             VitalTile(title: "Code", symbol: "chevron.left.forwardslash.chevron.right",
                       caption: "\(workspace.files.count) files", action: { session.area = .code }) {
                 if languages.isEmpty {

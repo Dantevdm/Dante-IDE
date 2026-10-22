@@ -45,7 +45,7 @@ struct DocsLibraryView: View {
                     ViewThatFits(in: .horizontal) {
                         ForEach([4, 3, 2], id: \.self) { count in
                             HStack(alignment: .top, spacing: 12) {
-                                ForEach(recent.prefix(count)) { doc in recentTile(doc).frame(minWidth: 190, idealWidth: 190, maxWidth: .infinity) }
+                                ForEach(recent.prefix(count)) { doc in recentTile(doc).frame(minWidth: 190, idealWidth: 190, maxWidth: .infinity).docMenu(doc, session: session) }
                             }
                         }
                     }
@@ -174,7 +174,7 @@ struct DocsLibraryView: View {
 
     @ViewBuilder
     private func sectionRows(_ section: DocLibrary.Section, others: [DocLibrary.Doc], showsAll: Bool) -> some View {
-            ForEach(others) { doc in docRow(doc) }
+            ForEach(others) { doc in docRow(doc).docMenu(doc, session: session) }
             if section.others.count > rowLimit {
                 LinkButton(showsAll ? "Show fewer" : "Show all \(section.others.count)") {
                     withAnimation(.snappy(duration: 0.2)) {

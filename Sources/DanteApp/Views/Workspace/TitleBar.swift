@@ -34,12 +34,6 @@ struct TitleBar: View {
                 Spacer(minLength: 12)
                 ThemeMenu()
                 ClaudeToggle(session: session)
-                IconButton(
-                    symbol: session.showsTerminal ? "terminal.fill" : "terminal",
-                    label: Shortcuts.label(session.showsTerminal ? "Hide terminal" : "Show terminal", "toggleTerminal")
-                ) {
-                    withAnimation(.snappy(duration: 0.22)) { session.showsTerminal.toggle() }
-                }
             }
             .padding(.leading, Self.trafficLightInset)
             .padding(.trailing, 10)

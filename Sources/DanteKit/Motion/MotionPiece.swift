@@ -13,6 +13,9 @@ public struct MotionPiece: Equatable, Sendable {
         case deck
         /// A short loop or explainer for a doc.
         case explainer
+        /// A one-page site whose motion follows the reader's scroll: in Dante it plays as a
+        /// scroll from top to bottom, and the exported page is scrolled by the reader.
+        case website
 
         public var id: Self { self }
         public var title: String {
@@ -20,6 +23,7 @@ public struct MotionPiece: Equatable, Sendable {
             case .video: "Video"
             case .deck: "Slide deck"
             case .explainer: "Animated explainer"
+            case .website: "Motion website"
             }
         }
     }
@@ -148,7 +152,7 @@ public struct MotionPiece: Equatable, Sendable {
         var lines = [
             "# A motion piece: Dante plays index.html, presents it on the Stage and renders it to MP4.",
             "title: \(Self.quoted(title))",
-            "kind: \(kind.rawValue)          # video, deck or explainer",
+            "kind: \(kind.rawValue)          # video, deck, explainer or website",
             "duration: \(Self.format(duration))        # seconds",
             "fps: \(fps)",
             "size: \(width)x\(height)       # design size; 4K renders at 2x",

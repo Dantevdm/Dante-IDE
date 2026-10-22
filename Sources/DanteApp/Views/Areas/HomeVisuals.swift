@@ -145,7 +145,7 @@ struct VitalTile<Picture: View>: View {
                 Text(caption).font(.dante(size: 12)).foregroundStyle(theme.text2.color).lineLimit(1)
             }
             .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(hovering ? theme.accentLine.color : theme.line.color))
             .contentShape(Rectangle())

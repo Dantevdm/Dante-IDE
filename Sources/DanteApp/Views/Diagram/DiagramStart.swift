@@ -38,13 +38,13 @@ extension Session {
 }
 
 extension Session {
-    enum DiagramDrawing: String, Identifiable { case draw, change, future; var id: String { rawValue } }
+    enum DiagramDrawing: String, Identifiable { case draw, change, future, rearrange; var id: String { rawValue } }
 
     /// Asks the agent in charge to draw what you described. The transcript shows your words;
     /// the format and the ground rules go with them unseen.
     func drawDiagram(_ path: String, description: String, as drawing: DiagramDrawing) {
         let what = description.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !what.isEmpty else { return }
+        guard !what.isEmpty || drawing == .rearrange else { return }
         let shown: String
         let steps: String
         switch drawing {
@@ -54,6 +54,11 @@ extension Session {
         case .change:
             shown = "Change \(path): \(what)"
             steps = "Change the diagram in \(path) as I described, editing the file in place and keeping the positions of what doesn't change."
+        case .rearrange:
+            shown = what.isEmpty ? "Rearrange \(path) so it reads well" : "Rearrange \(path): \(what)"
+            steps = """
+            Rearrange the diagram in \(path) so it reads at a glance, without adding, removing or renaming anything: change only frames (and a group's parent only if something is clearly in the wrong group). \(what.isEmpty ? "" : "Follow what I asked first. ")Lay it out so a request reads left to right: who uses it on the left, then the way in (DNS, load balancer, gateway), then routing, then the services, then data and outside services on the right; identity and security beside the step they guard; delivery (pipelines, registries) and observability as a band along the bottom. Keep related things in one group, line up rows and columns, keep links short and avoid crossings and links that pass behind cards. Edit the file in place; when you're done, say in a sentence what you moved and why.
+            """
         case .future:
             shown = "Draw a future version of \(path): \(what)"
             steps = "Save a future version of the diagram in \(path) with the change I described as a copy beside it (keep the original), in the same style with what doesn't change where it is, and open it with open_file."
@@ -67,6 +72,7 @@ struct DiagramDescriptionField: View {
     @Environment(\.theme) private var theme
     let placeholder: String
     let button: String
+    var allowsEmpty = false
     let send: (String) -> Void
     @State private var text = ""
 
@@ -85,12 +91,13 @@ struct DiagramDescriptionField: View {
                 .background(theme.raised.color, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(theme.line2.color))
             HStack {
+                DictationButton(text: $text)
                 Text("⌘↩ to send").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                 Spacer()
-                Button { if !words.isEmpty { send(words) } } label: { ClaudeLabel(button) }
+                Button { if allowsEmpty || !words.isEmpty { send(words) } } label: { ClaudeLabel(button) }
                     .buttonStyle(DanteButtonStyle(primary: true))
                     .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(words.isEmpty)
+                    .disabled(!allowsEmpty && words.isEmpty)
             }
         }
     }
@@ -240,6 +247,8 @@ struct NewDiagramSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.dante(size: 13))
                     .lineLimit(3...6)
+                    .padding(.trailing, 34)
+                    .overlay(alignment: .topTrailing) { DictationButton(text: $description) }
             }
             Text("Saved as docs/diagrams/\(Diagram.slug(title).isEmpty ? "diagram" : Diagram.slug(title)).dante-diagram.json, so it's reviewed in git like any doc.")
                 .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
@@ -320,6 +329,7 @@ struct MadeInDante: View {
         }
         .buttonStyle(.plain)
         .help(doc.path)
+        .docMenu(doc, session: session)
     }
 
     private func load() {

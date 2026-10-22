@@ -290,4 +290,15 @@ struct MotionLooksTests {
         for style in MotionLooks.styles { #expect(html.contains("data-kind=\"style\" data-id=\"\(style.id)\""), "\(style.id)") }
         for kit in MotionLooks.kits { #expect(html.contains("data-kind=\"kit\" data-id=\"\(kit.id)\""), "\(kit.id)") }
     }
+
+    @Test func aWebsiteIsScrolledByItsReader() {
+        let piece = MotionPiece.parse("title: Site\nkind: website\nduration: 60\n")
+        #expect(piece.kind == .website)
+        #expect(MotionPiece.parse(piece.yaml).kind == .website)
+        #expect(MotionQuestions.defaults(for: .website)["narration"]?.picked == ["No narration"])
+        // Exported, the reader's scroll drives the timeline instead of playing by itself.
+        let exported = MotionRuntime.script(piece: piece, brand: BrandKit(name: "Shop"), data: nil, mode: .browser, pixelRatio: 1)
+        #expect(exported.contains("piece.kind === \"website\""))
+        #expect(exported.contains("addEventListener(\"scroll\""))
+    }
 }

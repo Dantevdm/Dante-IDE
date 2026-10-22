@@ -140,7 +140,7 @@ public enum MotionQuestions {
             "aspect": Answer(picked: ["16:9"]),
             "loop": Answer(picked: [kind == .explainer ? "Yes, seamless loop" : "No, it ends"]),
             "continuity": Answer(picked: ["Let the agent propose"]),
-            "narration": Answer(picked: [kind == .explainer ? "No narration" : "Narrated throughout"]),
+            "narration": Answer(picked: [kind == .explainer || kind == .website ? "No narration" : "Narrated throughout"]),
             "voice": Answer(picked: ["The brand kit's tone"]),
             "bans": Answer(picked: ["Neon glow", "Hue-shifting gradients", "Fake UI", "Corner labels and timecodes", "Stock spinning objects"]),
             "avoid": Answer(picked: ["No secrets or keys", "No internal URLs or hosts"]),

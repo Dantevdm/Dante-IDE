@@ -76,6 +76,7 @@ struct DocsSidebar: View {
                                 Eyebrow(group.title).padding(.horizontal, 12).padding(.bottom, 4)
                                 ForEach(group.docs) { doc in
                                     DocRow(doc: doc, folder: (doc.path as NSString).deletingLastPathComponent.nonEmpty, isSelected: doc == selected) { session.showDoc(doc.path) }
+                .docMenu(doc, session: session)
                                 }
                             }
                         }
@@ -136,6 +137,7 @@ struct DocsSidebar: View {
             // Under its folder's heading a doc only needs its folder when the heading has two of that name.
             let repeated = section.others.contains { $0 != doc && $0.title == doc.title }
             DocRow(doc: doc, folder: repeated ? library.folder(distinguishing: doc) : nil, isSelected: doc == selected) { session.showDoc(doc.path) }
+                .docMenu(doc, session: session)
         }
         if !section.images.isEmpty {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 54, maximum: 72), spacing: 6)], spacing: 6) {

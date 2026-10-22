@@ -223,7 +223,7 @@ public enum MotionRuntime {
           .then(() => {
             ready = true; readyWaiters.splice(0).forEach((r) => r());
             post({ type: "ready", duration: piece.duration });
-            if (config.mode === "browser") dante.play();
+            if (config.mode === "browser" && piece.kind !== "website") dante.play();
           })
           .catch((error) => post({ type: "error", message: String(error && error.stack || error) }));
       },
@@ -251,11 +251,36 @@ public enum MotionRuntime {
 
     window.addEventListener("error", (event) => post({ type: "error", message: String(event.message), line: event.lineno, file: String(event.filename || "").split("/").pop() }));
     window.addEventListener("unhandledrejection", (event) => post({ type: "error", message: String(event.reason && event.reason.stack || event.reason) }));
-    if (config.mode === "browser") {
+    if (config.mode === "browser" && piece.kind === "website") {
+      // An exported website: the reader's scroll is the timeline. The scene stays fitted to the
+      // window while the page's height gives the scroll its length; time eases toward the scroll
+      // so it flows rather than jumps.
+      const length = Math.max(4, piece.duration / 4);
+      document.documentElement.style.cssText += `height: ${length * 100}vh; overflow-y: auto;`;
+      document.body.style.position = "fixed"; document.body.style.top = "0"; document.body.style.left = "0";
+      let target = 0, eased = 0, easing = false;
+      const scrolled = () => {
+        const room = document.documentElement.scrollHeight - innerHeight;
+        target = room > 0 ? clamp(scrollY / room, 0, 1) * piece.duration : 0;
+        if (!easing) { easing = true; realRAF(follow); }
+      };
+      function follow() {
+        eased += (target - eased) * 0.12;
+        if (Math.abs(target - eased) < 1e-3) eased = target;
+        draw(eased).then(() => {
+          if (eased !== target) realRAF(follow);
+          else easing = false;
+        });
+      }
+      window.addEventListener("scroll", scrolled, { passive: true });
+      whenReady().then(scrolled);
+    } else if (config.mode === "browser") {
       window.addEventListener("keydown", (event) => {
         if (["ArrowRight", " ", "PageDown"].includes(event.key)) dante.next();
         if (["ArrowLeft", "PageUp"].includes(event.key)) dante.previous();
       });
+    }
+    if (config.mode === "browser") {
       const fit = () => { const s = Math.min(innerWidth / piece.width, innerHeight / piece.height); document.body.style.transformOrigin = "0 0"; document.body.style.transform = `translate(${(innerWidth - piece.width * s) / 2}px, ${(innerHeight - piece.height * s) / 2}px) scale(${s})`; };
       window.addEventListener("resize", fit); window.addEventListener("load", fit);
     }

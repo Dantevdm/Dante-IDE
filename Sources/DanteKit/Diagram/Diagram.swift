@@ -30,6 +30,7 @@ public struct Diagram: Codable, Equatable, Sendable {
     /// A colour from the theme, by name, so a diagram looks right in every theme.
     public enum Hue: String, Codable, CaseIterable, Sendable {
         case blue, purple, teal, green, amber, red, gray
+        case indigo, pink, orange, yellow, cyan, lime, brown
 
         public var name: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
 
@@ -42,6 +43,15 @@ public struct Diagram: Codable, Equatable, Sendable {
             case .amber: theme.amber
             case .red: theme.red
             case .gray: theme.text3
+            // Beyond the theme's own colours: a light and a dark shade of each, so they read on
+            // Light and Paper as well as Dark.
+            case .indigo: RGBA(theme.isDark ? 0x8B87F5 : 0x4F46E5)
+            case .pink: RGBA(theme.isDark ? 0xF472B6 : 0xDB2777)
+            case .orange: RGBA(theme.isDark ? 0xFB923C : 0xEA580C)
+            case .yellow: RGBA(theme.isDark ? 0xFACC15 : 0xB88A04)
+            case .cyan: RGBA(theme.isDark ? 0x22D3EE : 0x0891B2)
+            case .lime: RGBA(theme.isDark ? 0xA3E635 : 0x65A30D)
+            case .brown: RGBA(theme.isDark ? 0xC08457 : 0x92400E)
             }
         }
 
@@ -51,11 +61,15 @@ public struct Diagram: Codable, Equatable, Sendable {
             let key = name.lowercased().trimmingCharacters(in: .whitespaces)
             if let hue = Hue(rawValue: key) { self = hue; return }
             switch key {
-            case "accent", "data", "images", "registry", "clients", "indigo", "navy": self = .blue
-            case "edge", "api", "violet", "keyword", "magenta", "pink": self = .purple
-            case "backend", "messaging", "network", "cyan", "type", "aqua": self = .teal
-            case "observability", "outside", "string", "lime": self = .green
-            case "compute", "orange", "yellow", "gold", "brown": self = .amber
+            case "accent", "data", "images", "registry", "clients", "navy": self = .blue
+            case "edge", "api", "violet", "keyword": self = .purple
+            case "backend", "messaging", "network", "type": self = .teal
+            case "observability", "outside", "string": self = .green
+            case "compute": self = .amber
+            case "magenta", "rose": self = .pink
+            case "aqua", "sky": self = .cyan
+            case "gold": self = .yellow
+            case "tan", "chocolate": self = .brown
             case "security", "danger", "crimson": self = .red
             case "grey", "neutral", "other", "slate", "silver": self = .gray
             default: return nil

@@ -252,6 +252,14 @@ public enum DiagramSVG {
                     out.append(rect(CGRect(x: end, y: r.minY + 42, width: width, height: 16), radius: 8, fill: theme.accentTint.css))
                     out.append(text(node.tag, x: end + width / 2, y: r.minY + 54, size: 10, weight: 500, color: theme.accent, anchor: "middle"))
                 }
+            case .title where r.height > 30:
+                // A note: the title, then its words wrapped under it.
+                header(node, at: CGPoint(x: r.minX, y: r.minY + 13), color: theme.text2, size: 11, count: nil, note: "", into: &out)
+                var y = r.minY + 34
+                for line in wrap(node.subtitle, width: r.width, size: 12, limit: 20) where y < r.maxY {
+                    out.append(text(line, x: r.minX, y: y, size: 12, color: theme.text3))
+                    y += 16
+                }
             case .title:
                 header(node, at: CGPoint(x: r.minX, y: r.minY + 13), color: theme.text2, size: 11, count: nil, note: node.subtitle, into: &out)
             case .text:

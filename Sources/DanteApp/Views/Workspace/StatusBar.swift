@@ -9,9 +9,7 @@ struct StatusBar: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            if let branch = session.git.status?.branch ?? session.branch {
-                Label(branch, systemImage: "arrow.triangle.branch")
-            }
+            TerminalToggle(session: session)
             SecurityStatus(session: session, workspace: workspace)
             Spacer()
             if let document = workspace.activeDocument, document.kind.opensAsText {
@@ -30,6 +28,31 @@ struct StatusBar: View {
         .frame(height: 26)
         .background(theme.panel.color)
         .overlay(alignment: .top) { Rectangle().fill(theme.line.color).frame(height: 1) }
+    }
+}
+
+/// Shows and hides the terminal under the editor (the branch is in the title bar).
+private struct TerminalToggle: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.22)) { session.showsTerminal.toggle() }
+        } label: {
+            Label("Terminal", systemImage: session.showsTerminal ? "terminal.fill" : "terminal")
+                .foregroundStyle(session.showsTerminal || hovering ? theme.text.color : theme.text3.color)
+                .padding(.horizontal, 6)
+                .frame(height: 20)
+                .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(session.showsTerminal ? theme.raised.color : hovering ? theme.raised.color.opacity(0.6) : .clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, -6)
+        .onHover { hovering = $0 }
+        .help(Shortcuts.label(session.showsTerminal ? "Hide terminal" : "Show terminal", "toggleTerminal"))
     }
 }
 

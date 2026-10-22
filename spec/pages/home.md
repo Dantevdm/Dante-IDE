@@ -21,6 +21,7 @@ Home is the project at a glance, drawn rather than listed: the system as a livin
 - Tests tile: the last recorded run as a bar of passed, failed and skipped, with "N passed" or "N failing" above it; "No run yet" without one.
 - Activity tile: a grid of commit days for the last twelve weeks, a column per week from Monday, darker green for busier days, days still to come left empty; "N commits this week" under it.
 - Agents tile: Agent HQ's rooms as dots (bigger for higher levels, fainter when quiet, dashed while unopened) and "HQ: a <era>, N jobs".
+- The tiles share one row when they fit (each at least 150 points wide), else they split into even rows (three and two, never four and one); the cards below are two columns (at least 340 points each, one when narrower), and every card in a row is as tall as the tallest, so their edges line up.
 - Since you were last here: commits since the project was last closed on this Mac, with files changed, lines added and removed, and "and N more" past the first few.
 - Recent commits: the latest commits on the current branch, with author and age.
 - Local environment: each compose service and whether it's up, or a note when the project has no compose file.

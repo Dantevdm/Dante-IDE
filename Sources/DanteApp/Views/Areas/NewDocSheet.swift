@@ -48,7 +48,7 @@ enum DocCreation: Identifiable, Hashable {
         switch self {
         case .doc(let template): template?.summary ?? ""
         case .diagram: "In the Map's style, or copied from it"
-        case .motion: "A video, deck or explainer"
+        case .motion: "A video, deck, explainer or motion website"
         }
     }
 }
@@ -187,6 +187,8 @@ struct NewDocSheet: View {
                     label("About")
                     TextField("Optional: what it should cover, for \(session.agentName)", text: $about, axis: .vertical)
                         .textFieldStyle(.roundedBorder).font(.dante(size: 13)).lineLimit(2...4)
+                        .padding(.trailing, 34)
+                        .overlay(alignment: .topTrailing) { DictationButton(text: $about) }
                 }
             }
         }

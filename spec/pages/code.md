@@ -16,7 +16,7 @@ Code is the editor: the file explorer, search, problems and the debugger beside 
 - The sidebar's tabs: Explorer (the project's files with git status marks), Search (text or regex, and Meaning), Changes (staged and unstaged files, branch, commit box), Problems (language server diagnostics by file) and Debug.
 - The editor: tabs, a split pane, syntax highlighting, line numbers with breakpoints, the blame of the caret's line in the status bar.
 - Files that aren't text open in a viewer: PDFs, images, Word, media.
-- The terminal below, with tabs; the agent's panel on the right.
+- The terminal below, with tabs, shown and hidden by Terminal at the left of the status bar (⌃` as before); the agent's panel on the right. The status bar no longer shows the branch: it's in the title bar.
 
 ## Actions
 - Open, create, rename, move and delete files and folders; drag files in from Finder.
