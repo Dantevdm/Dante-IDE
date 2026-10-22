@@ -129,7 +129,7 @@ struct ThemeSheet: View {
                         Text(key).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color)
                         Spacer()
                         Text(color.hex).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text2.color)
-                        source(key: "colors.\(key)", own: theme_.colors[key] != nil)
+                        source(key: "colors.\(key)", own: theme_.ownsColor(key))
                     }
                 }
             }

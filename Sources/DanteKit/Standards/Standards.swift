@@ -201,6 +201,12 @@ public struct Standards: Equatable, Sendable {
     }
 
     /// Reads it all; slow parts (files, source text) belong off the main thread.
+    /// Dante's own library on this Mac, used until another folder is chosen: standards and
+    /// themes copied in for every project, never into a repo.
+    public static var ownLibrary: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: "Dante/standards", directoryHint: .isDirectory)
+    }
+
     public static func load(projectRoot: URL, files: [String], library: URL?) -> Standards {
         var standards = Standards(library: library)
         standards.docs = projectDocs(in: files).map { path in
@@ -219,17 +225,28 @@ public struct Standards: Equatable, Sendable {
         }
         if let library {
             standards.docs += libraryDocs(library).map { Doc(title: title(of: $0), url: $0) }
-            if let set = ThemeSet.read(folder: library.appending(path: "themes"), place: .library) { standards.themeSets.append(set) }
+            // A library holds its themes in themes/, or is a themes folder itself (an app's
+            // themes/ chosen as the reference).
+            if let set = ThemeSet.read(folder: library.appending(path: "themes"), place: .library) ?? ThemeSet.read(folder: library, place: .library),
+               !standards.themeSets.contains(where: { $0.folder.resolvingSymlinksInPath().path == set.folder.resolvingSymlinksInPath().path }) {
+                standards.themeSets.append(set)
+            }
         }
         return standards
     }
 
-    /// Markdown in the library, outside its themes folder.
+    /// Markdown in the library: everything outside its themes folder, and that folder's README
+    /// (the guide to its themes).
     static func libraryDocs(_ library: URL) -> [URL] {
         guard let walker = FileManager.default.enumerator(at: library, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return [] }
         var docs: [URL] = []
         for case let url as URL in walker {
-            if url.lastPathComponent == "themes" || url.lastPathComponent == "node_modules" {
+            if url.lastPathComponent == "themes", case let readme = url.appending(path: "README.md"),
+               FileManager.default.fileExists(atPath: readme.path) {
+                docs.append(readme)
+            }
+            if url.lastPathComponent == "themes" || url.lastPathComponent == "node_modules"
+                || FileManager.default.fileExists(atPath: url.appending(path: "theme.json").path) {
                 walker.skipDescendants()
                 continue
             }

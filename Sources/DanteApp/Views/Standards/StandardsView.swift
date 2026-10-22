@@ -28,11 +28,9 @@ struct StandardsView: View {
         AreaPage(eyebrow: nil, title: "Standards", subtitle: subtitle, maxWidth: 1240) {
             Button { session.showDoc(DocLibrary.libraryPath) } label: { Label("Docs", systemImage: "chevron.left") }
                 .buttonStyle(DanteButtonStyle())
-            Button { chooseLibrary() } label: { Label(preferences.standardsLibrary.isEmpty ? "Company library…" : "Library", systemImage: "building.columns") }
+            Button { chooseLibrary() } label: { Label("Library", systemImage: "building.columns") }
                 .buttonStyle(DanteButtonStyle())
-                .help(preferences.standardsLibrary.isEmpty
-                      ? "Choose a folder for the standards and themes every project shares. Keep it outside any repo: a customer’s logos stay off other customers’ projects."
-                      : "The company library: \(preferences.standardsLibrary)")
+                .help("The library every project shares: \(preferences.standardsLibraryURL?.path ?? ""). It stays outside every repo, so a customer’s logos never travel in another customer’s project. Click to use another folder.")
             Button { writeStandardsDoc() } label: { Label("New standard", systemImage: "doc.badge.plus") }
                 .buttonStyle(DanteButtonStyle())
                 .help("Start docs/standards/ui-standards.md: principles, layout, colour and themes, type, accessibility and components, to fill in")
@@ -302,98 +300,6 @@ struct StandardsStrip: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-        }
-    }
-}
-
-extension EnvironmentValues {
-    /// The project's standards, for the Map's frontend boxes.
-    @Entry var frontendStandards: Standards?
-}
-
-/// A frontend's themes on its Map box: a dot of each brand colour and the one it uses.
-struct FrontendThemeLine: View {
-    @Environment(\.theme) private var theme
-    let sets: [ThemeSet]
-
-    var body: some View {
-        let themes = sets.flatMap { set in set.themes.map { set.resolved($0) } }
-        HStack(spacing: 4) {
-            ForEach(themes.prefix(7)) { item in
-                Circle().fill((item.color("primary") ?? ThemeColor("#888888")!).color).frame(width: 8, height: 8)
-                    .overlay(Circle().strokeBorder(theme.line.color, lineWidth: 0.5))
-            }
-            Text((sets.first?.defaultName ?? themes.first?.name ?? "") + (themes.count > 1 ? " +\(themes.count - 1)" : ""))
-                .font(.dante(size: 10, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
-            if sets.contains(where: { $0.swap?.isLive == true }) {
-                Image(systemName: "bolt.fill").font(.dante(size: 8.5)).foregroundStyle(theme.green.color)
-                    .help("Swaps themes live in development: pick one in the inspector")
-            }
-        }
-        .help(themes.map(\.name).joined(separator: ", "))
-    }
-}
-
-/// The inspector's themes for a frontend: each one to open the running app in when it swaps
-/// live, or the build setting when it picks one at build time.
-struct FrontendThemesCard: View {
-    @Environment(\.theme) private var theme
-    let session: Session
-    let sets: [ThemeSet]
-    /// Opens the running app with a theme (the query parameter and its name).
-    let open: (_ query: String, _ name: String) -> Void
-    @State private var copied: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Eyebrow("Themes")
-                Spacer()
-                LinkButton("Standards") { session.showDoc(DocLibrary.standardsPath) }
-            }
-            ForEach(sets) { set in
-                if case .project(let path) = set.place {
-                    Text(path + "/" + (set.swap?.isLive == true ? " · swaps live" : "")).font(.dante(size: 10.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.middle)
-                }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(set.themes) { item in
-                        let resolved = set.resolved(item)
-                        Button { pick(item.name, in: set) } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                // Over a clear space, so the shell's own width never widens the inspector.
-                                Color.clear.frame(maxWidth: .infinity).frame(height: 64)
-                                    .overlay(alignment: .leading) { ThemeShell(theme: resolved, scale: 0.55) }
-                                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(theme.line.color))
-                                HStack(spacing: 4) {
-                                    Text(item.name).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1)
-                                    if item.name == set.defaultName { Text("default").font(.dante(size: 9.5)).foregroundStyle(theme.text3.color) }
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(set.swap?.query.map { "Open the running app with ?\($0)=\(item.name)" }
-                              ?? set.swap?.buildVariable.map { "Copy \($0)=\(item.name): this app picks its theme when it’s built" }
-                              ?? "Show \(item.name) in Standards")
-                    }
-                }
-            }
-            if let copied {
-                Text("Copied \(copied). Set it before building or starting the app.").font(.dante(size: 11.5)).foregroundStyle(theme.text2.color)
-            }
-        }
-    }
-
-    private func pick(_ name: String, in set: ThemeSet) {
-        if let query = set.swap?.query {
-            open(query, name)
-        } else if let variable = set.swap?.buildVariable {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString("\(variable)=\(name)", forType: .string)
-            copied = "\(variable)=\(name)"
-        } else {
-            session.showDoc(DocLibrary.standardsPath)
         }
     }
 }

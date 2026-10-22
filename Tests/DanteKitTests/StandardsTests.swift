@@ -69,6 +69,11 @@ import Testing
         #expect(shown.assets["logoReversed"] == nil)
         #expect(shown.initials == "HM")
         #expect(shown.color("sidebar") == shown.color("primary"))
+        // A default's sidebar never paints another theme's: it follows the theme's own primary.
+        var dark = set.themes[0]
+        dark.colors["sidebar"] = ThemeColor("#003a5c")
+        #expect(harbour.over(dark).color("sidebar") == harbour.color("primary"))
+        #expect(harbour.ownsColor("loginCta") && !harbour.ownsColor("secondary"))
     }
 
     @Test func problemsAreTheChecksABuildMakes() throws {
@@ -166,12 +171,21 @@ import Testing
         try ##"{ "name": "pier", "colors": { "primary": "#334155" } }"##.write(to: library.appending(path: "themes/pier/theme.json"), atomically: true, encoding: .utf8)
         try "# Accessibility\n".write(to: library.appending(path: "accessibility.md"), atomically: true, encoding: .utf8)
         try "# Not a doc\n".write(to: library.appending(path: "themes/pier/README.md"), atomically: true, encoding: .utf8)
+        try "# Library themes\n".write(to: library.appending(path: "themes/README.md"), atomically: true, encoding: .utf8)
         let standards = Standards.load(projectRoot: root, files: files(root).filter { !$0.hasPrefix("library/") }, library: library)
-        #expect(standards.docs.map(\.title) == ["Principles", "UI standards", "Accessibility"])
+        #expect(standards.docs.map(\.title) == ["Principles", "UI standards", "Accessibility", "Library themes"])
         #expect(standards.docs.last?.path == nil)
         #expect(standards.themeSets.map(\.place) == [.project("web/themes"), .library])
         #expect(standards.themeSets.last?.defaultName == "pier")
         #expect(standards.themeCount == 3)
+
+        // An app's own themes folder chosen as the library: its themes, and its README as a doc.
+        let reference = Standards.load(projectRoot: library, files: [], library: root.appending(path: "web/themes"))
+        #expect(reference.themeSets.map(\.place) == [.library])
+        #expect(reference.themeSets.first?.themes.map(\.name) == ["base", "harbour"])
+        #expect(reference.docs.map(\.title) == ["Themes"])
+        // Open the app the library came from, and its themes show once, as the project's.
+        #expect(Standards.load(projectRoot: root, files: files(root).filter { !$0.hasPrefix("library/") }, library: root.appending(path: "web/themes")).themeSets.count == 1)
     }
 
     @Test func agentsAreBriefedAndCanAsk() async throws {

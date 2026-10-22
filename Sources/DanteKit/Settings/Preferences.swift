@@ -87,7 +87,8 @@ public final class Preferences {
     /// The company standards library: a folder of standards docs and a `themes/` folder,
     /// shared by every project and kept outside every repo. Empty for none.
     public var standardsLibrary: String { didSet { defaults.set(standardsLibrary, forKey: Keys.standardsLibrary) } }
-    public var standardsLibraryURL: URL? { standardsLibrary.isEmpty ? nil : URL(filePath: standardsLibrary, directoryHint: .isDirectory) }
+    /// The library in use: the folder chosen, else Dante's own (`Standards.ownLibrary`).
+    public var standardsLibraryURL: URL? { standardsLibrary.isEmpty ? Standards.ownLibrary : URL(filePath: standardsLibrary, directoryHint: .isDirectory) }
     /// How much Claude may do without asking.
     public var approvalLevel: ApprovalLevel { didSet { defaults.set(approvalLevel.rawValue, forKey: Keys.approvalLevel) } }
     /// Read Claude's replies out after you speak to it.

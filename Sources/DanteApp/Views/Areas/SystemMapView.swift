@@ -196,7 +196,6 @@ private struct LaneHeader: View {
 
 struct PartBox: View {
     @Environment(\.theme) private var theme
-    @Environment(\.frontendStandards) private var standards
     let part: SystemMap.Part
     let state: SystemDiagram.PartState
     let hue: Color
@@ -257,9 +256,6 @@ struct PartBox: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.leading, 29)
-                }
-                if part.lane == .clients, part.id.hasPrefix("client:"), let sets = standards?.themeSets(within: part.path ?? ""), !sets.isEmpty {
-                    FrontendThemeLine(sets: sets).padding(.leading, 29)
                 }
                 if let coverage, part.lane != .data, part.lane != .outside {
                     CoverageBar(fraction: coverage).padding(.leading, 29)
@@ -478,11 +474,6 @@ struct SystemInspector: View {
                         }
                         .buttonStyle(DanteButtonStyle(primary: open == nil))
                         .help("Opens it in your browser on localhost. If its dev server isn’t running, Dante says so and starts it first.")
-                    }
-                }
-                if let web = webApp, let sets = workspace.standards?.themeSets(within: web.client.path ?? ""), !sets.isEmpty {
-                    FrontendThemesCard(session: session, sets: sets) { query, name in
-                        session.openInBrowser(folder: web.client.path ?? "", name: web.client.name, screen: web.screen, theme: (query, name))
                     }
                 }
                 if part.kind == .table, let table {

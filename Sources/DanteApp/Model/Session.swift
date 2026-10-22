@@ -561,7 +561,7 @@ final class Session {
         if Preferences.shared.handsEnabled, claude.projectName == nil, claude.remote == nil { environment[Hands.environment] = "1" }
         // Its own browser, for the main conversation and jobs alike; it only visits the app here.
         if Preferences.shared.agentsBrowse, claude.remote == nil { environment[BrowserTools.environment] = "1" }
-        if !Preferences.shared.standardsLibrary.isEmpty { environment[DelegateEnvironment.standards] = Preferences.shared.standardsLibrary }
+        if let library = Preferences.shared.standardsLibraryURL { environment[DelegateEnvironment.standards] = library.path }
         // The server always carries the Security page's scan; with Codex in charge, also Claude
         // for second opinions.
         claude.delegateCommand = Self.danteCommand

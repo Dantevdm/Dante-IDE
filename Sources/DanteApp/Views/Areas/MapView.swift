@@ -108,7 +108,6 @@ struct MapView: View {
                         .id("summary" + level)
                     SystemDiagram(map: map, selected: $selected, coverage: showsCoverage ? coverage.map(map.coverage) : nil,
                                   openable: openable[level] ?? [], opening: opening, open: open, openContainer: openContainer, recorder: systemLayout)
-                        .environment(\.frontendStandards, workspace.standards)
                         .id("diagram" + level)
                         .transition(.asymmetric(
                             insertion: .scale(scale: zoomingIn ? 0.35 : 1.25, anchor: zoomingIn ? zoomAnchor : .center).combined(with: .opacity),

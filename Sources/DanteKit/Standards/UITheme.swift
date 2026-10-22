@@ -216,7 +216,8 @@ public struct UITheme: Identifiable, Equatable, Sendable {
         guard let base, base.name != name || base.folder != folder else { return self }
         var theme = self
         theme.productName = productName ?? base.productName
-        for (key, color) in base.colors where colors[key] == nil { theme.colors[key] = color }
+        // The sidebar and sign-in button follow the theme's own primary, never the default's.
+        for (key, color) in base.colors where !ownsColor(key) { theme.colors[key] = color }
         for (tone, parts) in base.status {
             for (part, color) in parts where status[tone]?[part] == nil { theme.status[tone, default: [:]][part] = color }
         }
@@ -229,6 +230,14 @@ public struct UITheme: Identifiable, Equatable, Sendable {
         theme.loginArtworkFocus = loginArtworkFocus ?? base.loginArtworkFocus
         return theme
     }
+
+    /// Whether this theme decides a colour itself: set it, or, for the sidebar and sign-in
+    /// button, set the primary they default to.
+    public func ownsColor(_ key: String) -> Bool {
+        colors[key] != nil || (Self.followsPrimary.contains(key) && colors["primary"] != nil)
+    }
+
+    static let followsPrimary: Set<String> = ["sidebar", "loginCta"]
 
     public func color(_ key: String) -> ThemeColor? {
         switch key {

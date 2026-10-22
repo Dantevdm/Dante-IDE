@@ -5,30 +5,27 @@ phrases: [standards, ui standards, house standards, principles, design standards
 ---
 # Standards (Docs › Standards)
 
-Standards are the house rules every app the team builds follows: principles and UI standards as docs, and the frontend themes (a folder per customer with a theme.json, its logos and its font) a frontend must take its colours, type, corners and logos from. They come from the project and from a company library kept outside every repo, and new themes are made here, by hand or by the agent in charge.
+Standards are the house rules every app the team builds follows: principles and UI standards as docs, and the frontend themes (a folder per customer with a theme.json, its logos and its font) a frontend must take its colours, type, corners and logos from. They're references for coding: they come from the project and from the company library, a folder on this Mac outside every repo, and new themes are made here, by hand or by the agent in charge. They don't appear on the Map.
 
 ## Highlights
 - Every themes folder in the project is found on its own (any `<folder>/<name>/theme.json`, builds and node_modules skipped), with its default theme from the folder's README.
 - Each theme shows as its own sign-in page and app shell, drawn in its colours, font, corners and logos, with what's wrong with it (missing files, unreadable fields, a missing font licence, text on the primary colour below 4.5:1).
 - When the frontend swaps themes live (`?theme=<name>` in its source), Open the app in it starts or opens the running app in that theme; when it picks one at build time (`VITE_THEME`), the variable to set is copied.
 - New theme: a customer's name, colours, corners, font and pictures, with a live preview and contrast check, written as a folder beside the others or in the company library; or the agent in charge makes it.
-- The Map's frontend boxes show their themes, and the inspector lists them to open the running app in.
 - The agents are told the standards in their brief, and Dante's ui_standards tool gives them the docs, every theme and the theme.json format.
 
 ## Shows
-- The header: the counts (docs and themes), Docs (back to the library), Company library… (a folder chooser; Library once one is chosen, its path in the tooltip), New standard and New theme.
+- The header: the counts (docs and themes), Docs (back to the library), Library (the library's path in the tooltip; click to use another folder), New standard and New theme.
 - Docs: a row per standards doc, project ones first (docs/standards/, standards/, .dante/standards/ or documentation/standards/) then the company library's, each with its first line and where it lives.
 - A section per themes folder: its folder (or Company library), the default theme, how the app picks a theme (a Live chip with `?theme=`, or the build variable's name), "Copy all to the library" and "New theme here"; then a card per theme: a small sign-in page, the name, the customer, the primary colours as dots, a Default chip and a problem count.
 - The theme sheet: the sign-in page and app shell side by side, the running app's launch card when it's opening in this theme, problems, every colour with its hex and contrast, the font, corners, product, copyright and pictures (reversed ones on the primary colour), with "from <default>" beside each field the theme leaves to its default.
 - The Docs library's Standards strip (after Diagrams and motion) and a Standards row in the Docs sidebar.
-- On the Map's System view: a theme line on a frontend box (a primary-colour dot per theme, up to seven, the default's name with +N for the others, and a green bolt when it swaps live); in the inspector, a Themes card listing them, each with Open in it when the app swaps live, else the build variable to copy.
 
 ## Actions
 - Open a theme card for its sheet; Open the app in it; Copy VAR=name; New theme from this…; Copy to the company library (or, from the library, Copy into a project's themes folder); Open theme.json (in Code inside the project, else the default app); Show in Finder.
 - New theme: Save in (each themes folder, the company library, or a new themes/ folder), Start from (a theme whose font and defaults it takes), customer (the folder name comes from it, lower case with dashes), product, copyright, tagline, primary, secondary and accent colours with the text colour on primary worked out, a separate sidebar colour, corners, and logo, reversed logo, mark and sign-in picture from files. Make theme writes theme.json and copies the pictures (and the starting theme's font files with their licence); Ask <agent> to make it sends the same as a request with the format.
 - New standard: writes docs/standards/ui-standards.md from an outline naming the project's themes (never over an existing file) and opens it Side by Side.
-- Company library…: choose a folder outside the project (a folder inside it is refused); its docs (markdown at its top level or under docs/) and its themes/ are shown for every project on this Mac.
-- On the Map: Open in it on a theme starts or opens the app with `?theme=<name>`, through the same launch card as the Map's Open in browser.
+- Library: Dante's own library, Application Support/Dante/standards, is used until another folder is chosen (outside the project; a folder inside it is refused). Its docs (markdown, plus a themes folder's README as the guide to its themes) and its themes (in themes/, or the folder itself when it holds theme folders) show for every project on this Mac. A library that is the open project's own themes folder isn't shown twice.
 
 ## States
 - No themes: an empty state saying what a theme is and where Dante finds them, with Company library… and New theme…; standards docs still list above it.
@@ -48,5 +45,4 @@ Standards are the house rules every app the team builds follows: principles and 
 - A project with web/themes/{base,acme}/theme.json and a `?theme=` reader shows both themes, base as Default, with the Live chip; Open the app in it opens `http://localhost:<port>/?theme=acme` (before any `#` route).
 - A theme with an unreadable colour and a missing logo shows two problems.
 - New theme with a customer "Kelp & Co." writes kelp-co/theme.json that reads back the same and shows as a card at once.
-- The Map's frontend box for that app shows its themes' dots and base +1, with the bolt.
 - Previews look right in the Light, Dark and Paper themes (the mock pages stay the customer's own colours).
