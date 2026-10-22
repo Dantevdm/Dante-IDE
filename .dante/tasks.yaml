@@ -579,3 +579,8 @@ tasks:
   phase: build
   state: review
   notes: "DanteKit/Release/Pipelines.swift (remote parsing, environments, runs, timelines, logs, retry, history, heal brief), PipelineMonitor per window (20 s while running, 90 s otherwise), PipelinesCard on Ship › Release and a status bar chip. The token is the user's own PAT in the Keychain. Checked in a test copy with seeded history; not yet against a live organisation, since that needs the user's token."
+- id: DI-139
+  title: "Standards in Docs: principles, UI standards and the company's frontend themes as references for coding, with previews, problems, New theme and the agents' ui_standards tool"
+  phase: build
+  state: review
+  notes: "The company themes live in Dante's own library on this Mac (Application Support/Dante/standards), never in a repo. Themes stay off the Map."
