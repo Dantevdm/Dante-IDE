@@ -112,6 +112,17 @@ import Testing
         #expect(read == ["src/a.ts"])
     }
 
+    @Test func bundledLibrariesAreNotRead() {
+        let files = ["LICENSE", "App/Resources/Lib/three/LICENSE", "App/Resources/Lib/three/three.module.js",
+                     "web/public/vendor-ish/chart/LICENSE.md", "web/public/vendor-ish/chart/chart.js",
+                     "packages/api/LICENSE", "packages/api/server.ts", "App/main.swift"]
+        #expect(SecurityScanner.vendoredFolders(files) == ["App/Resources/Lib/three/", "web/public/vendor-ish/chart/"])
+        var read: [String] = []
+        _ = SecurityScanner.scan(files: files, read: { read.append($0); return "" })
+        // A monorepo's own package keeps its licence and is still read.
+        #expect(read == ["LICENSE", "packages/api/LICENSE", "packages/api/server.ts", "App/main.swift"])
+    }
+
     @Test func idsSurviveMovedLines() {
         let one = SecurityScanner.scan(text: "eval(code)", path: "a.js")
         let two = SecurityScanner.scan(text: "\n\n// moved\neval(code)", path: "a.js")

@@ -36,13 +36,14 @@ public enum ProjectSecurity {
                 return try? String(contentsOf: url, encoding: .utf8)
             }, git: git, never: never)
         }.value
+        let vendored = SecurityScanner.vendoredFolders(files)
         var scanners = ["Dante"]
         if options.externalTools {
             for tool in SecurityTool.all where tool.applies(root) && (options.onlineAdvisories || !tool.sendsDependencies) {
                 guard let path = tool.locate() else { continue }
                 progress?("Running \(tool.name)")
                 if let found = await tool.run(executable: path, root: root) {
-                    findings += found.filter { !never($0.file) }
+                    findings += found.filter { !never($0.file) && !SecurityScanner.isVendored($0.file, in: vendored) }
                     scanners.append(tool.name)
                 }
             }

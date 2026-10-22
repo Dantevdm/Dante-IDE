@@ -42,6 +42,7 @@ Security scores the project out of a hundred and lists its findings, most seriou
 
 ## Edge cases
 - Comments, placeholders, example files, binaries, data files and `never` paths are skipped; tests are one step milder except for secrets.
+- Bundled third-party libraries are skipped by every scanner: a folder that keeps its own LICENSE (or LICENCE, COPYING) inside a resources, assets, static, public, lib or third_party folder. A monorepo's own packages, which have licences too, are still scanned.
 - A class-style test name needs its capital: `OrderServiceTest.java` is a test, `Latest.java` isn't; `…Spec` only counts on the JVM, so Swift's `PageSpec.swift` is code.
 - A finding that becomes set aside (a new `tests:` path, or after updating Dante) is neither fixed nor new.
 - No graded findings but some set aside: the card says how many aren't graded, with Show them.

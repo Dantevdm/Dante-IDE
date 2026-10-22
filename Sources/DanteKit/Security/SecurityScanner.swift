@@ -21,7 +21,8 @@ public enum SecurityScanner {
     public static func scan(files: [String], read: (String) -> String?, git: GitView? = nil,
                             never: (String) -> Bool = { _ in false }) -> [SecurityFinding] {
         var findings: [SecurityFinding] = []
-        for path in files where !never(path) && isScannable(path) {
+        let vendored = vendoredFolders(files)
+        for path in files where !never(path) && isScannable(path) && !isVendored(path, in: vendored) {
             guard let text = read(path) else { continue }
             findings += scan(text: text, path: path)
         }
@@ -387,6 +388,25 @@ public enum SecurityScanner {
         if ["node_modules/", ".git/", "vendor/", ".build/", "deriveddata/", "__pycache__/", ".venv/", "venv/", "site-packages/"]
             .contains(where: { lower.hasPrefix($0) || lower.contains("/" + $0) }) { return false }
         return true
+    }
+
+    /// Folders of bundled third-party code: a folder below the root that keeps its own licence,
+    /// inside one where apps keep bundled libraries (resources, assets, static, public, lib,
+    /// third_party). A monorepo's own packages, which have licences too, don't sit there.
+    public static func vendoredFolders(_ files: [String]) -> [String] {
+        let licences: Set<String> = ["license", "license.md", "license.txt", "licence", "licence.md", "licence.txt", "copying"]
+        let places: Set<String> = ["resources", "assets", "static", "public", "lib", "libs", "third_party", "third-party", "thirdparty", "external", "extern"]
+        var folders: Set<String> = []
+        for path in files where licences.contains((path as NSString).lastPathComponent.lowercased()) {
+            let parts = path.lowercased().split(separator: "/").dropLast()
+            guard parts.count >= 2, parts.dropLast().contains(where: { places.contains(String($0)) }) else { continue }
+            folders.insert((path as NSString).deletingLastPathComponent + "/")
+        }
+        return folders.sorted()
+    }
+
+    public static func isVendored(_ path: String, in folders: [String]) -> Bool {
+        folders.contains { path.hasPrefix($0) }
     }
 
     static let lockfiles: Set<String> = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "go.sum", "cargo.lock", "poetry.lock",
