@@ -356,26 +356,20 @@ struct DocsView: View {
             } else {
                 let url = workspace.url.appending(path: doc.path)
                 Button {
-                    Task { await session.attach([url]) }
-                } label: {
-                    Label("Ask Claude about this", systemImage: "paperclip")
-                }
-                .buttonStyle(DanteButtonStyle())
-                .fixedSize()
-                .help("Attaches the file to your next message to Claude")
-                Button {
                     let target = ((doc.path as NSString).deletingPathExtension) + ".md"
                     session.askClaude("Write up the attached \(doc.path) as a markdown doc at \(target), so it can be read in Docs and used as a spec. Keep its structure and every requirement, decision and number; turn diagrams into mermaid code blocks where you can, and tables into markdown tables. Link the original near the top. Then tell me anything in it the code doesn't do yet.", about: url)
                 } label: {
                     ClaudeLabel("Write it up as markdown")
                 }
                 .buttonStyle(DanteButtonStyle(primary: true))
+                .fixedSize()
                 Button {
                     NSWorkspace.shared.open(url)
                 } label: {
                     Label("Open", systemImage: "arrow.up.forward.app")
                 }
                 .buttonStyle(DanteButtonStyle())
+                .fixedSize()
             }
         }
         .font(.dante(size: 12.5))

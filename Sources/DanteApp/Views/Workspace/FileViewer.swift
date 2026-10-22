@@ -57,14 +57,6 @@ struct FileViewer: View {
             .help("Ask a vision model on this Mac about the image: nothing leaves it")
         }
         Button {
-            Task { await session.attach([document.url]) }
-        } label: {
-            Label("Ask Claude about this", systemImage: "paperclip")
-        }
-        .buttonStyle(DanteButtonStyle())
-        .fixedSize()
-        .help("Attaches the file to your next message to Claude")
-        Button {
             NSWorkspace.shared.activateFileViewerSelecting([document.url])
         } label: {
             Label("Show in Finder", systemImage: "folder")
