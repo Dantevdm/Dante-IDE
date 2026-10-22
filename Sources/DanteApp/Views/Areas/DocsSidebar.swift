@@ -110,7 +110,7 @@ struct DocsSidebar: View {
     private func sectionView(_ section: DocLibrary.Section) -> some View {
         let key = "s:\(section.id)"
         let holdsSelection = selected.map(section.docs.contains) ?? false
-        let open = holdsSelection || isOpen(key, default: section.docs.count <= 8)
+        let open = holdsSelection || isOpen(key, default: false)
         return VStack(alignment: .leading, spacing: 1) {
             FoldHeader(open: open, count: section.docs.count) { toggle(key, open) } label: {
                 HStack(spacing: 5) {

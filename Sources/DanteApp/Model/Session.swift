@@ -232,8 +232,9 @@ final class Session {
     var docAnchor: String?
     /// Set when a new doc is opened for writing: Docs shows it Side by Side.
     @ObservationIgnored var docOpensEditing = false
-    /// Groups and folders folded on the Docs library page (`DocLibrary.Group.id`, `Section.id`).
-    var docsFolded: Set<String> = []
+    /// Groups and folders opened or closed by hand on the Docs library page (`DocLibrary.Group.id`,
+    /// `Section.id`); groups start open and folders closed.
+    var docsFolds: [String: Bool] = [:]
     /// The latest test run, kept while the window is open so it runs on in the background.
     var testRun: TestRun?
     /// Health checks and the production log stream for the Run area.

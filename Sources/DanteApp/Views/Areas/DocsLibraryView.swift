@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Docs' front page: what changed lately, the diagrams and motion pieces made here, then every
 /// doc as a directory: a section per group, a heading per thing the docs belong to, and a row
-/// per doc with its first line and age. Groups and headings fold. New starts any kind of doc.
+/// per doc with its first line and age. Groups start open and their folders folded. New starts any kind of doc.
 struct DocsLibraryView: View {
     @Environment(\.theme) private var theme
     let session: Session
@@ -111,9 +111,9 @@ struct DocsLibraryView: View {
     // MARK: Directory
 
     private func groupSection(_ group: DocLibrary.Group) -> some View {
-        let open = !session.docsFolded.contains(group.id)
+        let open = session.docsFolds[group.id] ?? true
         return VStack(alignment: .leading, spacing: 10) {
-            FoldHeader(open: open) { toggle(group.id) } label: {
+            FoldHeader(open: open) { toggle(group.id, open) } label: {
                 HStack(spacing: 8) {
                     Image(systemName: Self.symbol(for: group.title)).font(.dante(size: 11, weight: .medium)).foregroundStyle(theme.text3.color)
                     Eyebrow(group.title)
@@ -138,20 +138,19 @@ struct DocsLibraryView: View {
         .padding(.top, 6)
     }
 
-    private func toggle(_ id: String) {
-        withAnimation(.snappy(duration: 0.2)) {
-            if session.docsFolded.contains(id) { session.docsFolded.remove(id) } else { session.docsFolded.insert(id) }
-        }
+    private func toggle(_ id: String, _ open: Bool) {
+        withAnimation(.snappy(duration: 0.2)) { session.docsFolds[id] = !open }
     }
 
     private func sectionView(_ section: DocLibrary.Section) -> some View {
         let showsAll = expanded.contains(section.id)
         let others = showsAll ? section.others : Array(section.others.prefix(rowLimit))
-        // A group's loose docs have no heading, so they can't fold.
-        let open = section.folder.isEmpty || !session.docsFolded.contains(section.id)
+        // Folders start folded, so the page reads as a list of what's documented; a group's loose
+        // docs have no heading, so they always show.
+        let open = section.folder.isEmpty || (session.docsFolds[section.id] ?? false)
         return VStack(alignment: .leading, spacing: 2) {
             if !section.folder.isEmpty {
-                FoldHeader(open: open) { toggle(section.id) } label: {
+                FoldHeader(open: open) { toggle(section.id, open) } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: section.images.count == section.docs.count ? "photo.on.rectangle" : "folder")
                         .font(.dante(size: 11.5)).foregroundStyle(theme.accent.color)
