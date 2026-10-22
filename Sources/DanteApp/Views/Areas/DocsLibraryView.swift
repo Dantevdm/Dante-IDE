@@ -236,6 +236,7 @@ struct DocsLibraryView: View {
         case .image: "photo"
         case .slides: "rectangle.on.rectangle"
         case .document: "doc"
+        case .html: "globe"
         case .motion: "film.stack"
         }
     }

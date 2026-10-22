@@ -15,7 +15,8 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 
 ## Shows
 - The library: recently changed docs, a card per group with excerpts and thumbnails.
-- A doc: markdown rendered with Mermaid diagrams (flowchart, sequence, ER) drawn natively; PDFs, images and Word files in a viewer.
+- A doc: markdown rendered with Mermaid diagrams (flowchart, sequence, ER) drawn natively; PDFs, images and Word files in a viewer; HTML reports and slides in a built-in web preview.
+- When an agent opens an HTML file for you (`open_file`), it shows in a sheet over the window, with Open in Code and Done.
 - Beside a markdown doc: its outline (On this page) and the project files it names in `code` (Files it mentions, shown only when there are some).
 - A sidebar of groups and sections with a filter.
 - The Studio card at the top of the library, and a Motion group with every piece (docs/motion/<name>/motion.yaml).
@@ -43,7 +44,9 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 - A critique: not asked (says what the critic will do), running (with seconds), done, or failed with the reason.
 
 ## Edge cases
-- PDFs, images and Word files count as docs only under docs/, documentation/ and .dante/; elsewhere they're app assets.
+- PDFs, images, HTML and Word files count as docs only under docs/, documentation/ and .dante/; elsewhere they're app assets.
+- The HTML preview loads only static files (pages, styles, scripts, images, fonts, media) from inside the project, never dot folders, env files or the rules' never paths, and nothing from the network; links elsewhere don't navigate. A file that can't load says why, with Try again.
+- An agent can only open files inside the project (symlinks are followed and checked), never a URL or a never path.
 - HTML blocks in a README (a centred header) become images, headings and paragraphs.
 - A scene draws any moment from its time alone (no timers), so playing, presenting and rendering show the same frames; Math.random is seeded.
 - Scenes load from their own folder, Dante's fonts and the project's images and models, never env files or the rules' never paths, and nothing from the network.

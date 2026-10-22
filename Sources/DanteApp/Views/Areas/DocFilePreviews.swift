@@ -50,11 +50,16 @@ struct FilePreview: View {
     @Environment(\.theme) private var theme
     let url: URL
     let kind: DocLibrary.Doc.Kind
+    var projectRoot: URL? = nil
+    var rules = ClaudeRules()
     @State private var text: String?
 
     var body: some View {
         Group {
             switch kind {
+            case .html:
+                HTMLDocumentPreview(url: url, root: projectRoot ?? url.deletingLastPathComponent(), rules: rules)
+                    .id(url)
             case .pdf:
                 PDFPreview(url: url)
             case .image:

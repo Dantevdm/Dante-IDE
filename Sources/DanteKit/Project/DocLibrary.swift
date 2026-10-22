@@ -10,7 +10,7 @@ public struct DocLibrary: Equatable, Sendable {
         public var id: String { path }
 
         public enum Kind: Equatable, Sendable {
-            case markdown, pdf, image
+            case markdown, pdf, image, html
             /// Word, RTF, OpenDocument: previewed as text.
             case document
             /// Slides and spreadsheets, shown by Quick Look.
@@ -26,6 +26,7 @@ public struct DocLibrary: Equatable, Sendable {
             let ext = (path as NSString).pathExtension.lowercased()
             if DocLibrary.markdownExtensions.contains(ext) { return .markdown }
             if ext == "pdf" { return .pdf }
+            if ["html", "htm"].contains(ext) { return .html }
             if DocLibrary.imageExtensions.contains(ext) { return .image }
             if DocLibrary.slideExtensions.contains(ext) { return .slides }
             return .document
@@ -143,7 +144,7 @@ public struct DocLibrary: Equatable, Sendable {
 
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdx"]
     static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "tiff"]
-    static let documentExtensions: Set<String> = ["pdf", "doc", "docx", "rtf", "odt"]
+    static let documentExtensions: Set<String> = ["pdf", "doc", "docx", "rtf", "odt", "html", "htm"]
     static let slideExtensions: Set<String> = ["key", "pptx", "ppt", "odp", "pages", "numbers", "xlsx", "xls", "ods"]
     /// Where PDFs, images and Word files count as docs. Elsewhere they're app assets.
     /// Documents and slides (not images) at the project root count too.

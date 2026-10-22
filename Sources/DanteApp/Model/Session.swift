@@ -221,6 +221,13 @@ final class Session {
 
     /// The document the Docs area shows, as a project-relative path.
     var docPath: String?
+    struct HTMLPresentation: Identifiable {
+        let url: URL
+        let root: URL
+        let rules: ClaudeRules
+        var id: URL { url }
+    }
+    var htmlPresentation: HTMLPresentation?
     /// A heading to scroll the open doc to.
     var docAnchor: String?
     /// The latest test run, kept while the window is open so it runs on in the background.
@@ -446,6 +453,7 @@ final class Session {
         }
         // Asked about security, the agent runs the Security page's scan: show the page.
         claude.onDanteTool = { [weak self, weak claude] name, input, finished in
+            if name == "open_file", !finished { self?.openAgentFile(input); return }
             if name == "show_page", !finished, let feature = input["page"]?.string.flatMap(FeatureGuide.resolve) {
                 self?.show(feature)
                 return
@@ -499,6 +507,7 @@ final class Session {
         }
         // A job making a motion piece looks at its own frames too.
         claude.onDanteTool = { [weak self] name, input, finished in
+            if name == "open_file", !finished { self?.openAgentFile(input, root: job.worktreeURL); return }
             if name == "motion_frames", !finished { self?.renderMotionFrames(input, root: job.worktreeURL) }
         }
         claude.engine = job.engine == .codex && Self.codexPath != nil ? .codex : .claude

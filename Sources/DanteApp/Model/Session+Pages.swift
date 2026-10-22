@@ -2,6 +2,30 @@ import AppKit
 import DanteKit
 
 extension Session {
+    /// An agent's generated file, opened by Dante rather than a shell's default application.
+    func openAgentFile(_ input: JSONValue, root: URL? = nil) {
+        guard let root = root ?? workspace?.url, let path = input["path"]?.string else { return }
+        do {
+            let rules = ClaudeRules.load(projectRoot: root)
+            let url = try ProjectFileOpen.resolve(path, root: root, rules: rules)
+            let mode = input["mode"]?.string ?? "preview"
+            guard ["preview", "code"].contains(mode) else {
+                throw ProjectFileOpen.Failure(message: "Choose preview or code mode.")
+            }
+            if mode == "preview", ProjectFileOpen.isHTML(url) {
+                htmlPresentation = HTMLPresentation(url: url, root: root, rules: rules)
+            } else if let line = input["line"]?.int {
+                open(file: url, line: line)
+            } else if mode == "preview", root == workspace?.url, DocLibrary.isDoc(path) {
+                showDoc(path)
+            } else {
+                open(file: url)
+            }
+            NSApp.activate()
+            window?.makeKeyAndOrderFront(nil)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
     /// Opens a page from the spec, for voice and the agents' `show_page`: an area and the view
     /// inside it, or the Settings window or the Stage. Returns a line to say about it.
     @discardableResult

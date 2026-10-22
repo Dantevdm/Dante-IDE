@@ -142,6 +142,24 @@ struct RootView: View {
             RemoteSheet(session: session)
                 .environment(\.theme, theme)
         }
+        .sheet(item: $session.htmlPresentation) { preview in
+            VStack(spacing: 0) {
+                HStack {
+                    Text(preview.url.lastPathComponent).font(.dante(size: 13, weight: .medium))
+                    Spacer()
+                    Button("Open in Code") {
+                        session.htmlPresentation = nil
+                        session.open(file: preview.url)
+                    }
+                    Button("Done") { session.htmlPresentation = nil }.keyboardShortcut(.cancelAction)
+                }
+                .padding(12)
+                Divider()
+                HTMLDocumentPreview(url: preview.url, root: preview.root, rules: preview.rules)
+            }
+            .frame(minWidth: 800, idealWidth: 1200, minHeight: 500, idealHeight: 760)
+            .environment(\.theme, theme)
+        }
         .alert(
             "Something went wrong",
             isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } }),

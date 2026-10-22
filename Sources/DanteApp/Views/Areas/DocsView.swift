@@ -67,7 +67,9 @@ struct DocsView: View {
                         MotionView(session: session, workspace: workspace, path: selected.path)
                             .id(selected.path)
                     } else if selected.kind != .markdown {
-                        FilePreview(url: workspace.url.appending(path: selected.path), kind: selected.kind)
+                        FilePreview(url: workspace.url.appending(path: selected.path), kind: selected.kind,
+                                    projectRoot: workspace.url, rules: workspace.claudeRules)
+                            .id("\(selected.path):\(workspace.revision)")
                     } else {
                         switch mode {
                         case .preview:

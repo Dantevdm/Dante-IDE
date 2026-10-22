@@ -25,6 +25,8 @@ public struct DelegateServer: Sendable {
     public var askClaude: ClaudeAsker?
     /// Who's in charge and calling these tools: "claude" or "codex", for the ledger.
     public var requester = "claude"
+    /// The project whose files Dante can open. Nil for a server outside the app workflow.
+    public var fileRoot: URL?
     /// Searches the project by meaning: the question and how many pieces, as text for the agent.
     public var searchCode: (@Sendable (_ question: String, _ limit: Int) async throws -> String)?
     /// Runs Dante's security scan of the project, saves it for the Security page and returns
@@ -101,6 +103,7 @@ public struct DelegateServer: Sendable {
             }
         }
         let projectRoot = URL(filePath: root, directoryHint: .isDirectory)
+        server.fileRoot = projectRoot
         server.motionFrames = { folder, times in await MotionFrames.await(root: projectRoot, folder: folder, times: times) }
         let online = environment[DelegateEnvironment.securityOnline] == "1"
         server.securityReport = {
@@ -155,6 +158,7 @@ public struct DelegateServer: Sendable {
 
     var instructions: String {
         var parts: [String] = ["dante_pages describes the IDE the user is in, page by page; show_page opens one for them."]
+        if fileRoot != nil { parts.append("Use open_file to show a project file in Dante, especially after making a slide, HTML report or document. HTML renders inside Dante, without a default browser or shell open command. Prefer open_file over running open or xdg-open.") }
         if motionFrames != nil { parts.append("motion_frames renders frames of a motion piece (docs/motion/…) so you can look at your own work.") }
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
         if securityReport != nil { parts.append("security_report runs Dante's security scan and returns the score and findings the user sees on the Security page: start there for any question about the project's security.") }
@@ -169,6 +173,7 @@ public struct DelegateServer: Sendable {
 
     var tools: [JSONValue] {
         var tools: [JSONValue] = Self.pageTools
+        if fileRoot != nil { tools.append(Self.openFileTool) }
         if motionFrames != nil { tools.append(Self.motionTool) }
         if offersLocal { tools += Self.localTools }
         if securityReport != nil { tools.append(Self.securityTool) }
@@ -182,7 +187,7 @@ public struct DelegateServer: Sendable {
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "motion_frames"].contains(tool["name"]?.string ?? ""), var object = tool.object,
+        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "open_file", "motion_frames"].contains(tool["name"]?.string ?? ""), var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
         schema["properties"] = .object(properties)
@@ -294,6 +299,21 @@ public struct DelegateServer: Sendable {
                 ],
                 "required": ["page"],
             ],
+        ],
+    ]
+
+    /// A project file shown to the user, opened by the app.
+    static let openFileTool: JSONValue = [
+        "name": "open_file",
+        "description": "Open an existing project file in Dante for the user. Use this after creating a slide, report or other deliverable. HTML opens in Dante's built-in preview with local assets; documents use Docs, other files use Code. No shell open command or external application is needed. This requests the app's UI action; report errors rather than claiming an unseen preview rendered.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "path": ["type": "string", "description": "Project-relative file path, such as docs/infrastructure-slide.html."],
+                "mode": ["type": "string", "enum": ["preview", "code"], "description": "Defaults to preview. Use code to edit the source."],
+                "line": ["type": "integer", "minimum": 1, "description": "Optional 1-based line for Code mode."],
+            ],
+            "required": ["path"],
         ],
     ]
 
@@ -414,6 +434,17 @@ public struct DelegateServer: Sendable {
             }
             // The app sees the call go by and opens the page; this only answers.
             return Self.text("Dante is showing \(FeatureGuide.place(feature)) to the user.")
+        case "open_file":
+            guard let root = fileRoot, let path = arguments["path"]?.string else {
+                return Self.text("open_file needs a project file path and an app-connected project.", isError: true)
+            }
+            guard ["preview", "code"].contains(arguments["mode"]?.string ?? "preview") else {
+                return Self.text("open_file mode must be preview or code.", isError: true)
+            }
+            do {
+                let url = try ProjectFileOpen.resolve(path, root: root, rules: ClaudeRules.load(projectRoot: root))
+                return Self.text("Requested opening \(ProposedChange.relativePath(of: url, in: root)) inside Dante. HTML is shown in the built-in preview, without an external browser.")
+            } catch { return Self.text(error.localizedDescription, isError: true) }
         case "motion_frames":
             guard let motionFrames, let folder = MotionFrames.folder(arguments["folder"]?.string) else {
                 return Self.text("motion_frames needs the piece's folder, like docs/motion/<name>.", isError: true)
