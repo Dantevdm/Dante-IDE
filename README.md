@@ -95,10 +95,10 @@ Security runs on every project, offline by default, and sits between the agents 
 
 ## Voice, the orb and the Stage
 
-- **Push to talk** with ⌃⌥Space or the Talk button. Speech is recognised on the Mac. Say "stop", "yes", "no", "switch to Codex", "status" or "how much usage is left"; anything else goes to the agent in the frontmost project.
+- **Push to talk**: hold ⌃⌥Space anywhere, speak, then release to send. Pauses while held don't submit the message, and held turns don't automatically listen for a follow-up. Click the Talk button instead for pause-to-send conversation. Speech is recognised on the Mac. Say "stop", "yes", "no", "switch to Codex", "status" or "how much usage is left"; anything else goes to the agent in the frontmost project.
 - **Voice knows the app.** Every page has a spec, so "show me the infrastructure", "what's on this page?" and "what can you do?" work, and the agents can open pages for you as they explain.
-- **Replies are read aloud as they stream**, with code skipped, in a natural voice ([Kokoro](https://github.com/thewh1teagle/kokoro-onnx), running on the Mac) or the system voices. "Hey Dante" is there too, off by default, and works only when the Mac can recognise speech offline.
-- **The Vine D** in the menu bar shows what the agents are doing: a firefly in its bowl glows orange while they work, pink when something waits for you, and the leaves sway; it fades as the usage window fills and when the plan runs out. Its panel holds a pocket copy of Agent HQ, whose brain shows the same mood.
+- **Replies are read aloud as they stream**, with code skipped, in a natural voice ([Kokoro](https://github.com/thewh1teagle/kokoro-onnx), running on the Mac) or the system voices. Completed sentences start after a brief stability check; short audio chunks are prepared ahead while the current one plays. Voice requests ask for brief conversational replies, and send after a one-second pause. "Hey Dante" is there too, off by default, and works only when the Mac can recognise speech offline.
+- **The Vine D** in the menu bar shows what the agents are doing: a firefly in its bowl glows orange while they work, pink when something waits for you, and the leaves sway; it fades as the usage window fills and when the plan runs out. Its panel shows the mood, project status, active agents, and Talk and Stage controls.
 - **The orb** is the agents' brain, on the Stage: thinking, acting, waiting for you, done, listening, tired, asleep. Sub-agents and local jobs bud off it as satellites and merge back when they finish.
 - **The Stage** is Dante full screen on a TV, or in a window: the orb in a heads-up display, the agents at work, today's tally, the reply as it's spoken, and approvals you can answer with Return.
 

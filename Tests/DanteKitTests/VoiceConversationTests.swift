@@ -22,6 +22,33 @@ import Testing
         #expect(stream.feed(reply + " More.", final: true).isEmpty)
     }
 
+    @Test func completedSentenceDoesNotWaitForTheNextOne() {
+        var stream = SpokenStream()
+        let first = "The dashboard requires a login."
+        #expect(stream.feed(first, final: false).isEmpty)
+        #expect(stream.feed(first, final: false, settled: true) == [first])
+        #expect(stream.feed(first, final: false, settled: true).isEmpty)
+        #expect(stream.feed(first + " The ping endpoint is public.", final: true) == ["The ping endpoint is public."])
+    }
+
+    @Test func stabilityCheckKeepsIncompleteWordsAndAbbreviations() {
+        for partial in ["I will check the", "Ask Dr.", "Version 3.", "For e.g.", "A.", "Working..."] {
+            var stream = SpokenStream()
+            #expect(stream.feed(partial, final: false, settled: true).isEmpty)
+            #expect(stream.feed(partial, final: true) == [partial])
+        }
+        for text in ["Ready?", "Done!", "He said “done.”"] {
+            var stream = SpokenStream()
+            #expect(stream.feed(text, final: false, settled: true) == [text])
+        }
+    }
+
+    @Test func settledTailStillSkipsCodeAndHonoursTheSpokenLimit() {
+        var stream = SpokenStream(limit: 25)
+        #expect(stream.feed("Ready.\n```swift\nlet x = 1\n```", final: false, settled: true) == ["Ready."])
+        #expect(stream.feed("Ready.\n```swift\nlet x = 1\n```\nThis explanation belongs on the screen.", final: false, settled: true) == [SpokenStream.more])
+    }
+
     @Test func hearsTheWakeWord() {
         #expect(WakeWord.command(in: "Hey Dante, run the tests") == "run the tests")
         #expect(WakeWord.command(in: "so I said okay dante") == "")

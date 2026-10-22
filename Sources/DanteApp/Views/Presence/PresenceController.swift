@@ -28,8 +28,8 @@ final class PresenceModel {
 
 /// Dante in the menu bar: the Vine D, whose firefly shows, across every window, whether the
 /// agents are resting, thinking, working, waiting for you, finished or in trouble. A click opens
-/// a panel with the frontmost project's pocket HQ and each project's state; a right click
-/// offers the Stage and to hide it. The orb lives on in the pocket HQ's brain and the Stage.
+/// a panel with the mood, controls and each project's state; a right click offers the Stage
+/// and to hide it.
 @MainActor
 final class PresenceController: NSObject {
     static let shared = PresenceController()
@@ -292,7 +292,7 @@ final class PresenceController: NSObject {
         let show = NSMenuItem(title: "Show Dante", action: #selector(showDante), keyEquivalent: "")
         show.target = self
         menu.addItem(show)
-        let talk = NSMenuItem(title: "Talk to Claude  \(VoiceController.keyLabel)", action: #selector(talk), keyEquivalent: "")
+        let talk = NSMenuItem(title: "Talk (hold \(VoiceController.keyLabel) anywhere)", action: #selector(talk), keyEquivalent: "")
         talk.target = self
         menu.addItem(talk)
         // The Stage, on any screen: a TV shows up here once it's connected or AirPlayed to.
@@ -373,14 +373,6 @@ final class PresenceController: NSObject {
     func openStage() {
         popover?.performClose(nil)
         StageController.shared.open()
-    }
-
-    /// The pocket HQ was clicked: Agent HQ in its window.
-    func openOffice(_ session: Session) {
-        popover?.performClose(nil)
-        session.area = .office
-        NSApp.activate()
-        session.window?.makeKeyAndOrderFront(nil)
     }
 
     func show(_ id: String) {

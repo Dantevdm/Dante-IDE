@@ -7,8 +7,8 @@ import Observation
 import os
 import Speech
 
-/// Talking to Claude through the orb. ⌃⌥Space (anywhere), the panel's mic or, when it's on,
-/// "Hey Dante" starts listening; it sends after a pause, or on the key again. Speech is
+/// Talking to Claude through the orb. Hold ⌃⌥Space anywhere, release to send. The panel's mic
+/// or "Hey Dante" starts listening until a pause or another click. Speech is
 /// recognised on this Mac. A few phrases Dante handles itself (stop, yes, no, switch to a
 /// project, full screen, minimise, status, usage, thanks); anything else goes to Claude in the
 /// frontmost project. Claude's reply is read out sentence by sentence as it streams, and in a
@@ -78,16 +78,23 @@ final class VoiceController {
     @ObservationIgnored private var naturalFailed = false
     @ObservationIgnored private let speech = SpeechDelegate()
     @ObservationIgnored private var hotKey: EventHotKeyRef?
+    @ObservationIgnored private var talkKey = PushToTalk()
+    @ObservationIgnored private var talkFinishTimer: Timer?
+    /// Held turns don't automatically reopen the microphone after a reply.
+    @ObservationIgnored private var heldTurn = false
+    /// Completed recognition segments during one long key hold.
+    @ObservationIgnored private var heldPrefix = ""
     @ObservationIgnored private weak var answering: Session?
     /// Items already in the transcript when the spoken request went in; later replies are read.
     @ObservationIgnored private var answeredFrom = 0
     @ObservationIgnored private var streams: [String: SpokenStream] = [:]
+    @ObservationIgnored private var speechFlush: Task<Void, Never>?
     @ObservationIgnored private var spokeThisTurn = false
 
     /// The talk key, shown in menus and tooltips.
     static let keyLabel = "⌃⌥Space"
     /// How long a pause ends what you're saying.
-    static let pause: TimeInterval = 1.6
+    static let pause: TimeInterval = 1.0
     /// How long Dante waits for a follow-up before the conversation ends.
     static let followUpWait: TimeInterval = 6
 
@@ -127,11 +134,26 @@ final class VoiceController {
     /// starts listening for "Hey Dante" if that's on.
     func install() {
         guard hotKey == nil else { return }
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { VoiceController.shared.toggle() } }
-            return noErr
-        }, 1, &spec, nil, nil)
+        let specs = [kEventHotKeyPressed, kEventHotKeyReleased].map {
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32($0))
+        }
+        specs.withUnsafeBufferPointer { events in
+            _ = InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+                guard let event else { return OSStatus(eventNotHandledErr) }
+                var id = EventHotKeyID()
+                guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
+                                        MemoryLayout<EventHotKeyID>.size, nil, &id) == noErr,
+                      id.signature == OSType(0x44414E54), id.id == 1 else { return OSStatus(eventNotHandledErr) }
+                let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        if pressed { VoiceController.shared.talkKeyPressed() }
+                        else { VoiceController.shared.talkKeyReleased() }
+                    }
+                }
+                return noErr
+            }, events.count, events.baseAddress, nil, nil)
+        }
         let id = EventHotKeyID(signature: OSType(0x44414E54), id: 1) // "DANT"
         RegisterEventHotKey(UInt32(kVK_Space), UInt32(controlKey | optionKey), id, GetApplicationEventTarget(), 0, &hotKey)
         updateWakeListening()
@@ -145,27 +167,65 @@ final class VoiceController {
         }
     }
 
+    private func talkKeyPressed() {
+        guard let ticket = talkKey.press() else { return }
+        // Interrupt narration, without cancelling the coding agent's work.
+        answering = nil
+        stopSpeaking()
+        release()
+        state = .idle
+        conversing = false
+        PresenceController.shared.voiceChanged()
+        Task { await begin(talkKeyTicket: ticket) }
+    }
+
+    private func talkKeyReleased() {
+        guard talkKey.release(), state == .listening else { return }
+        // Stop capturing now, but let recognition deliver the final word before cancelling it.
+        tapTarget.request = nil
+        request?.endAudio()
+        talkFinishTimer?.invalidate()
+        talkFinishTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                let voice = VoiceController.shared
+                guard voice.talkKey.phase == .finishing else { return }
+                voice.finish()
+            }
+        }
+    }
+
     // MARK: Listening
 
     func start() {
+        talkKey.cancel()
+        talkFinishTimer?.invalidate()
         stopSpeaking()
         Task { await begin() }
     }
 
-    private func begin(followUp: Bool = false) async {
-        guard await Self.authorised() else {
+    private func begin(followUp: Bool = false, talkKeyTicket: Int? = nil) async {
+        // A held key can be released while the system's permission prompt is still open.
+        guard talkKeyTicket.map(talkKey.canStart) ?? (talkKey.phase == .idle) else { return }
+        let authorised = await Self.authorised()
+        guard talkKeyTicket.map(talkKey.canStart) ?? (talkKey.phase == .idle) else { return }
+        guard authorised else {
+            talkKey.cancel()
             Self.log.error("not authorised for the microphone or speech recognition")
             state = .unavailable("Dante needs the microphone and speech recognition. Allow them in System Settings › Privacy & Security.")
             PresenceController.shared.voiceChanged()
             return
         }
         guard let recognizer, recognizer.isAvailable else {
+            talkKey.cancel()
             Self.log.error("speech recognition unavailable")
             state = .unavailable("Speech recognition isn’t available right now.")
             PresenceController.shared.voiceChanged()
             return
         }
-        guard startRecognition(.command, recognizer: recognizer) else { return }
+        guard startRecognition(.command, recognizer: recognizer) else { talkKey.cancel(); return }
+        if let ticket = talkKeyTicket { talkKey.started(ticket) }
+        heldTurn = talkKeyTicket != nil
+        heldPrefix = ""
         // A reply is coming: have the natural voice ready by then.
         NaturalSpeaker.shared.prewarm()
         self.followUp = followUp
@@ -270,18 +330,29 @@ final class VoiceController {
             guard state == .listening else { return }
             // After the wake word the same recognition carries on. Once you pause, it starts a
             // new segment without "Hey Dante" in it, and then all of it is the command.
-            let said = afterWake ? text.map { WakeWord.command(in: $0) ?? $0 } ?? heard : text ?? heard
+            let segment = afterWake ? text.map { WakeWord.command(in: $0) ?? $0 } : text
+            let said = segment.map { heldTurn && !heldPrefix.isEmpty ? heldPrefix + " " + $0 : $0 } ?? heard
             if said != heard {
                 heard = said
                 armSilence()
             }
-            if final || failed { finish() }
+            if failed, talkKey.phase == .listening {
+                // Never submit a held recording on a recognition failure.
+                cancel()
+            } else if final, talkKey.phase == .listening {
+                // Apple's recognizer may end a segment while the key is still down. Keep
+                // listening and append the next segment, without submitting a partial request.
+                heldPrefix = heard
+                if let recognizer, startRecognition(.command, recognizer: recognizer) { return }
+                cancel()
+            } else if final || failed { finish() }
         }
     }
 
     /// Sends once you've paused; with nothing said, gives up after a while.
     private func armSilence() {
         silenceTimer?.invalidate()
+        guard talkKey.phase == .idle else { return }
         let wait = heard.isEmpty ? (followUp ? Self.followUpWait : 6) : Self.pause
         silenceTimer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { _ in
             MainActor.assumeIsolated { VoiceController.shared.finish() }
@@ -292,6 +363,9 @@ final class VoiceController {
     func finish() {
         guard state == .listening else { return Self.log.info("finish ignored, state \(String(describing: self.state), privacy: .public)") }
         let text = heard
+        talkKey.cancel()
+        talkFinishTimer?.invalidate()
+        talkFinishTimer = nil
         wokeForThis = afterWake
         Self.log.info("heard \(text.split(separator: " ").count, privacy: .public) words: \(text, privacy: .private)")
         release()
@@ -305,6 +379,9 @@ final class VoiceController {
     }
 
     func cancel() {
+        talkKey.cancel()
+        talkFinishTimer?.invalidate()
+        talkFinishTimer = nil
         release()
         stopSpeaking()
         conversing = false
@@ -357,6 +434,7 @@ final class VoiceController {
         // Picking the device when the engine starts reports a change too.
         guard Date.now.timeIntervalSince(engineStarted) > 1 else { return }
         Self.log.info("audio devices changed")
+        if talkKey.phase != .idle { return cancel() }
         if state == .listening {
             finish()
         } else {
@@ -418,6 +496,8 @@ final class VoiceController {
     /// "Hey Dante" heard: the same recognition carries on as a command, so nothing said
     /// straight after is lost.
     private func woke(saying rest: String) {
+        heldTurn = false
+        heldPrefix = ""
         NaturalSpeaker.shared.prewarm()
         wakeTimer?.invalidate()
         wakeTimer = nil
@@ -504,7 +584,7 @@ final class VoiceController {
             for tool in claude.pendingApprovals { claude.approve(tool.id) }
             // Replies are read out from the main conversation; a job carries on by itself.
             guard claude === session.claude else { return say("Okay, the job carries on.") }
-            conversing = Preferences.shared.keepsConversation
+            conversing = !heldTurn && Preferences.shared.keepsConversation
             listenForReply(in: session, from: claude.items.count)
         case .decline:
             guard let claude = target?.waitingConversation?.claude else { return say("Nothing’s waiting.") }
@@ -551,8 +631,8 @@ final class VoiceController {
                 return say("I need a project open to ask \(Preferences.shared.agentEngine.title) that. "
                            + (names.isEmpty ? "Open a folder first." : "Say open and its name, like \(Self.list(Array(names))).")) }
             let from = session.claude?.items.count ?? 0
-            session.askClaude(text)
-            conversing = Preferences.shared.keepsConversation
+            session.askClaude(text, instructions: SpokenReply.conversationInstructions)
+            conversing = !heldTurn && Preferences.shared.keepsConversation
             listenForReply(in: session, from: from)
         }
     }
@@ -594,6 +674,8 @@ final class VoiceController {
     }
 
     private func watch() {
+        speechFlush?.cancel()
+        speechFlush = nil
         guard let session = answering, let claude = session.claude else {
             if state == .waiting { state = .idle }
             return
@@ -620,10 +702,28 @@ final class VoiceController {
             say("Claude wants to \(what.prefix(1).lowercased() + what.dropFirst()). Say yes or no.")
             return
         }
-        guard !working else { return }
+        guard !working else {
+            // No new token for a moment: release a complete final sentence. This doesn't
+            // register another observation, so the stream still has just one watcher.
+            speechFlush = Task { [weak self, weak session] in
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled, let self, let session, self.answering === session,
+                      let claude = session.claude else { return }
+                for reply in self.replies(in: claude) {
+                    var stream = self.streams[reply.id] ?? SpokenStream(limit: self.spokeThisTurn ? 400 : 700)
+                    let sentences = stream.feed(reply.text, final: false, settled: true)
+                    self.streams[reply.id] = stream
+                    for sentence in sentences { self.say(sentence) }
+                }
+            }
+            return
+        }
         answering = nil
         if state == .waiting { state = .idle }
         if !spokeThisTurn { say("Done.") }
+        // A short streamed answer may already have finished playing before the turn ended.
+        // Resume follow-up listening here too, rather than waiting for another audio callback.
+        else if outstanding.isEmpty { quiet() }
         updateWakeListening()
     }
 
@@ -654,14 +754,17 @@ final class VoiceController {
 
     /// Hands the next chunk to a voice when there's room: the natural one when it's set up.
     private func pump() {
-        guard let chunk = speechQueue.next(outstanding: outstanding.count) else { return }
-        lastToken += 1
-        let token = lastToken
-        outstanding.insert(token)
-        if !naturalFailed, NaturalSpeaker.shared.isAvailable {
-            NaturalSpeaker.shared.speak(token: token, text: chunk)
-        } else {
-            speakWithApple(chunk, token: token)
+        let natural = !naturalFailed && NaturalSpeaker.shared.isAvailable
+        // One playing, with up to two short chunks being generated or ready behind it.
+        while let chunk = speechQueue.next(outstanding: outstanding.count, capacity: natural ? 3 : 2) {
+            lastToken += 1
+            let token = lastToken
+            outstanding.insert(token)
+            if natural {
+                NaturalSpeaker.shared.speak(token: token, text: chunk)
+            } else {
+                speakWithApple(chunk, token: token)
+            }
         }
     }
 
@@ -680,6 +783,8 @@ final class VoiceController {
     }
 
     func stopSpeaking() {
+        speechFlush?.cancel()
+        speechFlush = nil
         speechQueue.reset()
         outstanding.removeAll()
         utterances.removeAll()

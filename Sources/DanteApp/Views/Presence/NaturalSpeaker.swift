@@ -60,7 +60,7 @@ final class NaturalSpeaker {
         let voice = NaturalVoice.voice(Preferences.shared.naturalVoice)
         let speed = NaturalVoice.speed(forRate: Preferences.shared.speechRate)
         Task {
-            let buffer = await synthesize(text, voice: voice, speed: speed)
+            let buffer = await synthesize(text, voice: voice, speed: speed, generation: generation)
             guard generation == self.generation else { return }
             guard let buffer else {
                 order.removeAll { $0 == token }
@@ -286,12 +286,17 @@ final class NaturalSpeaker {
         }
     }
 
-    private func synthesize(_ text: String, voice: String, speed: Double) async -> AVAudioPCMBuffer? {
+    private func synthesize(_ text: String, voice: String, speed: Double, generation: Int) async -> AVAudioPCMBuffer? {
+        guard generation == self.generation else { return nil }
         guard startServer() else { return nil }
         if !ready {
             let ok = await withCheckedContinuation { readyWaiters.append($0) }
             guard ok else { return nil }
         }
+        // Stop/interrupt may have happened while the model was warming up. Don't queue
+        // cancelled speech ahead of the user's next reply.
+        guard generation == self.generation else { return nil }
+        let started = ContinuousClock.now
         let id = nextID
         nextID += 1
         touch()
@@ -314,6 +319,7 @@ final class NaturalSpeaker {
             if let error = reply?.error { Self.log.error("natural voice: \(error, privacy: .public)") }
             return nil
         }
+        Self.log.info("natural voice: generated \(text.count, privacy: .public) characters in \(String(describing: started.duration(to: .now)), privacy: .public)")
         let url = URL(filePath: path)
         let samples = await Task.detached(priority: .userInitiated) { () -> [Float]? in
             defer { try? FileManager.default.removeItem(at: url) }
