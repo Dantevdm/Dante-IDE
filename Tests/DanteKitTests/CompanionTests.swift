@@ -181,3 +181,59 @@ private final class Probe: @unchecked Sendable {
         return nil
     }
 }
+
+@Suite struct CompanionForemanTests {
+    private func snapshot(working: Bool = false, reply: String = "", jobState: CompanionSnapshot.Job.State = .working,
+                          approvals: [CompanionSnapshot.Approval] = []) -> CompanionSnapshot {
+        CompanionSnapshot(server: "Mac", projects: [
+            .init(id: "p", name: "shop", lead: "Claude", working: working, lastReply: reply,
+                  jobs: [.init(id: "j", title: "Fix tests", state: jobState, label: "Working", lastReply: "")],
+                  approvals: approvals),
+        ])
+    }
+
+    @Test func aFinishedTurnIsSaidOnce() {
+        let before = snapshot(working: true, reply: "Looking")
+        let after = snapshot(working: false, reply: "The **build** is fixed.\n```\ncode\n```")
+        let events = CompanionForeman.events(from: before, to: after)
+        #expect(events == [.replied(project: "p", job: nil, text: after.projects[0].lastReply)])
+        #expect(CompanionForeman.spoken(events[0], in: after) == "The build is fixed.")
+        #expect(CompanionForeman.events(from: after, to: after).isEmpty)
+        #expect(CompanionForeman.events(from: nil, to: after).isEmpty)
+    }
+
+    @Test func newApprovalsAndFinishedJobsAreSaid() {
+        let run = CompanionSnapshot.Approval(id: "main/t", job: nil, from: "Main conversation", title: "Run go test ./...", detail: "go test ./...")
+        let after = snapshot(jobState: .ready, approvals: [run])
+        let events = CompanionForeman.events(from: snapshot(), to: after)
+        #expect(events.count == 2)
+        #expect(events.map { CompanionForeman.spoken($0, in: after) } == [
+            "The job Fix tests in shop is ready to review.",
+            "Claude wants to run go test ./... in shop. Yes or no?",
+        ])
+        let question = CompanionSnapshot.Approval(id: "q", job: "j", from: "Fix tests", title: "Claude has a question", detail: "",
+                                                   questions: [.init(question: "Which database?", options: ["Postgres", "SQLite"])])
+        #expect(CompanionForeman.ask(question, project: "shop", lead: "Claude")
+            == "The job Fix tests in shop asks: Which database? The options are Postgres or SQLite.")
+    }
+
+    @Test func statusComesFromTheSnapshot() {
+        let run = CompanionSnapshot.Approval(id: "a", job: nil, from: "", title: "Run x", detail: "")
+        #expect(CompanionForeman.status(snapshot(working: true, approvals: [run]))
+            == "shop needs you: one thing is waiting. Claude is working in shop. One job running in shop.")
+        #expect(CompanionForeman.status(snapshot(jobState: .paused)) == "All quiet in shop.")
+        #expect(CompanionForeman.status(CompanionSnapshot(server: "Studio", projects: [])) == "No projects are open on Studio.")
+    }
+
+    @Test func whatYouSayOnTheWalk() {
+        let projects = ["shop", "Dante IDE"]
+        #expect(CompanionForeman.parse("Yes.", projects: projects) == .approve)
+        #expect(CompanionForeman.parse("nope", projects: projects) == .decline)
+        #expect(CompanionForeman.parse("What's the status?", projects: projects) == .status)
+        #expect(CompanionForeman.parse("say that again", projects: projects) == .repeatLast)
+        #expect(CompanionForeman.parse("switch to dante ide", projects: projects) == .switchProject("Dante IDE"))
+        #expect(CompanionForeman.parse("start a job to fix the flaky login test", projects: projects) == .startJob("Fix the flaky login test"))
+        #expect(CompanionForeman.parse("Why is the build red?", projects: projects) == .ask("Why is the build red"))
+        #expect(CompanionForeman.parse("  ", projects: projects) == .cancel)
+    }
+}

@@ -1,3 +1,4 @@
+import DanteCore
 import Foundation
 
 /// A line or two that says what a doc is about, for the Docs library: the front matter's
@@ -33,20 +34,7 @@ public enum DocExcerpt {
         return nil
     }
 
-    private static let images = try! NSRegularExpression(pattern: #"!\[[^\]]*\]\([^)]*\)"#)
-    private static let links = try! NSRegularExpression(pattern: #"\[([^\]]*)\]\([^)]*\)"#)
-    private static let tags = try! NSRegularExpression(pattern: #"</?[A-Za-z][^>]*>"#)
-    private static let emphasis = try! NSRegularExpression(pattern: #"(\*\*|__|\*|`|~~)"#)
-    private static let spaces = try! NSRegularExpression(pattern: #"\s+"#)
-
-    /// The text a reader sees: images and tags gone, links as their words, no emphasis marks.
-    static func plain(_ text: String) -> String {
-        var result = text
-        for (pattern, template) in [(images, ""), (links, "$1"), (tags, ""), (emphasis, ""), (spaces, " ")] {
-            result = pattern.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: template)
-        }
-        return result.trimmingCharacters(in: .whitespaces)
-    }
+    static func plain(_ text: String) -> String { MarkdownText.plain(text) }
 
     /// Up to `length` characters, cut at a word with an ellipsis.
     static func shortened(_ text: String) -> String {

@@ -70,6 +70,10 @@ A job waiting on a pipeline shouldn't keep a model polling. Dante watches CI run
 
 `DanteCore` (Foundation and CryptoKit, macOS and iOS) holds `CompanionPairing` (the QR code's `dante-companion://pair` URL: host, port 47823, the Mac's name and a 256-bit key), `CompanionAuth` (the Mac sends a nonce, the device answers HMAC-SHA256(key, nonce), so the key never crosses the wire), `ServerMessage`/`ClientMessage` (JSON over a WebSocket at `/companion`) and `CompanionSnapshot` (each open project: lead, working, latest reply, open jobs and every waiting approval with its diff or command and any questions). The device sends `ask` (to the main conversation or a job; `spoken` asks for a reply fit for the ear), `answer` (approve, decline with a note, or answer questions), `startJob` and `stop`, and gets a `result` for each. `CompanionServer` (DanteKit, Network framework) listens on the tailnet address only (`DANTE_COMPANION_HOST` overrides it for tests), and `CompanionHub` (the app) builds the snapshot from every window once a second and sends it when it changes. The key is in the Keychain; Settings › Agents › iPhone and iPad turns it on and shows the code.
 
+### The iPhone app (built)
+
+`Mobile/DanteCompanion.xcodeproj` (see Mobile/README.md) compiles `Sources/DanteCore` into the app, so the voice helpers moved there too (`PushToTalk`, `SpokenReply`, `SpokenStream`, `SpeechQueue`, `MarkdownText`; DanteKit re-exports DanteCore). The foreman is Dante, not a Claude session: `CompanionForeman` (DanteCore, tested) compares snapshots for what's worth saying (a reply finished, a step waits, a job is ready or stopped), words an approval as a question, answers "status" from the snapshot, and parses what you say into approve, decline, stop, status, say that again, switch project, start a job or a question for the lead. On the phone, `CompanionConnection` keeps the socket (challenge, back-off reconnects, resumed when the app comes forward), `VoiceLoop` listens on-device and speaks with the best installed voice, and walk mode keeps a silent audio session running so an AirPods stem press (the remote play/pause command) starts listening with the screen locked.
+
 ## Order
 
 1. Jobs on the Mac: several Claude sessions at once, each in a worktree, a jobs board in the Claude area, and one inbox for every job's questions and approvals. Useful at the desk on its own.
@@ -84,5 +88,4 @@ A job waiting on a pipeline shouldn't keep a model polling. Dante watches CI run
 ## Open questions
 
 - How many jobs at once before the plan's five-hour window runs dry? Measure with real tasks.
-- Does the foreman run as its own Claude session, or is it Dante summarising job events with a cheap one-shot call (`ClaudeQuick`) and only waking a full session to act?
 - What the Verifier is allowed to log in to.
