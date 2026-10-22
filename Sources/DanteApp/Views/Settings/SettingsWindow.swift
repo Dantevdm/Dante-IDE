@@ -186,6 +186,7 @@ private struct ClaudePreferencesPane: View {
                 Text("Cloud agents")
                     .help("The agent in charge can ask Grok for a second opinion and Jev for quick typed decisions, using your own keys. Keys stay in your Keychain; it asks before sending anything to them unless approvals are off.")
             }
+            HandsSettingsSection()
             CompanionSettingsSection()
         }
     }

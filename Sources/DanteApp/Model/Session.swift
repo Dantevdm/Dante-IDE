@@ -464,6 +464,10 @@ final class Session {
         }
         // Asked about security, the agent runs the Security page's scan: show the page.
         claude.onDanteTool = { [weak self, weak claude] name, input, finished in
+            if let hands = Hands.Tool(rawValue: name) {
+                HandsController.shared.noteUse(by: self?.agentName ?? "Claude", step: hands.describe(input, done: finished), in: claude)
+                return
+            }
             if name == "open_file", !finished { self?.openAgentFile(input); return }
             if name == "show_page", !finished, let feature = input["page"]?.string.flatMap(FeatureGuide.resolve) {
                 self?.show(feature)
@@ -553,6 +557,8 @@ final class Session {
         if !Preferences.shared.grokModel.isEmpty, !environment.isEmpty { environment[DelegateEnvironment.grokModel] = Preferences.shared.grokModel }
         if !local { environment[DelegateEnvironment.local] = "0" }
         if Preferences.shared.checksDependenciesOnline { environment[DelegateEnvironment.securityOnline] = "1" }
+        // Hands only for a window's main conversation on this Mac; jobs are refused them anyway.
+        if Preferences.shared.handsEnabled, claude.projectName == nil, claude.remote == nil { environment[Hands.environment] = "1" }
         // The server always carries the Security page's scan; with Codex in charge, also Claude
         // for second opinions.
         claude.delegateCommand = Self.danteCommand

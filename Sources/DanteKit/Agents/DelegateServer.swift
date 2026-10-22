@@ -27,6 +27,8 @@ public struct DelegateServer: Sendable {
     public var requester = "claude"
     /// The project whose files Dante can open. Nil for a server outside the app workflow.
     public var fileRoot: URL?
+    /// Hands: apps, folders, the keyboard and mouse (`DANTE_HANDS=1`).
+    public var hands = false
     /// Searches the project by meaning: the question and how many pieces, as text for the agent.
     public var searchCode: (@Sendable (_ question: String, _ limit: Int) async throws -> String)?
     /// Runs Dante's security scan of the project, saves it for the Security page and returns
@@ -62,6 +64,7 @@ public struct DelegateServer: Sendable {
             return (model, try await ollama.chat(model: model, system: system(for: kind), prompt: prompt))
         }
         server.offersLocal = environment[DelegateEnvironment.local] != "0"
+        server.hands = environment[Hands.environment] == "1"
         if let key = environment[CloudAgent.jev.environmentVariable], !key.isEmpty {
             let jev = Jev(key: key)
             server.decide = { state, questions in try await jev.decide(state: state, questions: questions) }
@@ -169,6 +172,7 @@ public struct DelegateServer: Sendable {
         if askGrok != nil { parts.append("Grok (xAI) gives an independent second opinion or draft.") }
         if askCodex != nil { parts.append("Codex (OpenAI) reads the project itself, read-only, for a second opinion.") }
         if askClaude != nil { parts.append("Claude (Anthropic) reads the project itself, read-only, for a second opinion.") }
+        if hands { parts.append(Self.handsInstructions) }
         return parts.joined(separator: " ")
     }
 
@@ -183,12 +187,14 @@ public struct DelegateServer: Sendable {
         if askGrok != nil { tools.append(Self.grokTool) }
         if askCodex != nil { tools.append(Self.codexTool) }
         if askClaude != nil { tools.append(Self.claudeTool) }
+        if hands { tools += Self.handsTools }
         return tools.map(Self.askingWhy)
     }
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "open_file", "diagram_guide", "motion_frames"].contains(tool["name"]?.string ?? ""), var object = tool.object,
+        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "open_file", "diagram_guide", "motion_frames"].contains(tool["name"]?.string ?? ""),
+              Hands.Tool(rawValue: tool["name"]?.string ?? "") == nil, var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
         schema["properties"] = .object(properties)
@@ -400,6 +406,10 @@ public struct DelegateServer: Sendable {
     }
 
     func call(_ name: String, arguments: JSONValue) async -> JSONValue {
+        if let tool = Hands.Tool(rawValue: name) {
+            guard hands else { return Self.text("Hands are off in Dante's Settings.", isError: true) }
+            return await callHands(tool, arguments: arguments)
+        }
         switch name {
         case "delegate":
             guard let kind = arguments["kind"]?.string.flatMap(DelegateKind.init(rawValue:)),

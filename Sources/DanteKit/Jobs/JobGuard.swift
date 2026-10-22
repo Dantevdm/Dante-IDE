@@ -24,6 +24,9 @@ public enum JobGuard {
 
     /// nil when the job's usual approval level should decide.
     public static func verdict(toolName: String, input: JSONValue, worktree: URL, away: Bool, hasNote: Bool, commands: [String] = []) -> Verdict? {
+        if Hands.Tool.of(mcpName: toolName) != nil {
+            return .refuse("Jobs don't use Hands (apps, the keyboard and mouse); only the main conversation can, with the person watching.")
+        }
         if toolName == "Bash", let command = input["command"]?.string {
             if let reason = forbidden(command) { return .refuse(reason) }
             guard away else { return nil }

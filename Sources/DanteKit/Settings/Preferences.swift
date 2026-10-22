@@ -94,6 +94,8 @@ public final class Preferences {
     public var notifiesOnAlarms: Bool { didSet { defaults.set(notifiesOnAlarms, forKey: Keys.notifiesOnAlarms) } }
     /// A notification when a pipeline run starts or finishes. Off until asked for.
     public var notifiesOnPipelines: Bool { didSet { defaults.set(notifiesOnPipelines, forKey: Keys.notifiesOnPipelines) } }
+    /// Hands: the agent in charge may open apps, find folders and use the keyboard and mouse.
+    public var handsEnabled: Bool { didSet { defaults.set(handsEnabled, forKey: Keys.handsEnabled) } }
     /// The companion server for the iPhone and iPad app, on the tailnet. Off until asked for.
     public var companionEnabled: Bool { didSet { defaults.set(companionEnabled, forKey: Keys.companionEnabled) } }
     /// A notification when Claude finishes or waits for approval while Dante isn't in front.
@@ -137,6 +139,7 @@ public final class Preferences {
         notifiesOnClaude = bool(Keys.notifiesOnClaude, false)
         notifiesOnPipelines = bool(Keys.notifiesOnPipelines, false)
         companionEnabled = bool(Keys.companionEnabled, false)
+        handsEnabled = bool(Keys.handsEnabled, false)
         showsPresence = bool(Keys.showsPresence, true)
     }
 
@@ -192,6 +195,7 @@ public final class Preferences {
         static let notifiesOnClaude = "notifiesOnClaude"
         static let notifiesOnPipelines = "notifiesOnPipelines"
         static let companionEnabled = "companionEnabled"
+        static let handsEnabled = "handsEnabled"
         static let showsPresence = "showsPresence"
     }
 }

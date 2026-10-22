@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         VoiceController.shared.install()
         ActiveProject.install()
         CompanionHub.shared.install()
+        HandsController.shared.install()
         // MCP configs with agents' keys left by Dante processes that didn't stop cleanly.
         Task.detached(priority: .utility) { MCPConfigFile.removeStale() }
         // Needed when running the bare executable (`swift run`) rather than the .app bundle.

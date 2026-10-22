@@ -439,7 +439,7 @@ tasks:
 - id: DI-107
   title: "Hands: let Claude open apps, find folders and control the Mac, with a visible kill switch"
   phase: build
-  state: ready
+  state: review
   spec: docs/plans/walk-and-work.md
 - id: DI-108
   title: "Constellation: one orb per agent; orbs split off for sub-agents and jobs, beam to each other while they work together, and merge back when done"

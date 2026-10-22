@@ -81,6 +81,7 @@ public struct ToolActivity: Equatable, Sendable {
         case "mcp__dante__search_code": return resolved ? "Searched the code by meaning" : "Searching the code by meaning"
         case "mcp__dante__look": return resolved ? "Looker read an image" : "Looker is reading an image"
         default:
+            if let hands = Hands.Tool.of(mcpName: name) { return hands.describe(input, done: resolved) }
             if let tool = Self.mcpTool(name) { return tool.action }
             return name
         }
@@ -1147,6 +1148,9 @@ public final class ClaudeSession {
                         }
                     } else if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
+                    } else if Hands.Tool.of(mcpName: request.toolName)?.controls == true {
+                        // The keyboard, mouse and screen ask every time, at any approval level.
+                        onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input)))
                     } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames"].contains(request.toolName) {
                         // Dante's own local-model tools: nothing leaves the Mac. Grok and Jev
                         // send material away, so they follow the approval level.
@@ -1308,6 +1312,7 @@ public final class ClaudeSession {
     public nonisolated static func attentionLabel(_ toolName: String, input: JSONValue) -> String {
         if toolName == "AskUserQuestion" { return "Claude has a question" }
         if toolName == "ExitPlanMode" { return "Claude's plan is ready" }
+        if let hands = Hands.Tool.of(mcpName: toolName) { return hands.describe(input, done: false) }
         if let path = input["file_path"]?.string ?? input["notebook_path"]?.string {
             return "\(toolName == "Write" ? "Write" : "Edit") \((path as NSString).lastPathComponent)"
         }
