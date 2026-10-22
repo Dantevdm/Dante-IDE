@@ -27,6 +27,14 @@ cases:
     explain: map
   - say: What can you do?
     overview: true
+  - say: draw a diagram of how the umbrella app is put together
+    ask: true
+  - say: draw the infrastructure as a diagram
+    ask: true
+  - say: show me the diagrams
+    navigate: docs.diagrams
+  - say: write a runbook for restarting the dashboard
+    ask: true
   - say: show me where the orders table is written
     ask: true
   - say: explain how the data is saved
