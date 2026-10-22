@@ -24,7 +24,7 @@ struct InfraView: View {
         } else {
             InfraSummary(infra: infra)
             StoryCard(session: session, infra: infra)
-            InfraCanvas(infra: infra, selected: $selected, recorder: recorder)
+            InfraCanvas(infra: infra, selected: $selected, recorder: recorder, session: session)
         }
     }
 }
@@ -192,6 +192,8 @@ private struct InfraCanvas: View {
     let infra: Infrastructure
     @Binding var selected: String?
     var recorder: MapLayoutRecorder?
+    /// For the lanes' Runs buttons; none in a still copy.
+    var session: Session?
 
     static let nodeWidth: CGFloat = 196
 
@@ -270,6 +272,28 @@ private struct InfraCanvas: View {
             .map { ($0.1, $0.2) }
     }
 
+    /// Ship › Release, where the runs are, with the latest run's state when Dante has seen one.
+    private func runsButton(_ environment: PipelineEnvironment, session: Session) -> some View {
+        let latest = session.pipelines.history.lanes.first { $0.environment == environment }?.latest
+        return Button { session.area = .ship } label: {
+            HStack(spacing: 6) {
+                if let latest {
+                    RunDot(status: latest.status)
+                    Text("\(latest.status.title) \(latest.queued?.relative ?? "")").foregroundStyle(theme.text2.color)
+                }
+                Text("Runs").foregroundStyle(theme.accent.color)
+                Image(systemName: "arrow.up.right").font(.dante(size: 9.5, weight: .semibold)).foregroundStyle(theme.accent.color)
+            }
+            .font(.dante(size: 11.5, weight: .medium))
+            .padding(.horizontal, 9).frame(height: 22)
+            .background(Capsule().fill(theme.card.color))
+            .overlay(Capsule().strokeBorder(theme.line.color))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(latest.map { "\($0.pipeline) \($0.number) on \($0.branch): \($0.status.title). Opens the runs in Ship › Release." } ?? "Opens the pipeline runs in Ship › Release.")
+    }
+
     /// A pipeline's lane, tinted like the Pipelines card's chips: accent for non-prod, red for prod.
     private func environmentLane<Content: View>(_ environment: PipelineEnvironment, branches: [String], @ViewBuilder content: () -> Content) -> some View {
         let tint = environment == .prod ? theme.red.color : environment == .nonProd ? theme.accent.color : theme.text3.color
@@ -283,6 +307,8 @@ private struct InfraCanvas: View {
                     Text("from " + branches.joined(separator: ", "))
                         .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
                 }
+                Spacer(minLength: 12)
+                if let session { runsButton(environment, session: session) }
             }
             content()
         }
