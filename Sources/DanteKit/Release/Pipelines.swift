@@ -154,11 +154,59 @@ extension PipelineRun {
 
 // MARK: Azure DevOps
 
-/// An Azure DevOps repository, from its git remote.
+/// An Azure DevOps repository, from its git remote, or pipelines named by links someone
+/// pasted (when the code lives elsewhere and Azure DevOps only builds it).
 public struct AzureDevOpsRemote: Equatable, Sendable {
     public var organization: String
     public var project: String
     public var repository: String
+    /// Pipelines picked by link: only these are read. Empty means every pipeline building
+    /// `repository`.
+    public var definitions: [Int] = []
+
+    public init(organization: String, project: String, repository: String, definitions: [Int] = []) {
+        self.organization = organization
+        self.project = project
+        self.repository = repository
+        self.definitions = definitions
+    }
+
+    /// A pipeline's page: `…/_build?definitionId=12` (the classic and the new pages),
+    /// `…/_build/results?buildId=…&definitionId=12`, on dev.azure.com or org.visualstudio.com.
+    /// A link without a pipeline id gives the project's pipelines.
+    public static func link(_ text: String) -> AzureDevOpsRemote? {
+        guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)), let host = url.host?.lowercased(),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        func decoded(_ part: Substring) -> String { String(part).removingPercentEncoding ?? String(part) }
+        var parts = url.path.split(separator: "/")
+        let organization: String
+        if host == "dev.azure.com" {
+            guard !parts.isEmpty else { return nil }
+            organization = decoded(parts.removeFirst())
+        } else if host.hasSuffix(".visualstudio.com") {
+            organization = String(host.dropLast(".visualstudio.com".count))
+            parts.removeAll { $0.lowercased() == "defaultcollection" }
+        } else {
+            return nil
+        }
+        guard let project = parts.first, !project.hasPrefix("_") else { return nil }
+        let query = Dictionary((components.queryItems ?? []).map { ($0.name.lowercased(), $0.value ?? "") }) { a, _ in a }
+        let definition = (query["definitionid"] ?? query["pipelineid"]).flatMap { Int($0) }
+        return AzureDevOpsRemote(organization: organization, project: decoded(project), repository: "", definitions: definition.map { [$0] } ?? [])
+    }
+
+    /// The run a link points at (`…/_build/results?buildId=345`), whose pipeline Dante looks up.
+    public static func linkedRun(_ text: String) -> Int? {
+        guard let components = URLComponents(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        return components.queryItems?.first { $0.name.lowercased() == "buildid" }?.value.flatMap { Int($0) }
+    }
+
+    /// The same project with another linked pipeline.
+    public func adding(_ other: AzureDevOpsRemote) -> AzureDevOpsRemote {
+        var merged = self
+        merged.definitions = Array(Set(definitions + other.definitions)).sorted()
+        return merged
+    }
 
     /// `https://[user@]dev.azure.com/org/project/_git/repo`, `https://org.visualstudio.com/[DefaultCollection/]project/_git/repo`
     /// or `git@ssh.dev.azure.com:v3/org/project/repo`.
@@ -199,14 +247,18 @@ public struct AzureDevOpsRemote: Equatable, Sendable {
 }
 
 public enum AzureDevOps {
-    /// Pipelines whose YAML lives in this repository: id → (name, file).
-    public static func definitions(_ data: Data, repository: String) -> [Int: (name: String, file: String?)] {
+    /// Pipelines whose YAML lives in this repository, or the ones picked by link: id → (name, file).
+    public static func definitions(_ data: Data, repository: String, only picked: [Int] = []) -> [Int: (name: String, file: String?)] {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let values = json["value"] as? [[String: Any]] else { return [:] }
         var result: [Int: (name: String, file: String?)] = [:]
         for value in values {
             guard let id = value["id"] as? Int, let name = value["name"] as? String else { continue }
-            if let repo = (value["repository"] as? [String: Any])?["name"] as? String, repo.lowercased() != repository.lowercased() { continue }
+            if !picked.isEmpty {
+                if !picked.contains(id) { continue }
+            } else if repository.isEmpty {
+                // A project picked by link without a pipeline: all of them.
+            } else if let repo = (value["repository"] as? [String: Any])?["name"] as? String, repo.lowercased() != repository.lowercased() { continue }
             result[id] = (name, (value["process"] as? [String: Any])?["yamlFilename"] as? String)
         }
         return result
@@ -304,15 +356,21 @@ public enum AzureDevOps {
 
 // MARK: Talking to Azure DevOps
 
-/// Azure DevOps over its REST API with a personal access token (Build: Read & execute) kept
-/// in the Keychain. Never on a command line.
+/// Azure DevOps over its REST API, signed in with Microsoft (a bearer token) or with a personal
+/// access token (Build: Read & execute) kept in the Keychain. Never on a command line.
 public struct AzureDevOpsClient: Sendable {
     public var remote: AzureDevOpsRemote
-    var token: String
+    var authorization: String
 
     public init(remote: AzureDevOpsRemote, token: String) {
         self.remote = remote
-        self.token = token
+        authorization = "Basic " + Data(":\(token)".utf8).base64EncodedString()
+    }
+
+    /// With an access token from Microsoft sign-in.
+    public init(remote: AzureDevOpsRemote, bearer: String) {
+        self.remote = remote
+        authorization = "Bearer " + bearer
     }
 
     public enum Failure: Error, Equatable, Sendable {
@@ -320,7 +378,7 @@ public struct AzureDevOpsClient: Sendable {
 
         public var message: String {
             switch self {
-            case .unauthorised: "Azure DevOps refused the token. It needs Build (Read & execute) for this organisation, and it may have expired."
+            case .unauthorised: "Azure DevOps refused the sign-in. A token needs Build (Read & execute) for this organisation and may have expired; a Microsoft account needs access to the project."
             case .notFound: "Azure DevOps doesn't know this project, or the token can't see it."
             case .failed(let text): text
             }
@@ -333,7 +391,7 @@ public struct AzureDevOpsClient: Sendable {
         var request = URLRequest(url: components.url!, timeoutInterval: 30)
         request.httpMethod = method
         request.httpBody = body
-        request.setValue("Basic " + Data(":\(token)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         return request
@@ -353,11 +411,17 @@ public struct AzureDevOpsClient: Sendable {
     /// This repository's pipelines and their latest runs.
     public func runs(top: Int = 40) async throws(Failure) -> [PipelineRun] {
         let definitions = AzureDevOps.definitions(try await fetch(request("_apis/build/definitions", query: ["includeAllProperties": "true"])),
-                                                  repository: remote.repository)
+                                                  repository: remote.repository, only: remote.definitions)
         guard !definitions.isEmpty else { return [] }
         let ids = definitions.keys.sorted().map(String.init).joined(separator: ",")
         let data = try await fetch(request("_apis/build/builds", query: ["definitions": ids, "$top": "\(top)", "queryOrder": "queueTimeDescending"]))
         return AzureDevOps.runs(data, files: definitions.compactMapValues(\.file))
+    }
+
+    /// Which pipeline a run belongs to.
+    public func pipeline(ofRun run: Int) async throws(Failure) -> Int? {
+        let data = try await fetch(request("_apis/build/builds/\(run)"))
+        return ((try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["definition"] as? [String: Any])?["id"] as? Int
     }
 
     public func timeline(of run: Int) async throws(Failure) -> (stages: [PipelineStage], failures: [PipelineFailure]) {
@@ -367,7 +431,7 @@ public struct AzureDevOpsClient: Sendable {
     /// A step's log, the last `lines` of it.
     public func log(_ url: URL, lines: Int = 120) async throws(Failure) -> String {
         var request = URLRequest(url: url, timeoutInterval: 30)
-        request.setValue("Basic " + Data(":\(token)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
         let text = String(decoding: try await fetch(request), as: UTF8.self)
         return PipelineFailure.tail(text, lines: lines)
     }

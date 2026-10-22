@@ -18,7 +18,12 @@ final class PipelineMonitor {
     private(set) var history = PipelineHistory()
     /// Why nothing can be read: no token yet, a refused token, no gh…
     private(set) var problem: String?
+    /// Nobody is signed in to Azure DevOps (no Microsoft sign-in and no token), or it was refused.
     private(set) var needsToken = false
+    /// The project has Azure DevOps pipeline files but its code isn't there, so Dante needs a
+    /// pipeline's link to know which to read.
+    private(set) var wantsLink = false
+    private(set) var signingIn = false
     private(set) var checked: Date?
     private(set) var loading = false
     /// What failed in a run, read on demand (with the logs) for its card and the heal brief.
@@ -72,9 +77,16 @@ final class PipelineMonitor {
     private func detect(_ root: URL) async {
         let remote = await Shell.run(["git", "remote", "get-url", "origin"], in: root).stdout
         let files = Self.pipelineFiles(in: root)
-        if let azure = AzureDevOpsRemote.parse(remote) {
+        wantsLink = false
+        if let linked = Self.linked(Self.links(for: root)) {
+            source = .azure(linked)
+            hasPipelineFiles = true
+        } else if let azure = AzureDevOpsRemote.parse(remote) {
             source = .azure(azure)
             hasPipelineFiles = !files.azure.isEmpty
+        } else if !files.azure.isEmpty {
+            source = nil
+            wantsLink = true
         } else if !files.github.isEmpty {
             source = .github
             hasPipelineFiles = true
@@ -108,7 +120,7 @@ final class PipelineMonitor {
         let fresh: [PipelineRun]
         switch source {
         case .azure(let remote):
-            guard let client = client(remote) else {
+            guard let client = await client(remote) else {
                 needsToken = true
                 problem = nil
                 return
@@ -154,9 +166,82 @@ final class PipelineMonitor {
         for event in events { announce(event) }
     }
 
-    private func client(_ remote: AzureDevOpsRemote) -> AzureDevOpsClient? {
-        PipelineTokens.token(for: remote.organization).map { AzureDevOpsClient(remote: remote, token: $0) }
+    /// A saved token wins (it was chosen for this organisation), else the Microsoft sign-in.
+    private func client(_ remote: AzureDevOpsRemote) async -> AzureDevOpsClient? {
+        if let token = PipelineTokens.token(for: remote.organization) { return AzureDevOpsClient(remote: remote, token: token) }
+        if let bearer = await MicrosoftAccount.accessToken() { return AzureDevOpsClient(remote: remote, bearer: bearer) }
+        return nil
     }
+
+    /// Signs in with Microsoft in the browser, then looks.
+    func signIn() async {
+        signingIn = true
+        defer { signingIn = false }
+        switch await MicrosoftSignIn.signIn(open: { url in Task { @MainActor in NSWorkspace.shared.open(url) } }) {
+        case .success:
+            needsToken = false
+            problem = nil
+            refreshNow()
+        case .failure(let failure):
+            problem = failure.message
+        }
+    }
+
+    func signOut() {
+        MicrosoftAccount.signOut()
+        needsToken = true
+    }
+
+    // MARK: Links
+
+    static func linksKey(_ root: URL) -> String { "pipelineLinks." + root.standardizedFileURL.path }
+
+    static func links(for root: URL) -> [String] { UserDefaults.standard.stringArray(forKey: linksKey(root)) ?? [] }
+
+    /// The pipelines the links name, when they're all in one project.
+    static func linked(_ links: [String]) -> AzureDevOpsRemote? {
+        let remotes = links.compactMap(AzureDevOpsRemote.link)
+        guard let first = remotes.first else { return nil }
+        return remotes.dropFirst().reduce(first) { merged, next in
+            next.organization.lowercased() == merged.organization.lowercased() && next.project.lowercased() == merged.project.lowercased()
+                ? merged.adding(next) : merged
+        }
+    }
+
+    /// Adds a pipeline (or run) link for this project on this Mac. A run's link is turned into
+    /// its pipeline once Dante can ask Azure DevOps. Returns why it can't, if it can't.
+    func addLink(_ text: String) async -> String? {
+        guard let root else { return nil }
+        guard var remote = AzureDevOpsRemote.link(text) else { return "That isn't an Azure DevOps link. Copy it from the pipeline's page in the browser." }
+        var link = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if remote.definitions.isEmpty, let run = AzureDevOpsRemote.linkedRun(link) {
+            guard let client = await client(remote) else {
+                needsToken = true
+                return "Sign in first, so Dante can find which pipeline that run belongs to."
+            }
+            do {
+                guard let pipeline = try await client.pipeline(ofRun: run) else { return "Azure DevOps didn't say which pipeline that run belongs to." }
+                remote.definitions = [pipeline]
+                link = remote.base.appending(path: "_build").absoluteString + "?definitionId=\(pipeline)"
+            } catch {
+                return error.message
+            }
+        }
+        var links = Self.links(for: root)
+        if !links.contains(link) { links.append(link) }
+        UserDefaults.standard.set(links, forKey: Self.linksKey(root))
+        await detect(root)
+        refreshNow()
+        return nil
+    }
+
+    func forgetLinks() {
+        guard let root else { return }
+        UserDefaults.standard.removeObject(forKey: Self.linksKey(root))
+        Task { await detect(root); refreshNow() }
+    }
+
+    var hasLinks: Bool { root.map { !Self.links(for: $0).isEmpty } ?? false }
 
     func saveToken(_ token: String) {
         guard case .azure(let remote) = source else { return }
@@ -175,7 +260,7 @@ final class PipelineMonitor {
     /// What failed in a run, with the end of each failed step's log.
     func loadFailures(_ run: PipelineRun) async -> [PipelineFailure] {
         if let known = failures[run.id], known.allSatisfy({ !$0.log.isEmpty || $0.logURL == nil }) { return known }
-        guard case .azure(let remote) = source, let client = client(remote) else { return failures[run.id] ?? [] }
+        guard case .azure(let remote) = source, let client = await client(remote) else { return failures[run.id] ?? [] }
         var found: [PipelineFailure]
         if let known = failures[run.id] { found = known } else { found = (try? await client.timeline(of: run.id))?.failures ?? [] }
         for index in found.indices.prefix(4) {
@@ -195,7 +280,7 @@ final class PipelineMonitor {
         defer { retrying.remove(run.id) }
         switch source {
         case .azure(let remote):
-            guard let client = client(remote) else { return }
+            guard let client = await client(remote) else { return }
             guard let stage = run.failedStage ?? run.stages.last(where: { $0.state == .canceled }) else {
                 session?.errorMessage = "Dante can't tell which stage to run again; re-run it from Azure DevOps."
                 return

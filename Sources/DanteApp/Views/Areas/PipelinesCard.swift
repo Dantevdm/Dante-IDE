@@ -9,6 +9,10 @@ struct PipelinesCard: View {
     @Bindable var preferences = Preferences.shared
     let session: Session
     @State private var token = ""
+    @State private var usesToken = false
+    @State private var link = ""
+    @State private var linkProblem: String?
+    @State private var addingLink = false
     @State private var showsAll = false
     @State private var expanded: Int?
     @State private var confirmingProd: PipelineRun?
@@ -45,12 +49,17 @@ struct PipelinesCard: View {
                 if let web = webPage { LinkButton("Open") { NSWorkspace.shared.open(web) } }
             }
         } content: {
-            if monitor.needsToken, case .azure(let remote) = monitor.source {
-                tokenSetup(remote)
+            if monitor.wantsLink {
+                linkSetup(intro: true)
+            } else if monitor.needsToken, case .azure(let remote) = monitor.source {
+                signIn(remote)
             } else if let problem = monitor.problem {
                 Text(problem).font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
                 if case .azure = monitor.source {
-                    Button("Use another token") { monitor.forgetToken() }.buttonStyle(DanteButtonStyle())
+                    HStack(spacing: 8) {
+                        Button("Sign in again") { Task { await monitor.signIn() } }.buttonStyle(DanteButtonStyle(primary: true))
+                        Button("Use another token") { monitor.forgetToken() }.buttonStyle(DanteButtonStyle())
+                    }
                 }
             } else if monitor.runs.isEmpty {
                 Text(monitor.checked == nil ? "Looking for runs…" : "No runs yet.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
@@ -60,6 +69,7 @@ struct PipelinesCard: View {
                 lanes
                 history
             }
+            if case .azure = monitor.source, !monitor.needsToken { accountFooter }
         }
         .confirmationDialog("Run \(confirmingProd?.failedStage?.name ?? "the failed stage") in production again?",
                             isPresented: Binding(get: { confirmingProd != nil }, set: { if !$0 { confirmingProd = nil } }), presenting: confirmingProd) { run in
@@ -75,18 +85,35 @@ struct PipelinesCard: View {
         return monitor.runs.first?.url?.deletingLastPathComponent()
     }
 
-    // MARK: Token
+    // MARK: Signing in
 
-    private func tokenSetup(_ remote: AzureDevOpsRemote) -> some View {
+    private func signIn(_ remote: AzureDevOpsRemote) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Dante reads \(remote.project)'s pipeline runs from Azure DevOps with a personal access token: Build, Read & execute (execute lets it re-run a failed stage when you ask). It's kept in this Mac's Keychain and only sent to dev.azure.com.")
+            Text("Sign in with your work account to see \(remote.project)'s pipeline runs. Dante asks Azure DevOps as you, so you see what you can see in the browser. Microsoft's page opens in your browser (it names the Azure CLI, whose sign-in Dante borrows), and Dante keeps the sign-in in this Mac's Keychain.")
                 .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
-                SecureField("Personal access token", text: $token)
-                    .textFieldStyle(.roundedBorder).font(.dante(size: 12.5)).frame(maxWidth: 360)
-                    .onSubmit(save)
-                Button("Save", action: save).buttonStyle(DanteButtonStyle(primary: true)).disabled(token.trimmingCharacters(in: .whitespaces).isEmpty)
-                LinkButton("Make one in \(remote.organization)") { NSWorkspace.shared.open(remote.tokensPage) }
+                Button { Task { await monitor.signIn() } } label: {
+                    Label(monitor.signingIn ? "Waiting for the browser…" : "Sign in with Microsoft", systemImage: "person.badge.key")
+                }
+                .buttonStyle(DanteButtonStyle(primary: true))
+                .disabled(monitor.signingIn)
+                if !usesToken { LinkButton("Use a token instead") { usesToken = true } }
+                Spacer()
+                if monitor.hasLinks { LinkButton("Forget the links") { monitor.forgetLinks() } }
+            }
+            if let problem = monitor.problem {
+                Text(problem).font(.dante(size: 12)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
+            }
+            if usesToken {
+                Text("A personal access token with Build, Read & execute (execute lets Dante re-run a failed stage when you ask). It's kept in this Mac's Keychain and only sent to dev.azure.com.")
+                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    SecureField("Personal access token", text: $token)
+                        .textFieldStyle(.roundedBorder).font(.dante(size: 12.5)).frame(maxWidth: 360)
+                        .onSubmit(save)
+                    Button("Save", action: save).buttonStyle(DanteButtonStyle()).disabled(token.trimmingCharacters(in: .whitespaces).isEmpty)
+                    LinkButton("Make one in \(remote.organization)") { NSWorkspace.shared.open(remote.tokensPage) }
+                }
             }
         }
     }
@@ -94,6 +121,52 @@ struct PipelinesCard: View {
     private func save() {
         monitor.saveToken(token)
         token = ""
+    }
+
+    /// Who Dante asks as, and room to add another pipeline's link.
+    private var accountFooter: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                if let name = MicrosoftAccount.name, MicrosoftAccount.isSignedIn {
+                    Label("Signed in as \(name)", systemImage: "person.crop.circle.badge.checkmark")
+                    LinkButton("Sign out") { monitor.signOut() }
+                }
+                Spacer()
+                if monitor.hasLinks { LinkButton("Forget the links") { monitor.forgetLinks() } }
+                LinkButton("Add a pipeline") { withAnimation(.snappy) { addingLink.toggle() } }
+            }
+            .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+            if addingLink { linkSetup(intro: false) }
+        }
+    }
+
+    // MARK: Links
+
+    private func linkSetup(intro: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if intro {
+                Text("This project has Azure Pipelines files, but its code lives somewhere else, so Dante doesn't know which pipelines are its own. Paste a pipeline's link from the browser (a run's link works too), and add more for the other environments.")
+                    .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 8) {
+                TextField("https://dev.azure.com/org/project/_build?definitionId=…", text: $link)
+                    .textFieldStyle(.roundedBorder).font(.dante(size: 12.5)).frame(maxWidth: 460)
+                    .onSubmit(addLink)
+                Button("Add", action: addLink).buttonStyle(DanteButtonStyle(primary: intro))
+                    .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let linkProblem {
+                Text(linkProblem).font(.dante(size: 12)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func addLink() {
+        let text = link
+        Task {
+            linkProblem = await monitor.addLink(text)
+            if linkProblem == nil { link = ""; addingLink = false }
+        }
     }
 
     // MARK: Lanes

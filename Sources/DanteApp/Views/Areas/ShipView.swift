@@ -48,7 +48,7 @@ struct ShipView: View {
                         .buttonStyle(DanteButtonStyle())
                 }
             } else {
-                if session.pipelines.source != nil {
+                if session.pipelines.source != nil || session.pipelines.wantsLink {
                     PipelinesCard(session: session)
                 } else {
                     CICard(session: session, ci: ci)

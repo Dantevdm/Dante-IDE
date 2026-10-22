@@ -60,6 +60,63 @@ struct PipelineTests {
         #expect(definitions[7]?.file == "p/nonprod.yml")
     }
 
+    @Test func pastedLinksPickPipelines() {
+        let pipeline = AzureDevOpsRemote.link("https://dev.azure.com/Acme/Corporate%20Data/_build?definitionId=12")
+        #expect(pipeline == AzureDevOpsRemote(organization: "Acme", project: "Corporate Data", repository: "", definitions: [12]))
+        let run = "https://acme.visualstudio.com/DefaultCollection/Shop/_build/results?buildId=345&view=results"
+        #expect(AzureDevOpsRemote.link(run) == AzureDevOpsRemote(organization: "acme", project: "Shop", repository: ""))
+        #expect(AzureDevOpsRemote.linkedRun(run) == 345)
+        #expect(AzureDevOpsRemote.link("https://dev.azure.com/Acme/Shop/_apps/hub/ms.vss-ciworkflow.build-ci-hub?_a=edit-build-definition&pipelineId=4")?.definitions == [4])
+        #expect(AzureDevOpsRemote.link("https://dev.azure.com/Acme/_settings/tokens") == nil)
+        #expect(AzureDevOpsRemote.link("https://github.com/acme/shop/actions") == nil)
+        #expect(pipeline?.adding(AzureDevOpsRemote(organization: "Acme", project: "Corporate Data", repository: "", definitions: [3, 12])).definitions == [3, 12])
+    }
+
+    @Test func pickedPipelinesWinOverTheRepository() {
+        let json = """
+        {"value": [{"id": 7, "name": "hub-cd-nonprod", "repository": {"name": "hub"}},
+                   {"id": 9, "name": "other", "repository": {"name": "elsewhere"}}]}
+        """
+        #expect(AzureDevOps.definitions(Data(json.utf8), repository: "", only: [9]).keys.sorted() == [9])
+        #expect(AzureDevOps.definitions(Data(json.utf8), repository: "").keys.sorted() == [7, 9])
+    }
+
+    @Test func microsoftSignInPieces() throws {
+        // RFC 7636's example pair.
+        let pkce = MicrosoftSignIn.PKCE(verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+        #expect(pkce.challenge == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+        let url = MicrosoftSignIn.authorizeURL(clientID: "client", redirect: URL(string: "http://localhost:5123")!, pkce: pkce, state: "s1")
+        let items = Dictionary(uniqueKeysWithValues: (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        #expect(url.host == "login.microsoftonline.com" && url.path.hasSuffix("/oauth2/v2.0/authorize"))
+        #expect(items["code_challenge"] == pkce.challenge && items["code_challenge_method"] == "S256")
+        #expect(items["redirect_uri"] == "http://localhost:5123" && items["state"] == "s1" && items["client_id"] == "client")
+        #expect(items["scope"]?.contains("499b84ac-1321-427f-aa17-267ca6975798/.default") == true)
+
+        #expect(MicrosoftSignIn.code(fromRequest: "GET /?code=abc&state=s1 HTTP/1.1\r\nHost: localhost\r\n", state: "s1") == .success("abc"))
+        #expect(MicrosoftSignIn.code(fromRequest: "GET /?code=abc&state=other HTTP/1.1", state: "s1") == .failure(.mismatchedState))
+        #expect(MicrosoftSignIn.code(fromRequest: "GET /?error=access_denied&state=s1 HTTP/1.1", state: "s1") == .failure(.cancelled))
+        #expect(MicrosoftSignIn.code(fromRequest: "GET /favicon.ico HTTP/1.1", state: "s1") == nil)
+
+        let claims = MicrosoftSignIn.base64URL(Data(#"{"preferred_username":"sam@acme.example"}"#.utf8))
+        let answer = #"{"access_token":"a","refresh_token":"r","expires_in":3599,"id_token":"x.\#(claims).y"}"#
+        let now = Date(timeIntervalSince1970: 1000)
+        let tokens = try MicrosoftSignIn.tokens(Data(answer.utf8), now: now).get()
+        #expect(tokens.access == "a" && tokens.refresh == "r" && tokens.account == "sam@acme.example")
+        #expect(tokens.expires == now.addingTimeInterval(3599))
+        let refused = MicrosoftSignIn.tokens(Data(#"{"error":"invalid_grant","error_description":"AADSTS70008: expired.\r\nTrace ID: 1"}"#.utf8))
+        #expect(refused == .failure(.refused("AADSTS70008: expired.")))
+    }
+
+    @Test func theRedirectListenerTakesOneCode() async throws {
+        let loopback = try await Loopback.start(state: "s1")
+        defer { loopback.stop() }
+        #expect(loopback.port > 0)
+        let (data, response) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(loopback.port)/?code=abc&state=s1")!)
+        #expect((response as? HTTPURLResponse)?.statusCode == 200)
+        #expect(String(decoding: data, as: UTF8.self).contains("Signed in"))
+        #expect(await loopback.waitForCode(timeout: .seconds(5)) == .success("abc"))
+    }
+
     @Test func aTimelineGivesStagesAndWhatFailed() {
         let json = """
         {"records": [

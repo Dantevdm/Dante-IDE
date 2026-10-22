@@ -45,6 +45,12 @@ struct LargeRepoBenchmark {
         _ = time("TestGaps.load") { TestGaps.load(root: root, files: files, inventory: inventory) }
         _ = time("TestImpact") { TestImpact.tests(for: ["svc/s0007/pkg3/handler12.go"], in: inventory) }
 
+        let read: (String) -> String? = { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
+        let modules = time("Map: modules") { ArchitectureGraph.goModules(files: files, read: read) ?? ArchitectureGraph.folders(files) }
+        let system = time("Map: system") { SystemMap.build(files: files, read: read, modules: modules) }
+        #expect(!system.lanes.isEmpty)
+        _ = time("Security scan") { SecurityScanner.scan(files: files, read: read) }
+
         let report = timings.map { "\($0.0): \($0.1.formatted(.units(allowed: [.seconds, .milliseconds], width: .narrow)))" }
         print("Large repo (\(files.count) files)\n  " + report.joined(separator: "\n  "))
     }
