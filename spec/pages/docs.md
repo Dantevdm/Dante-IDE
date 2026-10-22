@@ -9,7 +9,7 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 
 ## Highlights
 - New document: a README, decision record, runbook, how-to guide or architecture overview with its outline, in the folder the project keeps them in, written by you or drafted by the agent from the code.
-- The library reads like a directory: docs kept beside the code are named after what they describe (portal-alb-stack, orders-portal), and every group and folder folds; folders start folded, so the page isn't noisy.
+- The library reads like a directory: docs kept beside the code are named after what they describe (shop-alb-stack, orders-portal), and every group and folder folds; folders start folded, so the page isn't noisy.
 - Standards: principles, UI standards and the customer themes every frontend follows, from the project and a company library; preview a theme as its sign-in page and app shell, open the running app in it, or make a new one (see docs.standards).
 - Diagrams: draw in the Map's style, or copy the Map's Infra or System view and change it; export as PNG, PDF, SVG or Mermaid.
 - Studio: describe a piece and the agent in charge storyboards it, builds it as a scene drawn from the real system map and infrastructure in the project's brand, looks at its own frames and fixes them.

@@ -246,14 +246,15 @@ private struct InfraCanvas: View {
             BandTitle(symbol: "arrow.triangle.branch", title: "Delivery", note: Set(infra.pipelines.map(\.system)).sorted().joined(separator: " · "))
                 .anchorPreference(key: FrameKey.self, value: .bounds) { ["band:delivery": $0] }
             ForEach(pipelinesByEnvironment, id: \.pipeline.id) { pipeline, environment in
-                environmentLane(environment, branches: pipeline.branches) {
+                let run = session?.pipelines.latestRun(file: pipeline.file)
+                environmentLane(environment, branches: pipeline.branches, pipeline: pipeline, run: run) {
                     HStack(alignment: .center, spacing: 40) {
                         SourceFace(title: pipeline.name, system: pipeline.system, branches: pipeline.branches, environment: pipeline.environment ?? "")
                             .help(pipeline.file)
                             .anchorPreference(key: FrameKey.self, value: .bounds) { ["source:" + pipeline.id: $0] }
                         ForEach(pipeline.stages) { stage in
                             let id = pipeline.id + "#" + stage.id
-                            StageNode(stage: stage, state: state(id)) { toggle(id) }
+                            StageNode(stage: stage, state: state(id), live: run.flatMap { Self.state(of: stage, in: $0) }) { toggle(id) }
                                 .anchorPreference(key: FrameKey.self, value: .bounds) { [id: $0] }
                         }
                     }
@@ -273,8 +274,8 @@ private struct InfraCanvas: View {
     }
 
     /// Ship › Release, where the runs are, with the latest run's state when Dante has seen one.
-    private func runsButton(_ environment: PipelineEnvironment, session: Session) -> some View {
-        let latest = session.pipelines.history.lanes.first { $0.environment == environment }?.latest
+    private func runsButton(_ environment: PipelineEnvironment, run: PipelineRun?, session: Session) -> some View {
+        let latest = run ?? session.pipelines.history.lanes.first { $0.environment == environment }?.latest
         return Button { session.area = .ship } label: {
             HStack(spacing: 6) {
                 if let latest {
@@ -295,7 +296,14 @@ private struct InfraCanvas: View {
     }
 
     /// A pipeline's lane, tinted like the Pipelines card's chips: accent for non-prod, red for prod.
-    private func environmentLane<Content: View>(_ environment: PipelineEnvironment, branches: [String], @ViewBuilder content: () -> Content) -> some View {
+    /// A stage's state in a run: by the YAML's identifier, else by its display name.
+    static func state(of stage: Infrastructure.Stage, in run: PipelineRun) -> PipelineRun.Status? {
+        (run.stages.first { $0.identifier.lowercased() == stage.id.lowercased() }
+            ?? run.stages.first { $0.name.lowercased() == stage.name.lowercased() })?.state
+    }
+
+    private func environmentLane<Content: View>(_ environment: PipelineEnvironment, branches: [String], pipeline: Infrastructure.Pipeline,
+                                                run: PipelineRun?, @ViewBuilder content: () -> Content) -> some View {
         let tint = environment == .prod ? theme.red.color : environment == .nonProd ? theme.accent.color : theme.text3.color
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
@@ -308,7 +316,15 @@ private struct InfraCanvas: View {
                         .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
                 }
                 Spacer(minLength: 12)
-                if let session { runsButton(environment, session: session) }
+                if let session {
+                    if session.pipelines.isMissing(file: pipeline.file) {
+                        Label("Not set up in Azure DevOps yet", systemImage: "circle.dashed")
+                            .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                            .help("\(pipeline.file) is in the repo, but no pipeline in Azure DevOps runs it. Once one does, its runs show here and on Ship › Release.")
+                    } else {
+                        runsButton(environment, run: run, session: session)
+                    }
+                }
             }
             content()
         }
@@ -439,8 +455,11 @@ private struct InfraCanvas: View {
 // MARK: Nodes
 
 private struct StageNode: View {
+    @Environment(\.theme) private var theme
     let stage: Infrastructure.Stage
     let state: InfraCanvas.NodeState
+    /// The stage in its pipeline's newest run, when Dante has seen one.
+    var live: PipelineRun.Status?
     let action: () -> Void
     @State private var hovering = false
 
@@ -449,11 +468,42 @@ private struct StageNode: View {
             StageFace(symbol: stage.kind.symbol, title: stage.name, environment: stage.environment ?? "",
                       steps: stage.steps.map { ($0.kind.symbol, $0.title + ($0.detail.isEmpty ? "" : "\n" + $0.detail)) },
                       selected: state == .selected, emphasised: hovering || state == .related)
+                .overlay { if let live { LiveRing(status: live) } }
+                .overlay(alignment: .topTrailing) { if let live { badge(live) } }
                 .opacity(state == .dimmed ? 0.4 : 1)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .help(live.map { "\(stage.name): \($0.title) in the latest run" } ?? stage.name)
+    }
+
+    private func badge(_ status: PipelineRun.Status) -> some View {
+        let color = RunDot.color(status, theme: theme)
+        return Image(systemName: StageTrack.symbol(status))
+            .font(.dante(size: 9, weight: .bold))
+            .foregroundStyle(status == .queued || status == .skipped ? theme.text3.color : color)
+            .frame(width: 18, height: 18)
+            .background(Circle().fill(theme.card.color))
+            .overlay(Circle().strokeBorder(color.opacity(0.55)))
+            .offset(x: 6, y: -6)
+    }
+}
+
+/// A stage's edge in its live state: green, red or amber once done, pulsing while it runs.
+private struct LiveRing: View {
+    @Environment(\.theme) private var theme
+    let status: PipelineRun.Status
+
+    var body: some View {
+        let color = RunDot.color(status, theme: theme)
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: status != .running)) { context in
+            let pulse = status == .running ? 0.5 + 0.5 * sin(context.date.timeIntervalSinceReferenceDate * 4) : 0
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(color.opacity(status == .queued || status == .skipped ? 0.25 : 0.55 + 0.4 * pulse), lineWidth: 1.5)
+                .shadow(color: color.opacity(0.35 * pulse), radius: 8 * pulse)
+        }
+        .allowsHitTesting(false)
     }
 }
 

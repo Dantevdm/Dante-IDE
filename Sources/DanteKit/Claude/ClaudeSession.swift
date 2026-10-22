@@ -25,6 +25,8 @@ public struct ToolActivity: Equatable, Sendable {
     public var securityNote: String?
     /// A high or critical finding: the edit waits for you whatever the approval level.
     public var securityBlocks = false
+    /// When the call arrived, for how long a sub-agent took.
+    public var started = Date()
 
     public init(id: String, name: String, input: JSONValue, status: Status, change: ProposedChange? = nil) {
         self.id = id
@@ -1127,7 +1129,7 @@ public final class ClaudeSession {
                     if tool.name.hasPrefix("mcp__dante__") { onDanteTool(String(tool.name.dropFirst(12)), tool.input, true) }
                     if tool.name == "Task" || tool.name == "Agent" {
                         ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: tool.input["subagent_type"]?.string ?? "general-purpose",
-                                                project: projectName ?? root.lastPathComponent, requestedBy: "claude",
+                                                project: projectName ?? root.lastPathComponent, seconds: Date().timeIntervalSince(tool.started), requestedBy: "claude",
                                                 title: tool.input["description"]?.string ?? "Sub-agent", gist: AgentJob.gist(of: result.text)))
                     }
                     if let change = tool.change ?? ProposedChange.make(toolName: tool.name, input: tool.input, root: root) {

@@ -53,6 +53,16 @@ public enum PipelineEnvironment: String, Codable, Sendable, CaseIterable, Compar
     }
 }
 
+public enum PipelineFile {
+    /// Whether two names for a pipeline's YAML are the same file: Azure DevOps keeps
+    /// `/pipelines/x.yml` or `pipelines\\x.yml`, the repo `pipelines/x.yml`.
+    public static func same(_ a: String, _ b: String) -> Bool { key(a) == key(b) }
+
+    static func key(_ path: String) -> String {
+        path.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/ ")).lowercased()
+    }
+}
+
 public struct PipelineStage: Codable, Equatable, Sendable, Identifiable {
     public var id: String
     /// What the YAML calls it (`RolloutNonProd`): the name a retry needs.
@@ -409,13 +419,18 @@ public struct AzureDevOpsClient: Sendable {
     }
 
     /// This repository's pipelines and their latest runs.
-    public func runs(top: Int = 40) async throws(Failure) -> [PipelineRun] {
+    public func runs(top: Int = 40) async throws(Failure) -> [PipelineRun] { try await load(top: top).runs }
+
+    /// The latest runs and the YAML files Azure DevOps has a pipeline for, so a file with none
+    /// can be told apart from a pipeline that hasn't run.
+    public func load(top: Int = 40) async throws(Failure) -> (runs: [PipelineRun], files: [String]) {
         let definitions = AzureDevOps.definitions(try await fetch(request("_apis/build/definitions", query: ["includeAllProperties": "true"])),
                                                   repository: remote.repository, only: remote.definitions)
-        guard !definitions.isEmpty else { return [] }
+        let files = definitions.values.compactMap(\.file)
+        guard !definitions.isEmpty else { return ([], files) }
         let ids = definitions.keys.sorted().map(String.init).joined(separator: ",")
         let data = try await fetch(request("_apis/build/builds", query: ["definitions": ids, "$top": "\(top)", "queryOrder": "queueTimeDescending"]))
-        return AzureDevOps.runs(data, files: definitions.compactMapValues(\.file))
+        return (AzureDevOps.runs(data, files: definitions.compactMapValues(\.file)), files)
     }
 
     /// Which pipeline a run belongs to.

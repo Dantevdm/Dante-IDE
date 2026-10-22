@@ -24,6 +24,19 @@ final class PipelineMonitor {
     /// pipeline's link to know which to read.
     private(set) var wantsLink = false
     private(set) var signingIn = false
+    /// The YAML files Azure DevOps has a pipeline for, once it has said (nil before that, and for GitHub).
+    private(set) var azureFiles: [String]?
+
+    /// The newest run of the pipeline built from `file`.
+    func latestRun(file: String) -> PipelineRun? {
+        runs.first { $0.file.map { PipelineFile.same($0, file) } ?? false }
+    }
+
+    /// True when Azure DevOps has answered and has no pipeline for `file`.
+    func isMissing(file: String) -> Bool {
+        guard case .azure = source, let azureFiles else { return false }
+        return !azureFiles.contains { PipelineFile.same($0, file) }
+    }
     private(set) var checked: Date?
     private(set) var loading = false
     /// What failed in a run, read on demand (with the logs) for its card and the heal brief.
@@ -126,7 +139,10 @@ final class PipelineMonitor {
                 return
             }
             do {
-                var runs = try await client.runs()
+                let loaded = try await client.load()
+                // Picked by link, the others weren't asked about.
+                azureFiles = remote.definitions.isEmpty ? loaded.files : nil
+                var runs = loaded.runs
                 // Stages for what's running and what finished without them yet.
                 for index in runs.indices.prefix(8) where runs[index].status.isActive || history.runs.first(where: { $0.id == runs[index].id })?.stages.isEmpty ?? true {
                     if let timeline = try? await client.timeline(of: runs[index].id) {

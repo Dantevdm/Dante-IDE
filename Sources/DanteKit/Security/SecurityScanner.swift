@@ -20,14 +20,26 @@ public enum SecurityScanner {
     /// Scans the project's files. `never` paths (from `project.yaml`) are neither read nor reported.
     public static func scan(files: [String], read: (String) -> String?, git: GitView? = nil,
                             never: (String) -> Bool = { _ in false }) -> [SecurityFinding] {
-        var findings: [SecurityFinding] = []
         let vendored = vendoredFolders(files)
-        for path in files where !never(path) && isScannable(path) && !isVendored(path, in: vendored) {
-            guard let text = read(path) else { continue }
-            findings += scan(text: text, path: path)
+        let paths = files.filter { !never($0) && isScannable($0) && !isVendored($0, in: vendored) }
+        // Files are independent, so they're read and scanned on every core (`read` must be safe
+        // to call from several threads; reading the disk is).
+        let results = Results(count: paths.count)
+        DispatchQueue.concurrentPerform(iterations: paths.count) { index in
+            guard let text = read(paths[index]) else { return }
+            results.set(index, scan(text: text, path: paths[index]))
         }
+        var findings = results.all
         findings += repository(files: files.filter { !never($0) }, git: git)
         return sorted(findings)
+    }
+
+    private final class Results: @unchecked Sendable {
+        private var slots: [[SecurityFinding]]
+        private let lock = NSLock()
+        init(count: Int) { slots = Array(repeating: [], count: count) }
+        func set(_ index: Int, _ findings: [SecurityFinding]) { lock.withLock { slots[index] = findings } }
+        var all: [SecurityFinding] { lock.withLock { slots.flatMap { $0 } } }
     }
 
     public static func sorted(_ findings: [SecurityFinding]) -> [SecurityFinding] {
