@@ -40,6 +40,10 @@ struct ClaudeFooter: View {
         .onChange(of: claude.state) { _, state in
             if state == .idle { Task { await session.refreshClaudeUsage() } }
         }
+        // Signing Claude Code in to another account happens in a terminal: check on coming back.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await session.refreshClaudeAccount() }
+        }
     }
 
     private var claudeUsageButton: some View {

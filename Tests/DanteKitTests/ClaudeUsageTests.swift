@@ -40,9 +40,26 @@ struct ClaudeUsageTests {
 
     @Test func keepsOnlyThePlanFromAuthStatus() {
         let account = ClaudeAccount.parse(#"{"loggedIn": true, "authMethod": "claude.ai", "email": "me@example.com", "subscriptionType": "pro"}"#)
-        #expect(account == ClaudeAccount(loggedIn: true, plan: "pro", method: "claude.ai"))
+        #expect(account?.loggedIn == true && account?.plan == "pro" && account?.method == "claude.ai")
         #expect(account?.planName == "Pro plan")
         #expect(ClaudeUsage.short(1_234_567) == "1.2M" && ClaudeUsage.short(86_400) == "86k")
+    }
+
+    @Test func noticesADifferentSignInWithoutKeepingTheAddress() throws {
+        // Claude Code prints its status as indented JSON.
+        func status(_ email: String, _ org: String) -> String {
+            "{\n  \"loggedIn\": true,\n  \"authMethod\": \"claude.ai\",\n  \"email\": \"\(email)\",\n  \"orgId\": \"\(org)\",\n  \"subscriptionType\": \"max\"\n}\n"
+        }
+        let old = try #require(ClaudeAccount.parse(status("old@example.com", "org-1")))
+        let new = try #require(ClaudeAccount.parse(status("new@example.com", "org-2")))
+        #expect(old.identity != nil && old.identity != new.identity && old.plan == "max")
+        #expect(old.identity == ClaudeAccount.parse(status("old@example.com", "org-1"))?.identity)
+        #expect(!(old.identity ?? "").contains("example") && !"\(old)".contains("old@"))
+        #expect(ClaudeAccount.parse(#"{"loggedIn": false}"#)?.identity == nil)
+        #expect(ClaudeSession.accountChanged(started: old.identity, now: new.identity))
+        #expect(!ClaudeSession.accountChanged(started: old.identity, now: old.identity))
+        // Not known yet, or signed out: carry on with the process as it is.
+        #expect(!ClaudeSession.accountChanged(started: nil, now: new.identity) && !ClaudeSession.accountChanged(started: old.identity, now: nil))
     }
 
     @MainActor

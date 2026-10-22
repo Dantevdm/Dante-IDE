@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// How much Claude has been used lately, worked out from Claude Code's own transcripts on
@@ -115,17 +116,25 @@ public struct ClaudeAccount: Equatable, Sendable {
     /// "pro", "max", "team", "enterprise", or nil when it's an API key.
     public var plan: String?
     public var method: String?
+    /// A fingerprint of the address and organisation, so a different sign-in is noticed
+    /// without keeping either.
+    public var identity: String?
 
-    public init(loggedIn: Bool, plan: String?, method: String?) {
+    public init(loggedIn: Bool, plan: String?, method: String?, identity: String? = nil) {
         self.loggedIn = loggedIn
         self.plan = plan
         self.method = method
+        self.identity = identity
     }
 
-    /// Only the plan and sign-in method are kept, never the address or organisation.
+    /// Only the plan, the sign-in method and a fingerprint are kept, never the address or organisation.
     public static func parse(_ output: String) -> ClaudeAccount? {
         guard let json = JSONValue(line: output.trimmingCharacters(in: .whitespacesAndNewlines)), json["loggedIn"] != nil else { return nil }
-        return ClaudeAccount(loggedIn: json["loggedIn"]?.bool ?? false, plan: json["subscriptionType"]?.string, method: json["authMethod"]?.string)
+        let who = [json["email"]?.string, json["orgId"]?.string].compactMap { $0 }
+        let identity = who.isEmpty ? nil
+            : SHA256.hash(data: Data(who.joined(separator: "\n").utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+        return ClaudeAccount(loggedIn: json["loggedIn"]?.bool ?? false, plan: json["subscriptionType"]?.string,
+                             method: json["authMethod"]?.string, identity: identity)
     }
 
     public var planName: String {

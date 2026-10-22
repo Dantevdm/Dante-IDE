@@ -523,6 +523,7 @@ final class Session {
         claude.asksFirst = Preferences.shared.claudeAsksFirst
         claude.requestedModel = Preferences.shared.claudeModel.argument
         claude.codexExecutable = Self.codexPath
+        claude.account = claudeAccount?.identity
         claude.switchesAtLimit = Preferences.shared.switchesToCodexAtLimit
         claude.codexModel = Preferences.shared.codexModel.isEmpty ? nil : Preferences.shared.codexModel
         claude.codexEffort = Preferences.shared.codexEffort.isEmpty ? nil : Preferences.shared.codexEffort

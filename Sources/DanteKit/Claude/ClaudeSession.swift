@@ -227,6 +227,10 @@ public final class ClaudeSession {
     /// (`MCPConfigFile`) that's removed when Claude Code stops.
     public var delegateEnvironment: [String: String] = [:]
     private var startedDelegateEnvironment: [String: String] = [:]
+    /// The signed-in Claude account (`ClaudeAccount.identity`). Claude Code reads its sign-in
+    /// once, so a different account continues the conversation in a new process.
+    public var account: String?
+    private var startedAccount: String?
     private var mcpConfigFile: URL?
     /// How much Claude may do without asking (on top of Claude Code's own read-only rule).
     public var approvalLevel: ApprovalLevel = .ask
@@ -385,6 +389,16 @@ public final class ClaudeSession {
             || delegateEnvironment != startedDelegateEnvironment || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
             stop()
         }
+        // A remote project's Claude Code uses the host's sign-in, not this Mac's.
+        if remote == nil, Self.accountChanged(started: startedAccount, now: account) {
+            if process != nil, startedEngine == .claude { stop() }
+            startedAccount = account
+            if limitEngine == .claude {
+                limitReachedAt = nil
+                limitEngine = nil
+            }
+            if engine == .claude { note("Signed in to a different Claude account: carrying on with that one.", isError: false) }
+        }
         // A different agent takes over: it starts afresh, with a summary of what was said.
         if let last = lastTurnEngine, last != engine {
             handover = Self.handover(items, from: last)
@@ -459,6 +473,12 @@ public final class ClaudeSession {
             self.state = .idle
             self.send(text, context: context, allowsLocalResponse: false)
         }
+    }
+
+    /// Whether Claude Code is now signed in to a different account than the one it started with.
+    nonisolated static func accountChanged(started: String?, now: String?) -> Bool {
+        guard let started, let now else { return false }
+        return started != now
     }
 
     /// Whether the conversation should move from Claude to Codex because Claude's plan is (nearly) out.
@@ -739,6 +759,7 @@ public final class ClaudeSession {
         startedDelegateEnvironment = delegateEnvironment
         startedModel = requestedModel
         startedEngine = .claude
+        startedAccount = account
         process.environment = Self.environment()
 
         let input = Pipe(), output = Pipe(), errors = Pipe()

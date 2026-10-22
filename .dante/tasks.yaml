@@ -554,3 +554,7 @@ tasks:
   title: "Say when Claude Code or Codex isn't installed: launch screen, agent panel, Agents cards and Settings"
   phase: build
   state: review
+- id: DI-134
+  title: "Follow a Claude Code sign-in change: a conversation started under another account carries on in a new process"
+  phase: build
+  state: review
