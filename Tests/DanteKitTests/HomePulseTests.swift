@@ -41,6 +41,14 @@ struct HomePulseTests {
         #expect(grid[0].allSatisfy { $0 == 0 })
     }
 
+    @Test func countsPerDayEndToday() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date(timeIntervalSince1970: 1_792_584_000)
+        let day: TimeInterval = 86_400
+        let counts = HomePulse.perDay([now, now - 60, now - day, now - 6 * day, now - 7 * day, now + day], days: 7, now: now, calendar: calendar)
+        #expect(counts == [1, 0, 0, 0, 0, 1, 2])
+    }
+
     @Test func languagesAddUpToTheWholeCode() {
         let paths = (0..<6).map { "api/\($0).go" } + ["web/a.ts", "web/b.ts", "web/c.py", "README.md", "web/d.rb"]
         let shares = HomePulse.languages(paths, limit: 2)

@@ -530,7 +530,7 @@ tasks:
   title: "Agent HQ: the agents as people in an isometric office around a glowing brain, with a task board and team panel (the design canvas's Office board)"
   phase: build
   state: done
-  notes: "Built as Agents › HQ: AgentOffice (DanteKit) grows rooms, eras, grounds and milestones from the ledger and git history; MotionLib/hq/office.html draws it in WebKit with live workers from every conversation, a replay and celebrations. The menu bar panel shows a pocket HQ under the Vine D. The Stage shows it too. Still to do: hiring a role as a job type."
+  notes: "Removed on 2026-10-22 at the user's request: the Agents › HQ tab, AgentOffice and office.html are gone. The Stage shows the orb again and Home's Agents tile shows this week's jobs."
 - id: DI-125
   title: "Discovery: a freshly opened project paints the picture of what Dante found (map, services, data, tests, security) on Home"
   phase: build

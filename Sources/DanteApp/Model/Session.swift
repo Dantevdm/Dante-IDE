@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, map, code, tests, security, environments, data, ship, run, timeline, claude, agents, jobs, office, docs
+    case home, map, code, tests, security, environments, data, ship, run, timeline, claude, agents, jobs, docs
 
     var id: String { rawValue }
 
@@ -37,7 +37,6 @@ enum Area: String, CaseIterable, Identifiable {
         case .claude: "slider.horizontal.3"
         case .agents: "chart.bar.doc.horizontal"
         case .jobs: "square.stack.3d.up"
-        case .office: "building.2"
         case .docs: "doc.text"
         }
     }
@@ -58,7 +57,6 @@ enum Area: String, CaseIterable, Identifiable {
         case .claude: "How the agents work on this project: usage, skills, memory, connectors and permissions."
         case .agents: "Claude, Codex and the models they delegate to: who did what, who checked what, and why."
         case .jobs: "Work handed to agents that run side by side, each on its own branch in its own worktree: what they're doing, what they need from you, and merging it."
-        case .office: "The agents' little office, which grows as they work: rooms open and fill up, and the garage becomes a campus."
         case .docs: "Specs and decisions as documents, with live diagrams and test status, in Paper mode."
         }
     }

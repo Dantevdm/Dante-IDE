@@ -57,6 +57,17 @@ public enum HomePulse {
         return grid
     }
 
+    /// Jobs on each of the last `days` days, oldest first, today last.
+    public static func perDay(_ dates: [Date], days: Int = 7, now: Date = Date(), calendar: Calendar = .current) -> [Int] {
+        let today = calendar.startOfDay(for: now)
+        var counts = Array(repeating: 0, count: days)
+        for date in dates where date <= now {
+            let back = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: today).day ?? -1
+            if back >= 0, back < days { counts[days - 1 - back] += 1 }
+        }
+        return counts
+    }
+
     /// The languages that make up the code, largest first, the rest as "Other".
     public static func languages(_ paths: [String], limit: Int = 4) -> [(name: String, share: Double)] {
         let all = LanguageStats.top(paths, limit: .max)

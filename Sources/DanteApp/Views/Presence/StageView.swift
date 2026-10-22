@@ -22,7 +22,7 @@ final class StageController: NSObject, NSWindowDelegate {
                 StageController.shared.applyLevel()
             }
         }
-        /// A motion piece shown full screen in place of HQ.
+        /// A motion piece shown full screen in place of the orb.
         var presenting: MotionPlayer?
         /// The Stage opened to present, so ending the presentation closes it.
         var openedToPresent = false
@@ -275,7 +275,6 @@ struct StageView: View {
     let model: PresenceModel
     var mode: StageController.Mode
     @State private var tally = StageTally()
-    @State private var office = OfficeBridge()
 
     /// The window with something waiting for an answer, if any.
     @MainActor static var waitingSession: Session? {
@@ -291,14 +290,14 @@ struct StageView: View {
     }
 
     /// Sizes for the Stage at any size: wide (a screen, a TV) with the projects and agents
-    /// either side, or narrow (a window beside your work) with everything stacked. HQ fills
-    /// the room left between the text (`inset`).
+    /// either side, or narrow (a window beside your work) with everything stacked. The orb fills
+    /// the room left between the text (`scene`).
     struct Layout {
         var unit: CGFloat
         var compact: Bool
         /// The scene's height in a narrow window.
         var sceneHeight: CGFloat = 0
-        var inset: [String: Double]
+        var scene: CGRect
 
         init(_ size: CGSize) {
             compact = size.width < max(980, size.height * 1.3)
@@ -307,10 +306,10 @@ struct StageView: View {
                 sceneHeight = max(140, min(size.width * 0.75, size.height * 0.42))
                 // Below the heading, which is about 150 units tall plus the title bar.
                 let top = 36 + 160 * unit
-                inset = ["top": top, "bottom": max(0, size.height - top - sceneHeight), "left": 12, "right": 12]
+                scene = CGRect(x: 12, y: top, width: max(0, size.width - 24), height: sceneHeight)
             } else {
                 unit = max(0.5, min(size.width / 1920, size.height / 1080))
-                inset = ["top": 150 * unit, "bottom": 190 * unit, "left": 380 * unit, "right": 380 * unit]
+                scene = CGRect(x: 380 * unit, y: 150 * unit, width: max(0, size.width - 760 * unit), height: max(0, size.height - 340 * unit))
             }
         }
     }
@@ -320,13 +319,14 @@ struct StageView: View {
             let layout = Layout(geometry.size)
             let unit = layout.unit
             ZStack {
-                // Agent HQ for the project followed, its brain showing the mood. It steps
-                // aside while a motion piece is presented.
+                // The orb, showing the mood with a satellite per agent at work. It steps aside
+                // while a motion piece is presented.
                 if mode.presenting == nil {
-                    OfficeWeb(bridge: office, mode: .stage)
-                        .onAppear { office.inset = layout.inset }
-                        .onChange(of: layout.inset) { _, inset in office.inset = inset }
-                        .task(id: "\(focus.map { ObjectIdentifier($0).hashValue } ?? 0)|\(theme.id)") { await feedOffice() }
+                    let side = min(layout.scene.width, layout.scene.height)
+                    OrbRepresentable(size: .large)
+                        .frame(width: side, height: side)
+                        .position(x: layout.scene.midX, y: layout.scene.midY)
+                        .allowsHitTesting(false)
                 }
                 if mode.fullScreen {
                     StageCorners()
@@ -352,7 +352,6 @@ struct StageView: View {
         }
         .background(theme.ground.color)
         .ignoresSafeArea()
-        .onChange(of: focus?.workspace?.url) { office.last = nil }
         .task {
             let ledger = AgentLedger.standard
             while !Task.isCancelled {
@@ -361,33 +360,6 @@ struct StageView: View {
                 try? await Task.sleep(for: .seconds(15))
             }
         }
-    }
-
-    /// Feeds HQ for the project followed until it changes. New milestones are celebrated here
-    /// too, once, wherever they're first seen.
-    private func feedOffice() async {
-        // At launch the Stage can open before any window has its project.
-        var session = focus
-        while session?.workspace == nil {
-            try? await Task.sleep(for: .seconds(1))
-            if Task.isCancelled { return }
-            session = focus
-        }
-        guard let session, let workspace = session.workspace else { return }
-        let key = OfficeBridge.seenKey(workspace.name)
-        office.handle = { [office] action, body in
-            switch action {
-            case "ready":
-                office.last = nil
-                office.sendInset()
-            case "seen":
-                if let date = body["date"] as? String { UserDefaults.standard.set(date, forKey: key) }
-            default:
-                break
-            }
-        }
-        await office.feed(session: session, workspace: workspace, theme: OfficeBridge.colours(theme),
-                          seen: UserDefaults.standard.string(forKey: key)) { [model] in model.mood.rawValue }
     }
 
     private func wide(_ unit: CGFloat) -> some View {

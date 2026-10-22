@@ -20,7 +20,7 @@ Home is the project at a glance, drawn rather than listed: the system as a livin
 - Security tile: the saved report's grade in a ring that fills with the score, coloured by the worst finding (green with none); "N serious problems", "N to tidy up", "Nothing found" or "Not scanned yet" under it.
 - Tests tile: the last recorded run as a bar of passed, failed and skipped, with "N passed" or "N failing" above it; "No run yet" without one.
 - Activity tile: a grid of commit days for the last twelve weeks, a column per week from Monday, darker green for busier days, days still to come left empty; "N commits this week" under it.
-- Agents tile: Agent HQ's rooms as dots (bigger for higher levels, fainter when quiet, dashed while unopened) and "HQ: a <era>, N jobs".
+- Agents tile: the project's agent jobs on each of the last seven days as bars, today on the right and brightest, days without jobs as a flat line; "N agent jobs this week" or "No agent jobs this week" under it.
 - The tiles share one row when they fit (each at least 150 points wide), else they split into even rows (three and two, never four and one); the cards below are two columns (at least 340 points each, one when narrower), and every card in a row is as tall as the tallest, so their edges line up.
 - Since you were last here: commits since the project was last closed on this Mac, with files changed, lines added and removed, and "and N more" past the first few.
 - Recent commits: the latest commits on the current branch, with author and age.
@@ -30,7 +30,7 @@ Home is the project at a glance, drawn rather than listed: the system as a livin
 
 ## Actions
 - A part on the map opens the Map on the system view with that part selected and its inspector open; Open the map opens it as it was.
-- Each tile opens its page: Code, Quality › Security, Quality › Tests, Ship › History, Agents › HQ.
+- Each tile opens its page: Code, Quality › Security, Quality › Tests, Ship › History, Agents › Activity.
 - Read opens a doc in Docs.
 - Manage opens Agents › Setup at the memory files.
 - Release opens Ship › Release.

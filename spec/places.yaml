@@ -21,7 +21,7 @@ places:
     pages: [ship, timeline]
   - id: agents
     title: Agents
-    pages: [jobs, agents, claude, office]
+    pages: [jobs, agents, claude]
   - id: docs
     title: Docs
     pages: [docs]

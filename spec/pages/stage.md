@@ -6,14 +6,14 @@ phrases: [stage]
 ---
 # Stage
 
-The Stage is Dante full screen: Agent HQ, the agents at work, the reply as it's spoken and anything waiting for approval.
+The Stage is Dante full screen: the orb, the agents at work, the reply as it's spoken and anything waiting for approval.
 
 ## Shows
-- Agent HQ in the middle (the office of the project the caption follows), with its room signs and who's at work in which room; the brain shows the mood, pulsing pink while something waits for you. New milestones get their celebration here too, once.
+- The large orb in the middle, in the room left between the text: it shows the mood (pink while something waits for you), with a satellite for each sub-agent or job at work, and dims as usage runs low.
 - The usage line under the clock, named for the agent in charge.
 - The mood, a clock, projects, agents and today's tally.
 - The newest words of the reply, or the waiting approval with Approve and Decline.
-- A motion piece being presented (Present in Docs): full screen on black in place of HQ, its captions, the slide number and progress faint at the bottom.
+- A motion piece being presented (Present in Docs): full screen on black in place of the orb, its captions, the slide number and progress faint at the bottom.
 
 ## Actions
 - Space talks; Return approves; Esc leaves full screen, then closes.

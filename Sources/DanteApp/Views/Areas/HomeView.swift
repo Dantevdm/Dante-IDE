@@ -15,7 +15,7 @@ struct HomeView: View {
     @State private var sketch: HomePulse.Sketch?
     @State private var commits: [Date] = []
     @State private var lastTests: TestRecord?
-    @State private var office: AgentOffice?
+    @State private var agentDays: [Int]?
 
     var body: some View {
         AreaPage(
@@ -105,8 +105,8 @@ struct HomeView: View {
                       action: { session.area = .timeline }) {
                 CommitGrid(grid: grid)
             }
-            VitalTile(title: "Agents", symbol: "building.2", caption: officeCaption, action: { session.area = .office }) {
-                OfficeRooms(office: office)
+            VitalTile(title: "Agents", symbol: "person.2", caption: agentsCaption, action: { session.area = .agents }) {
+                AgentWeek(days: agentDays)
             }
         }
     }
@@ -123,9 +123,9 @@ struct HomeView: View {
         return "Last run \(lastTests.date.relative)"
     }
 
-    private var officeCaption: String {
-        guard let office else { return "HQ" }
-        return office.totalJobs == 0 ? "HQ: a \(office.era.title.lowercased()), no jobs yet" : "HQ: a \(office.era.title.lowercased()), \(office.totalJobs) job\(office.totalJobs == 1 ? "" : "s")"
+    private var agentsCaption: String {
+        let jobs = agentDays?.reduce(0, +) ?? 0
+        return jobs == 0 ? "No agent jobs this week" : "\(jobs) agent job\(jobs == 1 ? "" : "s") this week"
     }
 
     private func load() async {
@@ -142,9 +142,9 @@ struct HomeView: View {
         let root = workspace.url
         let log = await Shell.run(["git", "log", "-n", "50000", "--format=%ct"], in: root)
         commits = log.stdout.split(separator: "\n").compactMap { Double($0.trimmingCharacters(in: .whitespaces)).map { Date(timeIntervalSince1970: $0) } }
-        let project = workspace.name, files = workspace.files, growth = AgentOffice.Growth(commits: commits, files: files.count)
-        office = await Task.detached(priority: .utility) {
-            AgentOffice.build(jobs: AgentLedger.standard.jobs().filter { $0.project == project }, project: project, growth: growth)
+        let project = workspace.name, since = Calendar.current.date(byAdding: .day, value: -7, to: .now) ?? .now
+        agentDays = await Task.detached(priority: .utility) {
+            HomePulse.perDay(AgentLedger.standard.jobs(since: since).filter { $0.project == project }.map(\.date))
         }.value
         await mapped
     }
@@ -165,28 +165,24 @@ struct HomeView: View {
     }
 }
 
-/// HQ's rooms as dots: bigger for higher levels, fainter when quiet, empty while unopened.
-private struct OfficeRooms: View {
+/// The agents' jobs on each of the last seven days, today on the right.
+private struct AgentWeek: View {
     @Environment(\.theme) private var theme
-    let office: AgentOffice?
+    let days: [Int]?
 
     var body: some View {
-        if let office {
-            HStack(alignment: .center, spacing: 8) {
-                ForEach(Array(office.rooms.enumerated()), id: \.offset) { _, room in
-                    let side = 10 + CGFloat(min(room.level, 5)) * 5
-                    ZStack {
-                        if room.level == 0 {
-                            Circle().strokeBorder(theme.line2.color, style: StrokeStyle(lineWidth: 1.2, dash: [3, 3]))
-                        } else {
-                            Circle().fill(theme.accent.color.opacity(0.25 + 0.75 * room.warmth))
-                        }
-                    }
-                    .frame(width: side, height: side)
-                    .help("\(room.role.title): \(room.jobs) jobs")
+        if let days {
+            let most = max(1, days.max() ?? 1)
+            HStack(alignment: .bottom, spacing: 5) {
+                ForEach(Array(days.enumerated()), id: \.offset) { index, count in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(count == 0 ? theme.line2.color : theme.accent.color.opacity(index == days.count - 1 ? 1 : 0.6))
+                        .frame(height: count == 0 ? 3 : max(6, 34 * CGFloat(count) / CGFloat(most)))
+                        .help("\(count) job\(count == 1 ? "" : "s")")
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(height: 34, alignment: .bottom)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ProgressView().controlSize(.small)
         }
