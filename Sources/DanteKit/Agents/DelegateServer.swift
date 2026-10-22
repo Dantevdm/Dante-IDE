@@ -159,6 +159,7 @@ public struct DelegateServer: Sendable {
     var instructions: String {
         var parts: [String] = ["dante_pages describes the IDE the user is in, page by page; show_page opens one for them."]
         if fileRoot != nil { parts.append("Use open_file to show a project file in Dante, especially after making a slide, HTML report or document. HTML renders inside Dante, without a default browser or shell open command. Prefer open_file over running open or xdg-open.") }
+        if fileRoot != nil { parts.append("diagram_guide explains Dante's diagram files (docs/diagrams/*.dante-diagram.json), drawn in the Map's style, and can start one from the project's infrastructure or system map: use it before drawing an architecture diagram for the user.") }
         if motionFrames != nil { parts.append("motion_frames renders frames of a motion piece (docs/motion/…) so you can look at your own work.") }
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
         if securityReport != nil { parts.append("security_report runs Dante's security scan and returns the score and findings the user sees on the Security page: start there for any question about the project's security.") }
@@ -173,7 +174,7 @@ public struct DelegateServer: Sendable {
 
     var tools: [JSONValue] {
         var tools: [JSONValue] = Self.pageTools
-        if fileRoot != nil { tools.append(Self.openFileTool) }
+        if fileRoot != nil { tools += [Self.openFileTool, Self.diagramTool] }
         if motionFrames != nil { tools.append(Self.motionTool) }
         if offersLocal { tools += Self.localTools }
         if securityReport != nil { tools.append(Self.securityTool) }
@@ -187,7 +188,7 @@ public struct DelegateServer: Sendable {
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "open_file", "motion_frames"].contains(tool["name"]?.string ?? ""), var object = tool.object,
+        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "open_file", "diagram_guide", "motion_frames"].contains(tool["name"]?.string ?? ""), var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
         schema["properties"] = .object(properties)
@@ -314,6 +315,18 @@ public struct DelegateServer: Sendable {
                 "line": ["type": "integer", "minimum": 1, "description": "Optional 1-based line for Code mode."],
             ],
             "required": ["path"],
+        ],
+    ]
+
+    /// How to write a diagram, and the Map as one to start from.
+    static let diagramTool: JSONValue = [
+        "name": "diagram_guide",
+        "description": "How to write a Dante diagram: JSON files in docs/diagrams/ that the user edits in Docs, drawn in the style of Dante's Map (cards, groups with a coloured header and count, a dashed cloud boundary, people, pipeline stages, labelled links with moving pulses). With from, also returns the project's infrastructure (from its templates and pipelines) or system map (from its code) as a diagram to save and change, for example into a target architecture. Write the file with your file tools, then open_file it.",
+        "inputSchema": [
+            "type": "object",
+            "properties": [
+                "from": ["type": "string", "enum": ["infra", "system"], "description": "Start from the Map's Infra view or System view. Leave out for the format alone."],
+            ],
         ],
     ]
 
@@ -445,6 +458,17 @@ public struct DelegateServer: Sendable {
                 let url = try ProjectFileOpen.resolve(path, root: root, rules: ClaudeRules.load(projectRoot: root))
                 return Self.text("Requested opening \(ProposedChange.relativePath(of: url, in: root)) inside Dante. HTML is shown in the built-in preview, without an external browser.")
             } catch { return Self.text(error.localizedDescription, isError: true) }
+        case "diagram_guide":
+            var text = DiagramGuide.format
+            if let from = arguments["from"]?.string, let root = fileRoot {
+                guard let diagram = Diagram.fromProject(root, system: from == "system", title: from == "system" ? "System" : "Infrastructure") else {
+                    return Self.text(text + (from == "system" ? "\n\nDante found no system map in this project's code: draw it from what you read."
+                                                              : "\n\nDante found no pipelines or infrastructure templates in this project."))
+                }
+                let json = (try? diagram.encoded()).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+                text += "\n\nThe project's \(from == "system" ? "system map" : "infrastructure") as a diagram, laid out as the Map draws it. Save it under docs/diagrams/ with a new title, then change it:\n\n" + json
+            }
+            return Self.text(text)
         case "motion_frames":
             guard let motionFrames, let folder = MotionFrames.folder(arguments["folder"]?.string) else {
                 return Self.text("motion_frames needs the piece's folder, like docs/motion/<name>.", isError: true)

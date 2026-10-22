@@ -35,6 +35,9 @@ struct MapView: View {
     @State private var opening: String?
     @State private var zoomingIn = true
     @State private var zoomAnchor: UnitPoint = .center
+    /// Where the shown view drew its boxes, for Copy and edit.
+    @State private var infraLayout = MapLayoutRecorder()
+    @State private var systemLayout = MapLayoutRecorder()
 
     private var level: String { trail.last?.id ?? "" }
     private var shown: SystemMap? { trail.last.flatMap { insides[$0.id] } ?? system }
@@ -81,13 +84,22 @@ struct MapView: View {
                         .fixedSize()
                         .help("Line coverage from \(coverage.source)\(coverage.date.map { ", written " + $0.formatted(.relative(presentation: .named)) } ?? "")")
                 }
+                if source == .infra, let infra, !infra.isEmpty {
+                    CopyAndEditButton(session: session, suggestedTitle: "\(workspace.name) infrastructure") { title in
+                        Diagram.infrastructure(infra, title: title, frames: infraLayout.frames)
+                    }
+                } else if showsSystem, let map = shown {
+                    CopyAndEditButton(session: session, suggestedTitle: trail.last.map { "Inside \($0.name)" } ?? "\(workspace.name) system") { title in
+                        Diagram.system(map, title: title, frames: systemLayout.frames)
+                    }
+                }
                 if showsSystem, let system {
                     IconButton(symbol: "square.and.arrow.up", label: "Export as Mermaid into .dante/architecture.md") { exportMermaid(system) }
                 }
                 IconButton(symbol: "arrow.clockwise", label: "Regenerate") { Task { await load() } }
             } content: {
                 if source == .infra, let infra {
-                    InfraView(session: session, infra: infra, selected: $infraSelected)
+                    InfraView(session: session, infra: infra, selected: $infraSelected, recorder: infraLayout)
                 } else if source == .system, system == nil, !loaded {
                     ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 200)
                 } else if showsSystem, let map = shown {
@@ -95,7 +107,7 @@ struct MapView: View {
                     SystemSummary(map: map, compact: !trail.isEmpty)
                         .id("summary" + level)
                     SystemDiagram(map: map, selected: $selected, coverage: showsCoverage ? coverage.map(map.coverage) : nil,
-                                  openable: openable[level] ?? [], opening: opening, open: open, openContainer: openContainer)
+                                  openable: openable[level] ?? [], opening: opening, open: open, openContainer: openContainer, recorder: systemLayout)
                         .id("diagram" + level)
                         .transition(.asymmetric(
                             insertion: .scale(scale: zoomingIn ? 0.35 : 1.25, anchor: zoomingIn ? zoomAnchor : .center).combined(with: .opacity),

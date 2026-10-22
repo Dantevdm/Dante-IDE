@@ -71,6 +71,8 @@ public struct ToolActivity: Equatable, Sendable {
         case "mcp__dante__show_page":
             let title = input["page"]?.string.flatMap(FeatureGuide.resolve).map(FeatureGuide.place) ?? "a page"
             return resolved ? "Showed \(title)" : "Showing \(title)"
+        case "mcp__dante__diagram_guide":
+            return resolved ? "Read how to draw a diagram" : "Reading how to draw a diagram"
         case "mcp__dante__open_file":
             return (resolved ? "Requested opening " : "Opening ") + (input["path"]?.string ?? "a project file")
         case "mcp__dante__motion_frames":
@@ -1143,7 +1145,7 @@ public final class ClaudeSession {
                         }
                     } else if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
-                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__motion_frames"].contains(request.toolName) {
+                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames"].contains(request.toolName) {
                         // Dante's own local-model tools: nothing leaves the Mac. Grok and Jev
                         // send material away, so they follow the approval level.
                         approve(id)

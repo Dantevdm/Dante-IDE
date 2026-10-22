@@ -37,6 +37,7 @@ names:
   pipelines: map.infra
   infra on the map: map.infra
   the data page: data
+  the diagrams: docs.diagrams
   map: map
   docker: environments
   services: environments

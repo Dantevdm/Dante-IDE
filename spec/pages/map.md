@@ -29,6 +29,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 
 ## Actions
 - Click a box to select it and dim everything it isn't linked to.
+- Copy and edit (in the header, for the System view and inside an opened part): name it, and what's shown becomes a diagram in Docs with the same positions, lanes as groups, icons and links (see docs.diagrams).
 - Open a box with an expand mark (or double-click it): parts open into folders, folders into files or classes, a class into its methods; the breadcrumb leads back out.
 - Open a table to trace it back: the code that reads or writes it, up to the routes that reach that code, with its columns and the tables its foreign keys name.
 - Open in browser on a web app or a screen: finds the dev server's port and the screen's route, starts the dev server in a terminal tab when it isn't listening (after asking), waits for the port and opens the page. Before asking it checks the app can start: its package manager (npm, pnpm, yarn or bun, from the lockfile) must be installed, else it says so and points to Settings › Tools; a package.json without node_modules shows "Install and start", which runs `<tool> install` and then the start command in one terminal tab, waiting up to 15 minutes instead of 150 seconds. The command's exit status is written to a file in /tmp when it stops, so a dev server that stops shows why at once ("A command it needs wasn't found…" for 127) with Install dependencies and try again and Show the terminal.

@@ -22,6 +22,7 @@ The Infra view on the Map shows how a change is delivered and where it runs: the
 
 ## Actions
 - Select a stage or resource to inspect it; Open goes to its file in Code.
+- Copy and edit: name it, and the view becomes a diagram in Docs (docs/diagrams/) with the same positions, tier groups, cloud boundary, users and links, to change into what comes next and export (see docs.diagrams).
 - Ask the agent in charge to explain the setup, review it for risks, write an architecture document, or write a missing pipeline or infrastructure templates.
 
 ## States

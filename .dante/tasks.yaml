@@ -558,3 +558,8 @@ tasks:
   title: "Follow a Claude Code sign-in change: a conversation started under another account carries on in a new process"
   phase: build
   state: review
+- id: DI-135
+  title: "Diagram editor in the Map's style: Copy and edit on the Map, diagrams in Docs as JSON files, PNG/PDF/SVG/Mermaid export, and agents draw them through diagram_guide"
+  phase: build
+  state: review
+  notes: "docs/diagrams/<name>.dante-diagram.json. Cards, parts, groups that grow and nest, a dashed boundary, people, pipeline stages and sources, titles and text; links solid, dashed or flowing with pulses, labels and loop routes. Copy and edit keeps the Map's frames (MapLayoutRecorder). Checked on a sample AWS project in Light, Dark and Paper."

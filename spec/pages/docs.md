@@ -5,9 +5,10 @@ phrases: [docs, documentation, readme, library, documents, motion, studio, video
 ---
 # Docs
 
-Docs is the project's documentation library: markdown with diagrams, PDFs and Word files, grouped by folder, and the Studio, where the agent makes videos, decks and explainers that move.
+Docs is the project's documentation library: markdown with diagrams, PDFs and Word files, grouped by folder, the Studio, where the agent makes videos, decks and explainers that move, and diagrams drawn in the Map's style.
 
 ## Highlights
+- Diagrams: draw in the Map's style, or copy the Map's Infra or System view and change it; export as PNG, PDF, SVG or Mermaid.
 - Studio: describe a piece and the agent in charge storyboards it, builds it as a scene drawn from the real system map and infrastructure in the project's brand, looks at its own frames and fixes them.
 - A piece plays in Docs with its narration in Dante's natural voice, and renders frame by frame to a 1080p or 4K MP4.
 - Made by both agents, a piece has two versions to switch between, play side by side and choose from; the other agent critiques either one from stills of its beats.
@@ -15,6 +16,7 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 
 ## Shows
 - The library: recently changed docs, a card per group with excerpts and thumbnails.
+- The Diagrams card, with New diagram and a thumbnail of each diagram; a diagram opens in its editor (see docs.diagrams).
 - A doc: markdown rendered with Mermaid diagrams (flowchart, sequence, ER) drawn natively; PDFs, images and Word files in a viewer; HTML reports and slides in a built-in web preview.
 - When an agent opens an HTML file for you (`open_file`), it shows in a sheet over the window, with Open in Code and Done.
 - Beside a markdown doc: its outline (On this page) and the project files it names in `code` (Files it mentions, shown only when there are some).

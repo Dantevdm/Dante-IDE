@@ -107,7 +107,7 @@ public enum OfficeRole: String, CaseIterable, Codable, Sendable {
         case "Edit", "MultiEdit", "Write", "NotebookEdit", CodexTranslator.patchTool:
             return path.map(of(path:)) ?? .backend
         case "Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "TodoWrite", "ToolSearch", "Skill",
-             "mcp__dante__search_code", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__ask_grok", "mcp__dante__decide":
+             "mcp__dante__search_code", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__diagram_guide", "mcp__dante__ask_grok", "mcp__dante__decide":
             return .research
         case "mcp__dante__security_report": return .security
         case "mcp__dante__look", "mcp__dante__motion_frames": return .frontend

@@ -15,6 +15,8 @@ struct SystemDiagram: View {
     var open: (SystemMap.Part) -> Void = { _ in }
     /// The container chip on a box: its database in Data, or its service in Local.
     var openContainer: (SystemMap.Part) -> Void = { _ in }
+    /// Where the boxes are, for Copy and edit.
+    var recorder: MapLayoutRecorder?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.areaScroll) private var areaScroll
     /// When the selection last changed, so its links light up rather than snap.
@@ -104,6 +106,7 @@ struct SystemDiagram: View {
             .padding(.bottom, 52)
             .backgroundPreferenceValue(PartBoundsKey.self) { anchors in
                 GeometryReader { proxy in
+                    RecordFrames(frames: anchors.mapValues { proxy[$0] }, recorder: recorder)
                     TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
                         Canvas { context, _ in
                             let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
@@ -115,22 +118,22 @@ struct SystemDiagram: View {
                                 let highlighted = selected != nil && (link.from == selected || link.to == selected)
                                 let dimmed = selected != nil && !highlighted
                                 let width = 1.1 + 1.6 * CGFloat(link.weight) / CGFloat(heaviest)
-                                let path = curve(from: from, to: to)
+                                let path = MapInk.path(.loop(from, to))
                                 if highlighted {
                                     let accent = theme.accent.color
-                                    stroke(path, color: theme.line2.color, width: width, in: &context)
+                                    MapInk.stroke(path, color: theme.line2.color, width: width, in: &context)
                                     // The lit line draws itself along the link, then traffic flows on it.
-                                    stroke(path.trimmedPath(from: 0, to: lit), color: accent, width: width + 0.6, in: &context)
-                                    stroke(path, color: accent.opacity(0.55 * lit), width: width + 0.6, dash: [5, 7], phase: -time * 24, in: &context)
-                                    pulse(path, time: time + Double(index % 5) * 0.37, color: accent, in: &context)
-                                    head(on: path, color: accent, in: &context)
+                                    MapInk.stroke(path.trimmedPath(from: 0, to: lit), color: accent, width: width + 0.6, in: &context)
+                                    MapInk.stroke(path, color: accent.opacity(0.55 * lit), width: width + 0.6, dash: [5, 7], phase: -time * 24, in: &context)
+                                    MapInk.pulse(path, time: time + Double(index % 5) * 0.37, color: accent, in: &context)
+                                    MapInk.arrowhead(path, color: accent, in: &context)
                                 } else {
                                     let color = theme.line2.color.opacity(dimmed ? 0.35 : 1)
-                                    stroke(path, color: color, width: width, in: &context)
-                                    head(on: path, color: color, in: &context)
+                                    MapInk.stroke(path, color: color, width: width, in: &context)
+                                    MapInk.arrowhead(path, color: color, in: &context)
                                     // At rest the busiest links carry a little traffic.
                                     if selected == nil, link.weight * 3 >= heaviest {
-                                        pulse(path, time: time + Double(index % 7) * 0.33, color: hue(map.part(link.to)?.lane ?? .backend), in: &context)
+                                        MapInk.pulse(path, time: time + Double(index % 7) * 0.33, color: hue(map.part(link.to)?.lane ?? .backend), in: &context)
                                     }
                                 }
                             }
@@ -159,65 +162,7 @@ struct SystemDiagram: View {
 
     func hue(_ lane: SystemMap.Lane) -> Color { Self.hue(lane, theme: theme) }
 
-    static func hue(_ lane: SystemMap.Lane, theme: Theme) -> Color {
-        switch lane {
-        case .clients: theme.accent.color
-        case .api: theme.syntax.keyword.color
-        case .backend: theme.syntax.type.color
-        case .data: theme.amber.color
-        case .outside: theme.syntax.string.color
-        }
-    }
-
-    /// Between lanes: a curve from the right edge to the left edge. Within a lane: a loop
-    /// out to the right, so it doesn't run under the boxes in between.
-    private func curve(from: CGRect, to: CGRect) -> Path {
-        var path = Path()
-        if to.minX > from.maxX {
-            let start = CGPoint(x: from.maxX, y: from.midY)
-            let end = CGPoint(x: to.minX - 2, y: to.midY)
-            let bend = max((end.x - start.x) / 2, 30)
-            path.move(to: start)
-            path.addCurve(to: end, control1: CGPoint(x: start.x + bend, y: start.y), control2: CGPoint(x: end.x - bend, y: end.y))
-        } else if to.maxX < from.minX {
-            let start = CGPoint(x: from.minX, y: from.midY)
-            let end = CGPoint(x: to.maxX + 2, y: to.midY)
-            let bend = max((start.x - end.x) / 2, 30)
-            path.move(to: start)
-            path.addCurve(to: end, control1: CGPoint(x: start.x - bend, y: start.y), control2: CGPoint(x: end.x + bend, y: end.y))
-        } else {
-            let start = CGPoint(x: from.maxX, y: from.midY)
-            let end = CGPoint(x: to.maxX + 2, y: to.midY)
-            let reach = 22 + min(abs(end.y - start.y) / 8, 18)
-            path.move(to: start)
-            path.addCurve(to: end, control1: CGPoint(x: start.x + reach, y: start.y), control2: CGPoint(x: end.x + reach, y: end.y))
-        }
-        return path
-    }
-
-    private func stroke(_ path: Path, color: Color, width: CGFloat, dash: [CGFloat] = [], phase: Double = 0, in context: inout GraphicsContext) {
-        context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round, dash: dash, dashPhase: CGFloat(phase)))
-    }
-
-    private func head(on path: Path, color: Color, in context: inout GraphicsContext) {
-        guard let end = path.currentPoint, let before = path.trimmedPath(from: 0, to: 0.97).currentPoint else { return }
-        let angle = atan2(end.y - before.y, end.x - before.x)
-        var head = Path()
-        head.move(to: end)
-        head.addLine(to: CGPoint(x: end.x - 7 * cos(angle - 0.45), y: end.y - 7 * sin(angle - 0.45)))
-        head.addLine(to: CGPoint(x: end.x - 7 * cos(angle + 0.45), y: end.y - 7 * sin(angle + 0.45)))
-        head.closeSubpath()
-        context.fill(head, with: .color(color))
-    }
-
-    /// A small glowing packet travelling along the path, as on the Infra view.
-    private func pulse(_ path: Path, time: Double, color: Color, in context: inout GraphicsContext) {
-        let progress = CGFloat((time / 2.4).truncatingRemainder(dividingBy: 1))
-        guard progress > 0.02, let point = path.trimmedPath(from: 0, to: progress).currentPoint else { return }
-        let fade = min(1, min(progress, 1 - progress) * 6)
-        context.fill(Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6, width: 12, height: 12)), with: .color(color.opacity(0.18 * fade)))
-        context.fill(Path(ellipseIn: CGRect(x: point.x - 2.6, y: point.y - 2.6, width: 5.2, height: 5.2)), with: .color(color.opacity(fade)))
-    }
+    static func hue(_ lane: SystemMap.Lane, theme: Theme) -> Color { Diagram.Hue(lane: lane).rgba(theme).color }
 }
 
 private struct PartBoundsKey: PreferenceKey {
@@ -272,11 +217,7 @@ struct PartBox: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
-                    Image(systemName: PartBox.symbol(part.kind))
-                        .font(.dante(size: 11, weight: .semibold))
-                        .foregroundStyle(hue)
-                        .frame(width: 22, height: 22)
-                        .background(hue.opacity(0.14), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    PartIcon(symbol: part.kind.symbol, hue: hue)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(Breakable.camel(part.name))
                             .font(.dante(size: 13, weight: .semibold, design: part.lane == .api ? .monospaced : .default))
@@ -344,17 +285,7 @@ struct PartBox: View {
             }
             .padding(10)
             .frame(width: SystemDiagram.width, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(state == .selected ? theme.accentTint.color : theme.card.color))
-            .overlay(alignment: .leading) {
-                UnevenRoundedRectangle(topLeadingRadius: 10, bottomLeadingRadius: 10, style: .continuous)
-                    .fill(hue)
-                    .frame(width: 3)
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(border, style: StrokeStyle(lineWidth: state == .selected ? 1.6 : 1, dash: part.lane == .outside ? [4, 3] : []))
-            )
-            .shadow(color: state == .selected ? theme.accent.color.opacity(0.22) : .clear, radius: state == .selected ? 12 : 0, y: state == .selected ? 4 : 0)
+            .modifier(PartChrome(hue: hue, selected: state == .selected, emphasised: hovering || state == .related, dashed: part.lane == .outside))
             .opacity(state == .dimmed ? 0.4 : 1)
             .contentShape(Rectangle())
         }
@@ -373,34 +304,7 @@ struct PartBox: View {
         return all.first(where: \.isConcern) ?? (all.count == 1 ? all[0] : all.allSatisfy { $0.level == .secured } ? all.first : nil)
     }
 
-    private var border: Color {
-        if state == .selected { return theme.accent.color }
-        if hovering || state == .related { return theme.accentLine.color }
-        return theme.line2.color
-    }
-
-    static func symbol(_ kind: SystemMap.Kind) -> String {
-        switch kind {
-        case .web: "macwindow"
-        case .mobile: "iphone"
-        case .routes: "arrow.left.arrow.right"
-        case .app: "terminal"
-        case .package: "shippingbox"
-        case .structure: "curlybraces.square"
-        case .function: "function"
-        case .database: "cylinder.split.1x2"
-        case .table: "tablecells"
-        case .cache: "bolt.horizontal"
-        case .container: "cube"
-        case .email: "envelope"
-        case .messaging: "bubble.left.and.bubble.right"
-        case .ai: "sparkles"
-        case .payments: "creditcard"
-        case .storage: "externaldrive"
-        case .monitoring: "waveform.path.ecg"
-        case .service: "globe"
-        }
-    }
+    static func symbol(_ kind: SystemMap.Kind) -> String { kind.symbol }
 }
 
 /// How much of a part the tests run: a bar and a percentage, coloured by how much.
