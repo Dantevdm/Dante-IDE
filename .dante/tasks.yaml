@@ -111,6 +111,7 @@ tasks:
   title: Operate alarms (CloudWatch and friends) linked to tasks
   phase: build
   state: review
+  notes: "Needs real CloudWatch alarms (AWS credentials): for you to check."
 - id: DI-28
   title: Attach files to Claude (drop, paste, pick) and turn them into docs
   phase: build
@@ -123,6 +124,7 @@ tasks:
   title: Clone progress and a Terminal fallback when git needs credentials
   phase: build
   state: review
+  notes: "Needs a clone that asks for credentials: for you to check."
 - id: DI-31
   title: Terminal tabs
   phase: build
@@ -312,6 +314,7 @@ tasks:
   title: "Claude panel: notify when Claude finishes or needs approval while Dante is in the background"
   phase: build
   state: review
+  notes: "Notifications need Dante in the background with you watching: for you to check."
 - id: DI-78
   title: "Claude panel: Apply all for several proposed edits"
   phase: build
@@ -360,6 +363,7 @@ tasks:
   title: "Polish: try Remove .dante on a throwaway project; System map speed on a large repo"
   phase: build
   state: review
+  notes: "Map speed on a large repo still to measure with the benchmark."
 - id: DI-90
   title: "Review sweep: every area in Dark, Light and Paper; fix layout bugs"
   phase: build
@@ -373,14 +377,17 @@ tasks:
   title: "Check custom shortcuts reach the menus live; notifications left for a foreground check"
   phase: build
   state: review
+  notes: "Shortcuts record and reset in Settings; menus and notifications need the foreground: for you to check."
 - id: DI-93
   title: "Release: app icon, release build script (Developer ID signing and notarisation when credentials exist), DMG"
   phase: release
   state: review
+  notes: "Signing, notarising and the DMG are yours to run (credentials)."
 - id: DI-94
   title: "README with screenshots, and a draft GitHub release"
   phase: release
   state: review
+  notes: "The draft GitHub release is outward-facing: yours to publish."
 - id: DI-95
   title: "dante command-line tool: open a folder or files from the terminal"
   phase: build
@@ -392,7 +399,7 @@ tasks:
 - id: DI-97
   title: "Debugger: Debug Adapter Protocol, breakpoints and stepping (Go via dlv, Python via debugpy)"
   phase: build
-  state: review
+  state: done
 - id: DI-98
   title: "Large repos: time the file index, search and test inventory at 50k files"
   phase: build
@@ -407,7 +414,7 @@ tasks:
 - id: DI-100
   title: "Breakpoints follow edits"
   phase: build
-  state: review
+  state: done
   notes: "BreakpointShift maps each edit: lines below move with added or removed newlines, a line deleted whole loses its breakpoint. Only the focused pane reports edits, so a split on one file doesn't move them twice. A running program isn't told."
 - id: DI-101
   title: "Walk and work: jobs on the Mac, away mode, and an iPhone and iPad companion"
@@ -418,94 +425,101 @@ tasks:
 - id: DI-102
   title: "Presence: an animated orb in the menu bar that shows what Claude is doing, with a panel"
   phase: build
-  state: review
+  state: done
 - id: DI-103
   title: "Settings as a native macOS Settings window (Dante › Settings…, ⌘,), not an area in the window"
   phase: build
-  state: review
+  state: done
 - id: DI-104
   title: "Remove the explanatory text under titles, in empty states and in footers across the app"
   phase: build
-  state: review
+  state: done
 - id: DI-105
   title: "Docs: group documents (project, phases, plans, folders, images) instead of one long list"
   phase: build
-  state: review
+  state: done
 - id: DI-106
   title: "Stage: a full-screen Jarvis-style view for a TV, with the orb and a Dante HUD"
   phase: build
-  state: review
+  state: done
   spec: docs/plans/walk-and-work.md
 - id: DI-107
   title: "Hands: let Claude open apps, find folders and control the Mac, with a visible kill switch"
   phase: build
   state: review
+  notes: "Hands needs Accessibility and Screen Recording grants: for you to check."
   spec: docs/plans/walk-and-work.md
 - id: DI-108
   title: "Constellation: one orb per agent; orbs split off for sub-agents and jobs, beam to each other while they work together, and merge back when done"
   phase: build
   state: review
+  notes: "Satellites need sub-agents running in a real conversation: check during a turn."
   spec: docs/plans/walk-and-work.md
 - id: DI-109
   title: "Local models: Claude delegates drafts, summaries and triage to Ollama models through Dante's tools, and checks what comes back"
   phase: build
-  state: review
+  state: done
   spec: docs/plans/walk-and-work.md
 - id: DI-110
   title: "Agent stats: jobs, tokens, time and pass rate per agent and model, what Claude delegated, and plan usage saved"
   phase: build
-  state: review
+  state: done
   spec: docs/plans/walk-and-work.md
 - id: DI-111
   title: "Approvals: an approval level beside Ask first (reads only, edits, edits and commands; never paths still refused), Always allow on a command, and Ask first renamed so it doesn't read as approvals"
   phase: build
   state: review
+  notes: "Approval levels need a live conversation: check during a turn."
 - id: DI-112
   title: "Orb energy follows the work: intensity from tool rate, parallel sessions and sub-agents; tired (dimmer, slower, nodding off) as the five-hour or weekly usage runs low; asleep when the limit is hit, waking as it resets"
   phase: build
   state: review
+  notes: "Orb energy needs live work and usage: check during a turn."
 - id: DI-113
   title: "Take planning out of the app for now: Plan and Spec areas, phase ribbon, setup sheet, task board, Finish Task and task links"
   phase: build
-  state: review
+  state: done
 - id: DI-114
   title: "Cloud agents with the user's own keys: Grok (xAI) as ask_grok for second opinions, Jev as decide for fast typed decisions; keys in the Keychain, passed to dante mcp in a private config file, shown in Settings and the Agents area"
   phase: build
   state: review
+  notes: "Needs your Grok and Jev keys: for you to check."
 - id: DI-115
   title: "Full voice: replies spoken as they stream, hands-free follow-ups, opt-in “Hey Dante” wake word (on-device only), spoken status and usage, voice and speed in Settings, orb and Stage react to Dante speaking"
   phase: build
   state: review
+  notes: "Voice needs the microphone: for you to check."
 - id: DI-116
   title: "Codex as an agent: Claude asks OpenAI's Codex (the user's ChatGPT sign-in) for read-only second opinions through ask_codex; a switch and model in Settings, a card in Agents, a satellite on the orb"
   phase: build
-  state: review
+  state: done
 - id: DI-117
   title: "Orb without the eye: no iris, blinking or pointer following; tiredness dims it instead"
   phase: build
   state: review
+  notes: "The menu bar orb needs the foreground: for you to check."
 - id: DI-118
   title: "Minimise the terminal from its own header, and remember it across windows"
   phase: build
-  state: review
+  state: done
 - id: DI-119
   title: "Codex or Claude in charge: a Claude/Codex switch in the panel; Codex runs through its app server with the same transcript, approvals, undo, orb and stats; each can ask the other (ask_codex, ask_claude); the Claude area becomes Setup"
   phase: build
-  state: review
+  state: done
 - id: DI-120
   title: "Security layer: scan the project (secrets, dependencies, code, config, containers, infra), explain and rank findings, suggest and apply fixes through Claude or Codex, and keep watching on every change"
   phase: build
-  state: review
+  state: done
   notes: "Security area: Dante's scanner (secrets, POPIA personal information, encryption, injection, containers, CI, infrastructure), installed scanners, OSV.dev when checking online, a grade, accepted risks in .dante/security.yaml, fixes by the agent in charge with the other checking, deep audits, edit review before approval, and dante scan for CI."
 - id: DI-121
   title: "Search by meaning: a local embedding model indexes the project, the Search panel answers plain questions, and Claude and Codex get search_code"
   phase: build
-  state: review
+  state: done
   notes: "SemanticIndex cuts files at top-level declarations (Chunker), embeds them with an embedding model in Ollama (qwen3-embedding first), keeps vectors per Mac in Application Support and re-embeds only changed pieces. The first index of Dante's 330 files takes about 3.5 minutes (the model's speed), later updates half a second; it saves progress as it goes, main code first. dante search for the terminal."
 - id: DI-122
   title: "Looker: a local vision model reads screenshots and images for Claude and Codex (look tool) and from the image viewer"
   phase: build
-  state: review
+  state: done
   notes: "Only models that read UI reliably are used (Qwen-VL, Gemma 3, Mistral Small 3, MiniCPM-V) and only if they fit in 60% of memory; llava, granite-vision and llama3.2-vision invent details or no longer load, so they're skipped with a reason. qwen3-vl:8b is installed and reads Dante's own screens accurately (about 50 s for a full description on an M4 Pro); answers render as markdown."
 - id: DI-123
   title: "Motion studio: videos, decks and explainers made by the agents from the real system, in the brand, narrated, rendered to 4K"
@@ -515,7 +529,7 @@ tasks:
 - id: DI-124
   title: "Agent HQ: the agents as people in an isometric office around a glowing brain, with a task board and team panel (the design canvas's Office board)"
   phase: build
-  state: review
+  state: done
   notes: "Built as Agents › HQ: AgentOffice (DanteKit) grows rooms, eras, grounds and milestones from the ledger and git history; MotionLib/hq/office.html draws it in WebKit with live workers from every conversation, a replay and celebrations. The menu bar panel shows a pocket HQ under the Vine D. The Stage shows it too. Still to do: hiring a role as a job type."
 - id: DI-125
   title: "Discovery: a freshly opened project paints the picture of what Dante found (map, services, data, tests, security) on Home"
@@ -524,7 +538,7 @@ tasks:
 - id: DI-126
   title: "Infra-style motion everywhere: animated links and pulses in Tests, Data, Env and Agents like the Map's Infra view"
   phase: build
-  state: review
+  state: done
 - id: DI-127
   title: "Away budgets for jobs, and telling a failing command apart from a refused one while away"
   phase: build
@@ -538,10 +552,12 @@ tasks:
   title: "Smoother voice conversations: earlier sentences, bounded synthesis ahead of playback, shorter pauses and concise replies"
   phase: build
   state: review
+  notes: "Voice needs the microphone: for you to check."
 - id: DI-130
   title: "Hold-to-talk shortcut: hold Control Option Space, release to send, with safe startup cancellation and final-word recognition"
   phase: build
   state: review
+  notes: "Hold-to-talk needs the microphone: for you to check."
 - id: DI-131
   title: "Automatic task routing: effort per request for Codex, self-contained rewrites and summaries answered by a small local model with the agent as fallback"
   phase: build
@@ -551,23 +567,26 @@ tasks:
   title: "HTML reports and slides open in a built-in preview in Docs, and the agents can open a project file for the user (open_file)"
   phase: build
   state: review
+  notes: "No HTML report on the test projects: check with one."
 - id: DI-133
   title: "Say when Claude Code or Codex isn't installed: launch screen, agent panel, Agents cards and Settings"
   phase: build
   state: review
+  notes: "Needs Claude Code or Codex missing from the Mac: check on a clean account."
 - id: DI-134
   title: "Follow a Claude Code sign-in change: a conversation started under another account carries on in a new process"
   phase: build
   state: review
+  notes: "Needs a second Claude account: for you to check."
 - id: DI-135
   title: "Diagram editor in the Map's style: Copy and edit on the Map, diagrams in Docs as JSON files, PNG/PDF/SVG/Mermaid export, and agents draw them through diagram_guide"
   phase: build
-  state: review
+  state: done
   notes: "docs/diagrams/<name>.dante-diagram.json. Cards, parts, groups that grow and nest, a dashed boundary, people, pipeline stages and sources, titles and text; links solid, dashed or flowing with pulses, labels and loop routes. Copy and edit keeps the Map's frames (MapLayoutRecorder). Checked on a sample AWS project in Light, Dark and Paper."
 - id: DI-136
   title: "Docs: a library grouped by what docs describe, folding groups and folders, and New document from templates (README, decision, runbook, how-to, architecture), written by you or drafted by the agent"
   phase: build
-  state: review
+  state: done
   notes: "Docs beside the code (infrastructure/aws/cloudformation/<stack>/documentation/) are named after the stack instead of an Elsewhere pile. DocTemplate in DanteKit; NewDocSheet in the app. Checked on a sample umbrella project."
 - id: DI-137
   title: "Diagram text notes wrap (icon top left), Tidy on a selection or by flow with Ask to rearrange, fourteen colours; right-click menu on docs; Home lined up; motion websites; a mic in description boxes; Terminal at the bottom left"
@@ -582,5 +601,5 @@ tasks:
 - id: DI-139
   title: "Standards in Docs: principles, UI standards and the company's frontend themes as references for coding, with previews, problems, New theme and the agents' ui_standards tool"
   phase: build
-  state: review
+  state: done
   notes: "The company themes live in Dante's own library on this Mac (Application Support/Dante/standards), never in a repo. Themes stay off the Map."
