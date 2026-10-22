@@ -281,16 +281,16 @@ struct StandardsStrip: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
                     } else {
-                        ForEach(standards.themeSets.flatMap { set in set.themes.map { set.resolved($0) } }.prefix(6)) { item in
-                            VStack(alignment: .leading, spacing: 5) {
-                                ThemeShell(theme: item, scale: 0.72)
-                                    .frame(width: 150, height: 86)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.line.color))
-                                Text(item.name).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text2.color).lineLimit(1)
+                        let themes = standards.themeSets.flatMap { set in set.themes.map { set.resolved($0) } }
+                        // As many as fit in one row; fixed-width tiles would widen the page past the window.
+                        ViewThatFits(in: .horizontal) {
+                            ForEach(Array(stride(from: min(themes.count, 6), through: 1, by: -1)), id: \.self) { count in
+                                HStack(spacing: 12) {
+                                    ForEach(themes.prefix(count)) { item in tile(item) }
+                                    Spacer(minLength: 0)
+                                }
                             }
                         }
-                        Spacer(minLength: 0)
                     }
                 }
                 .padding(12)
@@ -300,6 +300,16 @@ struct StandardsStrip: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private func tile(_ item: UITheme) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ThemeShell(theme: item, scale: 0.72)
+                .frame(width: 150, height: 86)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.line.color))
+            Text(item.name).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text2.color).lineLimit(1)
         }
     }
 }
