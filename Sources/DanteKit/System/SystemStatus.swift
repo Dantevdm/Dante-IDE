@@ -3,19 +3,23 @@ import Foundation
 /// What Dante can reach on this Mac, shown on the launch screen.
 public struct SystemStatus: Equatable, Sendable {
     public var claudePath: String?
+    public var codexPath: String?
     public var dockerRunning: Bool
 
-    public init(claudePath: String? = nil, dockerRunning: Bool = false) {
+    public init(claudePath: String? = nil, codexPath: String? = nil, dockerRunning: Bool = false) {
         self.claudePath = claudePath
+        self.codexPath = codexPath
         self.dockerRunning = dockerRunning
     }
 
     public static func detect(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        codexLocator: ([String: String], URL, (String) -> Bool) -> String? = Codex.locate
     ) -> SystemStatus {
         SystemStatus(
             claudePath: findExecutable("claude", environment: environment, fileManager: fileManager),
+            codexPath: codexLocator(environment, fileManager.homeDirectoryForCurrentUser, fileManager.isExecutableFile(atPath:)),
             dockerRunning: dockerSocketExists(fileManager: fileManager)
         )
     }

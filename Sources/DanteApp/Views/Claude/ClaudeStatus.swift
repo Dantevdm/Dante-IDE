@@ -124,9 +124,14 @@ private struct CodexModelMenu: View {
             if !efforts.isEmpty {
                 Divider()
                 Menu("Reasoning") {
-                    Button { choose(effort: "") } label: { checked("Default", Preferences.shared.codexEffort.isEmpty) }
+                    Button {
+                        Preferences.shared.automaticTaskRouting = true
+                        Sessions.all.forEach { $0.applyClaudePreferences() }
+                    } label: { checked("Automatic by task", Preferences.shared.automaticTaskRouting) }
+                    Divider()
+                    Button { choose(effort: "") } label: { checked("Default", !Preferences.shared.automaticTaskRouting && Preferences.shared.codexEffort.isEmpty) }
                     ForEach(efforts, id: \.self) { effort in
-                        Button { choose(effort: effort) } label: { checked(effort.capitalized, Preferences.shared.codexEffort == effort) }
+                        Button { choose(effort: effort) } label: { checked(effort.capitalized, !Preferences.shared.automaticTaskRouting && Preferences.shared.codexEffort == effort) }
                     }
                 }
             }
@@ -157,6 +162,10 @@ private struct CodexModelMenu: View {
 
     private var label: String {
         let name = current?.name ?? (Preferences.shared.codexModel.isEmpty ? "Default model" : Preferences.shared.codexModel)
+        if Preferences.shared.automaticTaskRouting {
+            let effort = claude.routingDecision?.effort ?? "auto"
+            return "\(name) · Auto (\(effort))"
+        }
         let effort = Preferences.shared.codexEffort
         return effort.isEmpty ? name : "\(name) · \(effort)"
     }
@@ -168,8 +177,11 @@ private struct CodexModelMenu: View {
 
     private func choose(model: String? = nil, effort: String? = nil) {
         if let model { Preferences.shared.codexModel = model }
-        if let effort { Preferences.shared.codexEffort = effort }
-        session.applyClaudePreferences()
+        if let effort {
+            Preferences.shared.codexEffort = effort
+            Preferences.shared.automaticTaskRouting = false
+        }
+        Sessions.all.forEach { $0.applyClaudePreferences() }
     }
 }
 

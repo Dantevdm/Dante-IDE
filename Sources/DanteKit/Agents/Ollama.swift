@@ -127,11 +127,11 @@ public struct Ollama: Sendable {
         return try? OllamaModel.parseList(data)
     }
 
-    public func chat(model: String, system: String?, prompt: String, maxTokens: Int = 2048) async throws -> OllamaReply {
+    public func chat(model: String, system: String?, prompt: String, maxTokens: Int = 2048, timeout: TimeInterval = 600) async throws -> OllamaReply {
         var request = URLRequest(url: base.appending(path: "api/chat"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 600
+        request.timeoutInterval = timeout
         request.httpBody = Self.chatBody(model: model, system: system, prompt: prompt, maxTokens: maxTokens)
         let data: Data
         do {

@@ -529,3 +529,28 @@ tasks:
   title: "Away budgets for jobs, and telling a failing command apart from a refused one while away"
   phase: build
   state: ready
+- id: DI-128
+  title: "Security: findings in tests, docs and examples are set aside, never graded, by each language's own test conventions"
+  phase: build
+  state: done
+- id: DI-129
+  title: "Smoother voice conversations: earlier sentences, bounded synthesis ahead of playback, shorter pauses and concise replies"
+  phase: build
+  state: review
+- id: DI-130
+  title: "Hold-to-talk shortcut: hold Control Option Space, release to send, with safe startup cancellation and final-word recognition"
+  phase: build
+  state: review
+- id: DI-131
+  title: "Automatic task routing: effort per request for Codex, self-contained rewrites and summaries answered by a small local model with the agent as fallback"
+  phase: build
+  state: review
+  notes: "TaskRouting.classify runs on the Mac (no tokens): risky words make a request complex, a few routine openings make it routine, everything else is standard. Codex gets low or medium effort; Claude keeps its chosen model. A `summarise this: …` style request goes to the smallest suitable Ollama model with a 30 s timeout and falls back to the agent. On by default (Settings › Agents, or Automatic by task in Codex's model menu). Each decision is a note in the conversation."
+- id: DI-132
+  title: "HTML reports and slides open in a built-in preview in Docs, and the agents can open a project file for the user (open_file)"
+  phase: build
+  state: review
+- id: DI-133
+  title: "Say when Claude Code or Codex isn't installed: launch screen, agent panel, Agents cards and Settings"
+  phase: build
+  state: review

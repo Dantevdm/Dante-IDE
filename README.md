@@ -43,6 +43,7 @@ Dante is built around agents rather than bolted onto them.
 - **Claude or Codex leads, the other reviews.** Claude Code and OpenAI's Codex both run as full agents in the panel, signed in with your own plans. Switch who's in charge mid-conversation and the new lead picks up the thread. When Claude's plan is nearly out, Dante can hand over to Codex and resend the request Claude couldn't finish.
 - **Every edit is a diff you approve.** Pick how much the agent may do on its own: ask for everything, allow edits, or allow everything. Read-only commands such as `git status` and `ls` go through without asking. "Always allow" saves the rule to Claude Code's own settings. Edits from a turn can be undone in one go, with files it created removed (shell commands' side effects can't be undone). Apply all approves the waiting edits and, if you like, the rest of the turn.
 - **It asks before it guesses.** Clarifying questions arrive as cards to answer, and a reply that ends in a list of options gets chips to click.
+- **Effort follows the task.** Dante sorts each request on the Mac, without spending tokens: routine Codex work runs at low reasoning, anything risky or ambiguous at medium. A self-contained rewrite or summary ("Summarise this: …") goes to a small model in Ollama first, with the agent taking over after 30 seconds or on any failure. Project work stays with your chosen cloud model. Each decision shows in the conversation; turn it off in Settings → Agents, or pick a reasoning level in Codex's model menu.
 - **Local models do the small jobs.** Through Dante's own MCP server (`dante mcp`), the agents can hand summaries, drafts and checks to models in [Ollama](https://ollama.com), picked per kind of job, at no cost. Looker, a local vision model, reads screenshots and images and quotes their text exactly.
 - **Cloud agents with your own keys.** Grok (xAI) for a second opinion and Jev for scored decisions, with keys in the Keychain. Those tools always ask first, since they send material off the Mac.
 - **Activity tells the story.** Every job, local or cloud, turns and sub-agents included, goes into one ledger: who did what and why, who checked whose work, the cost, and each request as a thread.
@@ -175,13 +176,12 @@ Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the s
 
 **Next**
 
-- **Discovery**: a freshly opened project paints the picture of everything Dante found, on Home.
 - **Motion everywhere**: the Infra view's animated links and pulses in Tests, Data, Services and Agents.
 - **Hands**: let an agent open apps and control the Mac, with a visible kill switch (needs Accessibility, asked first).
 
 **Waiting for review** (built, being tried in daily use)
 
-Agent HQ, the motion studio, presence orb and constellation, the Stage, full voice, Codex or Claude in charge, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
+Agent HQ, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
 
 ## Requirements
 

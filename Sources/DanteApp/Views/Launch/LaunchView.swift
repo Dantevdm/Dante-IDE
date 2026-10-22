@@ -61,7 +61,7 @@ struct LaunchView: View {
                     .blur(radius: drawn || reduceMotion ? 0 : 6)
                     .opacity(drawn ? 1 : 0)
                     .animation(reduceMotion ? nil : .timingCurve(0.2, 0.7, 0.2, 1, duration: 1).delay(1.05), value: drawn)
-                Text("Your code and Claude, in one window.")
+                Text("Your code and AI agents, in one window.")
                     .font(.dante(size: 15))
                     .foregroundStyle(theme.text2.color)
                     .opacity(drawn ? 1 : 0)
@@ -120,8 +120,11 @@ struct LaunchView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 16) {
-                statusItem(status.claudePath != nil, on: "Claude Code found", off: "Claude Code not found")
+            HStack(spacing: 12) {
+                statusItem(status.claudePath != nil, on: "Claude found", off: "Claude unavailable")
+                    .help(status.claudePath == nil ? "Claude Code isn’t installed. Claude features are unavailable until you install it." : "Claude Code is installed and ready.")
+                statusItem(status.codexPath != nil, on: "Codex found", off: "Codex unavailable")
+                    .help(status.codexPath == nil ? "Codex isn’t installed. ChatGPT features that use Codex are unavailable until you install the Codex CLI or ChatGPT app." : "Codex was found on this Mac.")
                 statusItem(status.dockerRunning, on: "Docker running", off: "Docker not running")
                 Spacer()
                 Text("v0.1")

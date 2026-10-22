@@ -20,6 +20,7 @@ Activity shows who did the work: Claude, Codex and the local models, the jobs ea
 
 ## States
 - Ollama not running or no models: says so and how to start.
+- An agent that can't run says so on its card: Claude without Claude Code, Codex without the Codex CLI or ChatGPT app, a cloud agent without its key.
 
 ## Acceptance
 - Every job in the ledger appears once, with its project.

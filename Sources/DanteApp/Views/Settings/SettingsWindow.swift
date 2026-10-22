@@ -144,6 +144,7 @@ private struct ThemePreview: View {
 // MARK: Claude
 
 private struct ClaudePreferencesPane: View {
+    @Environment(\.theme) private var theme
     @Bindable private var preferences = Preferences.shared
 
     var body: some View {
@@ -158,6 +159,10 @@ private struct ClaudePreferencesPane: View {
                 Picker("Model", selection: $preferences.claudeModel) {
                     ForEach(Preferences.ClaudeModel.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
+                if SystemStatus.detect().claudePath == nil {
+                    Label("Claude Code isn’t installed. Claude chat and coding features are unavailable.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.dante(size: 11.5)).foregroundStyle(theme.amber.color)
+                }
             }
             SwiftUI.Section {
                 Toggle("Ask clarifying questions before ambiguous work", isOn: $preferences.claudeAsksFirst)
@@ -165,6 +170,9 @@ private struct ClaudePreferencesPane: View {
                     .onChange(of: preferences.notifiesOnClaude) { _, on in
                         if on { Task { if await !Session.requestNotificationPermission() { preferences.notifiesOnClaude = false } } }
                     }
+                Toggle("Automatically manage task effort and local routing", isOn: $preferences.automaticTaskRouting)
+                    .help("Uses low reasoning for routine tasks and normal reasoning for harder work. Self-contained prose can run locally. Turn off to use your selected effort for every task.")
+                    .onChange(of: preferences.automaticTaskRouting) { Sessions.all.forEach { $0.applyClaudePreferences() } }
                 Toggle("Let the agent in charge delegate small jobs to local models", isOn: $preferences.delegatesToLocalModels)
                     .help("The agent in charge gets a delegate tool backed by Ollama on this Mac, for summaries, triage, drafts and commit messages. It checks what comes back.")
                     .onChange(of: preferences.delegatesToLocalModels) { Sessions.all.forEach { $0.applyClaudePreferences() } }

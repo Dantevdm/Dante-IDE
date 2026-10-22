@@ -124,12 +124,14 @@ struct AgentsView: View {
         let lead = session.claude?.engine ?? .claude
         let claudeRole = lead == .claude ? "In charge: writes, decides, checks" : "Reviews Codex’s work · Anthropic"
         var result: [AgentSummary] = [AgentSummary(name: "Claude", role: claudeRole, model: Preferences.shared.claudeModel.argument ?? "Claude",
-                                                   jobs: byAgent["Claude"] ?? [], color: theme.claude.color, isClaude: true)]
+                                                   jobs: byAgent["Claude"] ?? [], color: theme.claude.color, isClaude: true,
+                                                   availability: session.claude?.executable == nil ? "Unavailable · install Claude Code" : nil)]
         let codexJobs = byAgent["Codex"] ?? []
-        if Session.codexPath != nil && (Preferences.shared.asksCodex || lead == .codex) || !codexJobs.isEmpty {
+        if Preferences.shared.asksCodex || lead == .codex || !codexJobs.isEmpty {
             let codex = AgentSummary(name: "Codex", role: lead == .codex ? "In charge: writes, decides, checks" : "Reviews Claude’s work · OpenAI",
                                      model: Preferences.shared.codexModel.isEmpty ? codexJobs.last(where: { $0.kind == "turn" })?.model ?? "Codex default" : Preferences.shared.codexModel,
-                                     jobs: codexJobs, color: theme.syntax.function.color, isClaude: false, isCodex: true)
+                                     jobs: codexJobs, color: theme.syntax.function.color, isClaude: false, isCodex: true,
+                                     availability: Session.codexPath == nil ? "Unavailable · install Codex CLI or ChatGPT" : nil)
             if lead == .codex { result.insert(codex, at: 0) } else { result.append(codex) }
         }
         if let sub = byAgent["Sub-agents"], !sub.isEmpty {
@@ -144,11 +146,12 @@ struct AgentsView: View {
                                    jobs: byAgent[Looker.agent] ?? [], color: theme.amber.color, isClaude: false))
         for agent in CloudAgent.allCases {
             let jobs = byAgent[agent.title] ?? []
-            guard cloud.contains(agent) || !jobs.isEmpty else { continue }
+            let hasKey = cloud.contains(agent)
             let model = agent == .grok ? (Preferences.shared.grokModel.isEmpty ? jobs.last?.model ?? "Best available" : Preferences.shared.grokModel)
                                        : jobs.last?.model ?? Jev.defaultModel
-            result.append(AgentSummary(name: agent.title, role: "\(agent.role) · \(agent.company)", model: cloud.contains(agent) ? model : "No key",
-                                       jobs: jobs, color: agent == .grok ? theme.text2.color : theme.syntax.type.color, isClaude: false))
+            result.append(AgentSummary(name: agent.title, role: "\(agent.role) · \(agent.company)", model: hasKey ? model : "No key",
+                                       jobs: jobs, color: agent == .grok ? theme.text2.color : theme.syntax.type.color, isClaude: false,
+                                       availability: hasKey ? nil : "Unavailable · add API key in Settings"))
         }
         return result
     }
@@ -226,6 +229,7 @@ struct AgentSummary: Identifiable {
     var color: Color
     var isClaude: Bool
     var isCodex = false
+    var availability: String? = nil
     var id: String { name }
 
     var failed: Int { jobs.filter { $0.outcome == .failed }.count }
@@ -253,6 +257,11 @@ private struct AgentCard: View {
                 stat(agent.jobs.isEmpty ? "–" : "\(Int((agent.successRate * 100).rounded()))%", "ok")
                 stat(agent.jobs.isEmpty ? "–" : String(format: "%.1fs", agent.averageSeconds), "avg")
                 stat(ClaudeUsage.short(agent.tokens), "tokens")
+            }
+            if let availability = agent.availability {
+                Label(availability, systemImage: "exclamationmark.triangle.fill")
+                    .font(.dante(size: 11)).foregroundStyle(theme.amber.color)
+                    .lineLimit(1).help(availability)
             }
             Text(agent.model)
                 .font(.dante(size: 11, design: .monospaced))

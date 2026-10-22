@@ -518,6 +518,8 @@ final class Session {
     /// Settings Claude starts with; a change applies from the next message.
     func applyClaudePreferences(to claude: ClaudeSession? = nil) {
         guard let claude = claude ?? self.claude else { return }
+        claude.automaticTaskRouting = Preferences.shared.automaticTaskRouting
+        claude.routesToLocalModels = Preferences.shared.delegatesToLocalModels
         claude.asksFirst = Preferences.shared.claudeAsksFirst
         claude.requestedModel = Preferences.shared.claudeModel.argument
         claude.codexExecutable = Self.codexPath

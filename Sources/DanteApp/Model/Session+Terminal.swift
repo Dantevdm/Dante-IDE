@@ -63,7 +63,7 @@ extension Session {
         }
         applyClaudePreferences(to: claude)
         claude.send(text, context: [instructions, brief].compactMap { $0 }.joined(separator: "\n\n"),
-                    attachments: claudeAttachments + extra)
+                    attachments: claudeAttachments + extra, allowsLocalResponse: instructions == nil)
         claudeAttachments = []
     }
 

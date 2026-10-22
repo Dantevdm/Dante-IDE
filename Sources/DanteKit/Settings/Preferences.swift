@@ -49,6 +49,8 @@ public final class Preferences {
     public var autoSave: AutoSave { didSet { defaults.set(autoSave.rawValue, forKey: Keys.autoSave) } }
     public var claudeAsksFirst: Bool { didSet { defaults.set(claudeAsksFirst, forKey: Keys.claudeAsksFirst) } }
     public var claudeModel: ClaudeModel { didSet { defaults.set(claudeModel.rawValue, forKey: Keys.claudeModel) } }
+    /// Pick each request's effort, and answer self-contained prose locally (`TaskRouting`).
+    public var automaticTaskRouting: Bool { didSet { defaults.set(automaticTaskRouting, forKey: Keys.automaticTaskRouting) } }
     /// Let Claude hand small jobs to models in Ollama on this Mac (the `delegate` tool).
     public var delegatesToLocalModels: Bool { didSet { defaults.set(delegatesToLocalModels, forKey: Keys.delegatesToLocalModels) } }
     /// After a spoken reply, listen for a follow-up without the talk key.
@@ -106,6 +108,7 @@ public final class Preferences {
         insertsFinalNewline = bool(Keys.insertsFinalNewline, false)
         autoSave = defaults.string(forKey: Keys.autoSave).flatMap(AutoSave.init(rawValue:)) ?? .off
         claudeAsksFirst = bool(Keys.claudeAsksFirst, true)
+        automaticTaskRouting = bool(Keys.automaticTaskRouting, true)
         delegatesToLocalModels = bool(Keys.delegatesToLocalModels, true)
         speaksReplies = bool(Keys.speaksReplies, true)
         grokModel = defaults.string(forKey: Keys.grokModel) ?? ""
@@ -158,6 +161,7 @@ public final class Preferences {
         static let insertsFinalNewline = "insertsFinalNewline"
         static let autoSave = "autoSave"
         static let claudeAsksFirst = "claudeAsksFirst"
+        static let automaticTaskRouting = "automaticTaskRouting"
         static let delegatesToLocalModels = "delegatesToLocalModels"
         static let speaksReplies = "speaksReplies"
         static let grokModel = "grokModel"

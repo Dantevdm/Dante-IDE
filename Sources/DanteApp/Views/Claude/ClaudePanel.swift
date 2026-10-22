@@ -17,6 +17,13 @@ struct ClaudePanel: View {
             }
             ContextChips(session: session, workspace: workspace)
             Rectangle().fill(theme.line.color).frame(height: 1)
+            if claude.engine == .claude, claude.executable == nil, claude.remote == nil {
+                providerUnavailable("Claude Code isn’t installed. Claude chat, code edits and Claude jobs are unavailable. Install Claude Code and reopen Dante.")
+            } else if claude.engine == .codex, Session.codexPath == nil || claude.remote != nil {
+                providerUnavailable(claude.remote != nil
+                    ? "Codex runs on this Mac only. This remote project can’t use Codex; switch to Claude on the remote host."
+                    : "Codex isn’t installed. ChatGPT powered coding and review are unavailable; install the Codex CLI or ChatGPT app.")
+            }
             if let id = session.shownJob, let job = session.jobs.record(id) {
                 JobBanner(session: session, job: job)
                 Rectangle().fill(theme.line.color).frame(height: 1)
@@ -32,6 +39,16 @@ struct ClaudePanel: View {
         .background(theme.panel.color)
         .modifier(AcceptsAttachments(session: session))
         .animation(.snappy(duration: 0.3), value: session.jobs.open.isEmpty && session.jobs.starting == nil)
+    }
+
+    private func providerUnavailable(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.dante(size: 11.5))
+            .foregroundStyle(theme.amber.color)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(theme.amber.color.opacity(0.08))
     }
 
     private var header: some View {
@@ -145,12 +162,14 @@ private struct EngineSwitch: View {
     }
 
     private func available(_ engine: AgentEngine) -> Bool {
-        engine == .claude || (Session.codexPath != nil && claude.remote == nil)
+        if engine == .claude { return claude.executable != nil || claude.remote != nil }
+        return Session.codexPath != nil && claude.remote == nil
     }
 
     private func help(_ engine: AgentEngine) -> String {
         if engine == .codex, Session.codexPath == nil { return "Codex isn’t installed: get the Codex CLI or the ChatGPT app." }
         if engine == .codex, claude.remote != nil { return "Codex runs on this Mac only for now." }
+        if engine == .claude, claude.executable == nil, claude.remote == nil { return "Claude Code isn’t installed on this Mac." }
         if claude.engine == engine { return "\(engine.title) is in charge; it can ask \(engine.partner.title) for a second opinion." }
         return "Put \(engine.title) in charge. It picks up this conversation from a summary."
     }
