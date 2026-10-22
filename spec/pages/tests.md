@@ -12,6 +12,7 @@ Tests runs the project's tests and shows failures, flaky tests, the tests writte
 
 ## Shows
 - Last run: results by suite or category, failures first with their output.
+- How the run went: the runner, up to six suites (failing first, the rest as "N more") and the passed, failed and skipped totals, linked in the Infra view's ink.
 - Written: the tests found in the code, sorted into categories (logic, views and screens, and so on).
 - History: the last runs on this Mac, with flaky tests (passing and failing on the same code).
 - Untested: files and declarations no test names, most lines first.
@@ -35,3 +36,4 @@ Tests runs the project's tests and shows failures, flaky tests, the tests writte
 ## Acceptance
 - A failure's line opens the failing assertion.
 - Run changed picks only tests for the changed files.
+- The run picture shows failing suites before passing ones.

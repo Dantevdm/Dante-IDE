@@ -45,6 +45,7 @@ struct AgentsView: View {
             .fixedSize()
         } content: {
             hero(stats)
+            flowCard(agents(stats))
             AgentStoryCard(digest: AgentDigest(shown))
             CardGrid(minimum: 220) {
                 ForEach(agents(stats)) { agent in AgentCard(agent: agent) }
@@ -116,6 +117,39 @@ struct AgentsView: View {
     }
 
     // MARK: Agents
+
+    /// Who hands work to whom: you to the agent in charge, and it to the others, each link
+    /// labelled with the jobs in this range and moving while that agent is at work.
+    @ViewBuilder
+    private func flowCard(_ agents: [AgentSummary]) -> some View {
+        if agents.count >= 2, let lead = agents.first {
+            let recent = Date().addingTimeInterval(-120)
+            // The five who did most (or are at work now); the rest share one node.
+            let others = agents.dropFirst().sorted { ($0.jobs.contains { $0.date > recent } ? 1 : 0, $0.jobs.count) > ($1.jobs.contains { $0.date > recent } ? 1 : 0, $1.jobs.count) }
+            let shownAgents = Array(others.prefix(others.count > 6 ? 5 : 6))
+            let rest = others.dropFirst(shownAgents.count)
+            let leadWorking = session.claude?.state == .working || session.jobs.open.contains { session.jobs.phase(of: $0.id).isActive }
+            let nodes = [FlowGraph.Node(id: "you", title: "You", detail: "\(lead.jobs.filter { $0.kind == "turn" }.count) requests", symbol: "person.fill", state: .idle, column: 0),
+                         FlowGraph.Node(id: lead.name, title: lead.name, detail: lead.role.components(separatedBy: ":").first ?? lead.model,
+                                        symbol: lead.isCodex ? "chevron.left.forwardslash.chevron.right" : "sparkle", state: leadWorking ? .live : .idle, tint: lead.color, column: 1)]
+                + shownAgents.map { agent in
+                    FlowGraph.Node(id: agent.name, title: agent.name, detail: agent.model, symbol: agent.isClaude || agent.isCodex ? "person.2" : "cpu",
+                                   state: agent.jobs.contains { $0.date > recent } ? .live : agent.availability == nil ? .idle : .off, tint: agent.color, column: 2)
+                }
+            let links = [FlowGraph.Link(from: "you", to: lead.name, label: "\(lead.jobs.count)", state: leadWorking ? .live : .idle)]
+                + shownAgents.map { agent in
+                    FlowGraph.Link(from: lead.name, to: agent.name, label: agent.jobs.isEmpty ? "" : "\(agent.jobs.count)",
+                                   state: agent.jobs.contains { $0.date > recent } ? .live : agent.failed > 0 && agent.failed == agent.jobs.count ? .bad : .idle)
+                }
+            let restJobs = rest.reduce(0) { $0 + $1.jobs.count }
+            let restNodes = rest.isEmpty ? [] : [FlowGraph.Node(id: "rest", title: "\(rest.count) more", detail: rest.prefix(3).map(\.name).joined(separator: ", "),
+                                                                symbol: "ellipsis", state: .idle, column: 2)]
+            let restLinks = rest.isEmpty ? [] : [FlowGraph.Link(from: lead.name, to: "rest", label: restJobs == 0 ? "" : "\(restJobs)")]
+            Card("How the work flows") {
+                FlowGraph(nodes: nodes + restNodes, links: links + restLinks)
+            }
+        }
+    }
 
     private func agents(_ stats: AgentStats) -> [AgentSummary] {
         var byAgent: [String: [AgentJob]] = [:]

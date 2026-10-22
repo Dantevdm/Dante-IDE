@@ -157,3 +157,14 @@ struct PipelineTests {
         #expect(run.status == .failed && run.environment == .nonProd && run.pipeline == "Deploy staging")
     }
 }
+
+struct FlowColumnsTests {
+    @Test func chainsReadLeftToRightAndCyclesStop() {
+        let columns = FlowColumns.columns(nodes: ["web", "api", "db", "cache", "worker"],
+                                          links: [("web", "api"), ("api", "db"), ("api", "cache"), ("worker", "db"), ("db", "web")])
+        #expect(columns["web"] == 0 || columns["web"] == 3)
+        let plain = FlowColumns.columns(nodes: ["web", "api", "db", "worker"], links: [("web", "api"), ("api", "db"), ("worker", "db")])
+        #expect(plain == ["web": 0, "api": 1, "db": 2, "worker": 0])
+        #expect(FlowColumns.columns(nodes: ["a"], links: [("a", "a"), ("a", "zz")]) == ["a": 0])
+    }
+}

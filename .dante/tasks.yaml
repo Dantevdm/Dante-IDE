@@ -524,7 +524,7 @@ tasks:
 - id: DI-126
   title: "Infra-style motion everywhere: animated links and pulses in Tests, Data, Env and Agents like the Map's Infra view"
   phase: build
-  state: ready
+  state: review
 - id: DI-127
   title: "Away budgets for jobs, and telling a failing command apart from a refused one while away"
   phase: build

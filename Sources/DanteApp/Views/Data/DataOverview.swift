@@ -254,7 +254,7 @@ struct SchemaDiagramView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
                 ScrollView(.vertical) {
-                    ERDiagramView(diagram: diagram)
+                    ERDiagramView(diagram: diagram, flowing: session.data.selected.map { session.data.status[$0.id] == .online } ?? false)
                         .padding(30)
                 }
                 .background(theme.panel.color)

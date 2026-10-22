@@ -431,7 +431,10 @@ private struct SequenceView: View {
 
 struct ERDiagramView: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let diagram: ERDiagram
+    /// The database is online: foreign keys carry a moving packet, as links do in the Infra view.
+    var flowing = false
 
     var body: some View {
         FitOrScroll {
@@ -445,10 +448,15 @@ struct ERDiagramView: View {
             .padding(.vertical, 24)
             .backgroundPreferenceValue(DiagramBoundsKey.self) { anchors in
                 GeometryReader { proxy in
-                    Canvas { context, _ in
-                        let frames = anchors.mapValues { proxy[$0] }
-                        var placer = LabelPlacer(avoiding: Array(frames.values))
-                        for relationship in diagram.relationships { draw(relationship, frames, placer: &placer, in: &context) }
+                    TimelineView(.animation(minimumInterval: 1 / 30, paused: !flowing || reduceMotion)) { timeline in
+                        let time = timeline.date.timeIntervalSinceReferenceDate
+                        Canvas { context, _ in
+                            let frames = anchors.mapValues { proxy[$0] }
+                            var placer = LabelPlacer(avoiding: Array(frames.values))
+                            for (index, relationship) in diagram.relationships.enumerated() {
+                                draw(relationship, frames, placer: &placer, time: flowing && !reduceMotion ? time + Double(index) * 0.41 : nil, in: &context)
+                            }
+                        }
                     }
                 }
             }
@@ -487,7 +495,7 @@ struct ERDiagramView: View {
         .anchorPreference(key: DiagramBoundsKey.self, value: .bounds) { [entity.name: $0] }
     }
 
-    private func draw(_ relationship: ERDiagram.Relationship, _ frames: [String: CGRect], placer: inout LabelPlacer, in context: inout GraphicsContext) {
+    private func draw(_ relationship: ERDiagram.Relationship, _ frames: [String: CGRect], placer: inout LabelPlacer, time: Double? = nil, in context: inout GraphicsContext) {
         guard let from = frames[relationship.from], let to = frames[relationship.to] else { return }
         let start: CGPoint, end: CGPoint, c1: CGPoint, c2: CGPoint
         let fromLabel: CGPoint, toLabel: CGPoint
@@ -516,6 +524,10 @@ struct ERDiagramView: View {
         path.move(to: start)
         path.addCurve(to: end, control1: c1, control2: c2)
         context.stroke(path, with: .color(theme.text3.color), lineWidth: 1.3)
+        if let time {
+            MapInk.stroke(path, color: theme.accent.color.opacity(0.55), width: 1.3, dash: [5, 7], phase: -time * 20, in: &context)
+            MapInk.pulse(path, time: time, color: theme.accent.color, in: &context)
+        }
         cardinality(relationship.fromCardinality, at: fromLabel, in: &context)
         cardinality(relationship.toCardinality, at: toLabel, in: &context)
         if !relationship.label.isEmpty {

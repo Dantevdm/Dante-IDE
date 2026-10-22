@@ -9,6 +9,7 @@ Activity shows who did the work: Claude, Codex and the local models, the jobs ea
 
 ## Shows
 - Who did the work: each agent and model, its jobs, tokens and time.
+- How the work flows: you to the agent in charge and on to the others, each link labelled with its jobs in the range and moving while that agent worked in the last two minutes; the five busiest show, the rest share one node.
 - The story: sentences on who did what, who checked whose work, and requests as threads.
 - When: jobs over time.
 - Models on this Mac (Ollama) and which job each would get.
@@ -24,3 +25,4 @@ Activity shows who did the work: Claude, Codex and the local models, the jobs ea
 
 ## Acceptance
 - Every job in the ledger appears once, with its project.
+- The flow picture never shows more than six agents beside the one in charge.

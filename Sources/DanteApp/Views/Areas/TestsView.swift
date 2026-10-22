@@ -107,6 +107,7 @@ struct TestsView: View {
                 }
             } else if let run = session.testRun {
                 RunSummary(run: run)
+                if !run.results.isEmpty { RunFlowCard(run: run) }
                 if run.failedOutsideTests || isCouldNotStart(run) {
                     OutputCard(run: run, title: "The run stopped before any test failed", expanded: true)
                 }
@@ -553,6 +554,46 @@ private struct DraftTestsCard: View {
                     .buttonStyle(DanteButtonStyle())
                 }
             }
+        }
+    }
+}
+
+/// The run as a flow: the runner, the suites as their results come in (failing ones first),
+/// and where their tests ended up. Links move while it runs, as in the Infra view.
+private struct RunFlowCard: View {
+    let run: TestRun
+
+    var body: some View {
+        let bySuite = Dictionary(grouping: run.results, by: \.suite)
+        let suites = bySuite.keys.sorted { a, b in
+            let fa = bySuite[a]!.contains { $0.status == .failed }, fb = bySuite[b]!.contains { $0.status == .failed }
+            return fa != fb ? fa : bySuite[a]!.count > bySuite[b]!.count
+        }
+        let shown = Array(suites.prefix(6))
+        let more = suites.count - shown.count
+        var nodes = [FlowGraph.Node(id: "runner", title: run.command.label, detail: run.isRunning ? "running" : "\(run.results.count) tests",
+                                    symbol: "play.circle", state: run.isRunning ? .live : .idle, column: 0)]
+        var links: [FlowGraph.Link] = []
+        for suite in shown {
+            let tests = bySuite[suite] ?? []
+            let failed = tests.filter { $0.status == .failed }.count
+            nodes.append(FlowGraph.Node(id: "suite:" + suite, title: suite.isEmpty ? "Tests" : suite,
+                                        detail: failed > 0 ? "\(failed) of \(tests.count) failing" : "\(tests.count) tests",
+                                        symbol: "list.bullet.rectangle", state: failed > 0 ? .bad : run.isRunning ? .live : .good, column: 1))
+            links.append(FlowGraph.Link(from: "runner", to: "suite:" + suite, state: run.isRunning ? .live : failed > 0 ? .bad : .good))
+            for (status, id) in [(TestResult.Status.passed, "passed"), (.failed, "failed"), (.skipped, "skipped")] where tests.contains(where: { $0.status == status }) {
+                links.append(FlowGraph.Link(from: "suite:" + suite, to: id, state: status == .failed ? .bad : status == .passed ? (run.isRunning ? .live : .good) : .off))
+            }
+        }
+        if more > 0 {
+            nodes.append(FlowGraph.Node(id: "more", title: "\(more) more suites", symbol: "ellipsis", state: .idle, column: 1))
+            links.append(FlowGraph.Link(from: "runner", to: "more", state: run.isRunning ? .live : .idle))
+        }
+        if run.passed > 0 { nodes.append(FlowGraph.Node(id: "passed", title: "\(run.passed) passed", symbol: "checkmark.circle", state: .good, column: 2)) }
+        if run.failed > 0 { nodes.append(FlowGraph.Node(id: "failed", title: "\(run.failed) failed", symbol: "xmark.circle", state: .bad, column: 2)) }
+        if run.skipped > 0 { nodes.append(FlowGraph.Node(id: "skipped", title: "\(run.skipped) skipped", symbol: "arrow.uturn.right.circle", state: .off, column: 2)) }
+        return Card("How the run went") {
+            FlowGraph(nodes: nodes, links: links)
         }
     }
 }

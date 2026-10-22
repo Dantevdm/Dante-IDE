@@ -48,6 +48,32 @@ struct EnvironmentView: View {
         }
     }
 
+    private func flowState(_ service: String) -> FlowGraph.State {
+        guard let state = running.first(where: { $0.service == service }) else { return .off }
+        if state.health == "unhealthy" || (state.state != "running" && state.state != "created") { return state.state == "exited" ? .bad : .off }
+        return .live
+    }
+
+    private func flowNode(_ service: ComposeFile.Service) -> FlowGraph.Node {
+        let state = running.first { $0.service == service.name }
+        let symbol = ["postgres", "mysql", "mariadb", "mongo", "redis", "valkey", "sqlserver", "mssql"].contains { (service.image ?? service.name).lowercased().contains($0) }
+            ? "cylinder.split.1x2" : service.build != nil ? "shippingbox" : "cube"
+        return FlowGraph.Node(id: service.name, title: service.name,
+                              detail: state.map { $0.health.isEmpty ? $0.state : "\($0.state) · \($0.health)" } ?? (service.ports.first.map { "port \($0)" } ?? "not running"),
+                              symbol: symbol, state: flowState(service.name))
+    }
+
+    /// A service links to what it depends on; live while both run, red when it runs and what it needs doesn't.
+    private func flowLinks(_ compose: ComposeFile) -> [FlowGraph.Link] {
+        compose.services.flatMap { service in
+            service.dependsOn.map { dependency in
+                let from = flowState(service.name), to = flowState(dependency)
+                let state: FlowGraph.State = from == .live && to == .live ? .live : from == .live ? .bad : .off
+                return FlowGraph.Link(from: service.name, to: dependency, state: state)
+            }
+        }
+    }
+
     var body: some View {
         AreaPage(
             eyebrow: nil,
@@ -80,6 +106,11 @@ struct EnvironmentView: View {
                 }
                 if let failing = failing {
                     DiagnoseCard(session: session, service: failing.service, problem: failing.problem, note: notes[failing.service])
+                }
+                if compose.services.count >= 2, compose.services.contains(where: { !$0.dependsOn.isEmpty }) {
+                    Card("How they connect") {
+                        FlowGraph(nodes: compose.services.map(flowNode), links: flowLinks(compose))
+                    }
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 12, alignment: .top)], spacing: 12) {
                     ForEach(compose.services) { service in

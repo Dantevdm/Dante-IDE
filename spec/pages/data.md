@@ -16,6 +16,7 @@ Data connects to the project's databases: browse tables, run queries, read query
 - Overview: the connection's details, size, tables and views, the largest tables, and in the code: the libraries and the evidence the connection came from.
 - Suggestions, from the repo's SQL and the code that queries it: indexes for foreign keys and filtered columns, primary keys, money and time types, SELECT * and queries in loops, each with why, where and the SQL.
 - Tables with columns, keys and indexes; a schema diagram.
+- The schema diagram's relationship lines carry a moving dash while the connection is online.
 - Query results in a grid.
 - Query insights: the plan in plain words with index suggestions.
 - Migration preview: what a DDL script would change, checked against the schema.

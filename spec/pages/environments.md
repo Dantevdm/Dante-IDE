@@ -13,6 +13,7 @@ Services is the local environment: the docker compose services and their logs, t
 
 ## Shows
 - The compose file and each service: image, ports, state and health.
+- How they connect: services in columns by what they depend on, each link moving while both ends run, red where a service runs but its dependency doesn't, faint while stopped (shown with two or more services and a depends_on).
 - Apps in this project: the runnable apps found in the code (React, Spring Boot, Go and others) with their run commands.
 - This project's containers started outside compose.
 - Ports: what's listening on the project's ports, with the process, folder and uptime.
@@ -38,3 +39,4 @@ Services is the local environment: the docker compose services and their logs, t
 ## Acceptance
 - Every "not up" service has a reason or says it couldn't find one.
 - Nothing starts without a button press.
+- A dependency link is red only when the service runs and what it needs is down.
