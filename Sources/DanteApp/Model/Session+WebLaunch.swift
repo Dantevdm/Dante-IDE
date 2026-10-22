@@ -18,6 +18,8 @@ final class WebLaunch {
 
     let name: String
     let screen: String?
+    /// Open it with this theme: the query parameter the app reads and the theme's name.
+    var theme: (query: String, name: String)?
     var target: WebPreview.Target?
     var step: Step = .finding
     /// It was already running, so nothing was started.
@@ -42,10 +44,11 @@ final class WebLaunch {
 
 extension Session {
     /// Opens a frontend (or one of its screens) in the browser, starting nothing until asked.
-    func openInBrowser(folder: String, name: String, screen: (name: String, file: String?)?) {
+    func openInBrowser(folder: String, name: String, screen: (name: String, file: String?)?, theme: (query: String, name: String)? = nil) {
         guard let workspace else { return }
         webLaunch?.task?.cancel()
         let launch = WebLaunch(name: name, screen: screen?.name)
+        launch.theme = theme
         webLaunch = launch
         guard RemoteRegistry.project(containing: workspace.url) == nil else {
             launch.step = .failed("Opening pages isn’t available for remote projects yet: their dev servers run on the host.")
@@ -140,7 +143,8 @@ extension Session {
         guard let target = launch.target else { return }
         launch.step = .opening
         try? await Task.sleep(for: .milliseconds(350))
-        NSWorkspace.shared.open(target.url)
+        let url = launch.theme.flatMap { ThemeSwap(query: $0.query).url(target.url, theme: $0.name) } ?? target.url
+        NSWorkspace.shared.open(url)
         launch.step = .opened
     }
 

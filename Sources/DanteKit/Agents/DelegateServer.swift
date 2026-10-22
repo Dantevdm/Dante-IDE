@@ -29,6 +29,8 @@ public struct DelegateServer: Sendable {
     public var fileRoot: URL?
     /// Hands: apps, folders, the keyboard and mouse (`DANTE_HANDS=1`).
     public var hands = false
+    /// The project's and the company's standards and themes: everything, a theme or a doc.
+    public var uiStandards: (@Sendable (_ theme: String?, _ doc: String?) -> String)?
     /// The agents' own browser (`DANTE_BROWSER=1`).
     public var browser: BrowserTools?
     /// Searches the project by meaning: the question and how many pieces, as text for the agent.
@@ -113,6 +115,10 @@ public struct DelegateServer: Sendable {
         }
         let projectRoot = URL(filePath: root, directoryHint: .isDirectory)
         server.fileRoot = projectRoot
+        let library = environment[DelegateEnvironment.standards].flatMap { $0.isEmpty ? nil : URL(filePath: $0, directoryHint: .isDirectory) }
+        server.uiStandards = { theme, doc in
+            StandardsBrief.report(Standards.load(projectRoot: projectRoot, files: FileIndex.scan(projectRoot), library: library), theme: theme, doc: doc)
+        }
         server.motionFrames = { folder, times in await MotionFrames.await(root: projectRoot, folder: folder, times: times) }
         let online = environment[DelegateEnvironment.securityOnline] == "1"
         server.securityReport = {
@@ -171,6 +177,7 @@ public struct DelegateServer: Sendable {
         if fileRoot != nil { parts.append("diagram_guide explains Dante's diagram files (docs/diagrams/*.dante-diagram.json), drawn in the Map's style, and can start one from the project's infrastructure or system map: use it before drawing an architecture diagram for the user.") }
         if motionFrames != nil { parts.append("motion_frames renders frames of a motion piece (docs/motion/…) so you can look at your own work.") }
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
+        if uiStandards != nil { parts.append("ui_standards gives the team's standards and frontend themes (the theme.json format, each theme, the company library): read it before building or restyling a frontend, or making a theme.") }
         if securityReport != nil { parts.append("security_report runs Dante's security scan and returns the score and findings the user sees on the Security page: start there for any question about the project's security.") }
         if searchCode != nil { parts.append("search_code finds code by what it does, for questions grep can't answer.") }
         if look != nil { parts.append("look (Looker) reads screenshots and images on this Mac when a vision model is installed.") }
@@ -188,6 +195,7 @@ public struct DelegateServer: Sendable {
         if fileRoot != nil { tools += [Self.openFileTool, Self.diagramTool] }
         if motionFrames != nil { tools.append(Self.motionTool) }
         if offersLocal { tools += Self.localTools }
+        if uiStandards != nil { tools.append(Self.standardsTool) }
         if securityReport != nil { tools.append(Self.securityTool) }
         if searchCode != nil { tools.append(Self.searchTool) }
         if decide != nil { tools.append(Self.decideTool) }
@@ -201,7 +209,7 @@ public struct DelegateServer: Sendable {
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard !["local_models", "search_code", "security_report", "dante_pages", "show_page", "open_file", "diagram_guide", "motion_frames"].contains(tool["name"]?.string ?? ""),
+        guard !["local_models", "search_code", "security_report", "ui_standards", "dante_pages", "show_page", "open_file", "diagram_guide", "motion_frames"].contains(tool["name"]?.string ?? ""),
               Hands.Tool(rawValue: tool["name"]?.string ?? "") == nil, BrowserTools.Tool(rawValue: tool["name"]?.string ?? "") == nil, var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
@@ -370,6 +378,15 @@ public struct DelegateServer: Sendable {
         return "Page \(feature.id), shown as \(FeatureGuide.place(feature)).\n\n" + feature.markdown
     }
 
+    static let standardsTool: JSONValue = [
+        "name": "ui_standards",
+        "description": "The team's house standards: principles and UI standards docs, and frontend themes in the theme.json format (in this project and the company library), with how the app picks one. With no input, the list and the format; with theme, that theme's file and how the app shows it; with doc, a standards doc's text.",
+        "inputSchema": ["type": "object", "properties": [
+            "theme": ["type": "string", "description": "A theme's name."],
+            "doc": ["type": "string", "description": "A standards doc's title or path."],
+        ]],
+    ]
+
     static let securityTool: JSONValue = [
         "name": "security_report",
         "description": "Run Dante's security scan of this project again and get what its Security page shows: the score out of 100, the grade, and the findings most severe first, each with where it is and how to fix it. Covers secrets, personal information (POPIA), encryption, injection, containers, CI, infrastructure and, with the scanners installed, dependencies. Use it first for any question about the project's security, a score or what's critical, instead of exploring the code or sending sub-agents; then read only what it names. Runs on the user's Mac in seconds and updates the page they see.",
@@ -499,6 +516,11 @@ public struct DelegateServer: Sendable {
             guard !times.isEmpty else { return Self.text("motion_frames needs times in seconds.", isError: true) }
             let answer = await motionFrames(folder, times)
             return Self.text(answer.text, isError: answer.isError)
+        case "ui_standards":
+            guard let uiStandards else { return Self.text("Standards aren’t available here.", isError: true) }
+            let theme = arguments["theme"]?.string.flatMap { $0.isEmpty ? nil : $0 }
+            let doc = arguments["doc"]?.string.flatMap { $0.isEmpty ? nil : $0 }
+            return Self.text(await Task.detached { uiStandards(theme, doc) }.value)
         case "security_report":
             guard let securityReport else { return Self.text("Dante's security scan isn’t available here.", isError: true) }
             let started = Date()

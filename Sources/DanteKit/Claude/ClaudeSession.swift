@@ -80,6 +80,9 @@ public struct ToolActivity: Equatable, Sendable {
             return resolved ? "Looked at \(count) frame\(count == 1 ? "" : "s")" : "Rendering \(count) frame\(count == 1 ? "" : "s") to look at"
         case "mcp__dante__search_code": return resolved ? "Searched the code by meaning" : "Searching the code by meaning"
         case "mcp__dante__look": return resolved ? "Looker read an image" : "Looker is reading an image"
+        case "mcp__dante__ui_standards":
+            let what = input["theme"]?.string.map { "the \($0) theme" } ?? input["doc"]?.string ?? "the team's standards"
+            return (resolved ? "Read " : "Reading ") + what
         default:
             if let hands = Hands.Tool.of(mcpName: name) { return hands.describe(input, done: resolved) }
             if let browser = BrowserTools.Tool.of(mcpName: name) { return browser.describe(input, done: resolved) }
@@ -1152,7 +1155,7 @@ public final class ClaudeSession {
                     } else if Hands.Tool.of(mcpName: request.toolName)?.controls == true {
                         // The keyboard, mouse and screen ask every time, at any approval level.
                         onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input)))
-                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames"].contains(request.toolName)
+                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames", "mcp__dante__ui_standards"].contains(request.toolName)
                                 || BrowserTools.Tool.of(mcpName: request.toolName) != nil {
                         // Dante's own local tools: nothing leaves the Mac (the browser only
                         // visits the app here). Grok and Jev send material away, so they

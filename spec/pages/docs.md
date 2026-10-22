@@ -10,6 +10,7 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 ## Highlights
 - New document: a README, decision record, runbook, how-to guide or architecture overview with its outline, in the folder the project keeps them in, written by you or drafted by the agent from the code.
 - The library reads like a directory: docs kept beside the code are named after what they describe (portal-alb-stack, orders-portal), and every group and folder folds; folders start folded, so the page isn't noisy.
+- Standards: principles, UI standards and the customer themes every frontend follows, from the project and a company library; preview a theme as its sign-in page and app shell, open the running app in it, or make a new one (see docs.standards).
 - Diagrams: draw in the Map's style, or copy the Map's Infra or System view and change it; export as PNG, PDF, SVG or Mermaid.
 - Studio: describe a piece and the agent in charge storyboards it, builds it as a scene drawn from the real system map and infrastructure in the project's brand, looks at its own frames and fixes them.
 - A piece plays in Docs with its narration in Dante's natural voice, and renders frame by frame to a 1080p or 4K MP4.
@@ -17,7 +18,7 @@ Docs is the project's documentation library: markdown with diagrams, PDFs and Wo
 - Share a piece as one HTML file that plays in any browser, or a PDF of its slides or storyboard; present a deck full screen on the Stage.
 
 ## Shows
-- The library, top to bottom: the header (the doc and folder counts; Brand kit, Add files… and New), Recently changed (one row of as many as fit, two to four, each with what it belongs to, its age and first line; only past six docs), the Diagrams and motion strip (a thumbnail per diagram and per motion piece; only when there are some), then a section per group.
+- The library, top to bottom: the header (the doc and folder counts; Brand kit, Add files… and New), Recently changed (one row of as many as fit, two to four, each with what it belongs to, its age and first line; only past six docs), the Diagrams and motion strip (a thumbnail per diagram and per motion piece; only when there are some), then the Standards strip (themes as dots and a link to Standards; only when there are standards), then a section per group.
 - Groups: the project's own (Project, Docs, Specs, Decisions, Runbooks, Notes, Phases), then one per top-level folder holding two or more docs (Infrastructure, Pipelines; titled from the folder, with the folder as `infrastructure/` beside it; a folder named like a built-in group shows as `notes/`), then Around the code for top-level folders with a single doc.
 - In a group, a heading per folder named after what the docs belong to: the last folder that isn't documentation/, docs/ or doc/ (portal-alb-stack), with the folders above it in monospace (aws/cloudformation) and a count; under it a row per doc: title, first line and age, six before Show all N, images as a grid of thumbnails.
 - Group and folder headings have a chevron and fold on a click. Groups start open and folders folded, so the page first reads as a list of what's documented (each folder a row with its context and count); folds last while the window is open.

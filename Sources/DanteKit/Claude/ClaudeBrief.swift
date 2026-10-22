@@ -98,6 +98,9 @@ public enum ClaudeBrief {
                 "You are a pair, not an autopilot. The user reviews every file change as a diff and every command before it runs. Make focused edits with the Edit tool, and say briefly what each change does and why."),
         ]
         guard let workspace else { return sections }
+        if let standards = workspace.standards, let brief = StandardsBrief.brief(standards) {
+            sections.append(Section(title: "House standards", source: "docs/standards and themes", text: brief))
+        }
         let rules = workspace.claudeRules
         if !rules.isEmpty {
             var parts: [String] = []

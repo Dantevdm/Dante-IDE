@@ -153,6 +153,8 @@ public enum MCPConfigFile {
 public enum DelegateEnvironment {
     /// "0" leaves out the local-model tools (delegation to Ollama is off).
     public static let local = "DANTE_LOCAL"
+    /// The company standards library chosen in Settings › Files.
+    public static let standards = "DANTE_STANDARDS"
     /// The Grok model chosen in Settings.
     public static let grokModel = "DANTE_GROK_MODEL"
     /// The Codex CLI to ask, when the user lets Claude ask Codex.

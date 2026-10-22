@@ -33,6 +33,8 @@ cases:
     ask: true
   - say: show me the diagrams
     navigate: docs.diagrams
+  - say: show me the ui standards
+    navigate: docs.standards
   - say: write a runbook for restarting the dashboard
     ask: true
   - say: show me where the orders table is written
@@ -46,6 +48,7 @@ names:
   infra on the map: map.infra
   the data page: data
   the diagrams: docs.diagrams
+  the customer themes: docs.standards
   map: map
   docker: environments
   services: environments

@@ -84,6 +84,10 @@ public final class Preferences {
     public var grokModel: String { didSet { defaults.set(grokModel, forKey: Keys.grokModel) } }
     /// Looker's vision model; empty for the best installed.
     public var lookerModel: String { didSet { defaults.set(lookerModel, forKey: Keys.lookerModel) } }
+    /// The company standards library: a folder of standards docs and a `themes/` folder,
+    /// shared by every project and kept outside every repo. Empty for none.
+    public var standardsLibrary: String { didSet { defaults.set(standardsLibrary, forKey: Keys.standardsLibrary) } }
+    public var standardsLibraryURL: URL? { standardsLibrary.isEmpty ? nil : URL(filePath: standardsLibrary, directoryHint: .isDirectory) }
     /// How much Claude may do without asking.
     public var approvalLevel: ApprovalLevel { didSet { defaults.set(approvalLevel.rawValue, forKey: Keys.approvalLevel) } }
     /// Read Claude's replies out after you speak to it.
@@ -121,6 +125,7 @@ public final class Preferences {
         speaksReplies = bool(Keys.speaksReplies, true)
         grokModel = defaults.string(forKey: Keys.grokModel) ?? ""
         lookerModel = defaults.string(forKey: Keys.lookerModel) ?? ""
+        standardsLibrary = defaults.string(forKey: Keys.standardsLibrary) ?? ""
         asksCodex = bool(Keys.asksCodex, true)
         switchesToCodexAtLimit = bool(Keys.switchesToCodexAtLimit, true)
         codexModel = defaults.string(forKey: Keys.codexModel) ?? ""
@@ -178,6 +183,7 @@ public final class Preferences {
         static let speaksReplies = "speaksReplies"
         static let grokModel = "grokModel"
         static let lookerModel = "lookerModel"
+        static let standardsLibrary = "standardsLibrary"
         static let asksCodex = "asksCodex"
         static let switchesToCodexAtLimit = "switchesToCodexAtLimit"
         static let codexModel = "codexModel"

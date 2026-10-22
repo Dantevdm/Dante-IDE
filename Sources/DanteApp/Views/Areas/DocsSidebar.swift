@@ -60,8 +60,13 @@ struct DocsSidebar: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if query.isEmpty {
-                        SidebarRow(title: "Library", symbol: "square.grid.2x2", count: library.all.count, isSelected: selected == nil) {
+                        SidebarRow(title: "Library", symbol: "square.grid.2x2", count: library.all.count,
+                                   isSelected: selected == nil && session.docPath != DocLibrary.standardsPath) {
                             session.showDoc(DocLibrary.libraryPath)
+                        }
+                        SidebarRow(title: "Standards", symbol: "swatchpalette", count: (session.workspace?.standards).map { $0.docs.count + $0.themeCount } ?? 0,
+                                   isSelected: session.docPath == DocLibrary.standardsPath) {
+                            session.showDoc(DocLibrary.standardsPath)
                         }
                         ForEach(library.groups) { group in
                             groupView(group)

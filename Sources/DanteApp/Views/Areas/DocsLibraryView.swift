@@ -53,6 +53,7 @@ struct DocsLibraryView: View {
             }
             MadeInDante(session: session, workspace: workspace,
                         diagrams: library.all.filter { $0.kind == .diagram }, pieces: library.all.filter { $0.kind == .motion })
+            StandardsStrip(session: session, workspace: workspace)
             ForEach(library.groups.filter { !Self.madeHere.contains($0.title) }) { group in groupSection(group) }
         }
         .task(id: workspace.revision) { await loadDetails() }

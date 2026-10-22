@@ -196,6 +196,7 @@ private struct LaneHeader: View {
 
 struct PartBox: View {
     @Environment(\.theme) private var theme
+    @Environment(\.frontendStandards) private var standards
     let part: SystemMap.Part
     let state: SystemDiagram.PartState
     let hue: Color
@@ -256,6 +257,9 @@ struct PartBox: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.leading, 29)
+                }
+                if part.lane == .clients, part.id.hasPrefix("client:"), let sets = standards?.themeSets(within: part.path ?? ""), !sets.isEmpty {
+                    FrontendThemeLine(sets: sets).padding(.leading, 29)
                 }
                 if let coverage, part.lane != .data, part.lane != .outside {
                     CoverageBar(fraction: coverage).padding(.leading, 29)
@@ -474,6 +478,11 @@ struct SystemInspector: View {
                         }
                         .buttonStyle(DanteButtonStyle(primary: open == nil))
                         .help("Opens it in your browser on localhost. If its dev server isn’t running, Dante says so and starts it first.")
+                    }
+                }
+                if let web = webApp, let sets = workspace.standards?.themeSets(within: web.client.path ?? ""), !sets.isEmpty {
+                    FrontendThemesCard(session: session, sets: sets) { query, name in
+                        session.openInBrowser(folder: web.client.path ?? "", name: web.client.name, screen: web.screen, theme: (query, name))
                     }
                 }
                 if part.kind == .table, let table {
@@ -703,7 +712,7 @@ enum Breakable {
 
 /// Opening a web app from the Map, step by step: how it runs, starting it (once the person
 /// agrees), waiting for its port, and the page opening in the browser.
-private struct WebLaunchCard: View {
+struct WebLaunchCard: View {
     @Environment(\.theme) private var theme
     let session: Session
     let launch: WebLaunch
@@ -714,7 +723,7 @@ private struct WebLaunchCard: View {
         let target = launch.target
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Eyebrow("Opening \(launch.screen ?? launch.name)")
+                Eyebrow("Opening \(launch.screen ?? launch.name)" + (launch.theme.map { " in \($0.name)" } ?? ""))
                 Spacer()
                 IconButton(symbol: "xmark", label: launch.isDone ? "Dismiss" : "Cancel", size: 9) { session.cancelWebLaunch() }
             }

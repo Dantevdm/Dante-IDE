@@ -51,7 +51,8 @@ struct DocsView: View {
     private var library: DocLibrary { DocLibrary(paths: workspace.files) }
 
     /// The library shows until a doc is picked, and whenever it's picked again.
-    private var showsLibrary: Bool { session.docPath == nil || session.docPath == DocLibrary.libraryPath }
+    private var showsLibrary: Bool { session.docPath == nil || session.docPath == DocLibrary.libraryPath || showsStandards }
+    private var showsStandards: Bool { session.docPath == DocLibrary.standardsPath }
 
     private var selected: DocLibrary.Doc? { showsLibrary ? nil : library.doc(preferring: session.docPath) }
 
@@ -60,7 +61,9 @@ struct DocsView: View {
             DocsSidebar(session: session, library: library, root: workspace.url, selected: selected, addFiles: pickFiles)
                 .frame(width: 236)
             Rectangle().fill(theme.line.color).frame(width: 1)
-            if let selected {
+            if showsStandards {
+                StandardsView(session: session, workspace: workspace)
+            } else if let selected {
                 VStack(spacing: 0) {
                     if selected.kind != .diagram {
                         toolbar(for: selected)
@@ -130,7 +133,8 @@ struct DocsView: View {
         }
         // "Show me the diagrams": the library, where the Diagrams card is.
         .task(id: session.areaView) {
-            if session.areaView == "diagrams", !showsLibrary { session.showDoc(DocLibrary.libraryPath) }
+            if session.areaView == "diagrams", !showsLibrary || showsStandards { session.showDoc(DocLibrary.libraryPath) }
+            if session.areaView == "standards", !showsStandards { session.showDoc(DocLibrary.standardsPath) }
         }
         .overlay {
             if dropTargeted {

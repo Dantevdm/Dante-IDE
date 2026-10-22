@@ -15,6 +15,8 @@ public final class Workspace {
     public private(set) var claudeRules = ClaudeRules()
     /// Phase docs from `.dante/phases/`, keyed by lower-case phase name.
     public private(set) var phaseDocs: [String: PhaseDoc] = [:]
+    /// House standards and themes, from the project and the company library. Nil until read.
+    public private(set) var standards: Standards?
     /// Name, summary and health checks from project.yaml.
     public private(set) var info = ProjectInfo()
     /// Bumped whenever files change on disk or through the editor, so views that read
@@ -80,6 +82,14 @@ public final class Workspace {
         tasks = TaskBoard(projectRoot: url)
         resolvedRootPath = url.resolvingSymlinksInPath().standardizedFileURL.path
         reloadSpec()
+    }
+
+    /// Reads the standards docs and themes again, off the main thread.
+    public func reloadStandards(library: URL?) async {
+        let root = url
+        let files = files
+        let next = await Task.detached(priority: .utility) { Standards.load(projectRoot: root, files: files, library: library) }.value
+        if next != standards { standards = next }
     }
 
     // MARK: Plan

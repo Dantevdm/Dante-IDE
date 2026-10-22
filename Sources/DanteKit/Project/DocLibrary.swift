@@ -139,6 +139,8 @@ public struct DocLibrary: Equatable, Sendable {
 
     /// What Docs shows instead of a document: every group at a glance.
     public static let libraryPath = "#library"
+    /// Docs › Standards: principles, UI standards and themes.
+    public static let standardsPath = "#standards"
 
     /// The docs whose title or path has every word of `query`, in their groups.
     public func filtered(_ query: String) -> DocLibrary {
