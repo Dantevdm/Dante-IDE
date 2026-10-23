@@ -30,4 +30,23 @@ import Testing
         #expect(custom.only([TestResult(suite: "", name: "x", status: .failed)]) == nil)
         #expect(swift.only([]) == nil)
     }
+
+    @Test func findsRunnersInAppFolders() throws {
+        let folder = try TemporaryFolder()
+        _ = try folder.write("api/pom.xml", "<project/>")
+        _ = try folder.write("web/package.json", #"{"scripts": {"test": "vitest"}}"#)
+        _ = try folder.write("docs/package.json", #"{"scripts": {"test": "jest"}}"#)
+        let both = TestCommand.detect(projectRoot: folder.url)
+        #expect(both?.label == "mvn test in api · npm test in web")
+        #expect(both?.arguments == ["sh", "-c", "status=0; (cd api && mvn -B test) || status=1; (cd web && npm test) || status=1; exit $status"])
+
+        let gradle = try TemporaryFolder()
+        _ = try gradle.write("service/build.gradle.kts", "")
+        _ = try gradle.write("service/gradlew", "")
+        #expect(TestCommand.detect(projectRoot: gradle.url)?.arguments == ["sh", "-c", "cd service && ./gradlew test"])
+        #expect(TestCommand.detect(projectRoot: gradle.url)?.label == "./gradlew test in service")
+
+        _ = try gradle.write("go.mod", "module x")
+        #expect(TestCommand.detect(projectRoot: gradle.url)?.label == "go test -v ./...")
+    }
 }

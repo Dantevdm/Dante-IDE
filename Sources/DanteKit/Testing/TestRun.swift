@@ -11,17 +11,46 @@ public struct TestCommand: Equatable, Sendable {
     public var readsXUnit: Bool
 
     public static func detect(projectRoot root: URL) -> TestCommand? {
-        let fileManager = FileManager.default
-        func has(_ name: String) -> Bool { fileManager.fileExists(atPath: root.appending(path: name).path) }
-
         if let yaml = try? String(contentsOf: root.appending(path: ".dante/project.yaml"), encoding: .utf8),
            let project = (try? Yams.load(yaml: yaml)) as? [String: Any],
            let test = project["test"] as? [String: Any], let command = test["command"] as? String, !command.isEmpty {
             return TestCommand(label: command, arguments: ["sh", "-c", verbose(command)], readsXUnit: false)
         }
+        if let command = runner(in: root) { return command }
+        // A repo of apps side by side (`api/` with a pom.xml, `web/` with package.json): run each in its folder.
+        let folders = ((try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .filter { !$0.lastPathComponent.hasPrefix(".") && !skippedFolders.contains($0.lastPathComponent) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let found = folders.compactMap { folder in runner(in: folder).map { (folder.lastPathComponent, $0) } }
+        guard !found.isEmpty else { return nil }
+        if found.count == 1, let (folder, command) = found.first {
+            return TestCommand(label: "\(command.label) in \(folder)", arguments: ["sh", "-c", "cd \(Shell.quote(folder)) && " + command.script],
+                               readsXUnit: command.readsXUnit)
+        }
+        // Every folder runs even when one fails, and the run fails if any did.
+        let script = "status=0; " + found.map { "(cd \(Shell.quote($0.0)) && \($0.1.script)) || status=1; " }.joined() + "exit $status"
+        return TestCommand(label: found.map { "\($0.1.label) in \($0.0)" }.joined(separator: " · "), arguments: ["sh", "-c", script], readsXUnit: false)
+    }
+
+    static let skippedFolders: Set<String> = ["node_modules", "vendor", "build", "dist", "target", "docs", "Pods", "venv"]
+
+    /// The runner for the files in one folder.
+    static func runner(in root: URL) -> TestCommand? {
+        let fileManager = FileManager.default
+        func has(_ name: String) -> Bool { fileManager.fileExists(atPath: root.appending(path: name).path) }
+
         if has("Package.swift") { return TestCommand(label: "swift test", arguments: ["swift", "test"], readsXUnit: true) }
         if has("Cargo.toml") { return TestCommand(label: "cargo test", arguments: ["cargo", "test"], readsXUnit: false) }
         if has("go.mod") { return TestCommand(label: "go test -v ./...", arguments: ["go", "test", "-v", "./..."], readsXUnit: false) }
+        if has("pom.xml") {
+            let maven = has("mvnw") ? "./mvnw" : "mvn"
+            return TestCommand(label: "\(maven) test", arguments: [maven, "-B", "test"], readsXUnit: false)
+        }
+        if has("build.gradle") || has("build.gradle.kts") {
+            let gradle = has("gradlew") ? "./gradlew" : "gradle"
+            return TestCommand(label: "\(gradle) test", arguments: [gradle, "test"], readsXUnit: false)
+        }
         if has("package.json"),
            let data = fileManager.contents(atPath: root.appending(path: "package.json").path),
            let package = JSONValue(line: String(decoding: data, as: UTF8.self)),
@@ -29,10 +58,21 @@ public struct TestCommand: Equatable, Sendable {
             let runner = has("pnpm-lock.yaml") ? "pnpm" : has("yarn.lock") ? "yarn" : has("bun.lockb") ? "bun" : "npm"
             return TestCommand(label: "\(runner) test", arguments: [runner, "test"], readsXUnit: false)
         }
-        if has("pytest.ini") || has("pyproject.toml") || has("setup.py") || has("tox.ini") {
+        if has("pytest.ini") || has("pyproject.toml") || has("setup.py") || has("tox.ini") || has("requirements.txt") && hasPythonTests(root) {
             return TestCommand(label: "pytest -v", arguments: ["python3", "-m", "pytest", "-v"], readsXUnit: false)
         }
         return nil
+    }
+
+    /// A requirements.txt alone only means pytest when there are test files to run.
+    static func hasPythonTests(_ root: URL) -> Bool {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        return names.contains { $0 == "tests" || $0 == "test" || $0.hasPrefix("test_") && $0.hasSuffix(".py") }
+    }
+
+    /// The command as one line for `sh -c`.
+    var script: String {
+        arguments.first == "sh" && arguments.count == 3 ? arguments[2] : arguments.map(Shell.quote).joined(separator: " ")
     }
 
     /// `go test` lists each test only with -v; without it a run shows no results.

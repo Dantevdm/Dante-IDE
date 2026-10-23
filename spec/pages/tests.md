@@ -18,7 +18,7 @@ Tests runs the project's tests and shows failures, flaky tests, the tests writte
 - Untested: files and declarations no test names, most lines first.
 
 ## Actions
-- Run tests: the detected runner (swift test, go test, pytest, jest, vitest and others); run changed, the open file's tests, one kind, or tests picked by hand.
+- Run tests: the detected runner (swift test, go test, pytest, Maven, Gradle, jest, vitest and others; with nothing at the root, each app folder's runner in its folder, one after another); run changed, the open file's tests, one kind, or tests picked by hand.
 - Repeat a narrowed run from the header's main button.
 - Write tests: ask the agent to draft tests for ticked untested code.
 - Ask the agent to set up tests when the project has none.
