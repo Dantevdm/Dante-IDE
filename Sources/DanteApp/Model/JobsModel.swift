@@ -50,6 +50,9 @@ final class JobsModel {
     /// Runs already finished when the watch began, so old failures aren't news.
     @ObservationIgnored private var ciBaseline: Set<Int>?
 
+    /// Records this window removed (forgotten, or open ones whose worktree went), so saving
+    /// doesn't bring them back from disk.
+    @ObservationIgnored private var forgotten: Set<String> = []
     var open: [JobRecord] { records.filter { $0.outcome == .open } }
     /// Finished jobs, newest first, for the board's history.
     var closed: [JobRecord] { records.filter { $0.outcome != .open }.sorted { ($0.closed ?? $0.created) > ($1.closed ?? $1.created) } }
@@ -70,7 +73,9 @@ final class JobsModel {
         unavailable = FileManager.default.fileExists(atPath: root.appending(path: ".git").path) ? nil
             : "Jobs need a git repository: each one works on its own branch."
         // Keep only jobs whose worktree is still there; a missing one was removed by hand.
-        records = JobStore.load(for: root).filter { $0.outcome != .open || FileManager.default.fileExists(atPath: $0.worktree) }
+        let saved = JobStore.load(for: root)
+        records = saved.filter { $0.outcome != .open || FileManager.default.fileExists(atPath: $0.worktree) }
+        forgotten = Set(saved.map(\.id)).subtracting(records.map(\.id))
         // Time already up when the project opened isn't news.
         reportedTimeUp = Set(open.filter { $0.outOfTime() }.map(\.id))
         if open.contains(where: \.isAway) { watchTime() }
@@ -214,7 +219,9 @@ final class JobsModel {
         let claude = makeSession(job)
         claude.onConversationStarted = { [weak self] conversation in self?.noteConversation(conversation, for: id) }
         sessions[id] = claude
-        if let conversation = job.conversationID, job.engine == .claude {
+        if let conversation = job.conversationID, job.engine == .codex {
+            claude.resumeCodex(thread: conversation)
+        } else if let conversation = job.conversationID, job.engine == .claude {
             let url = ClaudeHistory.transcriptURL(for: conversation, root: job.worktreeURL)
             if FileManager.default.fileExists(atPath: url.path) {
                 // The conversation id is set now, so a message sent straight away (from the phone,
@@ -231,9 +238,14 @@ final class JobsModel {
         return claude
     }
 
+    /// Keeps the conversation and the engine it runs on, so a restart picks up the right one
+    /// (the job's engine can be switched while it runs).
     private func noteConversation(_ conversation: String, for id: String) {
-        guard let index = records.firstIndex(where: { $0.id == id }), records[index].conversationID != conversation else { return }
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+        let engine = sessions[id]?.engine ?? records[index].engine
+        guard records[index].conversationID != conversation || records[index].engine != engine else { return }
         records[index].conversationID = conversation
+        records[index].engine = engine
         save()
     }
 
@@ -382,6 +394,7 @@ final class JobsModel {
 
     /// Takes a finished job off the board's history.
     func forget(_ id: String) {
+        if records.contains(where: { $0.id == id && $0.outcome != .open }) { forgotten.insert(id) }
         records.removeAll { $0.id == id && $0.outcome != .open }
         save()
     }
@@ -407,9 +420,9 @@ final class JobsModel {
 
     private func save() {
         guard let root else { return }
-        // A long history isn't useful: keep every open job and the last 30 finished ones.
-        let kept = open + Array(closed.prefix(30))
-        try? JobStore.save(kept.sorted { $0.created < $1.created }, for: root)
+        // Merged with what's on disk, so a second window on the project keeps its jobs too.
+        // A long history isn't useful: every open job and the last 30 finished ones.
+        try? JobStore.save(JobStore.merged(disk: JobStore.load(for: root), mine: records, forgotten: forgotten), for: root)
     }
 
     /// A job's worktree starts with the project's search index, so only what the job changes

@@ -120,3 +120,19 @@ import Testing
         #expect(JobGuard.forbidden("git push") != nil)
     }
 }
+
+struct BrowserContentRuleTests {
+    @Test func sendingIsBlockedOutsideTheAllowedHosts() throws {
+        let json = BrowserHosts(extra: ["staging.shop.dev"]).contentRules
+        let rules = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]])
+        let first = try #require(rules.first)
+        #expect((first["action"] as? [String: String])?["type"] == "block")
+        #expect(((first["trigger"] as? [String: Any])?["resource-type"] as? [String])?.contains("fetch") == true)
+        #expect(((first["trigger"] as? [String: Any])?["resource-type"] as? [String])?.contains("image") == false)
+        let filters = rules.dropFirst().compactMap { ($0["trigger"] as? [String: Any])?["url-filter"] as? String }
+        #expect(filters.contains("^[a-z]+://staging\\.shop\\.dev[:/?#]"))
+        #expect(filters.contains("^[a-z]+://[^/:?#]*\\.localhost[:/?#]"))
+        // WebKit's url-filter has no alternation.
+        #expect(!filters.contains { $0.contains("|") })
+    }
+}

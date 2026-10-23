@@ -110,6 +110,28 @@ import Testing
         #expect(abs(loaded[0].created.timeIntervalSince(job.created)) < 1)
         #expect(JobStore.load(for: URL(filePath: "/home/me/code/other"), in: folder.url).isEmpty)
     }
+
+    @Test func twoWindowsKeepEachOthersJobs() {
+        func job(_ title: String, at seconds: Double) -> JobRecord {
+            var record = JobRecord(title: title, brief: title, branch: "dante/\(title)", worktree: "/wt/\(title)", base: "abc", baseBranch: nil, engine: .claude)
+            record.created = Date(timeIntervalSince1970: seconds)
+            return record
+        }
+        let a = job("a", at: 1), b = job("b", at: 2), old = job("old", at: 0)
+        var oldClosed = old
+        oldClosed.outcome = .merged
+        // Window B saved b; window A, which only knows a and the old one, saves after it.
+        let disk = [oldClosed, b]
+        var aDone = a
+        aDone.outcome = .discarded
+        let merged = JobStore.merged(disk: disk, mine: [oldClosed, aDone], forgotten: [])
+        #expect(merged.map(\.title) == ["old", "a", "b"])
+        #expect(merged.first { $0.title == "a" }?.outcome == .discarded)
+        #expect(JobStore.merged(disk: disk, mine: [aDone], forgotten: [old.id]).map(\.title) == ["a", "b"])
+        let many = (0..<40).map { n -> JobRecord in var r = job("c\(n)", at: Double(n)); r.outcome = .merged; r.closed = Date(timeIntervalSince1970: Double(n)); return r }
+        let trimmed = JobStore.merged(disk: many, mine: [b], forgotten: [])
+        #expect(trimmed.count == 31 && trimmed.contains { $0.title == "b" } && !trimmed.contains { $0.title == "c0" })
+    }
 }
 
 @Suite(.serialized) struct JobWorktreeTests {

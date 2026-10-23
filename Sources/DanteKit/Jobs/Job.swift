@@ -363,6 +363,18 @@ public enum JobStore {
         return (try? decoder.decode([JobRecord].self, from: data)) ?? []
     }
 
+    /// What to write when one window saves: the records on disk (another window on the same
+    /// project may have added some) with this window's versions in their place, without the
+    /// ones it forgot, keeping every open job and the newest `keepClosed` finished ones.
+    public static func merged(disk: [JobRecord], mine: [JobRecord], forgotten: Set<String>, keepClosed: Int = 30) -> [JobRecord] {
+        var byID = Dictionary(disk.map { ($0.id, $0) }) { a, _ in a }
+        for record in mine { byID[record.id] = record }
+        let all = byID.values.filter { !forgotten.contains($0.id) }
+        let open = all.filter { $0.outcome == .open }
+        let closed = all.filter { $0.outcome != .open }.sorted { ($0.closed ?? $0.created) > ($1.closed ?? $1.created) }.prefix(keepClosed)
+        return (open + closed).sorted { ($0.created, $0.id) < ($1.created, $1.id) }
+    }
+
     public static func save(_ jobs: [JobRecord], for root: URL, in folder: URL = defaultFolder()) throws {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let encoder = JSONEncoder()

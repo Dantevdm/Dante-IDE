@@ -5,7 +5,7 @@ import WebKit
 /// The agents' own browser: WebKit in a window nobody sees, inside the `dante mcp` process, so
 /// each conversation and job has one of its own and never uses the person's. Its storage is
 /// private and forgotten when the process ends (no cookies or sign-ins from anywhere else), and
-/// the page only moves within `BrowserHosts`. Needs the main run loop: `dante mcp` runs it.
+/// the page only moves within `BrowserHosts` and sends nothing to other hosts (`contentRules`). Needs the main run loop: `dante mcp` runs it.
 @MainActor
 public final class AgentBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
     public struct Failure: Error, LocalizedError {
@@ -27,6 +27,7 @@ public final class AgentBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Pages refused by `hosts` and dialogs the page showed, since they were last told.
     private var notes: [String] = []
     private var shotCount = 0
+    private var rulesInstalled = false
 
     public static let defaultSize = CGSize(width: 1280, height: 800)
     static let timeout: Duration = .seconds(20)
@@ -59,6 +60,7 @@ public final class AgentBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     public func open(_ url: URL) async throws -> String {
         guard hosts.allows(url) else { throw Failure(message: hosts.refusal(url)) }
+        try await installRules()
         status = nil
         loadError = nil
         await waitForLoad { web.load(URLRequest(url: url)) }
@@ -195,6 +197,23 @@ public final class AgentBrowser: NSObject, WKNavigationDelegate, WKUIDelegate {
         if let error { loadError = error }
         loading?.resume()
         loading = nil
+    }
+
+    /// `BrowserHosts.contentRules`, compiled once before the first page: without them a page
+    /// could send what it shows to any server. No page loads if they can't be compiled.
+    private func installRules() async throws {
+        guard !rulesInstalled else { return }
+        guard let store = WKContentRuleListStore.default() else { throw Failure(message: "The browser couldn’t set up its network rules.") }
+        do {
+            let list = try await store.compileContentRuleList(forIdentifier: "dante-agent-browser", encodedContentRuleList: hosts.contentRules)
+            guard let list else { throw Failure(message: "The browser couldn’t set up its network rules.") }
+            web.configuration.userContentController.add(list)
+            rulesInstalled = true
+        } catch let failure as Failure {
+            throw failure
+        } catch {
+            throw Failure(message: "The browser couldn’t set up its network rules: \(error.localizedDescription)")
+        }
     }
 
     private func takeNotes() -> String {

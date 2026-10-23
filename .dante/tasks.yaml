@@ -651,3 +651,8 @@ tasks:
   phase: build
   state: done
   notes: "Checked in the iPad simulator against a test copy. Hey Dante needs a real iPad (the simulator has no on-device recognition)."
+- id: DI-150
+  title: "Review fixes: windows keep each other's jobs, Codex jobs resume after a restart, the agents' browser sends nothing to other hosts"
+  phase: build
+  state: done
+  notes: "Content rules checked in real WebKit: a fetch to another host passes without them and is blocked with them."

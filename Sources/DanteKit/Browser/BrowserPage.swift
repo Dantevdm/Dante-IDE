@@ -28,6 +28,28 @@ public struct BrowserHosts: Equatable, Sendable {
         return extra.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 
+    /// WebKit content rules that keep a page from sending anything off the allowed hosts:
+    /// fetch, XHR, WebSockets, beacons, frames and pop-ups elsewhere are blocked, while pictures,
+    /// styles, scripts, fonts and media from a CDN still load so the app looks as it should.
+    /// (WebKit's url-filter has no `|`, so each host gets its own rule; it sees URLs with their
+    /// path, so `http://localhost` arrives as `http://localhost/`.)
+    public var contentRules: String {
+        let sending = ["fetch", "raw", "websocket", "ping", "document", "popup", "other"]
+        var rules: [[String: Any]] = [["trigger": ["url-filter": ".*", "resource-type": sending], "action": ["type": "block"]]]
+        let exact = (Self.local.subtracting(["::1", "[::1]"]).sorted() + extra).map { "^[a-z]+://" + Self.escaped($0) + "[:/?#]" }
+        let wild = (["localhost", "test"] + extra).map { "^[a-z]+://[^/:?#]*\\." + Self.escaped($0) + "[:/?#]" }
+        let local = ["^[a-z]+://\\[::1\\]", "^data:", "^blob:", "^about:"]
+        for filter in exact + wild + local {
+            rules.append(["trigger": ["url-filter": filter], "action": ["type": "ignore-previous-rules"]])
+        }
+        let data = (try? JSONSerialization.data(withJSONObject: rules, options: [.sortedKeys])) ?? Data("[]".utf8)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func escaped(_ host: String) -> String {
+        host.map { ".*+?()[]{}^$\\|".contains($0) ? "\\\($0)" : String($0) }.joined()
+    }
+
     /// Why a page is refused, for the agent.
     public func refusal(_ url: URL) -> String {
         let listed = extra.isEmpty ? "" : " and \(extra.joined(separator: ", "))"

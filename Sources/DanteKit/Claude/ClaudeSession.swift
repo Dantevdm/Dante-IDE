@@ -730,6 +730,15 @@ public final class ClaudeSession {
         note("Earlier conversation. Your next message continues it.", isError: false)
     }
 
+    /// Picks up an earlier Codex conversation by its thread id (a job after a restart): the
+    /// next message continues it with `thread/resume`, or starts afresh if Codex can't.
+    public func resumeCodex(thread id: String) {
+        reset()
+        codexThread = id
+        lastTurnEngine = .codex
+        note("Earlier conversation with Codex. Your next message continues it.", isError: false)
+    }
+
     /// The earlier conversation's items, read after `resume` was already called with none so a
     /// message sent meanwhile continued the right conversation: they go before everything
     /// since, without resetting anything.
@@ -969,6 +978,7 @@ public final class ClaudeSession {
             }
             guard let thread = result?["thread"]?["id"]?.string else { return self.codexFailed("Codex didn’t open a conversation.") }
             self.codexThread = thread
+            if thread != resume { self.onConversationStarted(thread) }
             self.model = result?["model"]?.string ?? model
             if let held = self.codexHeldTurn {
                 self.codexHeldTurn = nil
