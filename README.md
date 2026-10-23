@@ -31,10 +31,10 @@ The rail has seven places; some have tabs.
 - **Quality**: Tests and Security
 - **Local**: Services (Docker Compose), Data (your databases) and Health (alarms, checks, production logs)
 - **Ship**: Release and History
-- **Agents**: Jobs, Activity, Setup and HQ
+- **Agents**: Jobs, Activity and Setup
 - **Docs**, in the footer: markdown, native diagrams, PDFs and Word files, and the motion studio
 
-Beside them: the agent panel, the menu bar's Vine D, the Stage and voice. The sections below go through the big pieces.
+Beside them: the agent panel, the menu bar's Vine D, the Stage, voice and the iPhone and iPad companion. Each project opens in its own window, and several can be open at once. The sections below go through the big pieces.
 
 ## Agents in charge
 
@@ -47,6 +47,8 @@ Dante is built around agents rather than bolted onto them.
 - **Local models do the small jobs.** Through Dante's own MCP server (`dante mcp`), the agents can hand summaries, drafts and checks to models in [Ollama](https://ollama.com), picked per kind of job, at no cost. Looker, a local vision model, reads screenshots and images and quotes their text exactly.
 - **Cloud agents with your own keys.** Grok (xAI) for a second opinion and Jev for scored decisions, with keys in the Keychain. Those tools always ask first, since they send material off the Mac.
 - **Activity tells the story.** Every job, local or cloud, turns and sub-agents included, goes into one ledger: who did what and why, who checked whose work, the cost, and each request as a thread.
+- **A team of sub-agents.** The lead can hand work to a Documenter, Researcher, Front-end and Back-end engineers, Marketing, a Security Officer and a Tester, in parallel. Claude runs them as its own sub-agents, and Codex reaches them through Dante's `team` tool.
+- **Hands and a browser.** With Hands on, an agent can open apps, find folders, take screenshots, type and click. Every step that controls the Mac asks first, a badge shows what it did, and ⌃⌥⌘. stops it. The agents also have their own off-screen browser for checking local web apps, and it reports console errors and failed requests.
 - **Setup** lists the project's skills (and suggests new ones from its files), memory files and what they cost per message, MCP servers, plugins and permissions.
 
 ### Jobs: agents working beside you
@@ -113,11 +115,9 @@ In Docs, the agents make videos, slide decks and explainers from the real system
 
 When both agents make a piece, you switch between their versions, play them side by side in step, and keep the one you like. The other agent critiques a version from a contact sheet of its beats, as a motion designer who didn't make it, and you send its notes back to the maker. Dante's lint flags anything that would break a frame-accurate render. A piece exports as an MP4, as one HTML file that plays offline in any browser (the libraries go inside it), or as a PDF of its slides or storyboard. Decks are presented full screen on the Stage, moved on with the keys, a clicker or "next slide".
 
-## Agent HQ
+## On your iPhone and iPad
 
-A little easter egg under Agents › HQ: the agents in an isometric office around a glowing brain, and the office grows with your app. Every job an agent does and every commit counts. It starts as an empty lot and becomes a garage, a studio, an office, headquarters and finally a campus, with trees for the files and a tower under the brain for the commits.
-
-Each room is a kind of work: research, backend, front-end, DevOps, quality, docs, security and data. A room opens with its first job and is furnished as its work adds up: a desk, then a rug and lamp, a second desk, a bookshelf, and a gold-trimmed flagship with trophies after that. Rooms nobody uses go dusty, busy roads wear wider and light up, and the sky follows the time of day. Whoever is working sits in the room of the file they're editing, with a tag saying what they're doing. The story so far lists each milestone, and *Watch it grow* replays the whole history.
+The companion app pairs with a QR code and talks to the Mac over your tailnet, with the key never sent. From the phone you can ask either agent, answer approvals, start and stop jobs, and set the approval level. Hold to talk with AirPods, and replies come back in the Mac's natural voice. It works with no project open: the most recent project opens when you ask about it. The Mac stays awake while a device is connected. See [Mobile/README.md](Mobile/README.md).
 
 ## What stays on your Mac
 
@@ -154,7 +154,7 @@ Connections, database passwords (in the Keychain), the search index, test histor
 - Several terminals as tabs (⌃⇧` for a new one); hidden tabs keep running
 - Cloning shows git's progress, and if the server wants a password git can't ask for, Dante finishes the clone in Terminal and opens it when done
 - Layouts follow the window: pages fill wide and ultra-wide screens, panels can be dragged much wider, and Docs can switch to full width
-- Tests (⌘U): runs the project's tests (Swift, cargo, go, npm/pnpm/yarn/bun, pytest, or `test.command`), groups results by suite, re-runs just the failures (⇧⌘U) or any single test, and hands failures to Claude. Written lists every test in the code by category (Unit, Integration, End-to-end, UI, Performance, or your own from `test.categories` globs in project.yaml) and file, with each one's last result; results can be grouped by category too. History charts runs on this Mac and flags flaky and long-failing tests. Untested lists the functions and types no test names, logic before views, with Write tests per file and a concrete brief for Claude
+- Tests (⌘U): runs the project's tests (Swift, cargo, go, Maven, Gradle, npm/pnpm/yarn/bun, pytest, or `test.command`; with nothing at the root, each app folder's runner in turn), groups results by suite, re-runs just the failures (⇧⌘U) or any single test, and hands failures to Claude. Written lists every test in the code by category (Unit, Integration, End-to-end, UI, Performance, or your own from `test.categories` globs in project.yaml) and file, with each one's last result; results can be grouped by category too. History charts runs on this Mac and flags flaky and long-failing tests. Untested lists the functions and types no test names, logic before views, with Write tests per file and a concrete brief for Claude
 - Env: Docker Compose services with start, stop, logs, and Dockerfiles that are missing. Logs follow every service or one, with search (highlighted, or only matching lines), a level filter, the app's timestamps set apart, errors and warnings marked, and copy. They open at the newest line and stay there as lines arrive; scroll up to read back (following stops) and Jump to latest to return. The last 500 lines load by default, or 2,000, 10,000 or everything. Start and Rebuild show compose's output as it runs, and each service that isn't up says why: a failing health check (with the check's own error), a port something else on this Mac already holds, or a dependency it's waiting on. Find the cause hands that to Claude. A Ports card shows every port the compose file publishes and anything else listening that was started from the project, with the process, its command line and uptime; Stop asks it to quit. Before each start Dante checks the ports and, if one is taken, offers to stop what holds it, publish the service on the next free port (editing only that line of the compose file), or start anyway
 - Data: the project's databases (PostgreSQL, MySQL, SQLite). Dante finds them in compose files, `.env` URLs, Prisma/Rails/Django config and SQLite files, and says what the code uses (drivers, ORMs, migrations) even before there's a database. Browse tables a page at a time with sorting and a WHERE filter, see columns and foreign keys both ways, run SQL scripts in one session (⌘↩, with a check before anything that drops or rewrites whole tables), explain queries (with the tables read row by row to filter, the index that would help, and Claude to talk the plan through), preview what a script or migration file changes before it runs (checked against the live schema: missing tables, NOT NULL columns with no default, locking index builds, rows a drop deletes), export results, and see the live schema as an ER diagram you can save to docs. New database sets up a Docker Compose service (or a SQLite file) with a generated password in `.env`, on a free port, and starts it. Talks through `psql`, `mysql` and `sqlite3`, or the client inside the compose container; passwords live in the Keychain, connections stay on this Mac, and anything not on this Mac opens read-only. Claude writes queries from a description and fixes failing ones, with the schema as context
 - Map: the system map (clients and their screens, API route groups, backend packages, data stores and tables, outside services and webhooks, linked by real calls), plus modules from `Package.swift` or Go imports and compose services; an inspector with environment variables and coverage, drift against `.dante/architecture.md`, and a Mermaid export into it
@@ -172,16 +172,16 @@ Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the s
 
 **In progress**
 
-- **Walk and work**: jobs, away mode and job types are in ([plan](docs/plans/walk-and-work.md)); next are away budgets, then an iPhone and iPad companion (QR pairing, a voice loop with AirPods, Live Activities and actionable notifications, an iPad desk layout) and a verifier that drives its own browser.
+- **Explore from the iPhone and iPad**: browse docs, pictures, diagrams and the Map from the companion. The Mac renders each one at the device's size and sends only what's on screen, never the repo.
+- **A personal assistant**: "Hey Dante, give me my morning update" covers what changed in your projects and who changed it, how the pipelines are doing, the mail that needs you and today's meetings. Mail and calendar come from Outlook on the Mac, and only summaries leave it. An iPad on the wall gets an ambient Today screen.
 
 **Next**
 
-- **Motion everywhere**: the Infra view's animated links and pulses in Tests, Data, Services and Agents.
-- **Hands**: let an agent open apps and control the Mac, with a visible kill switch (needs Accessibility, asked first).
+- **Keep running reads the crash**: when a service keeps crashing, Dante reads its logs and asks the agent to fix the cause.
 
 **Waiting for review** (built, being tried in daily use)
 
-Agent HQ, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
+The companion app, Hands and the agents' browser, the team of sub-agents, jobs with away mode, budgets and job types, several projects in several windows, motion everywhere, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
 
 ## Requirements
 
