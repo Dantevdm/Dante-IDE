@@ -117,7 +117,7 @@ When both agents make a piece, you switch between their versions, play them side
 
 ## On your iPhone and iPad
 
-The companion app pairs with a QR code and talks to the Mac over your tailnet, with the key never sent. From the phone you can ask either agent, answer approvals, start and stop jobs, and set the approval level. Hold to talk with AirPods, and replies come back in the Mac's natural voice. It works with no project open: the most recent project opens when you ask about it. Browse a project's docs, pictures, diagrams and Map: the Mac draws each page at the device's size and sends only that page, and the device keeps what it has seen. Ask for your morning update (who changed what in your projects, pipelines, and from Outlook on the Mac the mail that needs you and today's meetings), or open Today. The Mac stays awake while a device is connected. See [Mobile/README.md](Mobile/README.md).
+The companion app pairs with a QR code and talks to the Mac over your tailnet, with the key never sent. From the phone you can ask either agent, answer approvals, start and stop jobs, and set the approval level. Hold to talk with AirPods, and replies come back in the Mac's natural voice. It works with no project open: the most recent project opens when you ask about it. Browse a project's docs, pictures, diagrams and Map: the Mac draws each page at the device's size and sends only that page, and the device keeps what it has seen. Hang an iPad on the wall for a clock, the update and the agents, with "Hey Dante". Ask for your morning update (who changed what in your projects, pipelines, and from Outlook on the Mac the mail that needs you and today's meetings), or open Today. The Mac stays awake while a device is connected. See [Mobile/README.md](Mobile/README.md).
 
 ## What stays on your Mac
 
@@ -170,17 +170,13 @@ Connections, database passwords (in the Keychain), the search index, test histor
 
 Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the short version.
 
-**In progress**
-
-- **The iPad on the wall**: an ambient Today screen that stays on, wakes to "Hey Dante" and reads the morning update aloud.
-
 **Next**
 
 - More control of the Mac's apps for the assistant, building on Hands.
 
 **Waiting for review** (built, being tried in daily use)
 
-Exploring from the iPhone and iPad, the morning update, Keep running reading crashes, the companion app, Hands and the agents' browser, the team of sub-agents, jobs with away mode, budgets and job types, several projects in several windows, motion everywhere, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
+Exploring from the iPhone and iPad, the morning update and the iPad wall, Keep running reading crashes, the companion app, Hands and the agents' browser, the team of sub-agents, jobs with away mode, budgets and job types, several projects in several windows, motion everywhere, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
 
 ## Requirements
 

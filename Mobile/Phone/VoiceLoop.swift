@@ -366,6 +366,7 @@ final class VoiceLoop {
     private func start() async {
         guard let ticket = talkKey.press() else { return }
         stopSpeaking()
+        if wakeTask != nil { stopWake() }
         guard await Self.authorize() else {
             talkKey.cancel()
             problem = "Dante needs the microphone and speech recognition: Settings › Dante."
@@ -511,6 +512,141 @@ final class VoiceLoop {
         guard !text.isEmpty else { return }
         handle(text)
         pumpSpeech()
+    }
+
+    // MARK: Hey Dante (the wall)
+
+    /// While the wall is up: an on-device recognition task listening for "Hey Dante",
+    /// restarted every 50 seconds and stopped while Dante speaks or the button is used.
+    /// Nothing heard leaves the iPad until the wake phrase is said.
+    private(set) var listensForWakeWord = false
+    /// What was said after "Hey Dante" so far; nil while waiting for it.
+    private(set) var wakeCommand: String?
+    private var wakeTask: SFSpeechRecognitionTask?
+    private var wakeRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var wakeLoop: Task<Void, Never>?
+    private var wakeQuiet: Task<Void, Never>?
+    private var wakeStarted = Date.distantPast
+    private var wakeGeneration = 0
+
+    var isWaitingForWakeWord: Bool { wakeTask != nil && wakeCommand == nil }
+
+    func setWakeWord(_ on: Bool) {
+        guard on != listensForWakeWord else { return }
+        listensForWakeWord = on
+        wakeLoop?.cancel()
+        wakeLoop = nil
+        if on {
+            wakeLoop = Task { [weak self] in
+                while !Task.isCancelled {
+                    await self?.tendWake()
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+        } else {
+            stopWake()
+        }
+    }
+
+    /// Starts listening when nothing else is going on, and restarts a long-running task
+    /// (on-device recognition stops by itself after about a minute).
+    private func tendWake() async {
+        let pressed: Bool = if case .idle = talkKey.phase { false } else { true }
+        if state != .idle || speakingChunk || pressed {
+            if wakeTask != nil, wakeCommand == nil { stopWake() }
+            return
+        }
+        if wakeTask != nil, wakeCommand == nil, Date.now.timeIntervalSince(wakeStarted) > 50 { stopWake() }
+        if wakeTask == nil { await startWake() }
+    }
+
+    private func startWake() async {
+        guard await Self.authorize() else {
+            problem = "Hey Dante needs the microphone and speech recognition: Settings › Dante."
+            return setWakeWord(false)
+        }
+        guard let recognizer, recognizer.supportsOnDeviceRecognition else {
+            problem = "This device can’t recognise speech offline, so Hey Dante stays off."
+            return setWakeWord(false)
+        }
+        guard listensForWakeWord, recognizer.isAvailable, state == .idle, wakeTask == nil else { return }
+        do { try activateSession(recording: true) } catch { return }
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = true
+        let input = engine.inputNode
+        input.removeTap(onBus: 0)
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else { return }
+        input.installTap(onBus: 0, bufferSize: 1024, format: format, block: Self.tap(request))
+        do {
+            if !engine.isRunning {
+                engine.prepare()
+                try engine.start()
+            }
+        } catch {
+            input.removeTap(onBus: 0)
+            return
+        }
+        wakeGeneration += 1
+        wakeRequest = request
+        wakeStarted = .now
+        wakeTask = recognizer.recognitionTask(with: request, resultHandler: Self.wakeResults(self, generation: wakeGeneration))
+    }
+
+    private nonisolated static func wakeResults(_ loop: VoiceLoop, generation: Int) -> (SFSpeechRecognitionResult?, (any Error)?) -> Void {
+        { [weak loop] result, error in
+            let text = result?.bestTranscription.formattedString ?? ""
+            let ended = error != nil || (result?.isFinal ?? false)
+            Task { @MainActor in loop?.wakeRecognized(text, ended: ended, generation: generation) }
+        }
+    }
+
+    private func wakeRecognized(_ text: String, ended: Bool, generation: Int) {
+        guard generation == wakeGeneration, wakeTask != nil else { return }
+        if let command = WakeWord.command(in: text) {
+            if wakeCommand == nil { AudioServicesPlaySystemSound(1113) }
+            wakeCommand = command
+            heard = command
+            // A pause ends the request; "Hey Dante" alone waits a little longer for the rest.
+            wakeQuiet?.cancel()
+            wakeQuiet = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(command.isEmpty ? 4 : 1.5))
+                guard !Task.isCancelled else { return }
+                self?.wakeFinished()
+            }
+        }
+        if ended {
+            if wakeCommand != nil { wakeFinished() } else { stopWake() }
+        }
+    }
+
+    private func wakeFinished() {
+        let command = (wakeCommand ?? "").trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        stopWake()
+        heard = ""
+        if command.isEmpty {
+            // "Hey Dante" alone: listen for the request as if the button were pressed.
+            talk()
+        } else {
+            AudioServicesPlaySystemSound(1114)
+            handle(command)
+        }
+    }
+
+    private func stopWake() {
+        wakeQuiet?.cancel()
+        wakeQuiet = nil
+        wakeCommand = nil
+        wakeGeneration += 1
+        wakeTask?.cancel()
+        wakeTask = nil
+        wakeRequest?.endAudio()
+        wakeRequest = nil
+        guard state == .idle else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        try? activateSession()
     }
 
     // MARK: Acting on what was said

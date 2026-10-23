@@ -646,3 +646,8 @@ tasks:
   phase: build
   state: done
   notes: "Checked with a test copy and the iPhone simulator (Outlook off): who changed what in each recent project, pipelines, the sheet in Settings."
+- id: DI-149
+  title: "iPad wall: a clock, the morning update and the agents, screen kept on and dimmed at night, with on-device Hey Dante"
+  phase: build
+  state: done
+  notes: "Checked in the iPad simulator against a test copy. Hey Dante needs a real iPad (the simulator has no on-device recognition)."

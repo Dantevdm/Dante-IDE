@@ -10,6 +10,7 @@ struct PadRoot: View {
     @State private var entry: CompanionLibrary.Entry?
     @State private var columns = NavigationSplitViewVisibility.all
     @State private var today = false
+    @State private var wall = ProcessInfo.processInfo.environment["DANTE_WALL"] == "1"
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
@@ -26,6 +27,11 @@ struct PadRoot: View {
                         today = true
                     } label: {
                         Label("Today", systemImage: "sun.horizon").foregroundStyle(today ? Palette.accent : Palette.text)
+                    }
+                    Button {
+                        wall = true
+                    } label: {
+                        Label("Wall", systemImage: "rectangle.inset.filled").foregroundStyle(Palette.text)
                     }
                 }
                 Section("Projects") {
@@ -49,6 +55,9 @@ struct PadRoot: View {
             } else {
                 PhoneHome(connection: connection, voice: voice, explorer: explorer)
             }
+        }
+        .fullScreenCover(isPresented: $wall) {
+            WallView(connection: connection, voice: voice) { wall = false }
         }
         .onChange(of: project) { entry = nil }
         .onChange(of: entry) { if entry != nil { today = false } }
