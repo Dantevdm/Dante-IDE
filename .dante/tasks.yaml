@@ -603,3 +603,26 @@ tasks:
   phase: build
   state: done
   notes: "The company themes live in Dante's own library on this Mac (Application Support/Dante/standards), never in a repo. Themes stay off the Map."
+- id: DI-140
+  title: "Team roles for the lead (Documenter, Researcher, Front-end and Back-end engineers, Marketing, Security Officer, Tester), each on its own model and able to run at once; decisions documented as we work; Codex gets them through the team tool"
+  phase: build
+  state: done
+  notes: "Claude gets Claude Code sub-agents via --agents; Codex gets Dante's MCP team tool (Researcher, Security Officer and Marketing read only, the Documenter writes only under docs/, checked live with Haiku). Settings › Agents › Team picks models or Off."
+- id: DI-141
+  title: "Quieter chat: routine steps fold into one line, hand-overs are cards, Shift+Return for a new line, effort in the model menu and the last reply's tokens in the footer"
+  phase: build
+  state: done
+  notes: "Shift+Return checked with a real keypress in a test copy."
+- id: DI-142
+  title: "Services: readable compose output per service, and Keep running brings crashed or unhealthy services back (three tries in 15 minutes) and applies a changed compose file"
+  phase: build
+  state: done
+  notes: "Checked on a made-up service that exits with code 3: brought back three times, then left down with a note on the Services page."
+- id: DI-143
+  title: "Map: full route paths, the backend lane in tiers (starts here, uses, shared); diagrams grey out what a selected card isn't related to"
+  phase: build
+  state: done
+- id: DI-144
+  title: "Several projects open at once, each in its own window; Recent marks open ones and can still open in this window"
+  phase: build
+  state: done

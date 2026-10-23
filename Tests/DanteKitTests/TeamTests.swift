@@ -36,3 +36,29 @@ struct TeamTests {
         #expect(AgentStats.agent(of: AgentJob(kind: "subagent", provider: .claude, model: "documenter", project: "p", requestedBy: "claude", title: "Record")) == "Documenter")
     }
 }
+
+@Test func codexGetsTheTeamThroughDantesServer() async throws {
+    let agents = Team.agentsJSON(models: [.researcher: .opus, .documenter: .lead], off: [.marketing])
+    let roles = Team.codexRoles(agentsJSON: agents)
+    #expect(roles.map(\.role) == [.researcher, .security, .documenter])
+    #expect(roles.first?.model == "opus")
+    #expect(roles.last?.model == nil)
+    #expect(Team.codexBrief(roles: roles.map(\.role)).contains("[security-officer]"))
+    #expect(!Team.codexBrief(roles: []).contains("team"))
+
+    let documenter = ClaudeOpinion.arguments(model: "haiku", tools: TeamRole.documenter.forCodex.tools, allowed: TeamRole.documenter.forCodex.allowed, system: "brief")
+    #expect(documenter.contains("Write(docs/**)"))
+    #expect(documenter.contains("dontAsk"))
+    #expect(!TeamRole.security.forCodex.tools.contains("Bash"))
+    #expect(ClaudeOpinion.arguments(model: nil) == ["-p", "--output-format", "json", "--tools", "Read,Grep,Glob", "--permission-mode", "dontAsk", "--no-session-persistence"])
+
+    var server = DelegateServer(project: "shop", ledger: nil, models: { [] }) { _, _ in ("m", OllamaReply(text: "", promptTokens: 0, outputTokens: 0, seconds: 0, tokensPerSecond: 0)) }
+    #expect(!server.tools.contains { $0["name"]?.string == "team" })
+    server.teamRoles = [.researcher]
+    server.team = { role, _ in ClaudeReply(text: "Found it in billing/api.py:12 for \(role.title).") }
+    #expect(server.tools.contains { $0["name"]?.string == "team" })
+    let reply = await server.callTeam(["role": "researcher", "brief": "Where are invoices made?"])
+    #expect(reply["isError"]?.bool == false)
+    let refused = await server.callTeam(["role": "frontend-engineer", "brief": "Build it"])
+    #expect(refused["isError"]?.bool == true)
+}

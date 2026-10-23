@@ -49,6 +49,11 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
                 return OrbSatellite(id: tool.id, kind: .subagent(type), color: color(subagent: type),
                                     title: description ?? "Sub-agent", lead: lead, agent: agentName(subagent: type),
                                     task: description.flatMap(short) ?? asked)
+            case "mcp__dante__team":
+                let type = tool.input["role"]?.string ?? "general-purpose"
+                let task = why ?? (tool.input["title"]?.string ?? tool.input["brief"]?.string).flatMap { AgentJob.gist(of: $0, limit: 90) }.flatMap(short) ?? ""
+                return OrbSatellite(id: tool.id, kind: .subagent(type), color: color(subagent: type),
+                                    title: tool.input["title"]?.string ?? agentName(subagent: type), lead: lead, agent: agentName(subagent: type), task: task)
             case "mcp__dante__delegate":
                 let kind = tool.input["kind"]?.string ?? "draft"
                 let agent = DelegateKind(rawValue: kind)?.agent ?? "Local model"

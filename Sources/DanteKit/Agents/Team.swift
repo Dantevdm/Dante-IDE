@@ -73,6 +73,20 @@ public enum TeamRole: String, CaseIterable, Codable, Sendable, Identifiable {
         }
     }
 
+    /// The roles Codex can hand work to through Dante's `team` tool. The engineers and the
+    /// Tester are left out: Codex does that work itself, where Dante can show and undo it.
+    public static let forCodexLead: [TeamRole] = [.researcher, .security, .marketing, .documenter]
+
+    /// Tools for a role run by `claude -p` for Codex: read-only, except that the Documenter
+    /// may edit and write under docs/ (rules relative to the project folder).
+    var forCodex: (tools: [String], allowed: [String]) {
+        switch self {
+        case .researcher: (["Read", "Grep", "Glob", "WebFetch", "WebSearch"], ["WebFetch", "WebSearch"])
+        case .documenter: (["Read", "Grep", "Glob", "Edit", "Write"], ["Edit(docs/**)", "Write(docs/**)"])
+        default: (["Read", "Grep", "Glob"], [])
+        }
+    }
+
     var prompt: String {
         let common = "You are the \(title) on a small software team led by the agent that called you. Do only the job you were given, stay inside the project, and finish with a short report: what you did, files touched, anything the lead must decide."
         switch self {
@@ -145,6 +159,34 @@ public enum Team {
         """
         if documents, roles.contains(.documenter) {
             text += "\nDocument as you go: when a decision is made or something works differently afterwards, start the Documenter [documenter] alongside the work with the decision, the reasons and the files involved, so docs/decisions/ and the project's docs stay current."
+        }
+        return text
+    }
+}
+
+extension Team {
+    /// The roles Codex may use from the `--agents` JSON, each with its Claude model (nil for
+    /// the lead's, "inherit").
+    public static func codexRoles(agentsJSON: String) -> [(role: TeamRole, model: String?)] {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(agentsJSON.utf8)) as? [String: Any] else { return [] }
+        return TeamRole.forCodexLead.compactMap { role in
+            guard let agent = object[role.agentID] as? [String: Any] else { return nil }
+            let model = agent["model"] as? String
+            return (role, model == "inherit" ? nil : model)
+        }
+    }
+
+    /// For Codex's instructions: the `team` tool and who's on it.
+    public static func codexBrief(roles: [TeamRole]) -> String {
+        guard !roles.isEmpty else { return "" }
+        var text = """
+        # Your team
+        You lead a team of Claude agents. Hand a self-contained piece of work to one with the `team` tool (role is the name in brackets) and keep the coding yourself:
+        \(roles.map { "- \($0.title) [\($0.agentID)]: \($0.summary)" }.joined(separator: "\n"))
+        They don't see this conversation, so give each a complete brief. You can call `team` for several roles at once. Check what they report before relying on it.
+        """
+        if roles.contains(.documenter) {
+            text += "\nThe Documenter can write only under docs/: when a decision is made or something works differently, hand it the decision, the reasons and the files involved."
         }
         return text
     }

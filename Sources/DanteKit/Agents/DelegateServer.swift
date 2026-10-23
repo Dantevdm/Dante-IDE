@@ -11,6 +11,7 @@ public struct DelegateServer: Sendable {
     public typealias Asker = @Sendable (_ system: String?, _ prompt: String) async throws -> GrokReply
     public typealias CodexAsker = @Sendable (_ prompt: String) async throws -> CodexReply
     public typealias ClaudeAsker = @Sendable (_ prompt: String) async throws -> ClaudeReply
+    public typealias TeamAsker = @Sendable (_ role: TeamRole, _ brief: String) async throws -> ClaudeReply
 
     public var project: String
     public var ledger: AgentLedger?
@@ -23,6 +24,9 @@ public struct DelegateServer: Sendable {
     public var askCodex: CodexAsker?
     /// Claude for Codex's second opinions, when Codex is the one in charge.
     public var askClaude: ClaudeAsker?
+    /// Claude team members for Codex, when Codex is in charge: the roles that are on.
+    public var team: TeamAsker?
+    public var teamRoles: [TeamRole] = []
     /// Who's in charge and calling these tools: "claude" or "codex", for the ledger.
     public var requester = "claude"
     /// The project whose files Dante can open. Nil for a server outside the app workflow.
@@ -129,6 +133,12 @@ public struct DelegateServer: Sendable {
             let claude = ClaudeOpinion(executable: path)
             let model = environment[DelegateEnvironment.claudeModel]
             server.askClaude = { prompt in try await claude.ask(prompt, in: root, model: model) }
+            if let agents = environment[DelegateEnvironment.team] {
+                let roles = Team.codexRoles(agentsJSON: agents)
+                let models = Dictionary(roles.map { ($0.role, $0.model ?? model) }, uniquingKeysWith: { a, _ in a })
+                server.teamRoles = roles.map(\.role)
+                server.team = { role, brief in try await claude.team(role, brief: brief, in: root, model: models[role] ?? model) }
+            }
         }
         if let path = environment[DelegateEnvironment.codex], !path.isEmpty {
             let codex = Codex(executable: path)
@@ -185,6 +195,7 @@ public struct DelegateServer: Sendable {
         if askGrok != nil { parts.append("Grok (xAI) gives an independent second opinion or draft.") }
         if askCodex != nil { parts.append("Codex (OpenAI) reads the project itself, read-only, for a second opinion.") }
         if askClaude != nil { parts.append("Claude (Anthropic) reads the project itself, read-only, for a second opinion.") }
+        if team != nil, !teamRoles.isEmpty { parts.append("team hands a piece of work to a Claude team member: " + teamRoles.map(\.title).joined(separator: ", ") + ".") }
         if hands { parts.append(Self.handsInstructions) }
         if browser != nil { parts.append(Self.browserInstructions) }
         return parts.joined(separator: " ")
@@ -202,6 +213,7 @@ public struct DelegateServer: Sendable {
         if askGrok != nil { tools.append(Self.grokTool) }
         if askCodex != nil { tools.append(Self.codexTool) }
         if askClaude != nil { tools.append(Self.claudeTool) }
+        if team != nil, !teamRoles.isEmpty { tools.append(Self.teamTool(teamRoles)) }
         if hands { tools += Self.handsTools }
         if browser != nil { tools += Self.browserTools }
         return tools.map(Self.askingWhy)
@@ -285,6 +297,22 @@ public struct DelegateServer: Sendable {
             "required": ["prompt"],
         ],
     ]
+
+    static func teamTool(_ roles: [TeamRole]) -> JSONValue {
+        [
+            "name": "team",
+            "description": .string("Hand a self-contained piece of work to a member of your Claude team, signed in with the user's Claude plan, each on its own model. They don't see this conversation: give a complete brief with the files, the question or the decision and its reasons. Researcher reads the code and the web; Security Officer reviews read-only; Marketing writes copy and returns it; Documenter writes decision records and docs, but only under docs/. Takes a minute or more and counts against the user's Claude usage. Roles: " + roles.map { "\($0.agentID) (\($0.summary))" }.joined(separator: "; ")),
+            "inputSchema": [
+                "type": "object",
+                "properties": [
+                    "role": ["type": "string", "enum": .array(roles.map { .string($0.agentID) }), "description": "Who does it."],
+                    "brief": ["type": "string", "description": "Everything they need to do the job."],
+                    "title": ["type": "string", "description": "A few words saying what you handed over, for the user's stats."],
+                ],
+                "required": ["role", "brief"],
+            ],
+        ]
+    }
 
     static let lookTool: JSONValue = [
         "name": "look",
@@ -466,6 +494,8 @@ public struct DelegateServer: Sendable {
             return await callCodex(arguments)
         case "ask_claude":
             return await callClaude(arguments)
+        case "team":
+            return await callTeam(arguments)
         case "look":
             return await callLook(arguments)
         case "search_code":
@@ -651,6 +681,28 @@ public struct DelegateServer: Sendable {
             ledger?.append(AgentJob(kind: "opinion", provider: .claude, model: "claude", project: project,
                                     seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: error.localizedDescription)))
             return Self.text("Claude couldn’t answer: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    func callTeam(_ arguments: JSONValue) async -> JSONValue {
+        guard let team else { return Self.text("The team isn’t set up here.", isError: true) }
+        guard let role = arguments["role"]?.string.flatMap(TeamRole.init(agentID:)), teamRoles.contains(role) else {
+            return Self.text("team needs a role: " + teamRoles.map(\.agentID).joined(separator: ", ") + ".", isError: true)
+        }
+        guard let brief = arguments["brief"]?.string, !brief.isEmpty else { return Self.text("team needs a brief.", isError: true) }
+        let title = arguments["title"]?.string ?? String(brief.prefix(60))
+        let started = Date()
+        do {
+            let reply = try await team(role, brief)
+            ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: role.agentID, project: project,
+                                    promptTokens: reply.inputTokens, outputTokens: reply.outputTokens, seconds: reply.seconds,
+                                    requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: reply.text)))
+            let header = "[\(role.title) · \(reply.inputTokens)→\(reply.outputTokens) tokens · \(String(format: "%.0f", reply.seconds))s] Check what they report before relying on it."
+            return Self.text(header + "\n\n" + reply.text)
+        } catch {
+            ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: role.agentID, project: project,
+                                    seconds: Date().timeIntervalSince(started), outcome: .failed, requestedBy: requester, title: title, why: arguments["why"]?.string, gist: AgentJob.gist(of: error.localizedDescription)))
+            return Self.text("The \(role.title) couldn’t finish: \(error.localizedDescription)", isError: true)
         }
     }
 

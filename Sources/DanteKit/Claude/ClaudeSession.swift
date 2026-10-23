@@ -72,6 +72,9 @@ public struct ToolActivity: Equatable, Sendable {
         case "mcp__dante__decide": return resolved ? "Asked Jev" : "Asking Jev"
         case "mcp__dante__ask_codex": return resolved ? "Asked Codex" : "Asking Codex"
         case "mcp__dante__ask_claude": return resolved ? "Asked Claude" : "Asking Claude"
+        case "mcp__dante__team":
+            let who = input["role"]?.string.flatMap { TeamRole(agentID: $0) }?.title ?? "the team"
+            return resolved ? "Handed to \(who)" : "\(who) is working on"
         case "mcp__dante__local_models": return "Checked local models"
         case "mcp__dante__security_report": return resolved ? "Scanned the project's security" : "Scanning the project's security"
         case "mcp__dante__dante_pages": return input["page"]?.string.flatMap(FeatureGuide.resolve).map { "Read how \($0.title) works" } ?? "Read Dante's pages"
@@ -428,7 +431,7 @@ public final class ClaudeSession {
         }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
         if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || (engine == .claude && requestedEffort != startedEffort) || delegateCommand != startedDelegate
-            || delegateEnvironment != startedDelegateEnvironment || (engine == .claude && team?.agents != startedTeam) || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
+            || delegateEnvironment != startedDelegateEnvironment || team?.agents != startedTeam || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
             stop()
         }
         // A remote project's Claude Code uses the host's sign-in, not this Mac's.
@@ -873,6 +876,7 @@ public final class ClaudeSession {
         stderrTail = ""
         startedEngine = .codex
         startedCodexModel = codexModel
+        startedTeam = team?.agents
         startedRules = rules()
         startedAsksFirst = asksFirst
         startedDelegate = delegateCommand
@@ -922,10 +926,14 @@ public final class ClaudeSession {
         if let executable {
             environment[DelegateEnvironment.claude] = executable
             if let requestedModel { environment[DelegateEnvironment.claudeModel] = requestedModel }
+            if let team, !team.agents.isEmpty, team.agents != "{}" { environment[DelegateEnvironment.team] = team.agents }
         }
         if let brief = ClaudeBrief.delegation(local: environment[DelegateEnvironment.local] != "0", jev: false, grok: false,
                                               claude: environment[DelegateEnvironment.claude] != nil) {
             prompt += "\n\n" + brief
+        }
+        if let agents = environment[DelegateEnvironment.team] {
+            prompt += "\n\n" + Team.codexBrief(roles: Team.codexRoles(agentsJSON: agents).map(\.role))
         }
         return (prompt, CodexRequest.mcpServer(command: delegate, environment: environment))
     }
@@ -1161,7 +1169,7 @@ public final class ClaudeSession {
                         updateTool(tool.id) { $0.status = .failed(result.text) }
                     }
                 } else {
-                    let delegated = tool.name == "Task" || tool.name == "Agent" || ["delegate", "ask_codex", "ask_claude", "ask_grok", "decide"].contains(tool.name.replacingOccurrences(of: "mcp__dante__", with: ""))
+                    let delegated = tool.name == "Task" || tool.name == "Agent" || ["delegate", "ask_codex", "ask_claude", "ask_grok", "decide", "team"].contains(tool.name.replacingOccurrences(of: "mcp__dante__", with: ""))
                     updateTool(tool.id) {
                         $0.status = .done
                         if delegated { $0.report = String(result.text.prefix(6000)) }

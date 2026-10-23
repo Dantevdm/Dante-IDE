@@ -48,17 +48,30 @@ public struct ClaudeOpinion: Sendable {
         self.executable = executable
     }
 
-    /// The prompt goes on stdin.
-    public static func arguments(model: String?) -> [String] {
-        var arguments = ["-p", "--output-format", "json", "--tools", "Read,Grep,Glob", "--permission-mode", "dontAsk", "--no-session-persistence"]
+    /// The prompt goes on stdin. `tools` are the only tools it has; `allowed` are rules for the
+    /// ones that would otherwise ask (and, with `dontAsk`, be refused), such as `Write(docs/**)`.
+    public static func arguments(model: String?, tools: [String] = ["Read", "Grep", "Glob"], allowed: [String] = [], system: String? = nil) -> [String] {
+        var arguments = ["-p", "--output-format", "json", "--tools", tools.joined(separator: ","), "--permission-mode", "dontAsk", "--no-session-persistence"]
+        if !allowed.isEmpty { arguments += ["--allowedTools"] + allowed }
+        if let system, !system.isEmpty { arguments += ["--append-system-prompt", system] }
         if let model, !model.isEmpty { arguments += ["--model", model] }
         return arguments
     }
 
     public func ask(_ prompt: String, in project: String, model: String? = nil, timeout: TimeInterval = 600) async throws -> ClaudeReply {
+        try await run(prompt, in: project, arguments: Self.arguments(model: model), timeout: timeout)
+    }
+
+    /// A team member working for Codex: the role's tools and prompt, on the role's model.
+    public func team(_ role: TeamRole, brief: String, in project: String, model: String?, timeout: TimeInterval = 900) async throws -> ClaudeReply {
+        let access = role.forCodex
+        return try await run(brief, in: project, arguments: Self.arguments(model: model, tools: access.tools, allowed: access.allowed, system: role.prompt), timeout: timeout)
+    }
+
+    private func run(_ prompt: String, in project: String, arguments: [String], timeout: TimeInterval) async throws -> ClaudeReply {
         let process = Process()
         process.executableURL = URL(filePath: executable)
-        process.arguments = Self.arguments(model: model)
+        process.arguments = arguments
         process.currentDirectoryURL = URL(filePath: project)
         process.environment = ClaudeSession.environment()
         let input = Pipe(), output = Pipe(), errors = Pipe()

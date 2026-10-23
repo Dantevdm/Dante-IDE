@@ -165,6 +165,8 @@ public enum DelegateEnvironment {
     public static let claude = "DANTE_CLAUDE"
     /// The model Claude answers with; unset for the user's default.
     public static let claudeModel = "DANTE_CLAUDE_MODEL"
+    /// The team's roles and models (`Team.agentsJSON`) for Codex's `team` tool.
+    public static let team = "DANTE_TEAM"
     /// Who calls the tools, "claude" or "codex", so the ledger says who asked.
     public static let requester = "DANTE_REQUESTER"
     /// Looker's vision model chosen in Settings; unset for the best installed.

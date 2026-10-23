@@ -336,7 +336,7 @@ extension Transcript {
 
     static func isDelegation(_ tool: ToolActivity) -> Bool {
         ["Task", "Agent", "mcp__dante__delegate", "mcp__dante__ask_codex", "mcp__dante__ask_claude",
-         "mcp__dante__ask_grok", "mcp__dante__decide"].contains(tool.name)
+         "mcp__dante__ask_grok", "mcp__dante__decide", "mcp__dante__team"].contains(tool.name)
     }
 
     static func segments(_ items: [TranscriptItem]) -> [Segment] {
