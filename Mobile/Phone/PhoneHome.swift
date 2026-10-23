@@ -28,6 +28,8 @@ struct PhoneHome: View {
                         if let project = voice.project {
                             jobs(project)
                             if !project.lastReply.isEmpty { ReplyCard(project: project) }
+                        } else if let recent = snapshot.recent, !recent.isEmpty {
+                            RecentCard(recent: recent, server: snapshot.server) { connection.openProject($0.id) }
                         } else {
                             EmptyCard(text: "No projects are open on \(snapshot.server). Open one in Dante and it shows here.")
                         }
@@ -241,6 +243,36 @@ private struct Banner: View {
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 12).fill(Palette.card))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(tint.opacity(0.4)))
+    }
+}
+
+/// No project is open on the Mac: its recent ones, each opened there with a tap. Talking
+/// works too: a question goes to the most recent one, which the Mac opens first.
+private struct RecentCard: View {
+    let recent: [CompanionSnapshot.Recent]
+    let server: String
+    let open: (CompanionSnapshot.Recent) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Nothing open on \(server)").font(.headline).foregroundStyle(Palette.text)
+            Text("Open a recent project there, or just ask: it goes to \(recent[0].name).")
+                .font(.subheadline).foregroundStyle(Palette.text3)
+            ForEach(recent) { project in
+                Button { open(project) } label: {
+                    HStack {
+                        Image(systemName: "folder").foregroundStyle(Palette.accent)
+                        Text(project.name).foregroundStyle(Palette.text)
+                        Spacer()
+                        Text("Open").font(.subheadline.weight(.medium)).foregroundStyle(Palette.accent)
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Palette.card))
     }
 }
 

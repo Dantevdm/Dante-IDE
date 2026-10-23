@@ -296,6 +296,10 @@ final class CompanionConnection {
         send(.setApprovals(id: id, project: project, mode: mode))
     }
 
+    func openProject(_ project: String) {
+        send(.openProject(id: UUID().uuidString, project: project))
+    }
+
     func stop(project: String, job: String? = nil) {
         send(.stop(id: UUID().uuidString, project: project, job: job))
     }

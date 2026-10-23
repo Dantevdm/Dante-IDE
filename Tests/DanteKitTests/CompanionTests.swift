@@ -56,11 +56,12 @@ import Testing
             .stop(id: "4", project: "p", job: "j1"),
             .speech(id: "5", text: "Hello from the Mac."),
             .setApprovals(id: "6", project: "p", mode: .everything),
+            .openProject(id: "7", project: "r"),
         ]
         for message in messages {
             #expect(CompanionCoding.decode(ClientMessage.self, from: CompanionCoding.encode(message)) == message)
         }
-        #expect(messages.compactMap(\.id) == ["1", "2", "3", "4", "5", "6"])
+        #expect(messages.compactMap(\.id) == ["1", "2", "3", "4", "5", "6", "7"])
         for message: ServerMessage in [.voiceAvailable(available: true), .speech(id: "5", audio: Data([0, 1, 255])), .speech(id: "6", audio: nil)] {
             #expect(CompanionCoding.decode(ServerMessage.self, from: CompanionCoding.encode(message)) == message)
         }
@@ -72,6 +73,23 @@ import Testing
         let server: ServerMessage = .snapshot(snapshot: snapshot)
         #expect(CompanionCoding.decode(ServerMessage.self, from: CompanionCoding.encode(server)) == server)
         #expect(snapshot.waiting == 1)
+    }
+
+    @Test func withNothingOpenMessagesGoToTheMostRecentProject() throws {
+        let open = CompanionSnapshot.Project(id: "p", name: "shop", lead: "Claude", working: false, lastReply: "", jobs: [], approvals: [])
+        let recent = [CompanionSnapshot.Recent(id: "r1", name: "orders"), .init(id: "r2", name: "billing")]
+        #expect(CompanionSnapshot(server: "Mac", projects: [open], recent: recent).target(focus: nil)?.id == "p")
+        let empty = CompanionSnapshot(server: "Mac", projects: [], recent: recent)
+        #expect(empty.target(focus: nil)?.id == "r1")
+        #expect(empty.target(focus: nil)?.isOpen == false)
+        #expect(empty.target(focus: "r2")?.name == "billing")
+        #expect(CompanionSnapshot(server: "Mac", projects: []).target(focus: nil) == nil)
+        // A snapshot from a Mac without recent projects still reads.
+        let old = Data(#"{"server":"Mac","projects":[]}"#.utf8)
+        #expect(CompanionCoding.decode(CompanionSnapshot.self, from: old)?.recent == nil)
+        let message: ServerMessage = .snapshot(snapshot: empty)
+        #expect(CompanionCoding.decode(ServerMessage.self, from: CompanionCoding.encode(message)) == message)
+        #expect(CompanionForeman.parse("switch to billing", projects: ["shop", "billing"]) == .switchProject("billing"))
     }
 
     @Test func approvalsDescribeWhatsWaiting() {

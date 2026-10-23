@@ -523,7 +523,9 @@ final class VoiceLoop {
         if let pending, !snapshot.projects.contains(where: { $0.id == pending.project && $0.approvals.contains(where: { $0.id == pending.approval.id }) }) {
             self.pending = nil
         }
-        let command = CompanionForeman.parse(text, projects: snapshot.projects.map(\.name))
+        let command = CompanionForeman.parse(text, projects: snapshot.projects.map(\.name) + (snapshot.recent ?? []).map(\.name))
+        // With nothing open, a message goes to the most recent project, which the Mac opens.
+        let target = snapshot.target(focus: focus)
         // A question waiting for an answer takes whatever was said as the answer.
         let changesApprovals: Bool = if case .approvals = command { true } else { false }
         if let pending, let question = pending.approval.questions.first, !changesApprovals, ![.stop, .cancel, .status, .repeatLast].contains(command) {
@@ -535,7 +537,7 @@ final class VoiceLoop {
         }
         switch command {
         case .approvals(let mode):
-            guard let project else { return say("No project is open on your Mac.") }
+            guard let project else { return say("Open a project on your Mac first.") }
             connection.setApprovals(mode, project: project.id)
         case .approve, .decline:
             let allow = command == .approve
@@ -565,16 +567,23 @@ final class VoiceLoop {
         case .cancel:
             break
         case .switchProject(let name):
-            focus = snapshot.projects.first { $0.name == name }?.id
-            updateNowPlaying()
-            say("Now in \(name).")
+            if let open = snapshot.projects.first(where: { $0.name == name }) {
+                focus = open.id
+                updateNowPlaying()
+                say("Now in \(name).")
+            } else if let recent = snapshot.recent?.first(where: { $0.name == name }) {
+                focus = recent.id
+                connection.openProject(recent.id)
+                say("Opening \(name) on your Mac.")
+            }
         case .startJob(let brief):
-            guard let project else { return say("No project is open on your Mac.") }
-            connection.startJob(brief, project: project.id, awayMinutes: nil)
-            say("Starting a job in \(project.name): \(brief).")
+            guard let target else { return say("There are no projects on your Mac yet.") }
+            connection.startJob(brief, project: target.id, awayMinutes: nil)
+            say((target.isOpen ? "" : "Opening \(target.name). ") + "Starting a job in \(target.name): \(brief).")
         case .ask(let message):
-            guard let project else { return say("No project is open on your Mac.") }
-            connection.ask(message, project: project.id, spoken: true)
+            guard let target else { return say("There are no projects on your Mac yet.") }
+            connection.ask(message, project: target.id, spoken: true)
+            if !target.isOpen { say("Opening \(target.name) on your Mac.") }
             AudioServicesPlaySystemSound(1004)
         }
     }

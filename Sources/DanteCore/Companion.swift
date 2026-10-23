@@ -151,11 +151,13 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case stop(id: String, project: String, job: String?)
     case speech(id: String, text: String)
     case setApprovals(id: String, project: String, mode: CompanionApprovalMode)
+    /// Open one of the Mac's recent projects (`CompanionSnapshot.recent`) in a window.
+    case openProject(id: String, project: String)
 
     public var id: String? {
         switch self {
         case .hello: nil
-        case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _): id
+        case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _): id
         }
     }
 }
@@ -165,10 +167,32 @@ public enum ClientMessage: Codable, Equatable, Sendable {
 public struct CompanionSnapshot: Codable, Equatable, Sendable {
     public var server: String
     public var projects: [Project]
+    /// Projects opened lately on the Mac but not open now, most recent first: the device can
+    /// open one, and a message for one opens it first. Nil from a Mac before this existed.
+    public var recent: [Recent]?
 
-    public init(server: String, projects: [Project]) {
+    public init(server: String, projects: [Project], recent: [Recent]? = nil) {
         self.server = server
         self.projects = projects
+        self.recent = recent
+    }
+
+    public struct Recent: Codable, Equatable, Sendable, Identifiable {
+        public var id: String
+        public var name: String
+
+        public init(id: String, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    /// Where a message goes when no project is chosen: the chosen open one, else the first open
+    /// one, else the most recent project, which the Mac opens first.
+    public func target(focus: String?) -> (id: String, name: String, isOpen: Bool)? {
+        if let project = projects.first(where: { $0.id == focus }) ?? projects.first { return (project.id, project.name, true) }
+        if let recent = recent?.first(where: { $0.id == focus }) ?? recent?.first { return (recent.id, recent.name, false) }
+        return nil
     }
 
     public var waiting: Int { projects.reduce(0) { $0 + $1.approvals.count } }

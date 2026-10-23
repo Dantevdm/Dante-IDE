@@ -27,7 +27,7 @@ enum Opener {
     /// in a window of its own (`Session.openProject`).
     static var openWindow: OpenWindowAction?
 
-    static func handle(_ url: URL, from receiver: Session, openWindow: OpenWindowAction) {
+    static func handle(_ url: URL, from receiver: Session?, openWindow: OpenWindowAction) {
         // A job opens its project like `dante <folder>` would; the window starts it.
         if var job = JobRequest(url: url) {
             // Without this Mac's key, the link came from a web page or another app: the

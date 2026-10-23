@@ -1,6 +1,7 @@
 import AppKit
 import DanteCore
 import DanteKit
+import DanteOpen
 import Foundation
 
 /// The companion server for the whole app (docs/plans/walk-and-work.md, step 4): off until
@@ -137,13 +138,54 @@ final class CompanionHub {
                                              jobs: jobs, approvals: session.inbox.map(CompanionSnapshot.Approval.init),
                                              approvalMode: session.claude.flatMap { CompanionApprovalMode(rawValue: $0.approvalLevel.rawValue) })
         }
-        return CompanionSnapshot(server: pairing?.name ?? "Mac", projects: projects)
+        let open = Set(projects.map(\.id))
+        let recent = recentProjects().filter { !open.contains($0.id) }.map { CompanionSnapshot.Recent(id: $0.id, name: $0.url.lastPathComponent) }
+        return CompanionSnapshot(server: pairing?.name ?? "Mac", projects: projects, recent: recent)
+    }
+
+    /// This Mac's recent projects that still exist, with their companion ids.
+    private func recentProjects() -> [(id: String, url: URL)] {
+        RecentProjects().items
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+            .map { (CompanionSnapshot.Project.id(for: $0.url), $0.url) }
     }
 
     // MARK: Acting
 
     private func session(_ project: String) -> Session? {
         Sessions.all.first { $0.workspace.map { CompanionSnapshot.Project.id(for: $0.url) } == project }
+    }
+
+    /// Opens a recent project in a window of its own. Nil when asked, else why not.
+    private func open(_ project: String) -> String? {
+        guard let url = recentProjects().first(where: { $0.id == project })?.url else { return "That project isn’t on the Mac any more." }
+        guard let openWindow = Opener.openWindow else { return "Open Dante’s window on the Mac once, then try again." }
+        Opener.handle(OpenRequest(items: [.init(path: url.path)]).url, from: nil, openWindow: openWindow)
+        return nil
+    }
+
+    /// The project's window, opening it first when it's only a recent one; waits up to 15 s
+    /// for its conversation.
+    private func opened(_ project: String) async -> Session? {
+        if let session = session(project), session.claude != nil { return session }
+        if session(project) == nil, open(project) != nil { return nil }
+        for _ in 0..<60 {
+            try? await Task.sleep(for: .milliseconds(250))
+            if let session = session(project), session.claude != nil { return session }
+        }
+        return nil
+    }
+
+    /// Does `work` in the project once it's open, telling the device if it couldn't be opened.
+    private func whenOpen(_ project: String, device: String, id: String, _ work: @escaping (Session) -> Void) {
+        Task {
+            guard let session = await opened(project) else {
+                server?.reply(to: device, id: id, ok: false, message: "Couldn’t open that project on the Mac.")
+                return
+            }
+            work(session)
+            publish()
+        }
     }
 
     private func handle(_ message: ClientMessage, from device: String) {
@@ -164,6 +206,28 @@ final class CompanionHub {
             return
         }
         guard let id = message.id else { return }
+        // A message for a recent project that isn't open opens it first.
+        switch message {
+        case .ask(_, let project, nil, let text, let spoken) where session(project) == nil:
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { break }
+            if let reason = open(project) { server?.reply(to: device, id: id, ok: false, message: reason); return }
+            server?.reply(to: device, id: id, ok: true, message: "Opening it on the Mac.")
+            if spoken { NaturalSpeaker.shared.prewarm() }
+            whenOpen(project, device: device, id: id) { $0.askClaude(trimmed, instructions: spoken ? SpokenReply.conversationInstructions : nil) }
+            return
+        case .startJob(_, let project, let brief, let awayMinutes) where session(project) == nil:
+            if let reason = open(project) { server?.reply(to: device, id: id, ok: false, message: reason); return }
+            server?.reply(to: device, id: id, ok: true, message: "Opening it on the Mac.")
+            whenOpen(project, device: device, id: id) { session in
+                if session.jobs.unavailable == nil {
+                    session.startJob(brief, engine: Preferences.shared.agentEngine, awayMinutes: awayMinutes, reportsFailure: true)
+                }
+            }
+            return
+        default:
+            break
+        }
         let result = act(on: message)
         server?.reply(to: device, id: id, ok: result == nil, message: result ?? "Done.")
         publish()
@@ -174,6 +238,12 @@ final class CompanionHub {
         switch message {
         case .hello, .speech:
             return nil
+        case .openProject(_, let project):
+            if let session = session(project) {
+                session.window?.makeKeyAndOrderFront(nil)
+                return nil
+            }
+            return open(project)
         case .setApprovals(_, let project, let mode):
             guard let session = session(project), let conversation = session.claude else { return "Open a conversation on the Mac first." }
             guard let level = ApprovalLevel(rawValue: mode.rawValue) else { return "That approval setting isn’t supported." }
