@@ -60,8 +60,16 @@ private struct ProjectMenu: View {
             Button("Clone Repository…") { session.isCloning = true }
             Button("Open Remote…") { session.showsOpenRemote = true }
             let others = recents.items.filter { $0.path != workspace.url.path }
+            let open = Set(Sessions.all.compactMap { $0.workspace?.url.standardizedFileURL.path })
             if !others.isEmpty {
-                Section("Recent") {
+                Section("Recent · each opens in its own window") {
+                    ForEach(others) { project in
+                        Button { session.openProject(project.url) } label: {
+                            if open.contains(project.url.standardizedFileURL.path) { Label(project.name, systemImage: "macwindow") } else { Text(project.name) }
+                        }
+                    }
+                }
+                Menu("Open in This Window") {
                     ForEach(others) { project in
                         Button(project.name) { session.open(folder: project.url) }
                     }

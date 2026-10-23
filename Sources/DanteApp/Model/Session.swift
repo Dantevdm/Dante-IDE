@@ -1,6 +1,7 @@
 import AppKit
 import DanteEditor
 import DanteKit
+import DanteOpen
 import Observation
 import PDFKit
 import UniformTypeIdentifiers
@@ -305,8 +306,15 @@ final class Session {
         panel.prompt = "Open"
         panel.message = "Choose a project folder"
         if panel.runModal() == .OK, let url = panel.url {
-            open(folder: url)
+            openProject(url)
         }
+    }
+
+    /// Opens a project beside this one: in this window while it shows the launch screen,
+    /// else in the window that already has it, else in a new window.
+    func openProject(_ url: URL) {
+        guard workspace != nil, let openWindow = Opener.openWindow else { return open(folder: url) }
+        Opener.handle(OpenRequest(items: [.init(path: url.path)]).url, from: self, openWindow: openWindow)
     }
 
     func newProject() {
@@ -319,7 +327,7 @@ final class Session {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-            open(folder: url)
+            openProject(url)
         } catch {
             errorMessage = error.localizedDescription
         }

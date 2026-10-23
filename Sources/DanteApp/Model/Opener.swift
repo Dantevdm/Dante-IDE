@@ -23,6 +23,10 @@ enum Opener {
         pendingJobs.removeValue(forKey: resolved(folder)) ?? []
     }
 
+    /// SwiftUI's window opener, kept from the first window so a session can open a project
+    /// in a window of its own (`Session.openProject`).
+    static var openWindow: OpenWindowAction?
+
     static func handle(_ url: URL, from receiver: Session, openWindow: OpenWindowAction) {
         // A job opens its project like `dante <folder>` would; the window starts it.
         if var job = JobRequest(url: url) {

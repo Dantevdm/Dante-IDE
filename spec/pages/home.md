@@ -35,6 +35,7 @@ Home is the project at a glance, drawn rather than listed: the system as a livin
 - Manage opens Agents › Setup at the memory files.
 - Release opens Ship › Release.
 - A service row opens Local › Services.
+- Several projects at once, each in its own window: the title bar's project menu (Open Folder…, or a project under Recent) and File › Open Folder… open it in a new window, or bring forward the window that already has it (marked with a window symbol in Recent); a window still on the launch screen takes it instead. Open in This Window swaps the project in the current window. File › New Window opens an empty one.
 
 ## States
 - A project whose system the Map can't tell apart (fewer than two lanes): no map; the tiles come first.

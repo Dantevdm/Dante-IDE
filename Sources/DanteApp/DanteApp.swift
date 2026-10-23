@@ -123,6 +123,7 @@ struct RootView: View {
         .background(WindowReader { session.window = $0 })
         .onAppear {
             PresenceController.shared.themeStore = themeStore
+            Opener.openWindow = openWindow
             let paths = AppDelegate.launchPaths
             AppDelegate.launchPaths = []
             if let folder = paths.first {
