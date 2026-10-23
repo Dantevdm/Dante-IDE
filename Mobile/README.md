@@ -17,7 +17,7 @@ The app compiles `Sources/DanteCore` straight into its target (the project point
 
 1. Install Tailscale on the Mac and the phone, signed in to the same account.
 2. On the Mac: Dante › Settings › Agents › iPhone and iPad, turn it on and choose Show Pairing Code….
-3. On the phone: Scan, and point the camera at the code. The key stays in the phone's Keychain (this device only) and is never sent; the Mac checks it with a challenge.
+3. On the phone: Scan, and point the camera at the code (the iPhone's Camera app works too: the code is a `dante-companion://` link that opens Dante, which asks before replacing an existing pairing), or paste the link from Copy Link. The key stays in the phone's Keychain (this device only) and is never sent; the Mac checks it with a challenge.
 
 ## Use it
 
@@ -30,12 +30,14 @@ The app compiles `Sources/DanteCore` straight into its target (the project point
 - While a paired device is connected, the Mac holds a user-initiated activity to prevent App Nap and idle system sleep; the display can still sleep. Heartbeats remove unresponsive devices after about 45 seconds, releasing the activity when the last device leaves. Turning the companion off releases it immediately. Closing the Mac's lid or explicitly putting it to sleep can still interrupt a session.
 - The phone checks connection health every 15 seconds and on return to the foreground, reconnects when a ping fails or takes over eight seconds, and briefly waits for voice availability before using the system voice. A fallback message explains whether the Mac was unreachable, voice generation failed, or audio could not play.
 - With no project open on the Mac, the phone lists its recent projects to open there, and anything you ask goes to the most recent one, which the Mac opens first. "Switch to <project>" opens a recent one too.
+- Explore (the iPhone home's Explore card; the iPad's three columns: projects, the project's library, the page): the project's docs, pictures and diagrams, plus the system map and infrastructure under How it works, for open and recent projects alike. The Mac does the work and sends only what's on screen: markdown as blocks, each mermaid diagram or picture drawn at the device's width (diagrams at twice that, to pinch-zoom) as it scrolls into view, a PDF a page at a time, Word and RTF as text, every picture under 2.6 MB. Code, dot folders and env files are never sent. Pages are kept in the phone's Caches (up to 300 MB): one opens from there at once, offline too, and the Mac answers `unchanged` when the hash the phone holds still matches. Explain asks the agent in charge about the page.
 - Waiting steps show their diff or command with Approve and Decline; jobs show their state with Stop; New Job starts one on its own branch, optionally in away mode.
 
 ## Layout
 
-- `Common/`: the app, the connection (`CompanionConnection`: WebSocket, challenge, reconnecting with back-off), the Keychain store and the colours.
+- `Common/`: the app, the connection (`CompanionConnection`: WebSocket, challenge, reconnecting with back-off), the Keychain store, the colours, exploring (`Explorer` and `PageCache`, `ExploreViews`) and the iPad's split view (`PadRoot`).
 - `Phone/`: pairing (camera scanner or a pasted link), the home screen and the voice loop.
-- `Pad/` (to come, step 7): the desk layout.
+
+In the simulator (an unsigned build can't use the Keychain), pair and open a page from the command line: `SIMCTL_CHILD_DANTE_PAIR_LINK='<link>' SIMCTL_CHILD_DANTE_EXPLORE=README.md xcrun simctl launch booted dev.dante.companion` (`library` for the list, `dante:system` for the map). Debug builds only.
 
 Things the simulator can't show: the camera, the microphone, headset buttons and the locked screen. Try those on a phone with your Beats or other headset connected.

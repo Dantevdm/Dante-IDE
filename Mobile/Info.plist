@@ -9,6 +9,18 @@
 	</array>
 	<!-- The Mac is reached at its Tailscale address over ws://; Tailscale's WireGuard tunnel
 	     encrypts it, and the app talks to nothing but the paired Mac. -->
+	<!-- The pairing code is a dante-companion:// link, so the Camera app opens Dante with it. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.dante.companion.pair</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dante-companion</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

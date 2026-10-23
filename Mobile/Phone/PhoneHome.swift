@@ -5,8 +5,13 @@ import SwiftUI
 struct PhoneHome: View {
     let connection: CompanionConnection
     @Bindable var voice: VoiceLoop
+    let explorer: Explorer
     @State private var newJob = false
     @State private var confirmsUnpair = false
+    #if DEBUG
+    /// Simulator testing: `DANTE_EXPLORE=library` or a page's path opens it once connected.
+    @State private var debugPath: String?
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -14,6 +19,7 @@ struct PhoneHome: View {
                 VStack(spacing: 14) {
                     statusBanner
                     TalkCard(voice: voice)
+                    if UIDevice.current.userInterfaceIdiom != .pad, !explorer.projects.isEmpty { exploreCard }
                     if let snapshot = connection.snapshot {
                         if let project = voice.project { approvalControl(project) }
                         let waiting = snapshot.projects.flatMap { project in project.approvals.map { (project, $0) } }
@@ -48,6 +54,20 @@ struct PhoneHome: View {
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
+            #if DEBUG
+            .navigationDestination(item: $debugPath) { path in
+                if let project = connection.snapshot?.target(focus: voice.focus) {
+                    if path == "library" {
+                        LibraryView(explorer: explorer, project: project.id, name: project.name)
+                    } else {
+                        PageView(explorer: explorer, project: project.id, entry: .debug(path))
+                    }
+                }
+            }
+            .onChange(of: connection.snapshot == nil) { _, missing in
+                if !missing, debugPath == nil, let path = ProcessInfo.processInfo.environment["DANTE_EXPLORE"] { debugPath = path }
+            }
+            #endif
             .sheet(isPresented: $newJob) {
                 if let project = voice.project {
                     NewJobSheet(project: project) { brief, away in connection.startJob(brief, project: project.id, awayMinutes: away) }
@@ -63,6 +83,31 @@ struct PhoneHome: View {
                 Text("You’ll need to scan the Mac’s code again.")
             }
         }
+    }
+
+    /// Reading the project from here: its docs, pictures and the map, drawn by the Mac.
+    private var exploreCard: some View {
+        let target = connection.snapshot?.target(focus: voice.focus)
+        return NavigationLink {
+            if let target {
+                LibraryView(explorer: explorer, project: target.id, name: target.name)
+            } else {
+                ExploreProjects(explorer: explorer)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "books.vertical").font(.title2).foregroundStyle(Palette.accent).frame(width: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(target.map { "Explore \($0.name)" } ?? "Explore").font(.headline).foregroundStyle(Palette.text)
+                    Text("Docs, pictures, diagrams and the system map, drawn by your Mac").font(.caption).foregroundStyle(Palette.text3)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(Palette.text3)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: Palette.controlRadius).fill(Palette.card))
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -425,3 +470,14 @@ private struct NewJobSheet: View {
         }
     }
 }
+
+#if DEBUG
+extension CompanionLibrary.Entry {
+    static func debug(_ path: String) -> Self {
+        let ext = (path as NSString).pathExtension.lowercased()
+        let kind: CompanionPage.Kind = path.hasPrefix("dante:") || path.hasSuffix(".dante-diagram.json") ? .diagram
+            : ext == "md" ? .markdown : ext == "pdf" ? .pdf : ["png", "jpg", "jpeg", "gif", "svg", "webp"].contains(ext) ? .image : .text
+        return .init(path: path, title: (path as NSString).lastPathComponent, kind: kind)
+    }
+}
+#endif

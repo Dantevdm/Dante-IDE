@@ -150,6 +150,31 @@ final class CompanionHub {
             .map { (CompanionSnapshot.Project.id(for: $0.url), $0.url) }
     }
 
+    // MARK: Exploring
+
+    /// Files of recent projects that aren't open, scanned once a minute at most.
+    @ObservationIgnored private var scanned: [URL: (date: Date, files: [String])] = [:]
+
+    /// A project's folder and files, open or recent, without opening a window.
+    private func files(of project: String) async -> (URL, [String])? {
+        if let session = session(project), let workspace = session.workspace { return (workspace.url, workspace.files) }
+        guard let root = recentProjects().first(where: { $0.id == project })?.url else { return nil }
+        if let cached = scanned[root], Date().timeIntervalSince(cached.date) < 60 { return (root, cached.files) }
+        let files = await Task.detached { FileIndex.scan(root) }.value
+        scanned[root] = (Date(), files)
+        return (root, files)
+    }
+
+    private func explore(_ project: String, device: String, id: String, _ make: @escaping (URL, [String]) async -> ServerMessage) {
+        Task {
+            guard let (root, files) = await files(of: project) else {
+                server?.reply(to: device, id: id, ok: false, message: "That project isn’t on the Mac any more.")
+                return
+            }
+            server?.deliver(await make(root, files), to: device)
+        }
+    }
+
     // MARK: Acting
 
     private func session(_ project: String) -> Session? {
@@ -205,6 +230,20 @@ final class CompanionHub {
             }
             return
         }
+        switch message {
+        case .library(let id, let project):
+            explore(project, device: device, id: id) { root, files in
+                .library(id: id, library: await CompanionRenderer.library(project: project, root: root, files: files))
+            }
+            return
+        case .page(let id, let project, let request):
+            explore(project, device: device, id: id) { root, files in
+                .page(id: id, page: await CompanionRenderer.page(request, root: root, files: files))
+            }
+            return
+        default:
+            break
+        }
         guard let id = message.id else { return }
         // A message for a recent project that isn't open opens it first.
         switch message {
@@ -236,7 +275,7 @@ final class CompanionHub {
     /// Nil when done, else why not.
     private func act(on message: ClientMessage) -> String? {
         switch message {
-        case .hello, .speech:
+        case .hello, .speech, .library, .page:
             return nil
         case .openProject(_, let project):
             if let session = session(project) {

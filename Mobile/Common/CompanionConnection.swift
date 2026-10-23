@@ -41,6 +41,7 @@ final class CompanionConnection {
     @ObservationIgnored private var healthDeadline: Task<Void, Never>?
     @ObservationIgnored private var pingID: UUID?
     @ObservationIgnored private var speechRequests: [String: CheckedContinuation<Data?, Never>] = [:]
+    @ObservationIgnored private var exploreRequests: [String: CheckedContinuation<ServerMessage?, Never>] = [:]
 
     func connect(_ pairing: CompanionPairing) {
         self.pairing = pairing
@@ -133,7 +134,14 @@ final class CompanionConnection {
             if !events.isEmpty { onEvents(events, next) }
         case .refused(let reason):
             refuse(reason)
+        case .library(let id, _), .page(let id, _):
+            exploreRequests.removeValue(forKey: id)?.resume(returning: message)
         case .result(let id, let ok, let message):
+            if let request = exploreRequests.removeValue(forKey: id) {
+                // A library or page the Mac couldn't make: the reader says why.
+                request.resume(returning: ok ? nil : .result(id: id, ok: false, message: message))
+                return
+            }
             failure = ok ? nil : message
             if let mode = approvalRequests.removeValue(forKey: id), ok { onApprovalModeChanged(mode) }
             onResult(ok, message)
@@ -231,6 +239,9 @@ final class CompanionConnection {
 
     private func finishSpeechRequests() {
         approvalRequests.removeAll()
+        let exploring = exploreRequests
+        exploreRequests.removeAll()
+        for request in exploring.values { request.resume(returning: nil) }
         naturalVoiceAvailable = false
         voiceAvailabilityKnown = false
         if !speechRequests.isEmpty { voiceFailure = "The connection to the Mac was interrupted." }
@@ -270,6 +281,48 @@ final class CompanionConnection {
         } onCancel: {
             Task { @MainActor [weak self] in
                 self?.speechRequests.removeValue(forKey: id)?.resume(returning: nil)
+            }
+        }
+    }
+
+    // MARK: Exploring
+
+    /// What a project has to read and look at. Nil when the Mac can't be reached in time.
+    func library(of project: String) async -> Result<CompanionLibrary, ExploreFailure> {
+        switch await explore(timeout: 30, { .library(id: $0, project: project) }) {
+        case .library(_, let library)?: .success(library)
+        case .result(_, _, let message)?: .failure(.init(message: message))
+        default: .failure(.unreachable(status))
+        }
+    }
+
+    /// One page drawn by the Mac. The Map can take a while on a big project.
+    func page(_ request: CompanionPageRequest, project: String) async -> Result<CompanionPage, ExploreFailure> {
+        switch await explore(timeout: request.path.hasPrefix("dante:") ? 120 : 45, { .page(id: $0, project: project, request: request) }) {
+        case .page(_, let page)?: .success(page)
+        case .result(_, _, let message)?: .failure(.init(message: message))
+        default: .failure(.unreachable(status))
+        }
+    }
+
+    struct ExploreFailure: Error, Equatable {
+        var message: String
+
+        static func unreachable(_ status: Status) -> ExploreFailure {
+            ExploreFailure(message: status == .connected ? "The Mac didn’t answer. Is Dante up to date there?" : "Not connected to your Mac.")
+        }
+    }
+
+    private func explore(timeout: Double, _ message: (String) -> ClientMessage) async -> ServerMessage? {
+        guard status == .connected else { return nil }
+        let id = UUID().uuidString
+        let outgoing = message(id)
+        return await withCheckedContinuation { continuation in
+            exploreRequests[id] = continuation
+            send(outgoing)
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(timeout))
+                self?.exploreRequests.removeValue(forKey: id)?.resume(returning: nil)
             }
         }
     }

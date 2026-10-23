@@ -135,6 +135,10 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case voiceAvailable(available: Bool)
     /// A short WAV utterance, or nil when the device should use its system voice.
     case speech(id: String, audio: Data?)
+    /// A project's docs, pictures and diagrams (`ClientMessage.library`).
+    case library(id: String, library: CompanionLibrary)
+    /// One page, drawn for the device (`ClientMessage.page`).
+    case page(id: String, page: CompanionPage)
 }
 
 /// From the device.
@@ -153,11 +157,15 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case setApprovals(id: String, project: String, mode: CompanionApprovalMode)
     /// Open one of the Mac's recent projects (`CompanionSnapshot.recent`) in a window.
     case openProject(id: String, project: String)
+    /// What there is to read and look at in a project, open or recent.
+    case library(id: String, project: String)
+    case page(id: String, project: String, request: CompanionPageRequest)
 
     public var id: String? {
         switch self {
         case .hello: nil
-        case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _): id
+        case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _),
+             .library(let id, _), .page(let id, _, _): id
         }
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import CoreImage.CIFilterBuiltins
 import DanteCore
 import DanteKit
@@ -43,6 +44,11 @@ struct CompanionSettingsSection: View {
                     HStack {
                         Button("Unpair All Devices…") { confirmsUnpair = true }
                         Spacer()
+                        Button("Copy Link") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(pairing.url.absoluteString, forType: .string)
+                        }
+                        .help("For pasting into the app when the camera can’t scan, such as on a Mac or in the simulator. It carries the key, so keep it private.")
                         Button("Done") { showsCode = false }.keyboardShortcut(.defaultAction)
                     }
                 }

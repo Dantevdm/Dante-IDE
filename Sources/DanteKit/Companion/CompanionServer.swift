@@ -119,6 +119,14 @@ public final class CompanionServer: @unchecked Sendable {
         }
     }
 
+    /// Sends one device an answer of its own: a library or a page.
+    public func deliver(_ message: ServerMessage, to device: String) {
+        queue.async {
+            guard let client = self.clients[device], client.device != nil else { return }
+            self.send(message, to: client)
+        }
+    }
+
     public func speech(to device: String, id: String, audio: Data?) {
         queue.async {
             guard let client = self.clients[device], client.device != nil else { return }
@@ -304,9 +312,10 @@ public final class CompanionServer: @unchecked Sendable {
 
 // MARK: Key and address
 
-/// The pairing key, in the Keychain. A new key unpairs every device.
+/// The pairing key, in the Keychain. A new key unpairs every device. Each build of Dante
+/// (by bundle id) has its own, so a test copy never asks for the real one's key.
 public enum CompanionKey {
-    static let service = "dev.dante.ide.companion"
+    static let service = (Bundle.main.bundleIdentifier ?? "dev.dante.ide") + ".companion"
     static let account = "pairing"
 
     public static func current() -> String {

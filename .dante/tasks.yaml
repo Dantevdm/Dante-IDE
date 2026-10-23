@@ -636,3 +636,8 @@ tasks:
   phase: build
   state: done
   notes: "Checked on a made-up worker that dies with a KeyError: three restarts, the error shown, one Fix the cause, the brief reached the agent."
+- id: DI-147
+  title: "Explore from the iPhone and iPad: docs, pictures, diagrams and the system map, drawn on the Mac and cached on the device by hash"
+  phase: build
+  state: done
+  notes: "Checked in the simulator against a test copy: library, README with its mermaid figure, the system map, the iPad split. Pairing links open the app (asks before replacing a pairing)."
