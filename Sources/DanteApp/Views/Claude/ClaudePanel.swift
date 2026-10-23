@@ -284,8 +284,8 @@ private struct Transcript: View {
                         switch segment {
                         case .item(let item):
                             TranscriptRow(item: item, claude: claude)
-                        case .tools(let tools):
-                            ToolGroup(tools: tools, claude: claude)
+                        case .tools(let items):
+                            ToolGroup(items: items, claude: claude)
                         }
                     }
                     if claude.state == .working, claude.pendingApprovals.isEmpty {
@@ -311,30 +311,54 @@ private struct Transcript: View {
 extension Transcript {
     enum Segment: Identifiable {
         case item(TranscriptItem)
-        /// Three or more finished tool calls in a row with nothing to review, shown as one line.
-        case tools([ToolActivity])
+        /// Two or more routine steps in a row (reads, searches, commands, and the short notes
+        /// between them), shown as one line.
+        case tools([TranscriptItem])
 
         var id: String {
             switch self {
             case .item(let item): item.id
-            case .tools(let tools): "group-" + (tools.first?.id ?? "")
+            case .tools(let items): "group-" + (items.first?.id ?? "")
             }
         }
+    }
+
+    /// Tools that only look around or run something, with nothing to review or decide.
+    static func isRoutine(_ tool: ToolActivity) -> Bool {
+        guard tool.change == nil, tool.ruleNote == nil, tool.securityNote == nil, !tool.isAwaitingApproval,
+              !["AskUserQuestion", "ExitPlanMode", "EnterPlanMode"].contains(tool.name), !isDelegation(tool) else { return false }
+        switch tool.status {
+        case .done, .running: return true
+        case .failed(let message): return ToolRow.routineFailure(message) != nil
+        default: return false
+        }
+    }
+
+    static func isDelegation(_ tool: ToolActivity) -> Bool {
+        ["Task", "Agent", "mcp__dante__delegate", "mcp__dante__ask_codex", "mcp__dante__ask_claude",
+         "mcp__dante__ask_grok", "mcp__dante__decide"].contains(tool.name)
     }
 
     static func segments(_ items: [TranscriptItem]) -> [Segment] {
         var segments: [Segment] = []
         var run: [TranscriptItem] = []
         func flush() {
-            if run.count >= 3 {
-                segments.append(.tools(run.compactMap { if case .tool(let tool) = $0.content { tool } else { nil } }))
+            // Notes at the end of a run aren't between steps: they stay as they are.
+            var trailing: [TranscriptItem] = []
+            while let last = run.last, !isTool(last) { trailing.insert(run.removeLast(), at: 0) }
+            if run.filter(isTool).count >= 2 {
+                segments.append(.tools(run))
             } else {
                 segments += run.map(Segment.item)
             }
+            segments += trailing.map(Segment.item)
             run = []
         }
         for item in items {
-            if case .tool(let tool) = item.content, tool.status == .done, tool.change == nil, tool.ruleNote == nil, tool.name != "AskUserQuestion" {
+            if case .tool(let tool) = item.content, isRoutine(tool) {
+                run.append(item)
+            } else if !run.isEmpty, case .assistant(let text) = item.content, text.count < 240 {
+                // "Now let me look at…" between steps belongs with them.
                 run.append(item)
             } else {
                 flush()
@@ -344,31 +368,54 @@ extension Transcript {
         flush()
         return segments
     }
+
+    static func isTool(_ item: TranscriptItem) -> Bool {
+        if case .tool = item.content { true } else { false }
+    }
 }
 
-/// Finished tool calls folded into one line: "Read 4 files, ran 2 commands". Click to list them.
+/// Routine steps folded into one line: "Read 4 files, ran 2 commands", or what's happening
+/// now while the last one runs. Click to list them.
 private struct ToolGroup: View {
     @Environment(\.theme) private var theme
-    let tools: [ToolActivity]
+    let items: [TranscriptItem]
     let claude: ClaudeSession
     @State private var expanded = false
+
+    private var tools: [ToolActivity] { items.compactMap { if case .tool(let tool) = $0.content { tool } else { nil } } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button { withAnimation(.snappy(duration: 0.18)) { expanded.toggle() } } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "checkmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.green.color).frame(width: 14)
-                    Text(summary).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text2.color).lineLimit(1)
+                    if let running {
+                        ProgressView().controlSize(.mini).frame(width: 14)
+                        Text(running.verb).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text2.color)
+                        Text(running.target(in: claude.root))
+                            .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            .lineLimit(1).truncationMode(.middle)
+                        Text("· \(tools.count - 1) done").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize()
+                    } else {
+                        Image(systemName: "checkmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.green.color).frame(width: 14)
+                        Text(summary).font(.dante(size: 12, weight: .medium)).foregroundStyle(theme.text2.color).lineLimit(1)
+                    }
                     Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .help(expanded ? "Hide the steps" : "Show each step")
             if expanded {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(tools, id: \.id) { tool in
-                        ToolRow(tool: tool, claude: claude)
+                    ForEach(items) { item in
+                        switch item.content {
+                        case .tool(let tool): ToolRow(tool: tool, claude: claude)
+                        case .assistant(let text):
+                            Text(text).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                                .fixedSize(horizontal: false, vertical: true).padding(.leading, 21)
+                        default: EmptyView()
+                        }
                     }
                 }
                 .padding(.leading, 12)
@@ -376,6 +423,8 @@ private struct ToolGroup: View {
             }
         }
     }
+
+    private var running: ToolActivity? { tools.last { $0.status == .running } }
 
     private var summary: String {
         var counts: [(String, Int)] = []
@@ -386,14 +435,67 @@ private struct ToolGroup: View {
             switch tool.name {
             case "Read": add("file read")
             case "Bash": add("command")
-            case "Grep", "Glob": add("search")
+            case "Grep", "Glob", "mcp__dante__search_code": add("search")
             case "WebFetch", "WebSearch": add("web lookup")
-            default: add("tool call")
+            default: add("step")
             }
         }
-        return counts.prefix(3).map { "\($0.1) \($0.0)\($0.1 == 1 ? "" : "s")" }.joined(separator: ", ")
+        let text = counts.prefix(3).map { "\($0.1) \($0.0)\($0.1 == 1 ? "" : "s")" }.joined(separator: ", ")
             .replacingOccurrences(of: "searchs", with: "searches")
+        return text.prefix(1).uppercased() + text.dropFirst()
     }
+}
+
+/// Work handed to a team member or another agent: who has it, on what model, and their report.
+private struct DelegationRow: View {
+    @Environment(\.theme) private var theme
+    let tool: ToolActivity
+    let claude: ClaudeSession
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { if result != nil { withAnimation(.snappy(duration: 0.18)) { expanded.toggle() } } } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: role?.symbol ?? "person.2")
+                        .font(.dante(size: 11, weight: .medium))
+                        .foregroundStyle(theme.accent.color)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(theme.accentTint.color))
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 5) {
+                            Text(tool.verb).font(.dante(size: 12, weight: .semibold)).foregroundStyle(theme.text.color)
+                            if let model { Text(model).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color) }
+                            if tool.status == .running { ProgressView().controlSize(.mini) }
+                        }
+                        Text(tool.target(in: claude.root)).font(.dante(size: 11.5)).foregroundStyle(theme.text2.color).lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    if result != nil {
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color)
+                    }
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 9).fill(theme.card.color))
+                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(theme.line.color))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Delegated: the lead handed this to another agent and checks the report")
+            if expanded, let result {
+                MarkdownText(text: result).padding(.leading, 30)
+            }
+        }
+    }
+
+    private var role: TeamRole? { tool.input["subagent_type"]?.string.flatMap(TeamRole.init(agentID:)) }
+
+    private var model: String? {
+        if let role { return Preferences.shared.teamModel(role) == .lead ? nil : Preferences.shared.teamModel(role).title }
+        return tool.input["kind"]?.string.flatMap(DelegateKind.init(rawValue:)).map { _ in "local model" }
+    }
+
+    private var result: String? { tool.report.flatMap { $0.isEmpty ? nil : $0 } }
 }
 
 private struct EmptyConversation: View {
@@ -533,7 +635,11 @@ private struct TranscriptRow: View {
         case .assistant(let text):
             if !text.isEmpty { MarkdownText(text: text) }
         case .tool(let tool):
-            ToolRow(tool: tool, claude: claude)
+            if Transcript.isDelegation(tool), !tool.isAwaitingApproval {
+                DelegationRow(tool: tool, claude: claude)
+            } else {
+                ToolRow(tool: tool, claude: claude)
+            }
         case .notice(let text, let isError):
             Label(text, systemImage: isError ? "exclamationmark.circle" : "info.circle")
                 .font(.dante(size: 11.5))
@@ -549,9 +655,9 @@ private struct ApprovalMenu: View {
     let session: Session
 
     var body: some View {
-        let level = Preferences.shared.approvalLevel
+        let level = session.claude?.approvalLevel ?? Preferences.shared.approvalLevel
         Menu {
-            Picker("Approvals", selection: Binding(get: { Preferences.shared.approvalLevel }, set: { level in
+            Picker("Approvals", selection: Binding(get: { session.claude?.approvalLevel ?? Preferences.shared.approvalLevel }, set: { level in
                 Preferences.shared.approvalLevel = level
                 Sessions.all.forEach { $0.applyClaudePreferences() }
             })) {

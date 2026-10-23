@@ -167,6 +167,26 @@ struct ClaudeSessionTranscriptTests {
         #expect(session.pendingApprovals.isEmpty)
     }
 
+    @Test func phoneApprovalSettingReleasesCommandsButKeepsQuestions() {
+        let session = session()
+        session.handle(.permissionRequest(.init(requestID: "r1", toolName: "Bash", input: ["command": "make"], toolUseID: "command")))
+        session.handle(.permissionRequest(.init(requestID: "r2", toolName: "AskUserQuestion", input: ["questions": [["question": "Which account?"]]], toolUseID: "question")))
+        #expect(Set(session.pendingApprovals.map(\.id)) == ["command", "question"])
+        session.setApprovalLevel(.everything, approvingPending: true)
+        #expect(session.pendingApprovals.map(\.id) == ["question"])
+        session.setApprovalLevel(.ask, approvingPending: true)
+        session.handle(.permissionRequest(.init(requestID: "r3", toolName: "Bash", input: ["command": "make"], toolUseID: "next")))
+        #expect(Set(session.pendingApprovals.map(\.id)) == ["question", "next"])
+    }
+
+    @Test func phoneApprovalSettingRespectsJobGuard() {
+        let session = session()
+        session.guardCall = { _, _, _ in .ask }
+        session.handle(.permissionRequest(.init(requestID: "r1", toolName: "Bash", input: ["command": "make"], toolUseID: "guarded")))
+        session.setApprovalLevel(.everything, approvingPending: true)
+        #expect(session.pendingApprovals.map(\.id) == ["guarded"])
+    }
+
     @Test func notLoggedInIsDetected() {
         let session = session()
         session.handle(.assistant(messageID: "m1", blocks: [.text("Not logged in · Please run /login")]))
@@ -244,6 +264,10 @@ struct ClaudeRulesTests {
         let withModel = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, model: "sonnet")
         #expect(withModel.suffix(2) == ["--model", "sonnet"])
         #expect(!ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil).contains("--model"))
+        let withEffort = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, effort: "low")
+        #expect(withEffort.suffix(2) == ["--effort", "low"])
+        #expect(!ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil).contains("--effort"))
+        #expect(TurnCost(context: 150_000, output: 2_000, replies: 12).read == 1_800_000)
         let delegating = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, delegate: "/Apps/Dante.app/bin/dante")
         #expect(delegating.suffix(2).first == "--mcp-config")
         #expect(delegating.last?.contains(#""command":"/Apps/Dante.app/bin/dante""#) == true)

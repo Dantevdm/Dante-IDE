@@ -91,7 +91,7 @@ struct Composer: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
-                    .help("Send (↩)")
+                    .help("Send (↩). ⇧↩ starts a new line.")
                 }
             }
             }
@@ -343,7 +343,8 @@ struct AcceptsAttachments: ViewModifier {
 }
 
 /// Catches ⌘V while the composer has focus, so files and images on the pasteboard attach
-/// instead of pasting as text. `handle` returns false to let the paste through.
+/// instead of pasting as text (`handle` returns false to let the paste through), and makes
+/// ⇧↩ insert a new line at the caret where a text field would otherwise submit.
 private struct PasteInterceptor: NSViewRepresentable {
     let isActive: Bool
     let handle: @MainActor () -> Bool
@@ -353,6 +354,13 @@ private struct PasteInterceptor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let coordinator = context.coordinator
         coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if coordinator.isActive, flags == .shift, event.keyCode == 36 || event.keyCode == 76 {
+                let inserted = MainActor.assumeIsolated {
+                    NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil)
+                }
+                return inserted ? nil : event
+            }
             guard coordinator.isActive,
                   event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
                   event.charactersIgnoringModifiers == "v" else { return event }

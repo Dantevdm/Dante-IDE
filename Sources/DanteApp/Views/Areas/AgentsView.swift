@@ -171,10 +171,16 @@ struct AgentsView: View {
         if let sub = byAgent["Sub-agents"], !sub.isEmpty {
             result.append(AgentSummary(name: "Sub-agents", role: "Claude’s own helpers", model: "Claude", jobs: sub, color: theme.syntax.keyword.color, isClaude: true))
         }
-        let palette = [theme.accent.color, theme.green.color, theme.amber.color, theme.syntax.type.color, theme.syntax.string.color]
-        for (index, kind) in DelegateKind.allCases.enumerated() {
-            result.append(AgentSummary(name: kind.agent, role: kind.title, model: ModelRouting.model(for: kind, installed: installed) ?? "No model",
-                                       jobs: byAgent[kind.agent] ?? [], color: palette[index % palette.count], isClaude: false))
+        // The team: Claude sub-agents on their own models, plus the small jobs local models do for them.
+        let palette = [theme.accent.color, theme.green.color, theme.amber.color, theme.syntax.type.color, theme.syntax.string.color, theme.syntax.function.color, theme.red.color]
+        let off = Preferences.shared.teamRolesOff
+        for (index, role) in TeamRole.allCases.enumerated() {
+            var model = Preferences.shared.teamModel(role).title
+            let kinds = DelegateKind.allCases.filter { $0.agent == role.title }
+            if let local = kinds.lazy.compactMap({ ModelRouting.model(for: $0, installed: installed) }).first { model += " · \(local) for small jobs" }
+            result.append(AgentSummary(name: role.title, role: role.summary, model: model,
+                                       jobs: byAgent[role.title] ?? [], color: palette[index % palette.count], isClaude: true,
+                                       availability: off.contains(role) ? "Off · Settings › Agents" : nil))
         }
         result.append(AgentSummary(name: Looker.agent, role: "Reads screenshots and images", model: Looker.model(installed: installed) ?? "No model",
                                    jobs: byAgent[Looker.agent] ?? [], color: theme.amber.color, isClaude: false))

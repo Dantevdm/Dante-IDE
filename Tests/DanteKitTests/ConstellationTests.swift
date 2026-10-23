@@ -22,7 +22,7 @@ import Testing
         #expect(satellites[0].kind == .subagent("Explore"))
         #expect(satellites[0].title == "Find the routes")
         #expect(satellites[1].kind == .local("summary"))
-        #expect(satellites[1].title == "Reader")
+        #expect(satellites[1].title == "Researcher")
     }
 
     @Test func satellitesSplitOffCircleAndMergeBack() {

@@ -19,6 +19,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 
 ## Shows
 - Five lanes, left to right: Clients (web and mobile apps and their screens), API (route groups), Backend (services and packages), Data (databases, tables, queues, caches) and Outside (third-party services).
+- The Backend lane in the order the code runs, when its parts use each other: Starts here (what nothing else in the lane uses, like the app's main), Uses (the parts it calls, and parts linked to nothing else in the lane), Shared (what the rest lean on, like core), each a column of its own under the lane's name.
 - Links between boxes along real code paths: fetch calls to routes, routes to their handlers, imports, queries naming tables, hosts called.
 - A box's detail line: its kind, how many routes, screens or methods it has, its test coverage when a coverage report exists.
 - The view picker: System (this view), Infra, Modules and, with a compose file, Services.
@@ -50,6 +51,8 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Tables come only from CREATE TABLE statements in the repo (and ORM table names); a live database is never read.
 - A file naming six or more services is a catalogue, not a caller, so it draws no links.
 - Route examples in comments are skipped.
+- A route annotation spread over several lines (`@GetMapping(` then `value = "/status",` then `produces = …)`, as generated controllers write them) is read whole; `value =` or `path =` wins over other strings in it.
+- Parts that use each other in a loop keep their first tier rather than being stretched across.
 - Access comes from Spring Security config (permitAll, authenticated, ignoring, anyRequest) and annotations, Express-style middleware, Python decorators and dependencies, and Go middleware; without any auth library, routes are open with that as the reason.
 - Migrations apply in name order, so ALTERs and later CREATE INDEX statements change the table they name.
 - Suggestions are static: table sizes are unknown, so index advice is for when tables grow.

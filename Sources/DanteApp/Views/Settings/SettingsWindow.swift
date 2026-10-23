@@ -159,6 +159,15 @@ private struct ClaudePreferencesPane: View {
                 Picker("Model", selection: $preferences.claudeModel) {
                     ForEach(Preferences.ClaudeModel.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
+                .onChange(of: preferences.claudeModel) { Sessions.all.forEach { $0.applyClaudePreferences() } }
+                Picker("Effort", selection: $preferences.claudeEffort) {
+                    Text("Claude Code’s default").tag("")
+                    Text("Low").tag("low")
+                    Text("Medium").tag("medium")
+                    Text("High").tag("high")
+                }
+                .help("How hard Claude thinks before answering. Low uses the least of your plan; the chat footer’s model menu changes it per message too.")
+                .onChange(of: preferences.claudeEffort) { Sessions.all.forEach { $0.applyClaudePreferences() } }
                 if SystemStatus.detect().claudePath == nil {
                     Label("Claude Code isn’t installed. Claude chat and coding features are unavailable.", systemImage: "exclamationmark.triangle.fill")
                         .font(.dante(size: 11.5)).foregroundStyle(theme.amber.color)
@@ -182,6 +191,7 @@ private struct ClaudePreferencesPane: View {
             } header: {
                 Text("Either agent")
             }
+            TeamSettingsSection()
             VoicePreferencesSection()
             SwiftUI.Section {
                 ForEach(CloudAgent.allCases) { agent in CloudAgentKeyRow(agent: agent) }
@@ -191,6 +201,41 @@ private struct ClaudePreferencesPane: View {
             }
             HandsSettingsSection()
             CompanionSettingsSection()
+        }
+    }
+}
+
+/// The team Claude hands work to: each role on or off, and its model.
+private struct TeamSettingsSection: View {
+    @Bindable private var preferences = Preferences.shared
+
+    var body: some View {
+        SwiftUI.Section {
+            ForEach(TeamRole.allCases) { role in
+                Picker(selection: binding(role)) {
+                    Text("Off").tag(Optional<TeamModel>.none)
+                    ForEach(TeamModel.allCases) { Text($0.title).tag(Optional($0)) }
+                } label: {
+                    Label(role.title, systemImage: role.symbol)
+                }
+                .help(role.summary)
+            }
+            Toggle("Document decisions as we work", isOn: $preferences.documentsAsWeWork)
+                .help("When a decision is made, the lead starts the Documenter beside the work to record it in docs/decisions/ and keep the project’s docs current.")
+                .onChange(of: preferences.documentsAsWeWork) { Sessions.all.forEach { $0.applyClaudePreferences() } }
+        } header: {
+            Text("Team")
+                .help("Claude hands self-contained work to these team members, each on its own model, and runs independent ones at the same time. Cheaper models for easier roles use less of your plan.")
+        }
+    }
+
+    private func binding(_ role: TeamRole) -> Binding<TeamModel?> {
+        Binding {
+            preferences.teamRolesOff.contains(role) ? nil : preferences.teamModel(role)
+        } set: { model in
+            preferences.teamOff.removeAll { $0 == role.rawValue }
+            if let model { preferences.teamModels[role.rawValue] = model.rawValue } else { preferences.teamOff.append(role.rawValue) }
+            Sessions.all.forEach { $0.applyClaudePreferences() }
         }
     }
 }

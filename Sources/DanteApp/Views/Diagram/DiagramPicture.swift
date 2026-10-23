@@ -16,6 +16,23 @@ struct DiagramPicture: View {
     var selectedLinks: Set<String> = []
     /// Nodes under the pointer: their borders warm up as on the Map.
     var hovered: String?
+    /// The one node selected: as on the Map, what it isn't linked to fades back.
+    var focus: String?
+
+    /// The focused node, what it links to either way, and the containers holding them.
+    private var related: Set<String>? {
+        guard let focus else { return nil }
+        var ids: Set<String> = [focus]
+        for link in diagram.drawableLinks where link.from == focus || link.to == focus { ids.formUnion([link.from, link.to]) }
+        var withParents = ids
+        for id in ids {
+            var parent = diagram.node(id)?.parent
+            while let next = parent, withParents.insert(next).inserted { parent = diagram.node(next)?.parent }
+        }
+        // Children of a focused container stay too.
+        withParents.formUnion(diagram.nodes.filter { $0.parent == focus }.map(\.id))
+        return withParents
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -28,8 +45,12 @@ struct DiagramPicture: View {
 
     private func place(_ node: Diagram.Node) -> some View {
         let rect = node.rect
+        let faded = related.map { !$0.contains(node.id) } ?? false
         return DiagramNodeView(node: node, count: diagram.count(of: node.id), hovered: hovered == node.id)
             .frame(width: rect.width, height: rect.height, alignment: .topLeading)
+            .opacity(faded ? 0.32 : 1)
+            .saturation(faded ? 0.2 : 1)
+            .animation(.easeOut(duration: 0.2), value: faded)
             .offset(x: rect.minX - origin.x, y: rect.minY - origin.y)
     }
 
@@ -47,18 +68,24 @@ struct DiagramPicture: View {
     private func canvas(time: Double) -> some View {
         Canvas { context, _ in
             context.translateBy(x: -origin.x, y: -origin.y)
-            Self.drawLinks(diagram, selected: selectedLinks, theme: theme, time: time, in: &context)
+            Self.drawLinks(diagram, selected: selectedLinks, focus: focus, theme: theme, time: time, in: &context)
         }
         .frame(width: size.width, height: size.height)
         .allowsHitTesting(false)
     }
 
     /// Every link: its line, arrowhead, pulse and label.
-    static func drawLinks(_ diagram: Diagram, selected: Set<String>, theme: Theme, time: Double, in context: inout GraphicsContext) {
+    static func drawLinks(_ diagram: Diagram, selected: Set<String>, focus: String? = nil, theme: Theme, time: Double, in context: inout GraphicsContext) {
         for (index, link) in diagram.drawableLinks.enumerated() {
             guard let from = diagram.node(link.from), let to = diagram.node(link.to) else { continue }
             let path = MapInk.path(.route(link.route, from.rect, to.rect))
-            let lit = selected.contains(link.id)
+            let touches = focus.map { link.from == $0 || link.to == $0 }
+            let lit = selected.contains(link.id) || touches == true
+            if touches == false {
+                // Not this node's: a faint line, no traffic.
+                MapInk.stroke(path, color: theme.line2.color.opacity(0.3), width: CGFloat(link.width), in: &context)
+                continue
+            }
             let base = link.hue.map { $0.rgba(theme).color.opacity(0.85) } ?? theme.line2.color
             let color = lit ? theme.accent.color : base
             let width = CGFloat(link.width) + (lit ? 0.6 : 0)

@@ -32,7 +32,8 @@ extension ArchitectureGraph {
         let stems = Dictionary(pieces.keys.filter { $0 != "…" }.map { (($0 as NSString).deletingPathExtension, $0) }) { a, _ in a }
         func piece(of file: String) -> String? {
             if files_ { return pieces[file] != nil ? file : stems[file] ?? stems[file + "/index"] }
-            return pieces.keys.filter { $0 != "…" && ($0 == base ? (file as NSString).deletingLastPathComponent == base : file.hasPrefix($0 + "/")) }.max { $0.count < $1.count }
+            // A module path names the folder itself (`backend/core` for `from backend.core import db`).
+            return pieces.keys.filter { $0 != "…" && (file == $0 || ($0 == base ? (file as NSString).deletingLastPathComponent == base : file.hasPrefix($0 + "/"))) }.max { $0.count < $1.count }
                 ?? (pieces["…"]?.contains(file) == true ? "…" : nil)
         }
 

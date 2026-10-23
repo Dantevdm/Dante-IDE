@@ -29,11 +29,10 @@ public enum DelegateKind: String, Sendable, CaseIterable, Codable, Identifiable 
     /// The agent's name in stats and on the orbs.
     public var agent: String {
         switch self {
-        case .summary: "Reader"
-        case .triage: "Triage"
-        case .draft: "Drafter"
-        case .commitMessage: "Scribe"
-        case .writing: "Writer"
+        case .summary: TeamRole.researcher.title
+        case .triage: TeamRole.tester.title
+        case .draft: TeamRole.backend.title
+        case .commitMessage, .writing: TeamRole.documenter.title
         }
     }
 
@@ -358,6 +357,7 @@ extension AgentStats {
         if job.provider == .codex { return "Codex" }
         if let kind = DelegateKind(rawValue: job.kind), job.provider == .local { return kind.agent }
         if job.kind == Looker.kind { return Looker.agent }
+        if job.kind == "subagent", let role = TeamRole(agentID: job.model) { return role.title }
         return job.kind == "subagent" ? "Sub-agents" : "Claude"
     }
 }

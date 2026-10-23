@@ -72,7 +72,8 @@ struct SystemDiagram: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: Self.gap) {
                     ForEach(columns, id: \.first!.lane) { column in
-                        LaneHeader(title: map.title(of: column[0].lane), count: column[0].parts.count).frame(width: Self.width, alignment: .leading)
+                        LaneHeader(title: map.title(of: column[0].lane), count: column[0].parts.count)
+                            .frame(width: columnWidth(column[0].lane), alignment: .leading)
                     }
                 }
                 // Columns centre on each other so arrows between short and long ones stay level.
@@ -83,21 +84,26 @@ struct SystemDiagram: View {
                                 if index > 0 {
                                     LaneHeader(title: map.title(of: section.lane), count: section.parts.count).padding(.top, 10)
                                 }
-                                ForEach(section.parts) { part in
-                                    PartBox(part: part, state: state(of: part), hue: hue(section.lane), showsContainer: showsContainer(part),
-                                            coverage: coverage.map { $0[part.id]?.fraction ?? -1 },
-                                            opens: openable.contains(part.id), isOpening: opening == part.id,
-                                            open: { open(part) }, openContainer: { openContainer(part) }) {
-                                        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                                            selected = selected == part.id ? nil : part.id
+                                let tiers = tiers(of: section.lane)
+                                if tiers.count > 1 {
+                                    // The backend in the order the code runs: entry, the parts it uses, what they share.
+                                    HStack(alignment: .center, spacing: Self.tierGap) {
+                                        ForEach(Array(tiers.enumerated()), id: \.offset) { tier, parts in
+                                            VStack(alignment: .leading, spacing: 12) {
+                                                Text(Self.tierTitle(tier, of: tiers.count))
+                                                    .font(.dante(size: 10, weight: .semibold)).tracking(0.6)
+                                                    .foregroundStyle(theme.text3.color)
+                                                ForEach(parts) { part in box(part, lane: section.lane) }
+                                            }
+                                            .frame(width: Self.width)
                                         }
                                     }
-                                    .id(part.id)
-                                    .anchorPreference(key: PartBoundsKey.self, value: .bounds) { [part.id: $0] }
+                                } else {
+                                    ForEach(section.parts) { part in box(part, lane: section.lane) }
                                 }
                             }
                         }
-                        .frame(width: Self.width)
+                        .frame(width: columnWidth(column[0].lane))
                     }
                 }
             }
@@ -149,6 +155,37 @@ struct SystemDiagram: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.line.color))
         .overlay(alignment: .bottomLeading) {
         }
+    }
+
+    static let tierGap: CGFloat = 34
+
+    /// Lanes split into tiers only for the backend, where the order matters most.
+    private func tiers(of lane: SystemMap.Lane) -> [[SystemMap.Part]] {
+        lane == .backend ? map.tiers(of: lane) : []
+    }
+
+    private func columnWidth(_ lane: SystemMap.Lane) -> CGFloat {
+        let count = CGFloat(max(tiers(of: lane).count, 1))
+        return Self.width * count + Self.tierGap * (count - 1)
+    }
+
+    static func tierTitle(_ tier: Int, of count: Int) -> String {
+        if tier == 0 { return "STARTS HERE" }
+        if tier == count - 1 { return "SHARED" }
+        return "USES"
+    }
+
+    private func box(_ part: SystemMap.Part, lane: SystemMap.Lane) -> some View {
+        PartBox(part: part, state: state(of: part), hue: hue(lane), showsContainer: showsContainer(part),
+                coverage: coverage.map { $0[part.id]?.fraction ?? -1 },
+                opens: openable.contains(part.id), isOpening: opening == part.id,
+                open: { open(part) }, openContainer: { openContainer(part) }) {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                selected = selected == part.id ? nil : part.id
+            }
+        }
+        .id(part.id)
+        .anchorPreference(key: PartBoundsKey.self, value: .bounds) { [part.id: $0] }
     }
 
     enum PartState { case normal, selected, related, dimmed }

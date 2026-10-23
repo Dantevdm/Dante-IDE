@@ -27,6 +27,8 @@ public struct ToolActivity: Equatable, Sendable {
     public var securityBlocks = false
     /// When the call arrived, for how long a sub-agent took.
     public var started = Date()
+    /// What a delegated agent reported back, for the transcript.
+    public var report: String?
 
     public init(id: String, name: String, input: JSONValue, status: Status, change: ProposedChange? = nil) {
         self.id = id
@@ -54,7 +56,10 @@ public struct ToolActivity: Equatable, Sendable {
         case "WebFetch": return "Fetched"
         case "WebSearch": return "Searched the web for"
         case "TodoWrite": return "Updated its to-do list"
-        case "Task", "Agent": return "Delegated"
+        case "Task", "Agent":
+            let who = input["subagent_type"]?.string.flatMap(TeamRole.init(agentID:))?.title
+                ?? input["subagent_type"]?.string.flatMap { $0 == "general-purpose" ? nil : $0 } ?? "a sub-agent"
+            return resolved ? "Handed to \(who)" : who.prefix(1).uppercased() + who.dropFirst() + " is working on"
         case "AskUserQuestion": return isAwaitingApproval ? "Asks" : (status == .declined ? "Skipped questions" : "Asked")
         case "EnterPlanMode": return "Planning first"
         case "ExitPlanMode": return isAwaitingApproval ? "Plan ready" : (status == .declined ? "Kept planning" : "Started on the plan")
@@ -238,6 +243,10 @@ public final class ClaudeSession {
     /// (`MCPConfigFile`) that's removed when Claude Code stops.
     public var delegateEnvironment: [String: String] = [:]
     private var startedDelegateEnvironment: [String: String] = [:]
+    /// The team as Claude Code sub-agents (`Team.agentsJSON`) and the lead's brief on using them;
+    /// nil for none. Takes effect on the next message.
+    public var team: (agents: String, brief: String)?
+    private var startedTeam: String?
     /// The signed-in Claude account (`ClaudeAccount.identity`). Claude Code reads its sign-in
     /// once, so a different account continues the conversation in a new process.
     public var account: String?
@@ -289,6 +298,11 @@ public final class ClaudeSession {
     /// The `--model` to start with; nil leaves it to Claude Code. Takes effect on the next message.
     public var requestedModel: String?
     private var startedModel: String?
+    /// Claude Code's `--effort`; nil leaves it to Claude Code. Takes effect on the next message.
+    public var requestedEffort: String?
+    private var startedEffort: String?
+    /// What the last finished turn cost, for the footer: the conversation it re-read and what it wrote.
+    public private(set) var lastTurn: TurnCost?
     private var sessionID: String?
 
     private var process: Process?
@@ -367,6 +381,23 @@ public final class ClaudeSession {
         }
     }
 
+    /// Changing the level can also release eligible steps that are already waiting.
+    /// Reuse the policy and job guard; questions and flagged steps keep waiting.
+    public func setApprovalLevel(_ level: ApprovalLevel, approvingPending: Bool = false) {
+        approvalLevel = level
+        guard approvingPending, level != .ask else { return }
+        for tool in pendingApprovals {
+            let hasNote = tool.ruleNote != nil || tool.securityBlocks
+            guard !hasNote, Hands.Tool.of(mcpName: tool.name)?.controls != true else { continue }
+            let guarded = guardCall?(tool.name, tool.input, hasNote)
+            if guarded == .ask { continue }
+            if case .refuse? = guarded { continue }
+            if ApprovalPolicy.approves(tool.name, input: tool.input, level: level, allow: allowRules, hasRuleNote: hasNote) {
+                approve(tool.id)
+            }
+        }
+    }
+
     // MARK: Conversation
 
     /// Sends a message. `context` is passed to Claude but not shown in the transcript.
@@ -396,8 +427,8 @@ public final class ClaudeSession {
             note("Task routing: \(decision.difficulty.rawValue), \(detail). \(decision.reason)", isError: false)
         }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
-        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || delegateCommand != startedDelegate
-            || delegateEnvironment != startedDelegateEnvironment || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
+        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || (engine == .claude && requestedEffort != startedEffort) || delegateCommand != startedDelegate
+            || delegateEnvironment != startedDelegateEnvironment || (engine == .claude && team?.agents != startedTeam) || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
             stop()
         }
         // A remote project's Claude Code uses the host's sign-in, not this Mac's.
@@ -736,6 +767,7 @@ public final class ClaudeSession {
         let delegate = remote == nil ? delegateCommand : nil
         var prompt = systemPrompt() + "\n\n" + ClaudeBrief.offeringChoices
         if asksFirst { prompt += "\n\n" + ClaudeBrief.clarifyingQuestions }
+        if let team, !team.brief.isEmpty { prompt += "\n\n" + team.brief }
         var mcpConfig: String?
         if let delegate {
             let environment = delegateEnvironment
@@ -753,7 +785,7 @@ public final class ClaudeSession {
                 mcpConfig = file.path
             }
         }
-        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel, mcpConfig: mcpConfig)
+        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel, effort: requestedEffort, agents: team?.agents, mcpConfig: mcpConfig)
         if let remote {
             process.executableURL = URL(filePath: "/usr/bin/env")
             process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
@@ -769,6 +801,8 @@ public final class ClaudeSession {
         startedDelegate = delegateCommand
         startedDelegateEnvironment = delegateEnvironment
         startedModel = requestedModel
+        startedEffort = requestedEffort
+        startedTeam = team?.agents
         startedEngine = .claude
         startedAccount = account
         process.environment = Self.environment()
@@ -1002,7 +1036,7 @@ public final class ClaudeSession {
     /// `mcpConfig` is JSON or the path of a file holding it; `delegate` makes the plain config
     /// for the `dante` command when there's none.
     nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?, model: String? = nil,
-                                      delegate: String? = nil, mcpConfig: String? = nil) -> [String] {
+                                      effort: String? = nil, agents: String? = nil, delegate: String? = nil, mcpConfig: String? = nil) -> [String] {
         var arguments = [
             "--output-format", "stream-json",
             "--input-format", "stream-json",
@@ -1015,6 +1049,8 @@ public final class ClaudeSession {
         if let settings = rules.settingsJSON { arguments += ["--settings", settings] }
         if let sessionID { arguments += ["--resume", sessionID] }
         if let model { arguments += ["--model", model] }
+        if let effort { arguments += ["--effort", effort] }
+        if let agents { arguments += ["--agents", agents] }
         if let config = mcpConfig ?? delegate.map({ MCPConfigFile.json(command: $0, environment: [:]) }) {
             arguments += ["--mcp-config", config]
         }
@@ -1125,7 +1161,11 @@ public final class ClaudeSession {
                         updateTool(tool.id) { $0.status = .failed(result.text) }
                     }
                 } else {
-                    updateTool(tool.id) { $0.status = .done }
+                    let delegated = tool.name == "Task" || tool.name == "Agent" || ["delegate", "ask_codex", "ask_claude", "ask_grok", "decide"].contains(tool.name.replacingOccurrences(of: "mcp__dante__", with: ""))
+                    updateTool(tool.id) {
+                        $0.status = .done
+                        if delegated { $0.report = String(result.text.prefix(6000)) }
+                    }
                     if tool.name.hasPrefix("mcp__dante__") { onDanteTool(String(tool.name.dropFirst(12)), tool.input, true) }
                     if tool.name == "Task" || tool.name == "Agent" {
                         ledger?.append(AgentJob(kind: "subagent", provider: .claude, model: tool.input["subagent_type"]?.string ?? "general-purpose",
@@ -1216,6 +1256,7 @@ public final class ClaudeSession {
                                     seconds: Double(result.durationMS ?? 0) / 1000, outcome: result.isError ? .failed : .done,
                                     requestedBy: "you", title: turnUsage.title,
                                     gist: AgentJob.gist(of: result.isError ? result.text : lastReply), files: turnFiles))
+            lastTurn = TurnCost(context: turnUsage.input, output: turnUsage.output.values.reduce(0, +), replies: turnUsage.output.count)
             onTurnFinished(turnUsage.output.values.reduce(0, +))
             turnUsage = (0, [:], "")
             if result.isError, Vitality.isLimitMessage(result.text) {
@@ -1357,4 +1398,21 @@ public final class ClaudeSession {
         update(&tool)
         items[position].content = .tool(tool)
     }
+}
+
+/// One turn's tokens: every reply in it re-reads the conversation (`context`, the largest),
+/// so a turn of many tool calls on a long conversation costs `replies` times that.
+public struct TurnCost: Equatable, Sendable {
+    public var context: Int
+    public var output: Int
+    public var replies: Int
+
+    public init(context: Int, output: Int, replies: Int) {
+        self.context = context
+        self.output = output
+        self.replies = replies
+    }
+
+    /// Roughly what the turn read: each reply re-reads the context, most of it from cache.
+    public var read: Int { context * max(replies, 1) }
 }

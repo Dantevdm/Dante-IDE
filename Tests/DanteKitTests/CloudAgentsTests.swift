@@ -121,10 +121,10 @@ import Testing
     @Test func toolRowsNameTheAgent() {
         let root = URL(filePath: "/home/me/shop")
         let running = ToolActivity(id: "a", name: "mcp__dante__delegate", input: ["kind": "summary", "title": "Sum NOTES.md", "prompt": "x"], status: .running)
-        #expect(running.verb == "Handing to Reader" && running.target(in: root) == "Sum NOTES.md")
+        #expect(running.verb == "Handing to Researcher" && running.target(in: root) == "Sum NOTES.md")
         var done = running
         done.status = .done
-        #expect(done.verb == "Handed to Reader")
+        #expect(done.verb == "Handed to Researcher")
         let grok = ToolActivity(id: "b", name: "mcp__dante__ask_grok", input: ["prompt": "Is this plan sound?"], status: .running)
         #expect(grok.verb == "Asking Grok" && grok.target(in: root) == "Is this plan sound?")
     }

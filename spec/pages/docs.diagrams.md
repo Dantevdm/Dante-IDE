@@ -26,6 +26,8 @@ Diagrams are pictures you draw in the Map's own style: cards, groups and moving 
 - Several: align (left, centre, right, top, middle, bottom), distribute, colour, Group them and Link them in order.
 - While moving: guides where edges and middles line up with other nodes.
 
+- With one card selected, everything it isn't linked to fades back (and its other links go faint), as on the Map: the card, what it links to either way and the containers holding them stay bright.
+
 ## Actions
 - New diagram (Docs' New sheet, Diagram, or an empty library): a name, then Blank, Infrastructure or System map, and an optional description in your own words ("What should it show?" for Blank, "What should change?" after copying the Map); it's saved as docs/diagrams/<name>.dante-diagram.json (numbered when the name is taken) and opens. With a description the button reads Create and draw, and the agent draws it (or changes the copy) to match.
 - Copy and edit (Map, Infra or System view, and inside an opened part): a name, then the view as a diagram, opened in Docs. The Map itself doesn't change.

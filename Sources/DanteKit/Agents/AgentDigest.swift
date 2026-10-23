@@ -23,7 +23,7 @@ public struct AgentDigest: Equatable, Sendable {
     public struct Step: Equatable, Sendable, Identifiable {
         public var job: AgentJob
         public var role: Role
-        /// Who did it: "Codex", "Reader", "Claude".
+        /// Who did it: "Codex", "Researcher", "Claude".
         public var agent: String
         /// Who asked: "You", "Codex", "Dante".
         public var asker: String

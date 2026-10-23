@@ -78,7 +78,7 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
             (0, 14, OrbSatellite(id: "demo-explore-\(loop)", kind: .subagent("Explore"), color: color(subagent: "explore"),
                                  title: "Find where the parser builds the tree", agent: "Explore", task: "Find where the parser builds the tree")),
             (3, 10, OrbSatellite(id: "demo-summary-\(loop)", kind: .local("summary"), color: color(local: "summary"),
-                                 title: "Reader", task: "Summarise the failing test log")),
+                                 title: "Researcher", task: "Summarise the failing test log")),
             (6, 20, OrbSatellite(id: "demo-codex-\(loop)", kind: .codex, color: RGBA(0x8C9EFF),
                                  title: "Codex", task: "Check the migration can't lock the table")),
             (12, 24, OrbSatellite(id: "demo-look-\(loop)", kind: .local(Looker.kind), color: RGBA(0xFFD740),
@@ -90,6 +90,7 @@ public struct OrbSatellite: Sendable, Equatable, Identifiable {
     /// "Explore", "Plan", "code-reviewer" → "Code reviewer"; the default type is just a sub-agent.
     static func agentName(subagent type: String) -> String {
         if type == "general-purpose" || type.isEmpty { return "Sub-agent" }
+        if let role = TeamRole(agentID: type) { return role.title }
         let words = type.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
         return words.prefix(1).uppercased() + words.dropFirst()
     }

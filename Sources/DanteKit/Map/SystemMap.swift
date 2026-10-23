@@ -110,6 +110,41 @@ public struct SystemMap: Equatable, Sendable {
         }
     }
 
+    /// A lane's parts in the order the code runs through them, by their links to each other:
+    /// what starts things first (nothing in the lane uses it), what everything leans on last.
+    /// Parts linked to nothing else in the lane sit in the middle tier. One tier when the
+    /// lane's parts don't link to each other.
+    public func tiers(of lane: Lane) -> [[Part]] {
+        let inLane = parts.filter { $0.lane == lane }
+        let ids = Set(inLane.map(\.id))
+        let edges = links.filter { ids.contains($0.from) && ids.contains($0.to) && $0.from != $0.to }
+        guard !edges.isEmpty else { return inLane.isEmpty ? [] : [inLane] }
+        let linked = Set(edges.flatMap { [$0.from, $0.to] })
+        // Longest path from a part nothing uses; a cycle stops growing after one pass per part.
+        var depth: [String: Int] = [:]
+        for id in linked where !edges.contains(where: { $0.to == id }) { depth[id] = 0 }
+        if depth.isEmpty, let first = inLane.first(where: { linked.contains($0.id) }) { depth[first.id] = 0 }
+        for _ in 0..<linked.count {
+            var changed = false
+            for edge in edges {
+                guard let from = depth[edge.from] else { continue }
+                if from + 1 > depth[edge.to] ?? -1, from + 1 < linked.count {
+                    depth[edge.to] = from + 1
+                    changed = true
+                }
+            }
+            if !changed { break }
+        }
+        let deepest = depth.values.max() ?? 0
+        guard deepest > 0 else { return [inLane] }
+        var result = Array(repeating: [Part](), count: deepest + 1)
+        for part in inLane {
+            let tier = depth[part.id] ?? (deepest >= 2 ? 1 : 0)
+            result[tier].append(part)
+        }
+        return result.filter { !$0.isEmpty }
+    }
+
     /// Worth showing over the plain module graph: it spans at least two lanes.
     public var isUseful: Bool { Set(parts.map(\.lane)).count >= 2 }
 
@@ -652,10 +687,19 @@ public struct SystemMap: Equatable, Sendable {
         var pendingVerb: String?
         var pendingLine = 0
         var found: [Route] = []
-        for (number, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-            let line = raw.trimmingCharacters(in: .whitespaces)
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        var skipUntil = -1
+        for (number, raw) in lines.enumerated() where number > skipUntil {
+            var line = raw.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("//") || line.hasPrefix("*") || line.hasPrefix("/*") { continue }
             if line.hasPrefix("@") {
+                // An annotation over several lines (`@GetMapping(` then `value = "/status",`): read it whole.
+                var next = number + 1
+                while line.count(where: { $0 == "(" }) > line.count(where: { $0 == ")" }), next < min(lines.count, number + 12) {
+                    line += " " + lines[next].trimmingCharacters(in: .whitespaces)
+                    skipUntil = next
+                    next += 1
+                }
                 let name = String(line.dropFirst().prefix { $0.isLetter })
                 let path = firstString(in: line)
                 if let verb = verbs[name] {
@@ -692,6 +736,13 @@ public struct SystemMap: Equatable, Sendable {
 
     /// The first string literal in an annotation: `("/x")`, `(value = "/x")`, `({"/a", "/b"})`.
     static func firstString(in line: String) -> String? {
+        // `produces = "application/json", value = "/x"`: the path's own key wins.
+        for key in ["value", "path"] {
+            if let range = line.range(of: #"\b"# + key + #"\s*=\s*\{?\s*""#, options: .regularExpression) {
+                let rest = line[range.upperBound...]
+                if let close = rest.firstIndex(of: "\"") { return String(rest[..<close]) }
+            }
+        }
         guard let open = line.firstIndex(of: "\"") else { return nil }
         let rest = line[line.index(after: open)...]
         guard let close = rest.firstIndex(of: "\"") else { return nil }

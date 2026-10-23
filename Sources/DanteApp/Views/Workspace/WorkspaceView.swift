@@ -78,6 +78,7 @@ struct WorkspaceView: View {
         .task(id: "\(workspace.revision)#\(Preferences.shared.standardsLibrary)") { await workspace.reloadStandards(library: Preferences.shared.standardsLibraryURL) }
         // Alarms are watched for the whole window, so one that starts firing can notify.
         .task(id: workspace.info.alarms) { session.watchAlarms() }
+        .task(id: workspace.url) { session.serviceKeeper.watch(workspace.url, remote: session.remoteSync != nil) }
         .task(id: workspace.url) {
             session.pipelines.session = session
             await session.pipelines.watch(workspace.url)

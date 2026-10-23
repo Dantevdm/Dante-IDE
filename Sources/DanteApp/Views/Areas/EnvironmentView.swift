@@ -81,6 +81,12 @@ struct EnvironmentView: View {
             subtitle: nil
         ) {
             if compose != nil {
+                if session.remoteSync == nil {
+                    Toggle("Keep running", isOn: Bindable(session.serviceKeeper).isOn)
+                        .toggleStyle(.switch).controlSize(.mini)
+                        .font(.dante(size: 12))
+                        .help("While this project is open, Dante restarts a service that crashes or stays unhealthy (three tries in 15 minutes), and applies changes to the compose file to the running services. Services you stop stay stopped.")
+                }
                 IconButton(symbol: "arrow.clockwise", label: "Refresh") { Task { await refresh() } }
                 Button { act("stop", ["stop"]) } label: { Label("Stop all", systemImage: "stop.fill") }
                     .buttonStyle(DanteButtonStyle())
@@ -101,8 +107,11 @@ struct EnvironmentView: View {
                 if let error = compose.parseError {
                     Banner(symbol: "xmark.octagon.fill", color: theme.red.color, text: error)
                 }
+                if !session.serviceKeeper.events.isEmpty {
+                    KeeperEvents(events: session.serviceKeeper.events)
+                }
                 if let command {
-                    CommandOutputCard(run: command) { self.command = nil }
+                    CommandOutputCard(run: command, services: compose.services.map(\.name)) { self.command = nil }
                 }
                 if let failing = failing {
                     DiagnoseCard(session: session, service: failing.service, problem: failing.problem, note: notes[failing.service])
@@ -370,6 +379,12 @@ struct EnvironmentView: View {
             return
         }
         busy = id
+        if !plain, let verb = arguments.first {
+            let named = arguments.dropFirst().filter { !$0.hasPrefix("-") }
+            let all = compose?.services.map(\.name) ?? []
+            if ["stop", "down", "kill", "rm"].contains(verb) { session.serviceKeeper.youStopped(named, all: all) }
+            if ["up", "start", "restart"].contains(verb) { session.serviceKeeper.youStarted(named, all: all) }
+        }
         // `plain` runs docker itself, for containers outside compose.
         command = ComposeRun(title: ((plain ? ["docker"] : ["docker", "compose"]) + arguments).joined(separator: " "))
         Task {
@@ -581,13 +596,41 @@ private struct DockerfilesCard: View {
     }
 }
 
-/// The output of the last start, stop or rebuild.
+/// What Keep running did lately: services brought back, ones left down, compose changes applied.
+private struct KeeperEvents: View {
+    @Environment(\.theme) private var theme
+    let events: [ServiceKeeper.Event]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(events.suffix(3).reversed()) { event in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: event.failed ? "exclamationmark.triangle.fill" : "arrow.clockwise.heart")
+                        .font(.dante(size: 11)).foregroundStyle(event.failed ? theme.amber.color : theme.green.color).frame(width: 14)
+                    Text(event.text).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Text(event.date.formatted(date: .omitted, time: .shortened)).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card.color))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.line.color))
+    }
+}
+
+/// The last start, stop or rebuild: a line per service saying where it got to, the errors,
+/// and Docker's own output folded away.
 private struct CommandOutputCard: View {
     @Environment(\.theme) private var theme
     let run: EnvironmentView.ComposeRun
+    var services: [String] = []
     let close: () -> Void
+    @State private var showsRaw = false
 
     var body: some View {
+        let progress = ComposeProgress.parse(run.lines, known: services)
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 if run.status == nil {
@@ -601,6 +644,11 @@ private struct CommandOutputCard: View {
                     .font(.dante(size: 12))
                     .foregroundStyle(run.status.map { $0 == 0 ? theme.text3.color : theme.red.color } ?? theme.text3.color)
                 Spacer()
+                Button(showsRaw ? "Hide raw output" : "Raw output") { withAnimation(.snappy(duration: 0.18)) { showsRaw.toggle() } }
+                    .buttonStyle(.plain)
+                    .font(.dante(size: 11.5, weight: .medium))
+                    .foregroundStyle(theme.accent.color)
+                    .help("Docker’s own output, line by line")
                 if run.status != nil {
                     IconButton(symbol: "xmark", label: "Close", size: 10, action: close)
                 }
@@ -609,32 +657,77 @@ private struct CommandOutputCard: View {
             .frame(height: 40)
             .background(theme.panel.color)
             Rectangle().fill(theme.line.color).frame(height: 1)
-            ScrollViewReader { proxy in
-                ScrollView([.vertical, .horizontal]) {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        if run.lines.isEmpty {
-                            Text("Waiting for docker compose…").foregroundStyle(theme.text3.color)
-                        }
-                        ForEach(Array(run.lines.enumerated()), id: \.offset) { index, line in
-                            Text(line.isEmpty ? " " : line)
-                                .foregroundStyle(line.localizedCaseInsensitiveContains("error") || line.contains("unhealthy") ? theme.red.color : theme.text2.color)
-                                .fixedSize()
-                                .id(index)
+            VStack(alignment: .leading, spacing: 8) {
+                if progress.services.isEmpty, progress.errors.isEmpty {
+                    Text(run.lines.isEmpty ? "Waiting for docker compose…" : (run.lines.last ?? ""))
+                        .font(.dante(size: 12)).foregroundStyle(theme.text3.color).lineLimit(1)
+                }
+                ForEach(progress.services) { service in
+                    HStack(spacing: 8) {
+                        icon(service.phase).frame(width: 14)
+                        Text(service.name).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
+                        Text(service.phase.text).font(.dante(size: 12)).foregroundStyle(service.phase.isFailed ? theme.red.color : theme.text2.color)
+                            .lineLimit(1).truncationMode(.tail)
+                        Spacer(minLength: 0)
+                        if service.cached + service.ran > 0 {
+                            Text("\(service.ran) built · \(service.cached) from cache").font(.dante(size: 11)).foregroundStyle(theme.text3.color).monospacedDigit()
+                                .help("Build steps Docker ran, and ones it reused from an earlier build")
                         }
                     }
-                    .font(.dante(size: 11.5, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(12)
                 }
-                .onChange(of: run.lines.count) { _, count in
-                    if count > 0 { proxy.scrollTo(count - 1, anchor: .bottom) }
+                if !progress.errors.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(progress.errors, id: \.self) { error in
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .font(.dante(size: 11.5)).foregroundStyle(theme.red.color)
+                                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(theme.red.color.opacity(0.07)))
                 }
             }
-            .frame(height: 160)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if showsRaw {
+                Rectangle().fill(theme.line.color).frame(height: 1)
+                ScrollViewReader { proxy in
+                    ScrollView([.vertical, .horizontal]) {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(run.lines.enumerated()), id: \.offset) { index, line in
+                                Text(line.isEmpty ? " " : line)
+                                    .foregroundStyle(line.localizedCaseInsensitiveContains("error") || line.contains("unhealthy") ? theme.red.color : theme.text2.color)
+                                    .fixedSize()
+                                    .id(index)
+                            }
+                        }
+                        .font(.dante(size: 11.5, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(12)
+                    }
+                    .onChange(of: run.lines.count) { _, count in
+                        if count > 0 { proxy.scrollTo(count - 1, anchor: .bottom) }
+                    }
+                    .onAppear { if !run.lines.isEmpty { proxy.scrollTo(run.lines.count - 1, anchor: .bottom) } }
+                }
+                .frame(height: 180)
+                .background(theme.codeBackground.color)
+            }
         }
-        .background(theme.codeBackground.color)
+        .background(theme.card.color)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(run.status.map { $0 == 0 ? theme.line.color : theme.red.color.opacity(0.5) } ?? theme.line.color))
+    }
+
+    @ViewBuilder
+    private func icon(_ phase: ComposeProgress.Phase) -> some View {
+        switch phase {
+        case .building, .starting: ProgressView().controlSize(.mini)
+        case .built, .running: Image(systemName: "checkmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.green.color)
+        case .stopped: Image(systemName: "stop.fill").font(.dante(size: 9)).foregroundStyle(theme.text3.color)
+        case .failed: Image(systemName: "xmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.red.color)
+        }
     }
 }
 

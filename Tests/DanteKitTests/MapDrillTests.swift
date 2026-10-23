@@ -78,6 +78,49 @@ struct MapDrillTests {
         }
         """)
         #expect(jaxrs.map { "\($0.method ?? "") \($0.path)" } == ["GET /items/{id}", "POST /items"])
+        // Generated controllers spread each annotation over several lines.
+        let generated = SystemMap.annotatedRoutes(in: """
+        @RequestMapping("/session")
+        public class SessionController {
+          @PostMapping(
+              produces = {"application/json"},
+              value = "/end")
+          public ResponseEntity<Void> end() {}
+          @GetMapping(
+              value = "/whoami",
+              produces = {JSON})
+          public ResponseEntity<Me> whoami() {}
+        }
+        """)
+        #expect(generated.map { "\($0.method ?? "") \($0.path)" } == ["POST /session/end", "GET /session/whoami"])
+        #expect(generated.map(\.line) == [3, 7])
+    }
+
+    @Test func theBackendLaneRunsFromItsEntryToWhatEverythingShares() {
+        var map = SystemMap(parts: [], links: [])
+        for name in ["server", "billing", "shipping", "shared", "tools"] {
+            map.parts.append(SystemMap.Part(id: name, name: name, lane: .backend, kind: .package))
+        }
+        map.parts.append(SystemMap.Part(id: "route", name: "/x", lane: .api, kind: .routes))
+        map.links = [.init(from: "route", to: "server"), .init(from: "server", to: "billing"), .init(from: "server", to: "shipping"),
+                     .init(from: "billing", to: "shared"), .init(from: "shipping", to: "shared"), .init(from: "server", to: "shared")]
+        #expect(map.tiers(of: .backend).map { $0.map(\.id) } == [["server"], ["billing", "shipping", "tools"], ["shared"]])
+        #expect(map.tiers(of: .api).count == 1)
+        map.links.append(.init(from: "shared", to: "server"))
+        #expect(map.tiers(of: .backend).flatMap { $0 }.count == 5)
+    }
+
+    @Test func pythonPackagesImportTheFoldersTheyName() throws {
+        let files: [String: String] = [
+            "app/main.py": "from app.billing import invoices\nfrom app.shipping import parcels\n",
+            "app/billing/invoices.py": "from app.core import db\n",
+            "app/shipping/parcels.py": "from app.core import db\n",
+            "app/core/db.py": "def query(): pass\n",
+            "app/reports/weekly.py": "def run(): pass\n",
+        ]
+        let part = SystemMap.Part(id: "x", name: "app", lane: .backend, kind: .package, path: "app")
+        let map = try #require(SystemMap.inside(part, files: Array(files.keys), read: { files[$0] }))
+        #expect(map.tiers(of: .backend).map { Set($0.map(\.name)) } == [["app"], ["billing", "shipping", "reports"], ["core"]])
     }
 
     @Test func theWholeSystemLinksScreensRoutesAndTables() {

@@ -47,7 +47,7 @@ import Testing
         #expect(sentences[1] == "Together they changed 2 files (LIST.md, a.swift).")
         #expect(sentences[2] == "Claude checked Codex’s work twice.")
         #expect(sentences[3] == "Local models took 2 jobs (summaries and code drafts), keeping 387 tokens off your plans.")
-        #expect(sentences.last == "1 job failed: Drafter on “Draft the parser”.")
+        #expect(sentences.last == "1 job failed: Back-end engineer on “Draft the parser”.")
     }
 
     @Test func saysWhenNothingWasChecked() {
@@ -66,7 +66,7 @@ import Testing
         ]
         let models = AgentDigest(jobs).models
         #expect(models.first?.name == "qwen3:14b")
-        #expect(models.first?.agents == ["Reader", "Scribe"])
+        #expect(models.first?.agents == ["Researcher", "Documenter"])
         #expect(models.first?.work == ["summaries", "commit messages"])
         #expect(models.contains { $0.name == "Claude Opus" && $0.work == ["led your requests"] })
         #expect(models.contains { $0.name == "Codex" && $0.work == ["checked Claude’s work"] })

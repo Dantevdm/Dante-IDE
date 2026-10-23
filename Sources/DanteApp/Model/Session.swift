@@ -239,6 +239,8 @@ final class Session {
     let health = HealthMonitor()
     /// Monitoring alarms from `operate.alarms`, polled while the window is open.
     let alarms = AlarmMonitor()
+    /// Brings crashed compose services back while the project is open.
+    let serviceKeeper = ServiceKeeper()
     /// The project's CI/CD pipelines, watched while the window is open.
     let pipelines = PipelineMonitor()
     var logWatch: LogWatch?
@@ -539,6 +541,15 @@ final class Session {
         claude.routesToLocalModels = Preferences.shared.delegatesToLocalModels
         claude.asksFirst = Preferences.shared.claudeAsksFirst
         claude.requestedModel = Preferences.shared.claudeModel.argument
+        claude.requestedEffort = Preferences.shared.claudeEffort.isEmpty ? nil : Preferences.shared.claudeEffort
+        // The team for the main conversation; a job is already one team member's work.
+        let off = Preferences.shared.teamRolesOff
+        if claude.projectName == nil, off.count < TeamRole.allCases.count {
+            let models = Dictionary(uniqueKeysWithValues: TeamRole.allCases.map { ($0, Preferences.shared.teamModel($0)) })
+            claude.team = (Team.agentsJSON(models: models, off: off), Team.brief(off: off, documents: Preferences.shared.documentsAsWeWork))
+        } else {
+            claude.team = nil
+        }
         claude.codexExecutable = Self.codexPath
         claude.account = claudeAccount?.identity
         claude.switchesAtLimit = Preferences.shared.switchesToCodexAtLimit

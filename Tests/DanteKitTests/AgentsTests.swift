@@ -101,7 +101,7 @@ import Testing
         let days = AgentStats.daily(jobs, days: 3, now: now, calendar: calendar)
         #expect(days.map(\.local) == [0, 0, 1])
         #expect(days.map(\.claude) == [0, 1, 0])
-        #expect(AgentStats.agent(of: jobs[0]) == "Reader")
+        #expect(AgentStats.agent(of: jobs[0]) == "Researcher")
         #expect(AgentStats.agent(of: jobs[1]) == "Claude")
     }
 }

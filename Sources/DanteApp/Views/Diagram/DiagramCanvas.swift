@@ -43,6 +43,12 @@ struct DiagramCanvas: View {
     private var diagram: Diagram { document.diagram }
     private var selectedNodes: [Diagram.Node] { diagram.nodes.filter { document.selection.contains($0.id) } }
 
+    /// One card selected, and not while it's being dragged: the rest fades back to show what it's linked to.
+    private var focusedNode: String? {
+        guard drag == nil, selectedNodes.count == 1, let node = selectedNodes.first, ![.title, .text].contains(node.kind) else { return nil }
+        return node.id
+    }
+
     static let paletteRoom: CGFloat = 64
 
     /// The canvas reaches past the picture so there's room to drag things out.
@@ -102,7 +108,7 @@ struct DiagramCanvas: View {
         ZStack(alignment: .topLeading) {
             DotGrid(color: theme.line2.color.opacity(0.7), spacing: Diagram.grid * 2)
                 .frame(width: size.width, height: size.height)
-            DiagramPicture(diagram: diagram, size: size, selectedLinks: document.selection, hovered: hoveredNode?.id)
+            DiagramPicture(diagram: diagram, size: size, selectedLinks: document.selection, hovered: hoveredNode?.id, focus: focusedNode)
             overlay(size: size)
             inlineEditor
         }

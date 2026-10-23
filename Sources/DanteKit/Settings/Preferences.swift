@@ -76,6 +76,14 @@ public final class Preferences {
     public var codexModel: String { didSet { defaults.set(codexModel, forKey: Keys.codexModel) } }
     /// How hard Codex thinks (its reasoning effort); empty for the model's default.
     public var codexEffort: String { didSet { defaults.set(codexEffort, forKey: Keys.codexEffort) } }
+    /// Each team role's model, by role id; a missing role uses its default.
+    public var teamModels: [String: String] { didSet { defaults.set(teamModels, forKey: Keys.teamModels) } }
+    /// Team roles switched off, by id.
+    public var teamOff: [String] { didSet { defaults.set(teamOff, forKey: Keys.teamOff) } }
+    /// The lead brings in the Documenter as decisions are made.
+    public var documentsAsWeWork: Bool { didSet { defaults.set(documentsAsWeWork, forKey: Keys.documentsAsWeWork) } }
+    /// Claude Code's `--effort` (low, medium, high); empty leaves it to Claude Code.
+    public var claudeEffort: String { didSet { defaults.set(claudeEffort, forKey: Keys.claudeEffort) } }
     /// Who new windows' conversations start with: Claude or Codex.
     public var agentEngine: AgentEngine { didSet { defaults.set(agentEngine.rawValue, forKey: Keys.agentEngine) } }
     /// Ask OSV.dev about the project's dependencies when scanning (sends package names and versions).
@@ -131,6 +139,10 @@ public final class Preferences {
         switchesToCodexAtLimit = bool(Keys.switchesToCodexAtLimit, true)
         codexModel = defaults.string(forKey: Keys.codexModel) ?? ""
         codexEffort = defaults.string(forKey: Keys.codexEffort) ?? ""
+        claudeEffort = defaults.string(forKey: Keys.claudeEffort) ?? ""
+        teamModels = defaults.dictionary(forKey: Keys.teamModels) as? [String: String] ?? [:]
+        teamOff = defaults.stringArray(forKey: Keys.teamOff) ?? []
+        documentsAsWeWork = defaults.object(forKey: Keys.documentsAsWeWork) as? Bool ?? true
         agentEngine = defaults.string(forKey: Keys.agentEngine).flatMap(AgentEngine.init(rawValue:)) ?? .claude
         checksDependenciesOnline = bool(Keys.checksDependenciesOnline, false)
         keepsConversation = bool(Keys.keepsConversation, true)
@@ -189,6 +201,10 @@ public final class Preferences {
         static let switchesToCodexAtLimit = "switchesToCodexAtLimit"
         static let codexModel = "codexModel"
         static let codexEffort = "codexEffort"
+        static let claudeEffort = "claudeEffort"
+        static let teamModels = "teamModels"
+        static let teamOff = "teamOff"
+        static let documentsAsWeWork = "documentsAsWeWork"
         static let agentEngine = "agentEngine"
         static let checksDependenciesOnline = "checksDependenciesOnline"
         static let keepsConversation = "keepsConversation"
@@ -227,4 +243,12 @@ public enum SaveTidy {
         if finalNewline, !result.isEmpty, !result.hasSuffix("\n") { result += "\n" }
         return result
     }
+}
+
+extension Preferences {
+    public func teamModel(_ role: TeamRole) -> TeamModel {
+        teamModels[role.rawValue].flatMap(TeamModel.init(rawValue:)) ?? role.defaultModel
+    }
+
+    public var teamRolesOff: Set<TeamRole> { Set(teamOff.compactMap(TeamRole.init(rawValue:))) }
 }

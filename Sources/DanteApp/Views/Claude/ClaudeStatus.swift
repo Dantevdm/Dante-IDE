@@ -22,6 +22,13 @@ struct ClaudeFooter: View {
                 }
             }
             Spacer(minLength: 4)
+            if let turn = claude.lastTurn, turn.replies > 0 {
+                Button { session.claudeShowsUsage.toggle() } label: {
+                    Text("last \(ClaudeUsage.short(turn.read))").monospacedDigit()
+                }
+                .buttonStyle(.plain)
+                .help(TurnCostText.explain(turn, engine: claude.engine.title))
+            }
             if claude.engine == .codex {
                 CodexUsageLabel(limits: claude.codexLimits)
             } else {
@@ -72,17 +79,32 @@ struct ClaudeFooter: View {
                 }
             }
             Divider()
+            Menu("Effort") {
+                ForEach(Self.efforts, id: \.id) { effort in
+                    Button {
+                        Preferences.shared.claudeEffort = effort.id
+                        session.applyClaudePreferences()
+                    } label: {
+                        if effort.id == Preferences.shared.claudeEffort { Label(effort.title, systemImage: "checkmark") } else { Text(effort.title) }
+                    }
+                }
+            }
         } label: {
             HStack(spacing: 3) {
                 Image(systemName: "cpu").font(.dante(size: 9.5))
-                Text(modelName)
+                Text(Preferences.shared.claudeEffort.isEmpty ? modelName : "\(modelName) · \(Preferences.shared.claudeEffort)")
             }
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("The model for the next message")
+        .help("The model and how hard it thinks, for the next message. Sonnet or Haiku with low effort uses far less of your plan than Opus.")
     }
+
+    private static let efforts: [(id: String, title: String)] = [
+        ("", "Claude Code’s default"), ("low", "Low: quick answers, small edits"),
+        ("medium", "Medium"), ("high", "High: hard problems"),
+    ]
 
     private var modelName: String {
         if Preferences.shared.claudeModel != .default { return Preferences.shared.claudeModel.label }
@@ -225,6 +247,17 @@ private struct CodexUsageLabel: View {
     }
 }
 
+/// Why a turn cost what it did, in a sentence.
+enum TurnCostText {
+    static func explain(_ turn: TurnCost, engine: String) -> String {
+        let steps = turn.replies == 1 ? "one step" : "\(turn.replies) steps"
+        var text = "The last reply took \(steps). Each step re-reads the whole conversation (\(ClaudeUsage.short(turn.context)) tokens now), so it read about \(ClaudeUsage.short(turn.read)) and wrote \(ClaudeUsage.short(turn.output))."
+        if turn.context > 100_000 { text += " Compacting or starting a new conversation makes every step cheaper." }
+        else if turn.replies > 15 { text += " Pointing \(engine) at the files saves it searching." }
+        return text
+    }
+}
+
 /// A small ring and percentage for the context window.
 struct ContextMeter: View {
     @Environment(\.theme) private var theme
@@ -274,6 +307,11 @@ struct UsagePopover: View {
                 fact("Last 7 days", "\(ClaudeUsage.short(usage.week.weighted)) tokens across \(usage.weekMessages) replies")
             } else {
                 Text("Reading Claude Code’s logs…").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+            }
+            if let turn = claude.lastTurn, turn.replies > 0 {
+                fact("Last reply", "\(ClaudeUsage.short(turn.read)) read · \(ClaudeUsage.short(turn.output)) written")
+                Text(TurnCostText.explain(turn, engine: claude.engine.title))
+                    .font(.dante(size: 11)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
             }
             if claude.totalCostUSD > 0 {
                 fact("This conversation", claude.totalCostUSD.formatted(.currency(code: "USD").precision(.fractionLength(2))) + " at API prices")
