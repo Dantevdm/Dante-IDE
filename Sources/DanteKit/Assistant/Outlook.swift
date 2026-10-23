@@ -154,6 +154,52 @@ public enum Outlook {
         """
     }
 
+    /// An AppleScript string literal.
+    static func literal(_ text: String) -> String {
+        "\"" + text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\r\n", with: "\n") + "\""
+    }
+
+    /// Addresses from "Ana <ana@example.com>, sam@example.com; lee@example.com": only ones
+    /// with an @ and no spaces.
+    public static func addresses(_ text: String) -> [String] {
+        text.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
+            .compactMap { part -> String? in
+                var address = part.trimmingCharacters(in: .whitespaces)
+                if let open = address.lastIndex(of: "<"), let close = address.lastIndex(of: ">"), open < close {
+                    address = String(address[address.index(after: open)..<close])
+                }
+                address = address.trimmingCharacters(in: .whitespaces)
+                guard address.contains("@"), !address.contains(" "), !address.hasPrefix("@"), !address.hasSuffix("@") else { return nil }
+                return address
+            }
+    }
+
+    /// AppleScript that writes a draft and opens it in its own window for the person to read
+    /// and send. It never sends. With `replyTo` (a message id from `mail`), it's a reply to
+    /// everyone or the sender, with the text above the quoted message.
+    public static func draftScript(to: [String], cc: [String] = [], subject: String, body: String, replyTo: String? = nil, replyAll: Bool = false) -> String {
+        let html = "<p>" + body.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\n", with: "<br>") + "</p>"
+        var lines = ["if application \"Microsoft Outlook\" is not running then return \"NOT_RUNNING\"", "tell application \"Microsoft Outlook\""]
+        if let replyTo, let id = Int(replyTo) {
+            lines.append("    set m to reply to (message id \(id))\(replyAll ? " with reply to all" : "") without opening window")
+            lines.append("    set content of m to \(literal(html)) & (content of m)")
+            if !subject.isEmpty { lines.append("    set subject of m to \(literal(subject))") }
+        } else {
+            lines.append("    set m to make new outgoing message with properties {subject:\(literal(subject)), content:\(literal(html))}")
+        }
+        for address in to { lines.append("    make new to recipient at m with properties {email address:{address:\(literal(address))}}") }
+        for address in cc { lines.append("    make new cc recipient at m with properties {email address:{address:\(literal(address))}}") }
+        lines += ["    open m", "    activate", "end tell", "return \"OK\""]
+        return lines.joined(separator: "\n")
+    }
+
+    /// Writes a draft and opens it in Outlook (`draftScript`).
+    public static func draft(to: [String], cc: [String] = [], subject: String, body: String, replyTo: String? = nil, replyAll: Bool = false) async throws(Failure) {
+        try check(try await run(draftScript(to: to, cc: cc, subject: subject, body: body, replyTo: replyTo, replyAll: replyAll)))
+    }
+
     /// Reads `mailScript`'s output.
     public static func parseMail(_ output: String, timeZone: TimeZone = .current) throws(Failure) -> [MailMessage] {
         try check(output)

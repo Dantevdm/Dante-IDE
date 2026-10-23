@@ -48,7 +48,7 @@ Dante is built around agents rather than bolted onto them.
 - **Cloud agents with your own keys.** Grok (xAI) for a second opinion and Jev for scored decisions, with keys in the Keychain. Those tools always ask first, since they send material off the Mac.
 - **Activity tells the story.** Every job, local or cloud, turns and sub-agents included, goes into one ledger: who did what and why, who checked whose work, the cost, and each request as a thread.
 - **A team of sub-agents.** The lead can hand work to a Documenter, Researcher, Front-end and Back-end engineers, Marketing, a Security Officer and a Tester, in parallel. Claude runs them as its own sub-agents, and Codex reaches them through Dante's `team` tool.
-- **Hands and a browser.** With Hands on, an agent can open apps, find folders, take screenshots, type and click. Every step that controls the Mac asks first, a badge shows what it did, and ⌃⌥⌘. stops it. The agents also have their own off-screen browser for checking local web apps, and it reports console errors and failed requests.
+- **Hands and a browser.** With Hands on, an agent can open apps, find folders, read the window in front and press its buttons or choose its menus by name, take screenshots, type and click, and in Outlook read your mail and calendar and write drafts for you to send. Every step that controls the Mac asks first, a badge shows what it did, and ⌃⌥⌘. stops it. The agents also have their own off-screen browser for checking local web apps, and it reports console errors and failed requests.
 - **Setup** lists the project's skills (and suggests new ones from its files), memory files and what they cost per message, MCP servers, plugins and permissions.
 
 ### Jobs: agents working beside you
@@ -172,11 +172,11 @@ Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the s
 
 **Next**
 
-- More control of the Mac's apps for the assistant, building on Hands.
+- The assistant acting on the morning update: "reply to Ana that Thursday works" from the wall or the phone, drafted on the Mac for you to send.
 
 **Waiting for review** (built, being tried in daily use)
 
-Exploring from the iPhone and iPad, the morning update and the iPad wall, Keep running reading crashes, the companion app, Hands and the agents' browser, the team of sub-agents, jobs with away mode, budgets and job types, several projects in several windows, motion everywhere, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
+Hands reading windows, menus and Outlook, exploring from the iPhone and iPad, the morning update and the iPad wall, Keep running reading crashes, the companion app, Hands and the agents' browser, the team of sub-agents, jobs with away mode, budgets and job types, several projects in several windows, motion everywhere, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
 
 ## Requirements
 

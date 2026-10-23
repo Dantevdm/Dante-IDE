@@ -19,13 +19,21 @@ public enum Hands {
         case typeText = "type_text"
         case pressKeys = "press_keys"
         case click
+        case readWindow = "read_window"
+        case pressControl = "press_control"
+        case chooseMenu = "choose_menu"
+        case outlookMail = "outlook_mail"
+        case outlookCalendar = "outlook_calendar"
+        case outlookDraft = "outlook_draft"
 
         public var mcpName: String { "mcp__dante__" + rawValue }
 
-        /// Acts on what's on screen: asks at every approval level.
+        /// Acts on what's on screen, or reads or writes the person's mail and calendar: asks at
+        /// every approval level.
         public var controls: Bool {
             switch self {
-            case .screenshot, .typeText, .pressKeys, .click: true
+            case .screenshot, .typeText, .pressKeys, .click, .readWindow, .pressControl, .chooseMenu,
+                 .outlookMail, .outlookCalendar, .outlookDraft: true
             default: false
             }
         }
@@ -46,6 +54,15 @@ public enum Hands {
             case .click:
                 let point = "\(input["x"]?.int ?? 0), \(input["y"]?.int ?? 0)"
                 return (input["double"]?.bool == true ? (done ? "Double-clicked at " : "Double-click at ") : (done ? "Clicked at " : "Click at ")) + point
+            case .readWindow: return done ? "Read the window in front" : "Read the window in front"
+            case .pressControl: return (done ? "Pressed control " : "Press control ") + "\(input["number"]?.int ?? 0) in the window in front"
+            case .chooseMenu: return (done ? "Chose " : "Choose ") + WindowReader.menuPath(input["path"]?.string ?? "").joined(separator: " › ") + " from the menu"
+            case .outlookMail: return done ? "Read your recent mail in Outlook" : "Read your recent mail in Outlook"
+            case .outlookCalendar: return done ? "Read your calendar in Outlook" : "Read your calendar in Outlook"
+            case .outlookDraft:
+                let who = Outlook.addresses(input["to"]?.string ?? "").first.map { " to " + $0 } ?? ""
+                let kind = input["reply_to"]?.string != nil ? "reply" : "email"
+                return (done ? "Wrote a draft \(kind)" : "Write a draft \(kind)") + who + " in Outlook (you send it)"
             }
         }
 

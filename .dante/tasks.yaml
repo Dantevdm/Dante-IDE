@@ -656,3 +656,8 @@ tasks:
   phase: build
   state: done
   notes: "Content rules checked in real WebKit: a fetch to another host passes without them and is blocked with them."
+- id: DI-151
+  title: "Hands use apps by their controls: read the window in front, press a control, choose a menu item; Outlook mail, calendar and drafts (never sent)"
+  phase: build
+  state: review
+  notes: "Pure parts tested; the Outlook scripts compile against Outlook's dictionary. Not tried live: needs Accessibility for Dante and Automation for Outlook, which the user grants."
