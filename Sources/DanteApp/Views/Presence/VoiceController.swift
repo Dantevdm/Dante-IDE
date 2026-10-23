@@ -609,6 +609,13 @@ final class VoiceController {
             player.advance(forward)
         case .status:
             say(VoiceStatus.summary(PresenceController.shared.model.presence.sources))
+        case .briefing:
+            // Gathering reads git, pipelines and Outlook: a few seconds, so say something first.
+            if Briefings.shared.latest.map({ Date.now.timeIntervalSince($0.date) >= 300 }) ?? true { say("Let me check.") }
+            Task {
+                let briefing = await Briefings.shared.make()
+                say(briefing.spoken)
+            }
         case .usage:
             let model = PresenceController.shared.model
             let out = Sessions.all.contains { $0.claude?.outOfUsageSince != nil }

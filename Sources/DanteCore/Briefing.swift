@@ -104,4 +104,21 @@ public struct Briefing: Codable, Equatable, Sendable {
         if let name, !name.isEmpty { return "\(part), \(name)." }
         return part + "."
     }
+
+    /// "Give me my morning update", "what did I miss", "brief me": asked for the briefing.
+    /// `spoken` is lower-cased without punctuation or the wake word.
+    public static func isRequest(_ spoken: String) -> Bool {
+        var text = " " + spoken.replacingOccurrences(of: "'", with: "") + " "
+        for filler in [" please ", " can you ", " could you ", " can i have ", " can i get ", " give me ", " tell me ", " lets have ", " i want ", " id like "] {
+            text = text.replacingOccurrences(of: filler, with: " ")
+        }
+        let core = text.split(separator: " ").filter { !["my", "the", "a", "today", "todays", "this", "for"].contains($0) }.joined(separator: " ")
+        return requests.contains(core)
+    }
+
+    static let requests: Set<String> = [
+        "morning update", "morning briefing", "morning brief", "daily update", "daily briefing", "briefing", "brief me",
+        "catch me up", "what did i miss", "what have i missed", "whats new", "morning report", "rundown", "days rundown",
+        "day ahead", "update for day", "good morning", "morning",
+    ]
 }

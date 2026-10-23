@@ -136,6 +136,10 @@ final class CompanionConnection {
             refuse(reason)
         case .library(let id, _), .page(let id, _):
             exploreRequests.removeValue(forKey: id)?.resume(returning: message)
+        case .briefing(let id, let briefing):
+            self.briefing = briefing
+            BriefingStore.save(briefing)
+            exploreRequests.removeValue(forKey: id)?.resume(returning: message)
         case .result(let id, let ok, let message):
             if let request = exploreRequests.removeValue(forKey: id) {
                 // A library or page the Mac couldn't make: the reader says why.
@@ -285,6 +289,20 @@ final class CompanionConnection {
         }
     }
 
+    // MARK: Morning update
+
+    /// The last update the Mac made, kept on the device for the wall and offline.
+    private(set) var briefing: Briefing? = BriefingStore.load()
+
+    /// Gathering reads git, pipelines and Outlook on the Mac: allow it a minute.
+    func requestBriefing(fresh: Bool = false) async -> Result<Briefing, ExploreFailure> {
+        switch await explore(timeout: 75, { .briefing(id: $0, fresh: fresh) }) {
+        case .briefing(_, let briefing)?: .success(briefing)
+        case .result(_, _, let message)?: .failure(.init(message: message))
+        default: .failure(.unreachable(status))
+        }
+    }
+
     // MARK: Exploring
 
     /// What a project has to read and look at. Nil when the Mac can't be reached in time.
@@ -355,5 +373,20 @@ final class CompanionConnection {
 
     func stop(project: String, job: String? = nil) {
         send(.stop(id: UUID().uuidString, project: project, job: job))
+    }
+}
+
+/// The last morning update, in Caches.
+enum BriefingStore {
+    static var url: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "briefing.json")
+    }
+
+    static func load() -> Briefing? {
+        (try? Data(contentsOf: url)).flatMap { CompanionCoding.decode(Briefing.self, from: $0) }
+    }
+
+    static func save(_ briefing: Briefing) {
+        try? CompanionCoding.encode(briefing).write(to: url, options: .atomic)
     }
 }

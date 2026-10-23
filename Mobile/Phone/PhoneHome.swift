@@ -19,7 +19,10 @@ struct PhoneHome: View {
                 VStack(spacing: 14) {
                     statusBanner
                     TalkCard(voice: voice)
-                    if UIDevice.current.userInterfaceIdiom != .pad, !explorer.projects.isEmpty { exploreCard }
+                    if UIDevice.current.userInterfaceIdiom != .pad {
+                        todayCard
+                        if !explorer.projects.isEmpty { exploreCard }
+                    }
                     if let snapshot = connection.snapshot {
                         if let project = voice.project { approvalControl(project) }
                         let waiting = snapshot.projects.flatMap { project in project.approvals.map { (project, $0) } }
@@ -57,7 +60,9 @@ struct PhoneHome: View {
             #if DEBUG
             .navigationDestination(item: $debugPath) { path in
                 if let project = connection.snapshot?.target(focus: voice.focus) {
-                    if path == "library" {
+                    if path == "today" {
+                        TodayView(connection: connection, voice: voice)
+                    } else if path == "library" {
                         LibraryView(explorer: explorer, project: project.id, name: project.name)
                     } else {
                         PageView(explorer: explorer, project: project.id, entry: .debug(path))
@@ -86,6 +91,29 @@ struct PhoneHome: View {
     }
 
     /// Reading the project from here: its docs, pictures and the map, drawn by the Mac.
+    /// The morning update: its greeting and first line, opening the whole of it.
+    private var todayCard: some View {
+        NavigationLink {
+            TodayView(connection: connection, voice: voice)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "sun.horizon").font(.title2).foregroundStyle(Palette.accent).frame(width: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Today").font(.headline).foregroundStyle(Palette.text)
+                    Text(connection.briefing?.sections.first { !$0.summary.isEmpty }?.summary ?? "Your projects, pipelines, mail and meetings")
+                        .font(.caption).foregroundStyle(Palette.text3).lineLimit(2).multilineTextAlignment(.leading)
+                }
+                Spacer()
+                if let status = connection.briefing?.status, status != .quiet { Circle().fill(color(status)).frame(width: 8, height: 8) }
+                Image(systemName: "chevron.right").foregroundStyle(Palette.text3)
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 14).fill(Palette.card))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.line))
+        }
+        .buttonStyle(.plain)
+    }
+
     private var exploreCard: some View {
         let target = connection.snapshot?.target(focus: voice.focus)
         return NavigationLink {

@@ -641,3 +641,8 @@ tasks:
   phase: build
   state: done
   notes: "Checked in the simulator against a test copy: library, README with its mermaid figure, the system map, the iPad split. Pairing links open the app (asks before replacing a pairing)."
+- id: DI-148
+  title: "Morning update: projects, pipelines, important Outlook mail and today's meetings, by voice on the Mac and phone and on Today"
+  phase: build
+  state: done
+  notes: "Checked with a test copy and the iPhone simulator (Outlook off): who changed what in each recent project, pipelines, the sheet in Settings."

@@ -9,6 +9,7 @@ struct PadRoot: View {
     @State private var project: String?
     @State private var entry: CompanionLibrary.Entry?
     @State private var columns = NavigationSplitViewVisibility.all
+    @State private var today = false
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
@@ -16,8 +17,15 @@ struct PadRoot: View {
                 Section {
                     Button {
                         entry = nil
+                        today = false
                     } label: {
-                        Label("Home", systemImage: "house").foregroundStyle(entry == nil ? Palette.accent : Palette.text)
+                        Label("Home", systemImage: "house").foregroundStyle(entry == nil && !today ? Palette.accent : Palette.text)
+                    }
+                    Button {
+                        entry = nil
+                        today = true
+                    } label: {
+                        Label("Today", systemImage: "sun.horizon").foregroundStyle(today ? Palette.accent : Palette.text)
                     }
                 }
                 Section("Projects") {
@@ -34,13 +42,16 @@ struct PadRoot: View {
                 ContentUnavailableView("Choose a project", systemImage: "folder", description: Text("Its docs, pictures and diagrams, drawn by your Mac."))
             }
         } detail: {
-            if let entry, let project {
+            if today {
+                NavigationStack { TodayView(connection: connection, voice: voice) }
+            } else if let entry, let project {
                 NavigationStack { PageView(explorer: explorer, project: project, entry: entry) }.id(project + entry.path)
             } else {
                 PhoneHome(connection: connection, voice: voice, explorer: explorer)
             }
         }
         .onChange(of: project) { entry = nil }
+        .onChange(of: entry) { if entry != nil { today = false } }
         .onChange(of: connection.snapshot?.projects.map(\.id)) {
             if project == nil { project = explorer.projects.first?.id }
         }

@@ -241,6 +241,12 @@ final class CompanionHub {
                 .page(id: id, page: await CompanionRenderer.page(request, root: root, files: files))
             }
             return
+        case .briefing(let id, let fresh):
+            Task { [weak self] in
+                let briefing = await Briefings.shared.make(fresh: fresh)
+                self?.server?.deliver(.briefing(id: id, briefing: briefing), to: device)
+            }
+            return
         default:
             break
         }
@@ -275,7 +281,7 @@ final class CompanionHub {
     /// Nil when done, else why not.
     private func act(on message: ClientMessage) -> String? {
         switch message {
-        case .hello, .speech, .library, .page:
+        case .hello, .speech, .library, .page, .briefing:
             return nil
         case .openProject(_, let project):
             if let session = session(project) {

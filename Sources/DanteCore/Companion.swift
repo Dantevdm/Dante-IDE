@@ -139,6 +139,8 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case library(id: String, library: CompanionLibrary)
     /// One page, drawn for the device (`ClientMessage.page`).
     case page(id: String, page: CompanionPage)
+    /// The morning update (`ClientMessage.briefing`).
+    case briefing(id: String, briefing: Briefing)
 }
 
 /// From the device.
@@ -160,12 +162,14 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// What there is to read and look at in a project, open or recent.
     case library(id: String, project: String)
     case page(id: String, project: String, request: CompanionPageRequest)
+    /// The morning update; `fresh` gathers it again rather than taking one under five minutes old.
+    case briefing(id: String, fresh: Bool)
 
     public var id: String? {
         switch self {
         case .hello: nil
         case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _),
-             .library(let id, _), .page(let id, _, _): id
+             .library(let id, _), .page(let id, _, _), .briefing(let id, _): id
         }
     }
 }

@@ -201,6 +201,7 @@ private struct ClaudePreferencesPane: View {
             }
             HandsSettingsSection()
             CompanionSettingsSection()
+            BriefingSettingsSection()
         }
     }
 }

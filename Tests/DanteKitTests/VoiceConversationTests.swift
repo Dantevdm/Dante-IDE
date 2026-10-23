@@ -69,6 +69,11 @@ import Testing
     @Test func answersStatusAndUsageItself() {
         #expect(VoiceCommand.parse("Hey Claude, what are you doing?", projects: []) == .status)
         #expect(VoiceCommand.parse("How much usage do I have left?", projects: []) == .usage)
+        #expect(VoiceCommand.parse("Hey Dante, give me my morning update.", projects: []) == .briefing)
+        #expect(VoiceCommand.parse("What did I miss?", projects: []) == .briefing)
+        #expect(VoiceCommand.parse("Good morning Dante", projects: []) == .briefing)
+        #expect(CompanionForeman.parse("Can you give me today's briefing please", projects: []) == .briefing)
+        #expect(CompanionForeman.parse("give me an update", projects: []) == .status)
         #expect(VoiceCommand.parse("Thanks, Claude.", projects: []) == .goodbye)
         #expect(VoiceCommand.parse("Next slide, please.", projects: []) == .slide(true))
         #expect(VoiceCommand.parse("Go back a slide", projects: []) == .slide(false))

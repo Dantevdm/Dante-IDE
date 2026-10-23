@@ -528,7 +528,7 @@ final class VoiceLoop {
         let target = snapshot.target(focus: focus)
         // A question waiting for an answer takes whatever was said as the answer.
         let changesApprovals: Bool = if case .approvals = command { true } else { false }
-        if let pending, let question = pending.approval.questions.first, !changesApprovals, ![.stop, .cancel, .status, .repeatLast].contains(command) {
+        if let pending, let question = pending.approval.questions.first, !changesApprovals, ![.stop, .cancel, .status, .repeatLast, .briefing].contains(command) {
             let answer = question.options.first { text.localizedCaseInsensitiveContains($0) } ?? text
             connection.answer(pending.approval, project: pending.project, allow: true, answers: [question.question: answer])
             self.pending = nil
@@ -560,6 +560,8 @@ final class VoiceLoop {
             if let project { connection.stop(project: project.id) }
         case .status:
             say(CompanionForeman.status(snapshot))
+        case .briefing:
+            briefing()
         case .repeatLast:
             say(lastSpoken.isEmpty ? "I haven’t said anything yet." : lastSpoken)
         case .goodbye:
@@ -585,6 +587,23 @@ final class VoiceLoop {
             connection.ask(message, project: target.id, spoken: true)
             if !target.isOpen { say("Opening \(target.name) on your Mac.") }
             AudioServicesPlaySystemSound(1004)
+        }
+    }
+
+    /// Asks the Mac for the morning update and reads it; says the kept one when the Mac can't answer.
+    func briefing() {
+        say("Let me check.")
+        Task {
+            switch await connection.requestBriefing() {
+            case .success(let briefing):
+                say(briefing.spoken)
+            case .failure(let failure):
+                if let kept = connection.briefing {
+                    say("I can’t reach your Mac, so this is from \(kept.date.formatted(date: .omitted, time: .shortened)). " + kept.spoken)
+                } else {
+                    say(failure.message)
+                }
+            }
         }
     }
 

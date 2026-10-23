@@ -113,6 +113,12 @@ public final class Preferences {
     public var agentsBrowse: Bool { didSet { defaults.set(agentsBrowse, forKey: Keys.agentsBrowse) } }
     /// The companion server for the iPhone and iPad app, on the tailnet. Off until asked for.
     public var companionEnabled: Bool { didSet { defaults.set(companionEnabled, forKey: Keys.companionEnabled) } }
+    /// The morning update: the name it greets you by, whether it reads Outlook's mail and
+    /// calendar (macOS asks once), and senders whose mail always counts (comma-separated).
+    public var assistantName: String { didSet { defaults.set(assistantName, forKey: Keys.assistantName) } }
+    public var briefingReadsMail: Bool { didSet { defaults.set(briefingReadsMail, forKey: Keys.briefingReadsMail) } }
+    public var briefingReadsCalendar: Bool { didSet { defaults.set(briefingReadsCalendar, forKey: Keys.briefingReadsCalendar) } }
+    public var briefingVIPs: String { didSet { defaults.set(briefingVIPs, forKey: Keys.briefingVIPs) } }
     /// A notification when Claude finishes or waits for approval while Dante isn't in front.
     public var notifiesOnClaude: Bool { didSet { defaults.set(notifiesOnClaude, forKey: Keys.notifiesOnClaude) } }
     /// The orb in the menu bar that shows what Claude is doing.
@@ -160,6 +166,10 @@ public final class Preferences {
         notifiesOnPipelines = bool(Keys.notifiesOnPipelines, false)
         companionEnabled = bool(Keys.companionEnabled, false)
         handsEnabled = bool(Keys.handsEnabled, false)
+        assistantName = defaults.string(forKey: Keys.assistantName) ?? ""
+        briefingReadsMail = bool(Keys.briefingReadsMail, false)
+        briefingReadsCalendar = bool(Keys.briefingReadsCalendar, false)
+        briefingVIPs = defaults.string(forKey: Keys.briefingVIPs) ?? ""
         agentsBrowse = bool(Keys.agentsBrowse, true)
         showsPresence = bool(Keys.showsPresence, true)
     }
@@ -222,6 +232,10 @@ public final class Preferences {
         static let notifiesOnPipelines = "notifiesOnPipelines"
         static let companionEnabled = "companionEnabled"
         static let handsEnabled = "handsEnabled"
+        static let assistantName = "assistantName"
+        static let briefingReadsMail = "briefingReadsMail"
+        static let briefingReadsCalendar = "briefingReadsCalendar"
+        static let briefingVIPs = "briefingVIPs"
         static let agentsBrowse = "agentsBrowse"
         static let showsPresence = "showsPresence"
     }

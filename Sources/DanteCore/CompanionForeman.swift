@@ -91,7 +91,7 @@ public enum CompanionForeman {
     // MARK: Listening
 
     public enum Command: Equatable, Sendable {
-        case approve, decline, stop, status, repeatLast, goodbye, cancel
+        case approve, decline, stop, status, repeatLast, goodbye, cancel, briefing
         case switchProject(String)
         case startJob(String)
         case approvals(CompanionApprovalMode)
@@ -111,6 +111,7 @@ public enum CompanionForeman {
         if ["never mind", "nevermind", "forget it", "nothing"].contains(lower) { return .cancel }
         if ["status", "what's the status", "whats the status", "what's happening", "whats happening", "what's going on",
             "whats going on", "how's it going", "hows it going", "any update", "give me an update", "update", "where are we"].contains(lower) { return .status }
+        if Briefing.isRequest(lower) { return .briefing }
         if ["say that again", "repeat that", "repeat", "again", "what did you say", "come again"].contains(lower) { return .repeatLast }
         if ["thanks", "thank you", "bye", "goodbye", "that's all", "thats all", "that's it", "thats it"].contains(lower) { return .goodbye }
         for prefix in ["start a job to ", "start a job ", "new job to ", "new job ", "make a job to ", "job "] where lower.hasPrefix(prefix) {
