@@ -3,6 +3,14 @@ import Foundation
 import Testing
 
 @Suite struct VoiceConversationTests {
+    @Test func commandPurposesUseEverydayLanguage() {
+        #expect(SpokenReply.action(forCommand: "cat README.md") == "read a project file")
+        #expect(SpokenReply.action(forCommand: "rg voice Sources") == "search the project")
+        #expect(SpokenReply.action(forCommand: "swift test --filter Companion") == "run the tests")
+        #expect(SpokenReply.action(forCommand: "git push") == "send commits to the remote repository")
+        #expect(SpokenReply.action(forCommand: "cat a && rm b") == "run a project command")
+        #expect(SpokenReply.action(forCommand: "cat a > b") == "run a project command")
+    }
     @Test func speaksSentencesAsTheReplyStreams() {
         var stream = SpokenStream()
         #expect(stream.feed("I'll look at the par", final: false).isEmpty)

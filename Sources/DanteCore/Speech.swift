@@ -48,6 +48,12 @@ public enum SpokenReply {
     public static let length = 320
     public static let conversationInstructions = """
     This is a spoken conversation. Lead with a short, direct answer in natural sentences.
+    Speak like the user's personal assistant: explain the purpose, result and next step in
+    everyday English. Say "I'll check the project files", not "I'll run cat or rg".
+    Never read shell commands, tool names, flags, paths or implementation mechanics aloud;
+    leave those details on screen. Use your judgement for routine implementation choices.
+    Ask a question only when a missing answer materially changes the outcome or when an
+    actual permission is required. Don't ask whether to continue work already requested.
     Keep ordinary replies to one or two sentences, then let the user follow up. For work
     that needs investigation, briefly say what you are checking and carry out the requested
     work. Put code, long lists and detailed evidence on screen; keep the spoken explanation
@@ -90,6 +96,34 @@ public enum SpokenReply {
             if let sentence = substring?.trimmingCharacters(in: .whitespaces), !sentence.isEmpty { result.append(sentence) }
         }
         return result
+    }
+
+    /// Describes the purpose of a command without reading syntax into someone's ear.
+    /// Compound or unfamiliar commands stay general rather than claiming they're reads.
+    public static func action(forCommand command: String) -> String {
+        let command = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ![";", "|", "&", ">", "<", "$(", "`", "\n"].contains(where: command.contains) else { return "run a project command" }
+        let words = command.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let program = words.first else { return "carry out the next step" }
+        let executable = (program as NSString).lastPathComponent
+        if ["cat", "head", "tail", "less"].contains(executable) { return "read a project file" }
+        if ["rg", "grep", "find"].contains(executable) { return "search the project" }
+        if ["ls", "pwd", "stat"].contains(executable) { return "check the project files" }
+        if ["rm", "rmdir"].contains(executable) { return "delete files" }
+        if executable == "git" {
+            switch words.dropFirst().first {
+            case "status", "diff", "log", "show": return "review the project changes"
+            case "push": return "send commits to the remote repository"
+            case "commit": return "save a commit"
+            default: return "run a version-control command"
+            }
+        }
+        if ["swift", "npm", "pnpm", "yarn", "cargo", "go", "make", "pytest", "xcodebuild"].contains(executable) {
+            if executable == "pytest" || words.contains("test") { return "run the tests" }
+            if words.contains("build") { return "build the app" }
+            if words.contains("lint") { return "check the code" }
+        }
+        return "run a project command"
     }
 }
 

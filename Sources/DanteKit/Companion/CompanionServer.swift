@@ -29,6 +29,7 @@ public final class CompanionServer: @unchecked Sendable {
         let nonce = CompanionAuth.nonce()
         var device: String?
         var since = Date()
+        var lastReceived = ContinuousClock.now
         init(_ connection: NWConnection) { self.connection = connection }
     }
 
@@ -44,6 +45,10 @@ public final class CompanionServer: @unchecked Sendable {
     private var listener: NWListener?
     private var clients: [String: Client] = [:]
     private var latest: CompanionSnapshot
+    private var naturalVoiceAvailable = false
+    private var heartbeat: DispatchSourceTimer?
+    private let heartbeatInterval: TimeInterval
+    private let heartbeatTimeout: TimeInterval
     private let onState: @Sendable (State) -> Void
     private let onDevices: @Sendable ([Device]) -> Void
     private let onMessage: @Sendable (_ device: String, ClientMessage) -> Void
@@ -52,7 +57,8 @@ public final class CompanionServer: @unchecked Sendable {
     public init(host: String, port: UInt16, name: String, key: String,
                 onState: @escaping @Sendable (State) -> Void,
                 onDevices: @escaping @Sendable ([Device]) -> Void = { _ in },
-                onMessage: @escaping @Sendable (_ device: String, ClientMessage) -> Void) {
+                onMessage: @escaping @Sendable (_ device: String, ClientMessage) -> Void,
+                heartbeatInterval: TimeInterval = 15, heartbeatTimeout: TimeInterval = 45) {
         self.host = host
         self.port = port
         self.name = name
@@ -61,6 +67,8 @@ public final class CompanionServer: @unchecked Sendable {
         self.onState = onState
         self.onDevices = onDevices
         self.onMessage = onMessage
+        self.heartbeatInterval = max(0.05, heartbeatInterval)
+        self.heartbeatTimeout = max(self.heartbeatInterval * 2, heartbeatTimeout)
     }
 
     public func start() {
@@ -69,6 +77,8 @@ public final class CompanionServer: @unchecked Sendable {
 
     public func stop() {
         queue.async {
+            self.heartbeat?.cancel()
+            self.heartbeat = nil
             self.listener?.cancel()
             self.listener = nil
             for client in self.clients.values { client.connection.cancel() }
@@ -99,6 +109,23 @@ public final class CompanionServer: @unchecked Sendable {
 
     // MARK: Listening
 
+    public func setNaturalVoiceAvailable(_ available: Bool) {
+        queue.async {
+            guard self.naturalVoiceAvailable != available else { return }
+            self.naturalVoiceAvailable = available
+            for client in self.clients.values where client.device != nil {
+                self.send(.voiceAvailable(available: available), to: client)
+            }
+        }
+    }
+
+    public func speech(to device: String, id: String, audio: Data?) {
+        queue.async {
+            guard let client = self.clients[device], client.device != nil else { return }
+            self.send(.speech(id: id, audio: audio), to: client)
+        }
+    }
+
     private func listen() {
         onState(.starting)
         let socket = NWProtocolWebSocket.Options()
@@ -125,6 +152,34 @@ public final class CompanionServer: @unchecked Sendable {
         }
         listener.newConnectionHandler = { [weak self] connection in self?.accept(connection) }
         listener.start(queue: queue)
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + heartbeatInterval, repeating: heartbeatInterval)
+        timer.setEventHandler { [weak self] in self?.checkConnections() }
+        heartbeat = timer
+        timer.resume()
+    }
+
+    /// Reap vanished phones so they don't hold the Mac awake indefinitely. WebSocket
+    /// control frames need no wire-protocol change and don't create snapshot events.
+    private func checkConnections() {
+        for client in Array(clients.values) where client.device != nil {
+            guard client.lastReceived.duration(to: .now) < .seconds(heartbeatTimeout) else {
+                drop(client)
+                continue
+            }
+            let metadata = NWProtocolWebSocket.Metadata(opcode: .ping)
+            // Network delivers pong acknowledgements here, rather than as normal
+            // receiveMessage payloads. Count them as proof the phone is still alive.
+            metadata.setPongHandler(queue) { [weak self, weak client] error in
+                guard let self, let client, self.clients[client.id] != nil else { return }
+                if error != nil { self.drop(client) } else { client.lastReceived = .now }
+            }
+            let context = NWConnection.ContentContext(identifier: "heartbeat", metadata: [metadata])
+            client.connection.send(content: Data(), contentContext: context, isComplete: true,
+                                   completion: .contentProcessed { [weak self] error in
+                if error != nil { self?.drop(client) }
+            })
+        }
     }
 
     private static func explain(_ error: NWError, port: UInt16) -> String {
@@ -142,6 +197,7 @@ public final class CompanionServer: @unchecked Sendable {
         clients[client.id] = client
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
+            guard self.clients[client.id] != nil else { return }
             switch state {
             case .ready:
                 self.send(.challenge(nonce: client.nonce, server: self.name, version: Companion.version), to: client)
@@ -160,11 +216,13 @@ public final class CompanionServer: @unchecked Sendable {
     private func receive(_ client: Client) {
         client.connection.receiveMessage { [weak self] data, context, _, error in
             guard let self else { return }
+            guard self.clients[client.id] != nil else { return }
             if error != nil {
                 self.drop(client)
                 return
             }
             let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition) as? NWProtocolWebSocket.Metadata
+            client.lastReceived = .now
             if metadata?.opcode == .close {
                 self.drop(client)
                 return
@@ -197,6 +255,7 @@ public final class CompanionServer: @unchecked Sendable {
             client.device = device.isEmpty ? "Device" : String(device.prefix(60))
             client.since = Date()
             send(.welcome(snapshot: latest), to: client)
+            send(.voiceAvailable(available: naturalVoiceAvailable), to: client)
             reportDevices()
             return
         }

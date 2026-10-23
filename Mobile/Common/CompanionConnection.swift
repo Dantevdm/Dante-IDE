@@ -22,16 +22,25 @@ final class CompanionConnection {
     private(set) var pairing: CompanionPairing?
     /// The last request the Mac couldn't carry out.
     private(set) var failure: String?
+    private(set) var naturalVoiceAvailable = false
+    private(set) var voiceFailure: String?
+    @ObservationIgnored private var voiceAvailabilityKnown = false
 
     /// What changed in each new snapshot, for the voice loop.
     @ObservationIgnored var onEvents: ([CompanionForeman.Event], CompanionSnapshot) -> Void = { _, _ in }
     /// What became of a request: ok, and the Mac's sentence.
     @ObservationIgnored var onResult: (Bool, String) -> Void = { _, _ in }
+    @ObservationIgnored var onApprovalModeChanged: (CompanionApprovalMode) -> Void = { _ in }
+    @ObservationIgnored private var approvalRequests: [String: CompanionApprovalMode] = [:]
 
     @ObservationIgnored private var socket: URLSessionWebSocketTask?
     @ObservationIgnored private var wanted = false
     @ObservationIgnored private var attempts = 0
     @ObservationIgnored private var retry: Task<Void, Never>?
+    @ObservationIgnored private var heartbeat: Task<Void, Never>?
+    @ObservationIgnored private var healthDeadline: Task<Void, Never>?
+    @ObservationIgnored private var pingID: UUID?
+    @ObservationIgnored private var speechRequests: [String: CheckedContinuation<Data?, Never>] = [:]
 
     func connect(_ pairing: CompanionPairing) {
         self.pairing = pairing
@@ -41,8 +50,10 @@ final class CompanionConnection {
     }
 
     func disconnect() {
+        finishSpeechRequests()
         wanted = false
         retry?.cancel()
+        stopHealthChecks()
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         status = .idle
@@ -56,19 +67,32 @@ final class CompanionConnection {
 
     /// After coming back to the foreground: reconnect now rather than at the next retry.
     func resume() {
-        guard wanted, status != .connected, status != .connecting else { return }
+        guard wanted else { return }
+        if status == .connected, let socket {
+            ping(socket)
+            return
+        }
+        guard status != .connecting else { return }
         retry?.cancel()
         open()
     }
 
     private func open() {
         guard let pairing else { return }
+        retry?.cancel()
+        stopHealthChecks()
+        finishSpeechRequests()
         socket?.cancel(with: .goingAway, reason: nil)
         status = .connecting
         let socket = URLSession.shared.webSocketTask(with: pairing.socketURL)
         socket.maximumMessageSize = 4 << 20
         self.socket = socket
         socket.resume()
+        healthDeadline = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(12))
+            guard !Task.isCancelled, let self, self.socket === socket, self.status == .connecting else { return }
+            self.lost()
+        }
         Task { await receive(on: socket) }
     }
 
@@ -102,19 +126,29 @@ final class CompanionConnection {
             status = .connected
             attempts = 0
             self.snapshot = snapshot
+            startHealthChecks()
         case .snapshot(let next):
             let events = CompanionForeman.events(from: snapshot, to: next)
             snapshot = next
             if !events.isEmpty { onEvents(events, next) }
         case .refused(let reason):
             refuse(reason)
-        case .result(_, let ok, let message):
+        case .result(let id, let ok, let message):
             failure = ok ? nil : message
+            if let mode = approvalRequests.removeValue(forKey: id), ok { onApprovalModeChanged(mode) }
             onResult(ok, message)
+        case .voiceAvailable(let available):
+            naturalVoiceAvailable = available
+            voiceAvailabilityKnown = true
+        case .speech(let id, let audio):
+            if speechRequests[id] != nil, audio == nil { voiceFailure = "The Mac couldn’t generate natural speech." }
+            speechRequests.removeValue(forKey: id)?.resume(returning: audio)
         }
     }
 
     private func refuse(_ reason: String) {
+        stopHealthChecks()
+        finishSpeechRequests()
         wanted = false
         status = .refused(reason)
         socket?.cancel(with: .goingAway, reason: nil)
@@ -122,6 +156,9 @@ final class CompanionConnection {
     }
 
     private func lost() {
+        stopHealthChecks()
+        finishSpeechRequests()
+        socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         guard wanted else { return }
         let name = pairing?.name ?? "your Mac"
@@ -139,10 +176,103 @@ final class CompanionConnection {
     private func send(_ message: ClientMessage) {
         guard let socket else { return }
         let text = String(decoding: CompanionCoding.encode(message), as: UTF8.self)
-        socket.send(.string(text)) { _ in }
+        socket.send(.string(text)) { [weak self] error in
+            guard error != nil else { return }
+            Task { @MainActor in
+                guard let self, self.socket === socket else { return }
+                self.lost()
+            }
+        }
+    }
+
+    // MARK: Connection health
+
+    private func stopHealthChecks() {
+        heartbeat?.cancel()
+        heartbeat = nil
+        healthDeadline?.cancel()
+        healthDeadline = nil
+        pingID = nil
+    }
+
+    private func startHealthChecks() {
+        stopHealthChecks()
+        guard let socket else { return }
+        heartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.socket === socket else { return }
+                self.ping(socket)
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            }
+        }
+    }
+
+    private func ping(_ socket: URLSessionWebSocketTask) {
+        guard pingID == nil, self.socket === socket else { return }
+        let id = UUID()
+        pingID = id
+        healthDeadline = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled, let self, self.socket === socket, self.pingID == id else { return }
+            self.lost()
+        }
+        socket.sendPing { [weak self] error in
+            Task { @MainActor in
+                guard let self, self.socket === socket, self.pingID == id else { return }
+                self.healthDeadline?.cancel()
+                self.healthDeadline = nil
+                self.pingID = nil
+                if error != nil { self.lost() }
+            }
+        }
     }
 
     // MARK: Requests
+
+    private func finishSpeechRequests() {
+        approvalRequests.removeAll()
+        naturalVoiceAvailable = false
+        voiceAvailabilityKnown = false
+        if !speechRequests.isEmpty { voiceFailure = "The connection to the Mac was interrupted." }
+        let pending = speechRequests
+        speechRequests.removeAll()
+        for request in pending.values { request.resume(returning: nil) }
+    }
+
+    func speech(_ text: String) async -> Data? {
+        voiceFailure = nil
+        // A welcome and its voice capability arrive separately. Also allow a short
+        // reconnect after wake before deciding that the phone must speak instead.
+        if status != .connected { resume() }
+        for _ in 0..<60 {
+            if status == .connected, voiceAvailabilityKnown { break }
+            guard wanted, !Task.isCancelled else { return nil }
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return nil }
+        }
+        guard !Task.isCancelled else { return nil }
+        guard status == .connected, naturalVoiceAvailable else {
+            voiceFailure = status == .connected ? "Natural voice isn’t available on the Mac." : "The Mac is unreachable; reconnecting."
+            return nil
+        }
+        let id = UUID().uuidString
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else { continuation.resume(returning: nil); return }
+                speechRequests[id] = continuation
+                send(.speech(id: id, text: text))
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(80)) // Includes a cold model startup.
+                    guard let self, let request = self.speechRequests.removeValue(forKey: id) else { return }
+                    self.voiceFailure = "The Mac’s natural voice timed out."
+                    request.resume(returning: nil)
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.speechRequests.removeValue(forKey: id)?.resume(returning: nil)
+            }
+        }
+    }
 
     func ask(_ text: String, project: String, job: String? = nil, spoken: Bool) {
         send(.ask(id: UUID().uuidString, project: project, job: job, text: text, spoken: spoken))
@@ -154,6 +284,16 @@ final class CompanionConnection {
 
     func startJob(_ brief: String, project: String, awayMinutes: Int?) {
         send(.startJob(id: UUID().uuidString, project: project, brief: brief, awayMinutes: awayMinutes))
+    }
+
+    func setApprovals(_ mode: CompanionApprovalMode, project: String) {
+        guard status == .connected else {
+            onResult(false, "I can change that once we’re connected to your Mac.")
+            return
+        }
+        let id = UUID().uuidString
+        approvalRequests[id] = mode
+        send(.setApprovals(id: id, project: project, mode: mode))
     }
 
     func stop(project: String, job: String? = nil) {

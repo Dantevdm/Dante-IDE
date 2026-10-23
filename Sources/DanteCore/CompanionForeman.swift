@@ -53,7 +53,7 @@ public enum CompanionForeman {
         }
     }
 
-    /// "Claude wants to run go test in shop. Yes or no?"
+    /// Permissions are spoken by purpose; the exact command stays on the phone.
     public static func ask(_ approval: CompanionSnapshot.Approval, project: String, lead: String) -> String {
         let who = approval.job == nil ? lead : "The job \(approval.from)"
         if let question = approval.questions.first {
@@ -61,9 +61,12 @@ public enum CompanionForeman {
             let choices = options.isEmpty ? "" : " The options are " + list(options.map { $0 }, or: true) + "."
             return "\(who) in \(project) asks: \(question.question)\(choices)"
         }
-        let step = approval.title.prefix(1).lowercased() + approval.title.dropFirst()
-        let note = approval.note.map { " Note: \($0)" } ?? ""
-        return "\(who) wants to \(SpokenReply.plain(String(step))) in \(project).\(note) Yes or no?"
+        let action: String
+        if approval.title.hasPrefix("Run ") { action = SpokenReply.action(forCommand: approval.detail.isEmpty ? String(approval.title.dropFirst(4)) : approval.detail) }
+        else if approval.title.hasPrefix("Edit ") || approval.title.hasPrefix("Write ") { action = "update a project file" }
+        else { action = "carry out the next step" }
+        let note = approval.note == nil ? "" : " This step needs your review."
+        return "\(who) wants to \(action) in \(project).\(note) Shall I go ahead?"
     }
 
     /// Everything at a glance, most urgent first.
@@ -91,6 +94,7 @@ public enum CompanionForeman {
         case approve, decline, stop, status, repeatLast, goodbye, cancel
         case switchProject(String)
         case startJob(String)
+        case approvals(CompanionApprovalMode)
         case ask(String)
     }
 
@@ -98,6 +102,9 @@ public enum CompanionForeman {
         let text = utterance.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         let lower = text.lowercased().filter { !",.!?;:".contains($0) }.replacingOccurrences(of: "’", with: "'")
         guard !lower.isEmpty else { return .cancel }
+        if ["auto approve", "auto-approve", "turn on auto approve", "turn on auto-approve", "enable auto approve", "approve automatically"].contains(lower) { return .approvals(.everything) }
+        if ["auto edit", "auto-edit", "turn on auto edit", "automatically apply edits"].contains(lower) { return .approvals(.edits) }
+        if ["turn off auto approve", "turn off auto-approve", "disable auto approve", "ask me first", "ask before changes"].contains(lower) { return .approvals(.ask) }
         if ["yes", "yeah", "yep", "yes please", "do it", "go ahead", "approve", "approve it", "ok do it", "sure"].contains(lower) { return .approve }
         if ["no", "nope", "don't", "dont", "decline", "no thanks", "don't do that", "skip it"].contains(lower) { return .decline }
         if ["stop", "stop it", "stop that", "hold on", "wait"].contains(lower) { return .stop }

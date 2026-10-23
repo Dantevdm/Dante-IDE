@@ -106,6 +106,19 @@ public enum CompanionAddress {
 
 // MARK: Messages
 
+/// The same approval choices as the Mac, scoped to the selected main conversation.
+public enum CompanionApprovalMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case ask, edits, everything
+    public var id: String { rawValue }
+    public var title: String {
+        switch self {
+        case .ask: "Ask me"
+        case .edits: "Auto-edit"
+        case .everything: "Auto-approve"
+        }
+    }
+}
+
 /// From the Mac.
 public enum ServerMessage: Codable, Equatable, Sendable {
     /// First, on every connection.
@@ -118,6 +131,10 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case snapshot(snapshot: CompanionSnapshot)
     /// What became of a request (`ClientMessage`'s id).
     case result(id: String, ok: Bool, message: String)
+    /// Optional capability: older companions can ignore it.
+    case voiceAvailable(available: Bool)
+    /// A short WAV utterance, or nil when the device should use its system voice.
+    case speech(id: String, audio: Data?)
 }
 
 /// From the device.
@@ -132,11 +149,13 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case startJob(id: String, project: String, brief: String, awayMinutes: Int?)
     /// Stops the conversation's current turn.
     case stop(id: String, project: String, job: String?)
+    case speech(id: String, text: String)
+    case setApprovals(id: String, project: String, mode: CompanionApprovalMode)
 
     public var id: String? {
         switch self {
         case .hello: nil
-        case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _): id
+        case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _): id
         }
     }
 }
@@ -164,8 +183,9 @@ public struct CompanionSnapshot: Codable, Equatable, Sendable {
         public var lastReply: String
         public var jobs: [Job]
         public var approvals: [Approval]
+        public var approvalMode: CompanionApprovalMode?
 
-        public init(id: String, name: String, lead: String, working: Bool, lastReply: String, jobs: [Job], approvals: [Approval]) {
+        public init(id: String, name: String, lead: String, working: Bool, lastReply: String, jobs: [Job], approvals: [Approval], approvalMode: CompanionApprovalMode? = nil) {
             self.id = id
             self.name = name
             self.lead = lead
@@ -173,6 +193,7 @@ public struct CompanionSnapshot: Codable, Equatable, Sendable {
             self.lastReply = lastReply
             self.jobs = jobs
             self.approvals = approvals
+            self.approvalMode = approvalMode
         }
     }
 

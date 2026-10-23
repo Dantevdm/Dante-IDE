@@ -20,6 +20,9 @@ final class CompanionHub {
 
     @ObservationIgnored private var server: CompanionServer?
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    @ObservationIgnored private var speakingDevices: Set<String> = []
+    @ObservationIgnored private var companionActivity: NSObjectProtocol?
+    @ObservationIgnored private var serverGeneration = UUID()
 
     var isOn: Bool { Preferences.shared.companionEnabled }
 
@@ -43,8 +46,10 @@ final class CompanionHub {
         let key = CompanionKey.current()
         pairing = CompanionPairing(host: host, port: Companion.defaultPort, name: name, key: key)
         let server = CompanionServer(host: host, port: Companion.defaultPort, name: name, key: key,
-                                     onState: Self.stateHandler(), onDevices: Self.devicesHandler(), onMessage: Self.messageHandler())
+                                     onState: Self.stateHandler(serverGeneration), onDevices: Self.devicesHandler(serverGeneration),
+                                     onMessage: Self.messageHandler(serverGeneration))
         self.server = server
+        server.setNaturalVoiceAvailable(NaturalSpeaker.shared.isAvailable)
         server.start()
         ticker = Task { [weak self] in
             while !Task.isCancelled {
@@ -55,6 +60,7 @@ final class CompanionHub {
     }
 
     func stop() {
+        serverGeneration = UUID()
         ticker?.cancel()
         ticker = nil
         server?.stop()
@@ -62,6 +68,7 @@ final class CompanionHub {
         pairing = nil
         devices = []
         state = .stopped
+        updateActivity()
     }
 
     /// A new key: every paired device has to scan the code again.
@@ -71,16 +78,41 @@ final class CompanionHub {
     }
 
     // Closures the server calls on its own queue are made here, outside the main actor.
-    private nonisolated static func stateHandler() -> @Sendable (CompanionServer.State) -> Void {
-        { state in Task { @MainActor in CompanionHub.shared.state = state } }
+    private nonisolated static func stateHandler(_ generation: UUID) -> @Sendable (CompanionServer.State) -> Void {
+        { state in Task { @MainActor in
+            guard CompanionHub.shared.serverGeneration == generation else { return }
+            CompanionHub.shared.state = state
+        } }
     }
 
-    private nonisolated static func devicesHandler() -> @Sendable ([CompanionServer.Device]) -> Void {
-        { devices in Task { @MainActor in CompanionHub.shared.devices = devices } }
+    private nonisolated static func devicesHandler(_ generation: UUID) -> @Sendable ([CompanionServer.Device]) -> Void {
+        { devices in Task { @MainActor in
+            let hub = CompanionHub.shared
+            guard hub.serverGeneration == generation, hub.server != nil else { return }
+            let firstDevice = hub.devices.isEmpty && !devices.isEmpty
+            hub.devices = devices
+            hub.updateActivity()
+            if firstDevice { NaturalSpeaker.shared.prewarm() }
+        } }
     }
 
-    private nonisolated static func messageHandler() -> @Sendable (String, ClientMessage) -> Void {
-        { device, message in Task { @MainActor in CompanionHub.shared.handle(message, from: device) } }
+    /// A remote session is user-initiated work even when every Mac window is hidden.
+    /// Keep the system and app responsive, but let the display switch off normally.
+    private func updateActivity() {
+        if !devices.isEmpty, companionActivity == nil {
+            companionActivity = ProcessInfo.processInfo.beginActivity(options: .userInitiated,
+                                                                      reason: "Serving a connected Dante companion")
+        } else if devices.isEmpty, let activity = companionActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            companionActivity = nil
+        }
+    }
+
+    private nonisolated static func messageHandler(_ generation: UUID) -> @Sendable (String, ClientMessage) -> Void {
+        { device, message in Task { @MainActor in
+            guard CompanionHub.shared.serverGeneration == generation else { return }
+            CompanionHub.shared.handle(message, from: device)
+        } }
     }
 
     // MARK: Snapshot
@@ -88,6 +120,7 @@ final class CompanionHub {
     private func publish() {
         // Also with no device yet, so a device's welcome already carries everything.
         server?.publish(snapshot())
+        server?.setNaturalVoiceAvailable(NaturalSpeaker.shared.isAvailable)
     }
 
     func snapshot() -> CompanionSnapshot {
@@ -101,7 +134,8 @@ final class CompanionHub {
             return CompanionSnapshot.Project(id: CompanionSnapshot.Project.id(for: workspace.url), name: workspace.url.lastPathComponent,
                                              lead: session.agentName, working: working,
                                              lastReply: CompanionSnapshot.Job.trimmed(TranscriptItem.lastReply(in: session.claude?.items ?? [])),
-                                             jobs: jobs, approvals: session.inbox.map(CompanionSnapshot.Approval.init))
+                                             jobs: jobs, approvals: session.inbox.map(CompanionSnapshot.Approval.init),
+                                             approvalMode: session.claude.flatMap { CompanionApprovalMode(rawValue: $0.approvalLevel.rawValue) })
         }
         return CompanionSnapshot(server: pairing?.name ?? "Mac", projects: projects)
     }
@@ -113,6 +147,22 @@ final class CompanionHub {
     }
 
     private func handle(_ message: ClientMessage, from device: String) {
+        if case .speech(let id, let text) = message {
+            // One bounded synthesis per device; the phone queues the rest locally.
+            guard let server else { return }
+            guard !text.isEmpty, text.count <= SpeechQueue.chunkLimit,
+                  speakingDevices.count < CompanionServer.maximumClients,
+                  speakingDevices.insert(device).inserted else {
+                server.speech(to: device, id: id, audio: nil)
+                return
+            }
+            Task {
+                defer { speakingDevices.remove(device) }
+                let audio = await NaturalSpeaker.shared.companionAudio(text)
+                server.speech(to: device, id: id, audio: audio)
+            }
+            return
+        }
         guard let id = message.id else { return }
         let result = act(on: message)
         server?.reply(to: device, id: id, ok: result == nil, message: result ?? "Done.")
@@ -122,7 +172,12 @@ final class CompanionHub {
     /// Nil when done, else why not.
     private func act(on message: ClientMessage) -> String? {
         switch message {
-        case .hello:
+        case .hello, .speech:
+            return nil
+        case .setApprovals(_, let project, let mode):
+            guard let session = session(project), let conversation = session.claude else { return "Open a conversation on the Mac first." }
+            guard let level = ApprovalLevel(rawValue: mode.rawValue) else { return "That approval setting isn’t supported." }
+            conversation.setApprovalLevel(level, approvingPending: true)
             return nil
         case .ask(_, let project, let job, let text, let spoken):
             guard let session = session(project) else { return "That project isn’t open on the Mac any more." }
@@ -130,6 +185,7 @@ final class CompanionHub {
             if job != nil, target == nil { return "That job isn’t running." }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return "Nothing to send." }
+            if spoken { NaturalSpeaker.shared.prewarm() }
             session.askClaude(trimmed, instructions: spoken ? SpokenReply.conversationInstructions : nil, in: target)
             return nil
         case .answer(_, let project, let approval, let allow, let note, let answers):

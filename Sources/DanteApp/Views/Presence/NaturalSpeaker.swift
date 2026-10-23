@@ -1,4 +1,5 @@
 import AVFoundation
+import DanteCore
 import DanteKit
 import os
 
@@ -174,23 +175,29 @@ final class NaturalSpeaker {
         }
     }
 
-    private nonisolated static func reader() -> @Sendable (FileHandle) -> Void {
+    private nonisolated static func reader(for process: Process) -> @Sendable (FileHandle) -> Void {
         { handle in
             let data = handle.availableData
             // Empty at the end of the output; stop listening or it's called again and again.
             if data.isEmpty { handle.readabilityHandler = nil }
-            Task { @MainActor in NaturalSpeaker.shared.read(data) }
+            Task { @MainActor in NaturalSpeaker.shared.read(data, from: process) }
         }
     }
 
     private nonisolated static func terminated() -> @Sendable (Process) -> Void {
-        { _ in Task { @MainActor in NaturalSpeaker.shared.ended() } }
+        { process in Task { @MainActor in NaturalSpeaker.shared.ended(process) } }
     }
 
     // MARK: The server
 
     private func startServer() -> Bool {
-        if process != nil { return true }
+        if let process {
+            if process.isRunning {
+                touch()
+                return true
+            }
+            ended(process)
+        }
         guard NaturalVoice.isInstalled() else { return false }
         let folder = NaturalVoice.folder
         do {
@@ -210,7 +217,7 @@ final class NaturalSpeaker {
         let logURL = folder.appending(path: "server.log")
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
         process.standardError = (try? FileHandle(forWritingTo: logURL)) ?? FileHandle.nullDevice
-        output.fileHandleForReading.readabilityHandler = Self.reader()
+        output.fileHandleForReading.readabilityHandler = Self.reader(for: process)
         process.terminationHandler = Self.terminated()
         do {
             try process.run()
@@ -231,8 +238,8 @@ final class NaturalSpeaker {
         return true
     }
 
-    private func read(_ data: Data) {
-        guard !data.isEmpty else { return }
+    private func read(_ data: Data, from process: Process) {
+        guard self.process === process, !data.isEmpty else { return }
         received.append(data)
         while let newline = received.firstIndex(of: 0x0A) {
             let line = String(decoding: received[received.startIndex..<newline], as: UTF8.self)
@@ -250,9 +257,13 @@ final class NaturalSpeaker {
         }
     }
 
-    private func ended() {
+    private func ended(_ process: Process) {
+        // A retired worker may exit after its replacement has already started.
+        guard self.process === process else { return }
         Self.log.info("natural voice: server stopped")
-        process = nil
+        idleTimer?.invalidate()
+        idleTimer = nil
+        self.process = nil
         stdin = nil
         ready = false
         let waiters = readyWaiters
@@ -267,10 +278,8 @@ final class NaturalSpeaker {
     private func giveUpWaiting(for process: Process) {
         guard self.process === process, !ready else { return }
         Self.log.error("natural voice: server took too long to start")
+        ended(process)
         process.terminate()
-        let waiters = readyWaiters
-        readyWaiters.removeAll()
-        for waiter in waiters { waiter.resume(returning: false) }
     }
 
     /// Stops the server after ten minutes without a word, to give its memory back.
@@ -279,15 +288,27 @@ final class NaturalSpeaker {
         idleTimer = Timer.scheduledTimer(withTimeInterval: 600, repeats: false) { _ in
             MainActor.assumeIsolated {
                 let speaker = NaturalSpeaker.shared
-                guard speaker.replies.isEmpty else { return speaker.touch() }
+                guard speaker.replies.isEmpty, speaker.readyWaiters.isEmpty else { return speaker.touch() }
+                guard let process = speaker.process else { return }
                 try? speaker.stdin?.close()
-                speaker.process?.terminate()
+                // Retire it now, before another request can reuse a stopping worker.
+                speaker.ended(process)
+                process.terminate()
             }
         }
     }
 
-    private func synthesize(_ text: String, voice: String, speed: Double, generation: Int) async -> AVAudioPCMBuffer? {
-        guard generation == self.generation else { return nil }
+    /// Renders without playing on the Mac or joining its playback queue.
+    func companionAudio(_ text: String) async -> Data? {
+        guard isAvailable, let buffer = await synthesize(text, voice: NaturalVoice.voice(Preferences.shared.naturalVoice),
+                                                       speed: NaturalVoice.speed(forRate: Preferences.shared.speechRate), generation: nil),
+              let samples = buffer.floatChannelData?[0] else { return nil }
+        return CompanionAudio.wav(samples: Array(UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))),
+                                  sampleRate: Int(buffer.format.sampleRate))
+    }
+
+    private func synthesize(_ text: String, voice: String, speed: Double, generation: Int?) async -> AVAudioPCMBuffer? {
+        guard generation == nil || generation == self.generation else { return nil }
         guard startServer() else { return nil }
         if !ready {
             let ok = await withCheckedContinuation { readyWaiters.append($0) }
@@ -295,7 +316,7 @@ final class NaturalSpeaker {
         }
         // Stop/interrupt may have happened while the model was warming up. Don't queue
         // cancelled speech ahead of the user's next reply.
-        guard generation == self.generation else { return nil }
+        guard generation == nil || generation == self.generation else { return nil }
         let started = ContinuousClock.now
         let id = nextID
         nextID += 1

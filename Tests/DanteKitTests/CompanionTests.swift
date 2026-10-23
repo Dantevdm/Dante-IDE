@@ -1,5 +1,7 @@
+import AVFoundation
 import DanteCore
 import Foundation
+import Network
 import Testing
 @testable import DanteKit
 
@@ -52,11 +54,16 @@ import Testing
             .answer(id: "2", project: "p", approval: "main/t1", allow: true, note: nil, answers: ["Which?": "A"]),
             .startJob(id: "3", project: "p", brief: "Fix the flaky test", awayMinutes: 30),
             .stop(id: "4", project: "p", job: "j1"),
+            .speech(id: "5", text: "Hello from the Mac."),
+            .setApprovals(id: "6", project: "p", mode: .everything),
         ]
         for message in messages {
             #expect(CompanionCoding.decode(ClientMessage.self, from: CompanionCoding.encode(message)) == message)
         }
-        #expect(messages.compactMap(\.id) == ["1", "2", "3", "4"])
+        #expect(messages.compactMap(\.id) == ["1", "2", "3", "4", "5", "6"])
+        for message: ServerMessage in [.voiceAvailable(available: true), .speech(id: "5", audio: Data([0, 1, 255])), .speech(id: "6", audio: nil)] {
+            #expect(CompanionCoding.decode(ServerMessage.self, from: CompanionCoding.encode(message)) == message)
+        }
         let snapshot = CompanionSnapshot(server: "Mac", projects: [
             .init(id: "p", name: "shop", lead: "Claude", working: true, lastReply: "On it.",
                   jobs: [.init(id: "j1", title: "Fix tests", state: .waiting, label: "1 waiting", lastReply: "")],
@@ -110,6 +117,7 @@ import Testing
         try await Self.write(.hello(device: "Phone", proof: CompanionAuth.proof(key: key, nonce: nonce), version: Companion.version), to: socket)
         guard case .welcome(let snapshot) = try await Self.read(socket) else { Issue.record("no welcome"); return }
         #expect(snapshot.projects.map(\.name) == ["shop"])
+        #expect(try await Self.read(socket) == .voiceAvailable(available: false))
 
         try await Self.write(.ask(id: "1", project: "p", job: nil, text: "Status?", spoken: true), to: socket)
         let received = await probe.nextMessage()
@@ -120,6 +128,99 @@ import Testing
         #expect(next.projects.isEmpty)
         socket.cancel(with: .goingAway, reason: nil)
         server.stop()
+    }
+
+    @Test func naturalAudioTravelsOverThePairedConnection() async throws {
+        let key = CompanionPairing.newKey()
+        let probe = Probe()
+        let server = CompanionServer(host: "127.0.0.1", port: 0, name: "Voice Mac", key: key,
+                                     onState: { probe.state($0) }, onMessage: { device, message in probe.message(message, device: device) })
+        server.setNaturalVoiceAvailable(true)
+        server.start()
+        defer { server.stop() }
+        let port = try #require(await probe.port())
+        let socket = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:\(port)/companion")!)
+        socket.resume()
+        defer { socket.cancel(with: .goingAway, reason: nil) }
+        guard case .challenge(let nonce, _, _) = try await Self.read(socket) else { Issue.record("no challenge"); return }
+        try await Self.write(.hello(device: "Phone", proof: CompanionAuth.proof(key: key, nonce: nonce), version: Companion.version), to: socket)
+        guard case .welcome = try await Self.read(socket) else { Issue.record("no welcome"); return }
+        #expect(try await Self.read(socket) == .voiceAvailable(available: true))
+        try await Self.write(.speech(id: "voice", text: "Hello."), to: socket)
+        #expect(await probe.nextMessage() == .speech(id: "voice", text: "Hello."))
+        let device = try #require(probe.deviceID())
+        let audio = try #require(CompanionAudio.wav(samples: [0, -1, 1], sampleRate: 24_000))
+        server.speech(to: device, id: "voice", audio: audio)
+        #expect(try await Self.read(socket) == .speech(id: "voice", audio: audio))
+        server.speech(to: device, id: "fallback", audio: nil)
+        #expect(try await Self.read(socket) == .speech(id: "fallback", audio: nil))
+    }
+
+    @Test func quietPhoneAnswersHeartbeatsAndKeepsReceiving() async throws {
+        let key = CompanionPairing.newKey(), probe = Probe()
+        let server = CompanionServer(host: "127.0.0.1", port: 0, name: "Mac", key: key,
+                                     onState: { probe.state($0) }, onDevices: { probe.devices($0) },
+                                     onMessage: { device, message in probe.message(message, device: device) },
+                                     heartbeatInterval: 0.1, heartbeatTimeout: 0.8)
+        server.start()
+        defer { server.stop() }
+        let port = try #require(await probe.port())
+        let socket = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:\(port)/companion")!)
+        socket.resume()
+        defer { socket.cancel(with: .goingAway, reason: nil) }
+        guard case .challenge(let nonce, _, _) = try await Self.read(socket) else { Issue.record("no challenge"); return }
+        try await Self.write(.hello(device: "Quiet phone", proof: CompanionAuth.proof(key: key, nonce: nonce), version: Companion.version), to: socket)
+        guard case .welcome = try await Self.read(socket) else { Issue.record("no welcome"); return }
+        _ = try await Self.read(socket) // voice availability
+        // Like the app's receive loop, keep a receive outstanding while idle.
+        let incoming = Task { try await Self.read(socket) }
+        defer { incoming.cancel() }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            socket.sendPing { error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            }
+        }
+        // Longer than the stale-client deadline, with no application messages.
+        try await Task.sleep(for: .milliseconds(1400))
+        try await Self.write(.ask(id: "alive", project: "p", job: nil, text: "Still here?", spoken: true), to: socket)
+        #expect(await probe.nextMessage() == .ask(id: "alive", project: "p", job: nil, text: "Still here?", spoken: true))
+        let device = try #require(probe.deviceID())
+        server.reply(to: device, id: "alive", ok: true, message: "Still connected.")
+        #expect(try await incoming.value == .result(id: "alive", ok: true, message: "Still connected."))
+        #expect(probe.connectedDeviceCount() == 1)
+    }
+
+    @Test func unresponsivePhoneIsRemovedFromConnectedDevices() async throws {
+        let key = CompanionPairing.newKey(), probe = Probe()
+        let server = CompanionServer(host: "127.0.0.1", port: 0, name: "Mac", key: key,
+                                     onState: { probe.state($0) }, onDevices: { probe.devices($0) },
+                                     onMessage: { _, message in probe.message(message) },
+                                     heartbeatInterval: 0.1, heartbeatTimeout: 0.5)
+        server.start()
+        defer { server.stop() }
+        let port = try #require(await probe.port())
+        let phone = SilentPhone(port: port, key: key)
+        phone.start()
+        defer { phone.stop() }
+        #expect(await probe.waitForDeparture())
+        #expect(probe.connectedDeviceCount() == 0)
+    }
+
+    @Test func companionWAVHasPlayablePCMAndBounds() throws {
+        let data = try #require(CompanionAudio.wav(samples: [-2, 0, 2, .nan], sampleRate: 24_000))
+        #expect(String(decoding: data.prefix(4), as: UTF8.self) == "RIFF")
+        #expect(String(decoding: data[8..<16], as: UTF8.self) == "WAVEfmt ")
+        #expect(data.count == 52)
+        let player = try AVAudioPlayer(data: data)
+        #expect(player.format.sampleRate == 24_000)
+        #expect(player.numberOfChannels == 1)
+        let values = data.withUnsafeBytes { bytes in
+            (0..<4).map { Int16(littleEndian: bytes.loadUnaligned(fromByteOffset: 44 + $0 * 2, as: Int16.self)) }
+        }
+        #expect(values == [-32767, 0, 32767, 0])
+        #expect(CompanionAudio.wav(samples: [], sampleRate: 24_000) == nil)
+        #expect(CompanionAudio.wav(samples: [0], sampleRate: 0) == nil)
+        #expect(CompanionAudio.wav(samples: Array(repeating: 0, count: CompanionAudio.maximumBytes / 2), sampleRate: 24_000) == nil)
     }
 
     @Test func wrongKeyIsRefused() async throws {
@@ -156,14 +257,36 @@ private final class Probe: @unchecked Sendable {
     private let lock = NSLock()
     private var listening: UInt16?
     private var messages: [ClientMessage] = []
+    private var device: String?
+    private var connectedDevices = 0
+    private var sawDevice = false
+
+    func devices(_ devices: [CompanionServer.Device]) {
+        lock.withLock {
+            connectedDevices = devices.count
+            if !devices.isEmpty { sawDevice = true }
+        }
+    }
+
+    func connectedDeviceCount() -> Int { lock.withLock { connectedDevices } }
+
+    func waitForDeparture() async -> Bool {
+        for _ in 0..<150 {
+            if lock.withLock({ sawDevice && connectedDevices == 0 }) { return true }
+            try? await Task.sleep(for: .milliseconds(30))
+        }
+        return false
+    }
 
     func state(_ state: CompanionServer.State) {
         if case .listening(_, let port) = state { lock.withLock { listening = port } }
     }
 
-    func message(_ message: ClientMessage) {
-        lock.withLock { messages.append(message) }
+    func message(_ message: ClientMessage, device: String? = nil) {
+        lock.withLock { messages.append(message); self.device = device }
     }
+
+    func deviceID() -> String? { lock.withLock { device } }
 
     func port() async -> UInt16? {
         for _ in 0..<100 {
@@ -179,6 +302,45 @@ private final class Probe: @unchecked Sendable {
             try? await Task.sleep(for: .milliseconds(30))
         }
         return nil
+    }
+}
+
+/// Authenticates normally, but deliberately ignores WebSocket pings to model a
+/// suspended or unreachable phone without waiting for the TCP stack to time out.
+private final class SilentPhone: @unchecked Sendable {
+    private let connection: NWConnection
+    private let key: String
+    private let queue = DispatchQueue(label: "companion-test-silent-phone")
+
+    init(port: UInt16, key: String) {
+        self.key = key
+        let options = NWProtocolWebSocket.Options()
+        options.autoReplyPing = false
+        let parameters = NWParameters.tcp
+        parameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0)
+        connection = NWConnection(to: .url(URL(string: "ws://127.0.0.1:\(port)/companion")!), using: parameters)
+    }
+
+    func start() {
+        connection.stateUpdateHandler = { [weak self] state in
+            if case .ready = state { self?.receive() }
+        }
+        connection.start(queue: queue)
+    }
+
+    func stop() { connection.cancel() }
+
+    private func receive() {
+        connection.receiveMessage { [weak self] data, _, _, error in
+            guard let self, error == nil else { return }
+            if let data, case .challenge(let nonce, _, _) = CompanionCoding.decode(ServerMessage.self, from: data) {
+                let hello = ClientMessage.hello(device: "Silent phone", proof: CompanionAuth.proof(key: self.key, nonce: nonce), version: Companion.version)
+                let context = NWConnection.ContentContext(identifier: "hello", metadata: [NWProtocolWebSocket.Metadata(opcode: .text)])
+                self.connection.send(content: CompanionCoding.encode(hello), contentContext: context, isComplete: true,
+                                     completion: .contentProcessed { _ in })
+            }
+            self.receive()
+        }
     }
 }
 
@@ -209,7 +371,7 @@ private final class Probe: @unchecked Sendable {
         #expect(events.count == 2)
         #expect(events.map { CompanionForeman.spoken($0, in: after) } == [
             "The job Fix tests in shop is ready to review.",
-            "Claude wants to run go test ./... in shop. Yes or no?",
+            "Claude wants to run the tests in shop. Shall I go ahead?",
         ])
         let question = CompanionSnapshot.Approval(id: "q", job: "j", from: "Fix tests", title: "Claude has a question", detail: "",
                                                    questions: [.init(question: "Which database?", options: ["Postgres", "SQLite"])])
@@ -235,5 +397,18 @@ private final class Probe: @unchecked Sendable {
         #expect(CompanionForeman.parse("start a job to fix the flaky login test", projects: projects) == .startJob("Fix the flaky login test"))
         #expect(CompanionForeman.parse("Why is the build red?", projects: projects) == .ask("Why is the build red"))
         #expect(CompanionForeman.parse("  ", projects: projects) == .cancel)
+        #expect(CompanionForeman.parse("Auto-approve", projects: projects) == .approvals(.everything))
+        #expect(CompanionForeman.parse("Turn off auto approve", projects: projects) == .approvals(.ask))
+        #expect(CompanionForeman.parse("auto edit", projects: projects) == .approvals(.edits))
+        #expect(CompanionForeman.parse("should we auto approve this?", projects: projects) == .ask("should we auto approve this"))
+    }
+
+    @Test func permissionPromptsExplainPurposeWithoutReadingCommands() {
+        let read = CompanionSnapshot.Approval(id: "a", job: nil, from: "Main", title: "Run cat Sources/App.swift", detail: "cat Sources/App.swift")
+        #expect(CompanionForeman.ask(read, project: "shop", lead: "Codex") == "Codex wants to read a project file in shop. Shall I go ahead?")
+        let compound = CompanionSnapshot.Approval(id: "b", job: nil, from: "Main", title: "Run cat a", detail: "cat a; rm b", note: "Run cat a; rm b")
+        let spoken = CompanionForeman.ask(compound, project: "shop", lead: "Codex")
+        #expect(spoken == "Codex wants to run a project command in shop. This step needs your review. Shall I go ahead?")
+        #expect(!spoken.contains("cat"))
     }
 }

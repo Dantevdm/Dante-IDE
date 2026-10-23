@@ -4,6 +4,7 @@ import UIKit
 /// The Mac's Light and Dark theme colours (DanteKit/Theme), for the companion. Light unless
 /// the phone is in dark mode.
 enum Palette {
+    static let controlRadius: CGFloat = 12
     static let accent = dynamic(light: 0x3B5BDB, dark: 0x8FA8FF)
     static let accentTint = dynamic(light: 0xE8EDFF, dark: 0x1A2238)
     static let background = dynamic(light: 0xF5F6F8, dark: 0x0B0D10)

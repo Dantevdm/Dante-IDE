@@ -21,8 +21,14 @@ The app compiles `Sources/DanteCore` straight into its target (the project point
 
 ## Use it
 
+- Replies use the Mac’s natural voice and speed when Natural Voice is enabled and set up there. The Mac generates short audio chunks and sends them over the paired connection; the phone plays them, including in walk mode. If natural speech is unavailable or the connection drops, the phone uses its installed system voice. Pressing the microphone interrupts either voice.
 - Tap the microphone and speak; two seconds of quiet sends it. Say "status", "yes" or "no" to a waiting step, "stop", "say that again", "switch to <project>", "start a job to …", or ask anything: it goes to the agent in charge of that project.
-- Walk mode keeps the audio session alive with the screen locked: press an AirPod stem to talk, and it reads out replies, finished jobs and steps waiting on you.
+- Walk mode keeps the audio session alive with the screen locked: press your Beats or another headset’s play/pause button to talk, and press again or pause speaking to send. It selects the Bluetooth microphone, shows the active audio route, and recovers the audio session after route changes or interruptions that permit resuming. The phone asks for microphone and speech recognition access when Walk mode is first enabled.
+- Walk mode uses a looping local silent audio item and an explicit Now Playing session to request headset controls. Idle time and replies use the playback audio category; microphone capture temporarily uses the Bluetooth call-audio route, waiting for the input to settle before starting recognition. Its handlers and metadata belong to that session. If another audio app owns the controls, tap **Reconnect controls** in Dante; Control Center should show Dante before testing the play/pause button. The phone shows session activation and counts received presses. Volume buttons do not start recording. Test this on the updated phone build, first unlocked and then locked; a successful compile cannot verify Bluetooth routing on real Beats hardware.
+- Spoken replies focus on the result and next step in everyday English. Permission prompts describe the purpose (such as reading a project file or running tests); exact commands and diffs stay on screen.
+- Use the Approvals selector, or say “auto-approve”, “auto-edit”, or “ask me first”, to change the selected project’s main conversation. Eligible waiting steps are released too. This uses the Mac’s existing approval policy: questions, flagged changes and explicit job restrictions still wait. Jobs retain their own approval rules. A setting change is confirmed only after the Mac accepts it, and both apps need a build with this feature.
+- While a paired device is connected, the Mac holds a user-initiated activity to prevent App Nap and idle system sleep; the display can still sleep. Heartbeats remove unresponsive devices after about 45 seconds, releasing the activity when the last device leaves. Turning the companion off releases it immediately. Closing the Mac's lid or explicitly putting it to sleep can still interrupt a session.
+- The phone checks connection health every 15 seconds and on return to the foreground, reconnects when a ping fails or takes over eight seconds, and briefly waits for voice availability before using the system voice. A fallback message explains whether the Mac was unreachable, voice generation failed, or audio could not play.
 - Waiting steps show their diff or command with Approve and Decline; jobs show their state with Stop; New Job starts one on its own branch, optionally in away mode.
 
 ## Layout
@@ -31,4 +37,4 @@ The app compiles `Sources/DanteCore` straight into its target (the project point
 - `Phone/`: pairing (camera scanner or a pasted link), the home screen and the voice loop.
 - `Pad/` (to come, step 7): the desk layout.
 
-Things the simulator can't show: the camera, the microphone, AirPods presses and the locked screen. Try those on a phone.
+Things the simulator can't show: the camera, the microphone, headset buttons and the locked screen. Try those on a phone with your Beats or other headset connected.

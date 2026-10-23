@@ -15,6 +15,7 @@ struct PhoneHome: View {
                     statusBanner
                     TalkCard(voice: voice)
                     if let snapshot = connection.snapshot {
+                        if let project = voice.project { approvalControl(project) }
                         let waiting = snapshot.projects.flatMap { project in project.approvals.map { (project, $0) } }
                         if !waiting.isEmpty {
                             SectionTitle("Waiting on you", count: waiting.count)
@@ -92,6 +93,28 @@ struct PhoneHome: View {
     }
 
     @ViewBuilder
+    private func approvalControl(_ project: CompanionSnapshot.Project) -> some View {
+        if let mode = project.approvalMode {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Approvals").font(.headline).foregroundStyle(Palette.text)
+                Picker("Approvals", selection: Binding(get: { project.approvalMode ?? .ask }, set: {
+                    connection.setApprovals($0, project: project.id)
+                })) {
+                    ForEach(CompanionApprovalMode.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(connection.status != .connected)
+                Text(mode == .everything
+                     ? "Edits and commands go ahead in this conversation. Questions and flagged steps still wait for you."
+                     : "For this project’s main conversation. Jobs keep their own approval rules.")
+                    .font(.caption).foregroundStyle(Palette.text3)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: Palette.controlRadius).fill(Palette.card))
+        }
+    }
+
+    @ViewBuilder
     private func jobs(_ project: CompanionSnapshot.Project) -> some View {
         HStack {
             SectionTitle("Jobs", count: project.jobs.count)
@@ -132,10 +155,24 @@ private struct TalkCard: View {
                 Text(problem).font(.footnote).foregroundStyle(Palette.red).multilineTextAlignment(.center)
             }
             Divider()
+            if voice.walking, !voice.audioRoute.isEmpty {
+                Text("Audio: \(voice.audioRoute)").font(.caption).foregroundStyle(Palette.text3)
+            }
+            if voice.walking {
+                Text(voice.headsetControlsReady ? "Headset controls connected" : "Headset controls not connected")
+                    .font(.caption).foregroundStyle(voice.headsetControlsReady ? Palette.green : Palette.amber)
+                if voice.headsetPresses > 0 {
+                    Text("Button presses received: \(voice.headsetPresses)").font(.caption).foregroundStyle(Palette.text3)
+                }
+                Button("Reconnect controls") { voice.reconnectHeadsetControls() }
+                    .font(.caption).buttonStyle(.bordered)
+                Text("Control Center should show Dante. Use the play/pause button; volume buttons only change the volume.")
+                    .font(.caption).foregroundStyle(Palette.text3)
+            }
             Toggle(isOn: Binding(get: { voice.walking }, set: { voice.setWalking($0) })) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Walk mode").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.text)
-                    Text("Keeps listening for an AirPods press with the screen locked, and reads out what needs you.")
+                    Text("Use your Beats or other headset’s play/pause button to talk with the screen locked, and hear replies.")
                         .font(.caption).foregroundStyle(Palette.text3)
                 }
             }
@@ -168,7 +205,7 @@ private struct TalkCard: View {
         case .sending: voice.heard
         case .speaking: voice.lastSpoken
         case .idle:
-            voice.lastSpoken.isEmpty ? "Tap to talk, or press an AirPod in walk mode. Say “status”, “yes”, “no”, or ask anything." : voice.lastSpoken
+            voice.lastSpoken.isEmpty ? "Tap to talk, or use your headset’s play/pause button in Walk mode. Say “status”, “auto-approve”, or ask anything." : voice.lastSpoken
         }
     }
 }

@@ -28,7 +28,10 @@ struct CompanionApp: App {
                 if let pairing = PairingStore.load() { connection.connect(pairing) }
             }
             .onChange(of: phase) { _, phase in
-                if phase == .active { connection.resume() }
+                if phase == .active {
+                    connection.resume()
+                    voice.resumeWalking()
+                }
             }
         }
     }
