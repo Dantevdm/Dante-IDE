@@ -50,22 +50,28 @@ public struct ClaudeOpinion: Sendable {
 
     /// The prompt goes on stdin. `tools` are the only tools it has; `allowed` are rules for the
     /// ones that would otherwise ask (and, with `dontAsk`, be refused), such as `Write(docs/**)`.
-    public static func arguments(model: String?, tools: [String] = ["Read", "Grep", "Glob"], allowed: [String] = [], system: String? = nil) -> [String] {
+    public static func arguments(model: String?, tools: [String] = ["Read", "Grep", "Glob"], allowed: [String] = [], system: String? = nil, settings: String? = nil) -> [String] {
         var arguments = ["-p", "--output-format", "json", "--tools", tools.joined(separator: ","), "--permission-mode", "dontAsk", "--no-session-persistence"]
         if !allowed.isEmpty { arguments += ["--allowedTools"] + allowed }
+        // The project's `never` paths, denied as they are for the main conversation.
+        if let settings { arguments += ["--settings", settings] }
         if let system, !system.isEmpty { arguments += ["--append-system-prompt", system] }
         if let model, !model.isEmpty { arguments += ["--model", model] }
         return arguments
     }
 
     public func ask(_ prompt: String, in project: String, model: String? = nil, timeout: TimeInterval = 600) async throws -> ClaudeReply {
-        try await run(prompt, in: project, arguments: Self.arguments(model: model), timeout: timeout)
+        try await run(prompt, in: project, arguments: Self.arguments(model: model, settings: Self.settings(project)), timeout: timeout)
+    }
+
+    static func settings(_ project: String) -> String? {
+        ClaudeRules.load(projectRoot: URL(filePath: project)).settingsJSON
     }
 
     /// A team member working for Codex: the role's tools and prompt, on the role's model.
     public func team(_ role: TeamRole, brief: String, in project: String, model: String?, timeout: TimeInterval = 900) async throws -> ClaudeReply {
         let access = role.forCodex
-        return try await run(brief, in: project, arguments: Self.arguments(model: model, tools: access.tools, allowed: access.allowed, system: role.prompt), timeout: timeout)
+        return try await run(brief, in: project, arguments: Self.arguments(model: model, tools: access.tools, allowed: access.allowed, system: role.prompt, settings: Self.settings(project)), timeout: timeout)
     }
 
     private func run(_ prompt: String, in project: String, arguments: [String], timeout: TimeInterval) async throws -> ClaudeReply {
@@ -83,14 +89,25 @@ public struct ClaudeOpinion: Sendable {
         } catch {
             throw Failure(message: "Couldn’t start Claude Code: \(error.localizedDescription)")
         }
-        try? input.fileHandleForWriting.write(contentsOf: Data(prompt.utf8))
-        try? input.fileHandleForWriting.close()
-        let drain = Task.detached { errors.fileHandleForReading.readDataToEndOfFile() }
+        // The watchdog starts first and the prompt is written off this task: a child that
+        // never reads a long prompt can't hang the call.
         let watchdog = Task {
             try await Task.sleep(for: .seconds(timeout))
             if process.isRunning { process.terminate() }
         }
-        let data = await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
+        let writer = input.fileHandleForWriting
+        Task.detached {
+            try? writer.write(contentsOf: Data(prompt.utf8))
+            try? writer.close()
+        }
+        // Drain stderr so a chatty run can't fill the pipe and stall.
+        let drain = Task.detached { errors.fileHandleForReading.readDataToEndOfFile() }
+        // A cancelled call (the MCP client gave up) stops the child rather than leaving it running.
+        let data = await withTaskCancellationHandler {
+            await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
         process.waitUntilExit()
         watchdog.cancel()
         let stderr = String(decoding: await drain.value, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)

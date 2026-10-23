@@ -117,6 +117,8 @@ public struct JobRequest: Equatable, Sendable {
         let brief = words.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !brief.isEmpty else { throw OpenRequest.ArgumentError(description: "Say what the job should do: dante job \"Fix the login redirect\"") }
         guard isDirectory(folder) else { throw OpenRequest.ArgumentError(description: "\(folder): no such folder") }
+        // From a subfolder, the job is the repository's: its nearest .git or .dante folder.
+        folder = OpenTarget.projectRoot(of: folder + "/.")
         return JobRequest(folder: folder, brief: brief, awayMinutes: away, agent: agent, kind: kind)
     }
 

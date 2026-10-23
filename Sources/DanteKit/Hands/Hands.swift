@@ -34,7 +34,9 @@ public enum Hands {
         public func describe(_ input: JSONValue, done: Bool) -> String {
             func quoted(_ text: String) -> String { "“\(text.count > 60 ? text.prefix(57) + "…" : text)”" }
             switch self {
-            case .openApp: return (done ? "Opened " : "Open ") + (input["app"]?.string ?? "an app")
+            case .openApp:
+                let file = input["path"]?.string.map { " with " + ($0 as NSString).lastPathComponent } ?? ""
+                return (done ? "Opened " : "Open ") + (input["app"]?.string ?? "an app") + file
             case .findFolders: return (done ? "Looked for folders named " : "Look for folders named ") + quoted(input["name"]?.string ?? "")
             case .revealInFinder: return (done ? "Showed " : "Show ") + ((input["path"]?.string as NSString?)?.lastPathComponent ?? "a file") + " in Finder"
             case .frontmostApp: return done ? "Checked which app is in front" : "Check which app is in front"

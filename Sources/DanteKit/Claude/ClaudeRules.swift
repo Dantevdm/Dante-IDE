@@ -106,8 +106,10 @@ public struct ClaudeRules: Equatable, Sendable {
         input["file_path"]?.string ?? input["notebook_path"]?.string ?? input["path"]?.string
     }
 
+    /// Case doesn't matter: the Mac's disk doesn't care, so `Secrets/x.json` is `secrets/`.
     public static func path(_ relative: String, matches pattern: String) -> Bool {
-        let pattern = pattern.hasPrefix("./") ? String(pattern.dropFirst(2)) : pattern
+        let relative = relative.lowercased()
+        let pattern = (pattern.hasPrefix("./") ? String(pattern.dropFirst(2)) : pattern).lowercased()
         if pattern.hasSuffix("/") {
             let folder = String(pattern.dropLast())
             return relative == folder || relative.hasPrefix(pattern) || relative.contains("/" + pattern)

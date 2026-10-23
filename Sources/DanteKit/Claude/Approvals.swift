@@ -152,6 +152,7 @@ public enum ApprovalPolicy {
         return parts.allSatisfy { part in
             let words = part.split(whereSeparator: \.isWhitespace).map(String.init)
             guard let program = words.first.map({ ($0 as NSString).lastPathComponent }) else { return false }
+            if runsOrWrites(program, words.dropFirst()) { return false }
             switch program {
             case _ where readers.contains(program):
                 return true
@@ -161,12 +162,38 @@ public enum ApprovalPolicy {
             case "find":
                 return !words.contains { ["-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].contains($0) }
             case "git":
+                // `-c core.pager=…` or `--config-env` would run what it names.
+                if words.contains(where: { $0 == "-c" || $0.hasPrefix("--config-env") || $0 == "--exec-path" || $0.hasPrefix("--exec-path=") }) { return false }
                 let rest = words.dropFirst().filter { !$0.hasPrefix("-") }
                 guard let sub = rest.first, gitReaders.contains(sub) else { return false }
                 return !words.contains("--output") && !words.contains { $0.hasPrefix("--output=") }
             default:
                 return false
             }
+        }
+    }
+
+    /// Options that make a reading program run another program or write a file: `rg --pre`,
+    /// `fd -x`, `git grep -O`, `sort -o`, `tree -o`, `file -C`. Short options may be bundled
+    /// (`fd -Hx`, `sort -ro`), so a single-dash word containing the letter counts.
+    static let runningOptions: [String: (long: [String], short: Set<Character>)] = [
+        "rg": (["--pre", "--pre-glob"], []),
+        "fd": (["--exec", "--exec-batch"], ["x", "X"]),
+        "sort": (["--output"], ["o"]),
+        "tree": ([], ["o"]),
+        "file": (["--compile"], ["C"]),
+        "git": (["--open-files-in-pager", "--output", "--ext-diff", "--textconv"], ["O"]),
+        "find": (["-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"], []),
+        "less": ([], []),
+    ]
+
+    static func runsOrWrites(_ program: String, _ arguments: ArraySlice<String>) -> Bool {
+        guard let options = runningOptions[program] else { return false }
+        return arguments.contains { word in
+            if options.long.contains(where: { word == $0 || word.hasPrefix($0 + "=") }) { return true }
+            guard word.hasPrefix("-"), !word.hasPrefix("--"), word.count > 1 else { return false }
+            // `git grep -O` only: in `git log -O<file>` the letter means something else, but refusing is safe.
+            return word.dropFirst().contains { options.short.contains($0) }
         }
     }
 

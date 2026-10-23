@@ -30,7 +30,7 @@ public enum JobGuard {
         if toolName == "Bash", let command = input["command"]?.string {
             if let reason = forbidden(command) { return .refuse(reason) }
             guard away else { return nil }
-            return !hasNote && runsUnattended(command, also: commands) ? .approve : .ask
+            return !hasNote && runsUnattended(command, also: commands, worktree: worktree) ? .approve : .ask
         }
         if ApprovalPolicy.editTools.contains(toolName) {
             for path in paths(in: input) where !inside(path, worktree) {
@@ -42,6 +42,15 @@ public enum JobGuard {
         // Questions, web access and anything else wait for the person while away.
         return away && !ApprovalPolicy.questionTools.contains(toolName) ? .ask : nil
     }
+
+    /// Environment for a job's agent: every push URL is rewritten to a scheme git doesn't know,
+    /// so `git push` fails even from a script the job wrote (`npm test` running a push).
+    /// Fetching still works.
+    public static let noPush: [String: String] = [
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "url.dante-job-cannot-push:.pushInsteadOf",
+        "GIT_CONFIG_VALUE_0": "",
+    ]
 
     /// What the agent is told when a step is refused, so it doesn't read it as the command
     /// failing and try another way round.
@@ -55,14 +64,42 @@ public enum JobGuard {
         // Commands the approval rules can't split (substitutions) are cut at every separator
         // instead: more cautious, which is right for refusing.
         for part in ApprovalPolicy.commandParts(plain) ?? roughParts(plain) {
-            let words = part.split(whereSeparator: \.isWhitespace).map(String.init).filter { !$0.contains("=") || $0.hasPrefix("-") }
-            guard let first = words.first else { continue }
+            var words = part.split(whereSeparator: \.isWhitespace).map { unquoted(String($0)) }.filter { !$0.contains("=") || $0.hasPrefix("-") }
+            // `env git push`, `command git push`, `/usr/bin/git push`: the program that runs.
+            while let first = words.first, wrappers.contains((first as NSString).lastPathComponent) {
+                words.removeFirst()
+                while let option = words.first, option.hasPrefix("-") { words.removeFirst() }
+            }
+            guard let program = words.first.map({ ($0 as NSString).lastPathComponent }) else { continue }
             let rest = Array(words.dropFirst())
-            switch first {
+            // A shell or eval running a string: check the string itself.
+            if ["sh", "bash", "zsh", "dash", "fish", "ksh"].contains(program), let flag = rest.firstIndex(where: { $0.hasPrefix("-") && $0.contains("c") }) {
+                let script = unquoted(rest[(flag + 1)...].joined(separator: " "))
+                if let reason = forbidden(script) { return reason }
+                continue
+            }
+            if program == "eval", let reason = forbidden(unquoted(rest.joined(separator: " "))) { return reason }
+            switch program {
             case "git":
-                let sub = rest.first { !$0.hasPrefix("-") } ?? ""
+                if part.range(of: #"-c\s+['"]?alias\."#, options: .regularExpression) != nil { return "Jobs don’t make git aliases." }
+                var index = 0
+                var sub = ""
+                while index < rest.count {
+                    let word = rest[index]
+                    // `-c key=value` lost its value with the other assignments above.
+                    if word == "-c" { index += 1; continue }
+                    if ["-C", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"].contains(word) {
+                        index += 2
+                        continue
+                    }
+                    if word.hasPrefix("-") { index += 1; continue }
+                    sub = word
+                    break
+                }
                 switch sub {
-                case "push": return "Jobs don’t push. Dante merges the branch when you accept the job."
+                case "push", "send-pack": return "Jobs don’t push. Dante merges the branch when you accept the job."
+                case "config" where rest.contains { $0.hasPrefix("alias.") || $0.contains("pushinsteadof") || $0.contains("pushInsteadOf") }:
+                    return "Jobs don’t change how git pushes or add aliases."
                 case "tag" where rest.count > 1 && !rest.contains("-l") && !rest.contains("--list"):
                     return "Jobs don’t make tags."
                 case "merge", "rebase", "cherry-pick", "pull":
@@ -97,13 +134,32 @@ public enum JobGuard {
         return nil
     }
 
+    /// Programs that run the rest of the line: looked through to the program they run.
+    static let wrappers: Set<String> = ["env", "command", "nohup", "time", "sudo", "exec", "xargs", "nice", "caffeinate"]
+
+    static func unquoted(_ word: String) -> String {
+        var text = word
+        while let first = text.first, let last = text.last, text.count >= 2, first == last, first == "\"" || first == "'" {
+            text = String(text.dropFirst().dropLast())
+        }
+        return text.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "")
+    }
+
     /// Building, testing, linting, formatting and local commits: safe to run unattended in a
-    /// worktree. Commands that substitute or redirect never are.
+    /// worktree. Commands that substitute or redirect never are, and nor is `cd` out of the
+    /// worktree (into the main checkout, say).
     /// `also` adds a job type's own commands, each matched word by word from the start.
-    public static func runsUnattended(_ command: String, also extra: [String] = []) -> Bool {
+    public static func runsUnattended(_ command: String, also extra: [String] = [], worktree: URL? = nil) -> Bool {
         let command = withPlainMessages(command)
-        if ApprovalPolicy.readsOnly(command) { return true }
         guard let parts = ApprovalPolicy.commandParts(command), !parts.isEmpty else { return false }
+        if let worktree {
+            for part in parts {
+                let words = part.split(whereSeparator: \.isWhitespace).map { unquoted(String($0)) }
+                guard words.first == "cd" || words.first == "pushd" else { continue }
+                guard let target = words.dropFirst().first, target != "-", !target.hasPrefix("~"), inside(target, worktree) else { return false }
+            }
+        }
+        if ApprovalPolicy.readsOnly(command) { return true }
         let allowed = extra.map { $0.split(whereSeparator: \.isWhitespace).map(String.init) }.filter { !$0.isEmpty }
         return parts.allSatisfy { part in
             let words = part.split(whereSeparator: \.isWhitespace).map(String.init)
@@ -160,7 +216,8 @@ public enum JobGuard {
     }
 
     static func inside(_ path: String, _ worktree: URL) -> Bool {
-        let url = URL(filePath: path, relativeTo: worktree).standardizedFileURL.resolvingSymlinksInPath().path
+        let file = path.hasPrefix("/") ? URL(filePath: path) : worktree.appending(path: path)
+        let url = file.standardizedFileURL.resolvingSymlinksInPath().path
         let root = worktree.standardizedFileURL.resolvingSymlinksInPath().path
         return url == root || url.hasPrefix(root.hasSuffix("/") ? root : root + "/")
     }

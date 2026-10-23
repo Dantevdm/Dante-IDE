@@ -72,7 +72,11 @@ extension DelegateServer {
             }
             if let refusal = Self.appRefusal(app) { return Self.text(refusal, isError: true) }
             var command = ["open", "-a", app]
-            if let path = arguments["path"]?.string, !path.isEmpty { command.append(Self.expand(path, home: home)) }
+            if let path = arguments["path"]?.string, !path.isEmpty {
+                let file = Self.expand(path, home: home)
+                if let refusal = Self.documentRefusal(file) { return Self.text(refusal, isError: true) }
+                command.append(file)
+            }
             let result = await Shell.run(command, in: home)
             return result.status == 0 ? Self.text("Opened \(app).")
                 : Self.text("Couldn’t open \(app): \(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))", isError: true)
@@ -138,9 +142,34 @@ extension DelegateServer {
         path == "~" ? home.path : path.hasPrefix("~/") ? home.path + path.dropFirst(1) : path
     }
 
+    /// Files that run when opened: Hands open documents, never scripts or apps (those go
+    /// through Bash, where the person sees the command).
+    static let runnable: Set<String> = ["command", "sh", "zsh", "bash", "tool", "app", "py", "rb", "pl", "terminal", "workflow",
+                                        "scpt", "scptd", "applescript", "action", "pkg", "mpkg", "dmg", "jar", "webloc", "inetloc", "fileloc"]
+
+    static func documentRefusal(_ path: String) -> String? {
+        let resolved = URL(filePath: path).resolvingSymlinksInPath()
+        let ext = resolved.pathExtension.lowercased()
+        let executable = FileManager.default.isExecutableFile(atPath: resolved.path) && !FileManager.default.fileExists(atPath: resolved.path + "/", isDirectory: nil)
+        guard runnable.contains(ext) || runnable.contains((path as NSString).pathExtension.lowercased()) || (executable && ext.isEmpty) else { return nil }
+        return "Hands open documents, not scripts or apps (\((path as NSString).lastPathComponent)). Run commands with Bash instead, where the person sees them."
+    }
+
     /// Opening a terminal or settings is allowed by name only if it isn't one Hands keep out of.
+    /// A path or bundle id counts by the app it names.
     static func appRefusal(_ app: String) -> String? {
-        let name = app.lowercased().replacingOccurrences(of: ".app", with: "")
+        let named = app.hasPrefix("/") || app.hasPrefix("~") ? ((app as NSString).lastPathComponent) : app
+        let lowered = named.lowercased()
+        let bundleRefused = ["com.apple.terminal", "com.googlecode.iterm2", "dev.warp", "com.mitchellh.ghostty", "net.kovidgoyal.kitty",
+                             "org.alacritty", "co.zeit.hyper", "com.github.wez.wezterm", "com.apple.systempreferences", "com.apple.keychainaccess",
+                             "com.apple.passwords", "com.1password", "dev.dante.ide", "com.apple.scripteditor2", "com.apple.automator", "org.python.pythonlauncher"]
+        if bundleRefused.contains(where: { lowered.hasPrefix($0) }) {
+            return "Hands don’t open \(app). Use Bash for commands, and ask the user to change settings or passwords themselves."
+        }
+        let name = lowered.replacingOccurrences(of: ".app", with: "")
+        if ["script editor", "automator", "python launcher", "shortcuts", "launchpad"].contains(name) {
+            return "Hands don’t open \(app): it runs scripts."
+        }
         let refused = ["terminal", "iterm", "iterm2", "warp", "ghostty", "kitty", "alacritty", "hyper", "wezterm",
                        "system settings", "system preferences", "keychain access", "passwords", "1password", "dante"]
         guard refused.contains(name) else { return nil }

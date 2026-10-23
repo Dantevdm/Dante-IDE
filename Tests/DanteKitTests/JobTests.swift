@@ -172,6 +172,27 @@ import Testing
 }
 
 @Suite struct JobGuardTests {
+    @Test func wrappersShellsAndOptionsDontHideAPush() {
+        for command in ["git -C . push", "env git push", "command git push", "nohup git push origin main", "/usr/bin/git push",
+                        "\"git\" push", "sh -c 'git push'", "bash -lc \"git push origin HEAD\"", "eval git push", "git send-pack origin HEAD:main",
+                        "git config alias.p push", "git -c alias.p=push p", "git --git-dir .git push", "env FOO=1 kubectl apply -f x.yaml"] {
+            #expect(JobGuard.forbidden(command) != nil, "\(command)")
+        }
+        for command in ["git -C . status", "git -c color.ui=never log", "sh -c 'swift test'", "env CI=1 npm test"] {
+            #expect(JobGuard.forbidden(command) == nil, "\(command)")
+        }
+    }
+
+    @Test func awayJobsStayInTheirWorktree() {
+        let worktree = URL(filePath: "/tmp/dante-jobs/shop-fix")
+        #expect(JobGuard.runsUnattended("cd /tmp/dante-jobs/shop-fix/src && swift test", worktree: worktree))
+        #expect(JobGuard.runsUnattended("cd src && swift build", worktree: worktree))
+        #expect(!JobGuard.runsUnattended("cd /home/me/shop && git restore .", worktree: worktree))
+        #expect(!JobGuard.runsUnattended("cd ~ && ls", worktree: worktree))
+        #expect(!JobGuard.runsUnattended("cd ../.. && git add -A", worktree: worktree))
+        #expect(JobGuard.noPush["GIT_CONFIG_VALUE_0"] == "")
+    }
+
     @Test func commitMessagesInHeredocsAreJustText() {
         let commit = "cd /home/me/shop && git add shop.py && git commit -m \"$(cat <<'EOF'\nAdd tax\n\nWith a doctest.\nEOF\n)\""
         #expect(JobGuard.runsUnattended(commit))

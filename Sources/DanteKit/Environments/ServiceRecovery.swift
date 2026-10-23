@@ -13,6 +13,24 @@ public enum ServiceRecovery {
         case apply(reason: String)
     }
 
+    /// The compose command for an action. A crashed service comes back with `up -d`; a running
+    /// but unhealthy one needs `restart` (`up -d` leaves a running container alone); a changed
+    /// compose file is applied only to what's running and wasn't stopped by you, so nothing you
+    /// stopped or never started comes up.
+    public static func command(for action: Action, states: [ContainerState], stoppedByYou: Set<String>) -> [String]? {
+        switch action {
+        case .restart(let service, _):
+            let running = states.first { $0.service == service }?.state == "running"
+            return running ? ["docker", "compose", "restart", service] : ["docker", "compose", "up", "-d", service]
+        case .giveUp:
+            return nil
+        case .apply:
+            let running = states.filter { $0.state == "running" && !stoppedByYou.contains($0.service) }.map(\.service)
+            guard !running.isEmpty else { return nil }
+            return ["docker", "compose", "up", "-d", "--no-deps"] + Array(Set(running)).sorted()
+        }
+    }
+
     public struct Attempt: Equatable, Sendable, Codable {
         public var service: String
         public var date: Date

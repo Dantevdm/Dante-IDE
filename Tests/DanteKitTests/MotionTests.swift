@@ -302,3 +302,23 @@ struct MotionLooksTests {
         #expect(exported.contains("addEventListener(\"scroll\""))
     }
 }
+
+@Test func motionFilesStayInsideTheirFolderThroughSymlinks() throws {
+    let fm = FileManager.default
+    let base = fm.temporaryDirectory.appending(path: "motion-contained-\(UUID().uuidString)")
+    let piece = base.appending(path: "docs/motion/demo")
+    try fm.createDirectory(at: piece, withIntermediateDirectories: true)
+    try fm.createDirectory(at: base.appending(path: ".hidden"), withIntermediateDirectories: true)
+    try Data("secret".utf8).write(to: base.appending(path: ".hidden/key"))
+    try Data("<html>".utf8).write(to: piece.appending(path: "index.html"))
+    try fm.createSymbolicLink(atPath: piece.appending(path: "k1").path, withDestinationPath: "../../../.hidden/key")
+    try fm.createSymbolicLink(atPath: piece.appending(path: "inside").path, withDestinationPath: "index.html")
+    defer { try? fm.removeItem(at: base) }
+
+    #expect(MotionRuntime.contained("index.html", in: piece) != nil)
+    #expect(MotionRuntime.contained("inside", in: piece) != nil)
+    #expect(MotionRuntime.contained("k1", in: piece) == nil)
+    #expect(MotionRuntime.contained("docs/motion/demo/k1", in: base) == nil)
+    #expect(MotionRuntime.contained(".hidden/key", in: base) == nil)
+    #expect(MotionRuntime.contentPolicy.contains("connect-src 'self' dante-motion: blob: data:;"))
+}

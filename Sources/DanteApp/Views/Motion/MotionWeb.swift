@@ -22,19 +22,21 @@ final class MotionSchemeHandler: NSObject, WKURLSchemeHandler {
         guard let url = task.request.url, let path = MotionRuntime.safe(url.path) else {
             return task.didFailWithError(URLError(.badURL))
         }
+        // Every file is looked up with symlinks resolved and must stay inside its folder, so a
+        // link in a piece can't reach ~/.ssh or anything else outside.
         let file: URL?
         if path.hasPrefix(MotionLibrary.path) {
-            file = Self.libraries?.appending(path: String(path.dropFirst(MotionLibrary.path.count)))
+            file = Self.libraries.flatMap { MotionRuntime.contained(String(path.dropFirst(MotionLibrary.path.count)), in: $0) }
         } else if path.hasPrefix(MotionRuntime.fontsPath) {
-            file = DanteFonts.folder?.appending(path: String(path.dropFirst(MotionRuntime.fontsPath.count)))
+            file = DanteFonts.folder.flatMap { MotionRuntime.contained(String(path.dropFirst(MotionRuntime.fontsPath.count)), in: $0) }
         } else if path.hasPrefix(MotionRuntime.projectPath) {
             let relative = String(path.dropFirst(MotionRuntime.projectPath.count))
-            let ext = (relative as NSString).pathExtension.lowercased()
-            let name = (relative as NSString).lastPathComponent.lowercased()
-            file = MotionRuntime.servedExtensions.contains(ext) && !name.hasPrefix(".env") && !refused(relative)
-                ? projectRoot.appending(path: relative) : nil
+            let resolved = MotionRuntime.contained(relative, in: projectRoot)
+            let inside = resolved.map { ProposedChange.relativePath(of: $0, in: projectRoot.resolvingSymlinksInPath()) } ?? relative
+            let ext = (inside as NSString).pathExtension.lowercased()
+            file = MotionRuntime.servedExtensions.contains(ext) && !refused(relative) && !refused(inside) ? resolved : nil
         } else {
-            file = folder.appending(path: path.isEmpty ? "index.html" : path)
+            file = MotionRuntime.contained(path.isEmpty ? "index.html" : path, in: folder)
         }
         guard let file, var data = try? Data(contentsOf: file) else {
             let response = HTTPURLResponse(url: url, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/plain"])!
@@ -48,7 +50,7 @@ final class MotionSchemeHandler: NSObject, WKURLSchemeHandler {
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
             // Text says it's UTF-8, so a page without <meta charset> isn't read as Latin-1.
             "Content-Type": MotionRuntime.mimeType(for: file.path) + (MotionRuntime.isText(file.path) ? "; charset=utf-8" : ""), "Content-Length": "\(data.count)",
-            "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*", "Content-Security-Policy": MotionRuntime.contentPolicy,
         ])!
         task.didReceive(response)
         task.didReceive(data)

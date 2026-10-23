@@ -350,7 +350,8 @@ public enum CodexRequest {
 
     /// The `dante mcp` server for Codex's config: local models, and Claude for second opinions.
     public static func mcpServer(command: String, environment: [String: String]) -> JSONValue {
-        var server: [String: JSONValue] = ["command": .string(command), "args": ["mcp"]]
+        // Team members and second opinions take minutes; Codex's default gives up after 60 s.
+        var server: [String: JSONValue] = ["command": .string(command), "args": ["mcp"], "tool_timeout_sec": 900, "startup_timeout_sec": 30]
         if !environment.isEmpty { server["env"] = .object(environment.mapValues { .string($0) }) }
         return .object(server)
     }

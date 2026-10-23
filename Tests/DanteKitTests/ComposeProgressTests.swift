@@ -90,4 +90,24 @@ struct ServiceRecoveryTests {
                 == [.apply(reason: "The compose file changed")])
         #expect(ServiceRecovery.plan(states: [], services: ["api"], attempts: [], unhealthySince: [:], stoppedByYou: [], composeChanged: true, now: now).isEmpty)
     }
+
+    @Test func eachActionGetsTheRightComposeCommand() {
+        let states = [
+            ContainerState(service: "db", state: "running", health: "unhealthy"),
+            ContainerState(service: "api", state: "exited", status: "Exited (1) 1 minute ago"),
+            ContainerState(service: "web", state: "running"),
+            ContainerState(service: "worker", state: "running"),
+        ]
+        #expect(ServiceRecovery.command(for: .restart(service: "db", reason: ""), states: states, stoppedByYou: []) == ["docker", "compose", "restart", "db"])
+        #expect(ServiceRecovery.command(for: .restart(service: "api", reason: ""), states: states, stoppedByYou: []) == ["docker", "compose", "up", "-d", "api"])
+        #expect(ServiceRecovery.command(for: .apply(reason: ""), states: states, stoppedByYou: ["worker"])
+                == ["docker", "compose", "up", "-d", "--no-deps", "db", "web"])
+        #expect(ServiceRecovery.command(for: .giveUp(service: "db", reason: ""), states: states, stoppedByYou: []) == nil)
+    }
+
+    @Test func multiStageBuildsShowTheirStep() {
+        let progress = ComposeProgress.parse(["#12 [api builder 3/6] RUN npm ci", "#12 DONE 4.1s"], known: ["api"])
+        #expect(progress.services.first?.phase == .building(step: "3/6", detail: "RUN npm ci"))
+        #expect(progress.services.first?.ran == 1)
+    }
 }

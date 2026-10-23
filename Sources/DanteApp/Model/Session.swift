@@ -340,6 +340,13 @@ final class Session {
             recents.prune()
             return
         }
+        // One window per project: two would each save the project's jobs over the other's
+        // and both restart its services.
+        let wanted = url.standardizedFileURL.resolvingSymlinksInPath().path
+        if let other = Sessions.all.first(where: { $0 !== self && $0.workspace?.url.standardizedFileURL.resolvingSymlinksInPath().path == wanted }) {
+            other.window?.makeKeyAndOrderFront(nil)
+            return
+        }
         guard confirmDiscardingChanges(in: workspace?.documents ?? []) else { return }
         recordVisit()
         claude?.stop()
@@ -391,6 +398,7 @@ final class Session {
         claude?.stop()
         claude = nil
         jobs.stopAll()
+        serviceKeeper.stop()
         shownJob = nil
         languages?.stop()
         languages = nil
@@ -409,6 +417,7 @@ final class Session {
         recordVisit()
         claude?.stop()
         jobs.stopAll()
+        serviceKeeper.stop()
         languages?.stop()
         watcher?.stop()
         logWatch?.stop()
@@ -517,6 +526,7 @@ final class Session {
             }
         )
         claude.projectName = project
+        claude.blocksPushes = true
         // Keeps the board's change count current while the job edits.
         claude.onFileChanged = { [weak self] _ in self?.jobs.changesMayHaveChanged(job.id) }
         claude.onAttention = { [weak self] attention in

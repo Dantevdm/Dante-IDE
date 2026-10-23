@@ -48,9 +48,18 @@ final class ServiceKeeper {
         watcher = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(20))
-                await self?.check()
+                guard let self, !Task.isCancelled else { return }
+                await self.check()
             }
         }
+    }
+
+    /// The project closed: stop watching it.
+    func stop() {
+        watcher?.cancel()
+        watcher = nil
+        root = nil
+        key = nil
     }
 
     /// You stopped these from Dante (all of them when empty): leave them down.
@@ -83,14 +92,18 @@ final class ServiceKeeper {
             switch action {
             case .restart(let service, let reason):
                 attempts.append(.init(service: service, date: now))
-                let result = await Shell.run(["docker", "compose", "up", "-d", service], in: root)
+                guard let command = ServiceRecovery.command(for: action, states: states, stoppedByYou: stoppedByYou) else { continue }
+                let result = await Shell.run(command, in: root)
+                // A restarted service gets its full grace again before it counts as unhealthy.
+                unhealthySince[service] = nil
                 note(result.status == 0 ? "Brought \(service) back: \(reason.lowercasedFirst)." : "Couldn’t restart \(service): \(Self.lastLine(result.stderr.isEmpty ? result.stdout : result.stderr))", failed: result.status != 0)
             case .giveUp(let service, let reason):
                 gaveUp.insert(service)
                 note("Left \(service) down: \(reason.lowercasedFirst). Its logs say why.", failed: true)
             case .apply(let reason):
                 composeText = text
-                let result = await Shell.run(["docker", "compose", "up", "-d", "--remove-orphans"], in: root)
+                guard let command = ServiceRecovery.command(for: action, states: states, stoppedByYou: stoppedByYou) else { continue }
+                let result = await Shell.run(command, in: root)
                 note(result.status == 0 ? "\(reason), so the running services were updated to match." : "\(reason), but updating the services failed: \(Self.lastLine(result.stderr.isEmpty ? result.stdout : result.stderr))",
                      failed: result.status != 0)
             }

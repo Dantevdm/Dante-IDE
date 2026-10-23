@@ -46,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Writing to a child that has exited (Claude Code, a language server) must fail
+        // with EPIPE, not kill Dante.
+        signal(SIGPIPE, SIG_IGN)
         // `launchPaths` handles the folder argument. Left to AppKit, it becomes an open-file
         // event, and SwiftUI then skips the window it would make at launch.
         UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])

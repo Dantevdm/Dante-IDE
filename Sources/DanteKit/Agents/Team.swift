@@ -81,7 +81,9 @@ public enum TeamRole: String, CaseIterable, Codable, Sendable, Identifiable {
     /// may edit and write under docs/ (rules relative to the project folder).
     var forCodex: (tools: [String], allowed: [String]) {
         switch self {
-        case .researcher: (["Read", "Grep", "Glob", "WebFetch", "WebSearch"], ["WebFetch", "WebSearch"])
+        // Searching the web is allowed; fetching any page isn't, since a page it read could
+        // tell it to send what it found somewhere (a URL is a way out).
+        case .researcher: (["Read", "Grep", "Glob", "WebSearch"], ["WebSearch"])
         case .documenter: (["Read", "Grep", "Glob", "Edit", "Write"], ["Edit(docs/**)", "Write(docs/**)"])
         default: (["Read", "Grep", "Glob"], [])
         }

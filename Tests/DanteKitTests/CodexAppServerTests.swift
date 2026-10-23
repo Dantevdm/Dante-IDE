@@ -139,11 +139,14 @@ import Testing
 
     @Test func readOnlyCommandsGoAhead() {
         for command in ["rg -n startup NOTES.md", "pwd && rg --files -g 'LIST.md'", "sed -n '1,40p' main.go", "git log --oneline -5 | head -3",
-                        "find . -name '*.swift'", "cat a.txt 2>/dev/null", "ls -la"] {
+                        "find . -name '*.swift'", "cat a.txt 2>/dev/null", "ls -la", "sort -n x", "fd -e swift", "tree -L 2", "git log -p -3"] {
             #expect(ApprovalPolicy.readsOnly(command), "\(command)")
         }
         for command in ["sed -i '' s/a/b/ x", "find . -delete", "rm -rf build", "git commit -m x", "cat a > b", "echo $(whoami)",
-                        "printf 'x' >> LIST.md", "git push", "awk '{print}' x"] {
+                        "printf 'x' >> LIST.md", "git push", "awk '{print}' x",
+                        "rg --pre ./x.sh foo", "rg --pre=./x.sh foo", "fd . -x sh -c 'id'", "fd -HX rm", "fd --exec-batch rm",
+                        "git grep -O'sh evil.sh' foo", "git grep --open-files-in-pager=sh x", "git -c core.pager=sh log",
+                        "sort -o ~/.zshrc payload", "sort -ro out in", "tree -o out.txt", "file -C -m magic", "find . -fprint0 out"] {
             #expect(!ApprovalPolicy.readsOnly(command), "\(command)")
         }
         #expect(ApprovalPolicy.approves("Bash", input: ["command": "rg TODO"], level: .ask, allow: [], hasRuleNote: false))

@@ -296,6 +296,9 @@ public final class ClaudeSession {
     /// The project the ledger files this conversation's jobs under, when `root` isn't the
     /// project's own folder (a job's worktree).
     public var projectName: String?
+    /// For a job: git in its commands can't push to any remote (`JobGuard.noPush`), whatever
+    /// script the command runs.
+    public var blocksPushes = false
     /// This turn's tokens so far, for the ledger: the largest context, and output per message.
     private var turnUsage = (input: 0, output: [String: Int](), title: "")
     /// The `--model` to start with; nil leaves it to Claude Code. Takes effect on the next message.
@@ -727,6 +730,17 @@ public final class ClaudeSession {
         note("Earlier conversation. Your next message continues it.", isError: false)
     }
 
+    /// The earlier conversation's items, read after `resume` was already called with none so a
+    /// message sent meanwhile continued the right conversation: they go before everything
+    /// since, without resetting anything.
+    public func insertEarlier(_ earlier: [TranscriptItem]) {
+        let known = Set(items.map(\.id))
+        let missing = earlier.filter { !known.contains($0.id) }
+        guard !missing.isEmpty else { return }
+        items.insert(contentsOf: missing, at: 0)
+        index = Dictionary(items.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { _, last in last })
+    }
+
     /// Has Claude Code summarise the conversation so far, freeing context. Long conversations
     /// cost more per message, because every message re-reads everything before it.
     public func compact() {
@@ -753,6 +767,9 @@ public final class ClaudeSession {
         if process?.isRunning == true { process?.terminate() }
         process = nil
         stdin = nil
+        // The config file holds cloud agents' keys: it goes with the process.
+        if let mcpConfigFile { try? FileManager.default.removeItem(at: mcpConfigFile) }
+        mcpConfigFile = nil
         codexWaiting = [:]
         codexHeldTurn = nil
         codexTurn = nil
@@ -808,7 +825,7 @@ public final class ClaudeSession {
         startedTeam = team?.agents
         startedEngine = .claude
         startedAccount = account
-        process.environment = Self.environment()
+        process.environment = Self.environment().merging(blocksPushes ? JobGuard.noPush : [:]) { _, job in job }
 
         let input = Pipe(), output = Pipe(), errors = Pipe()
         process.standardInput = input
@@ -856,7 +873,7 @@ public final class ClaudeSession {
         process.executableURL = URL(filePath: codexExecutable)
         process.arguments = ["app-server"]
         process.currentDirectoryURL = root
-        process.environment = Self.environment()
+        process.environment = Self.environment().merging(blocksPushes ? JobGuard.noPush : [:]) { _, job in job }
         let input = Pipe(), output = Pipe(), errors = Pipe()
         process.standardInput = input
         process.standardOutput = output

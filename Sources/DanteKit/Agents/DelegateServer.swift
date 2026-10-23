@@ -100,8 +100,11 @@ public struct DelegateServer: Sendable {
             let rules = ClaudeRules.load(projectRoot: URL(filePath: root, directoryHint: .isDirectory))
             server.look = { model, path, question in
                 let url = URL(filePath: path, relativeTo: URL(filePath: root, directoryHint: .isDirectory)).standardizedFileURL
+                // Through symlinks too, so docs/a.png -> ../secrets/a.png is still secrets/.
+                let resolved = url.resolvingSymlinksInPath()
                 let relative = ProposedChange.relativePath(of: url, in: URL(filePath: root, directoryHint: .isDirectory))
-                if rules.never.contains(where: { ClaudeRules.path(relative, matches: $0) }) {
+                let target = ProposedChange.relativePath(of: resolved, in: URL(filePath: root, directoryHint: .isDirectory).resolvingSymlinksInPath())
+                if rules.never.contains(where: { ClaudeRules.path(relative, matches: $0) || ClaudeRules.path(target, matches: $0) }) {
                     throw Ollama.Failure(message: "This project’s rules don’t allow reading \(relative).")
                 }
                 let image = try Looker.prepare(try Data(contentsOf: url))
@@ -710,11 +713,48 @@ public struct DelegateServer: Sendable {
         ["content": [["type": "text", "text": .string(text)]], "isError": .bool(isError)]
     }
 
-    /// Reads stdin until it closes, answering each line on stdout.
+    /// Reads stdin until it closes, answering each line on stdout. Tool calls run side by side
+    /// (several team members at once, a ping while a long job runs), and a cancelled call
+    /// (`notifications/cancelled`) stops its work.
     public func serve() async {
+        let calls = RunningCalls()
         while let line = readLine(strippingNewline: true) {
-            guard !line.isEmpty, let reply = await handle(line) else { continue }
-            FileHandle.standardOutput.write(Data((reply + "\n").utf8))
+            guard !line.isEmpty else { continue }
+            let message = JSONValue(line: line)
+            let method = message?["method"]?.string
+            if method == "notifications/cancelled", let id = message?["params"]?["requestId"] {
+                await calls.cancel(id.jsonLine)
+                continue
+            }
+            guard method == "tools/call", let id = message?["id"] else {
+                if let reply = await handle(line) { await calls.write(reply) }
+                continue
+            }
+            let key = id.jsonLine
+            let task = Task {
+                let reply = await handle(line)
+                await calls.finish(key)
+                if !Task.isCancelled, let reply { await calls.write(reply) }
+            }
+            await calls.start(key, task)
         }
+        await calls.waitForAll()
+    }
+}
+
+/// The tool calls `serve` is running, and one writer for stdout so replies don't interleave.
+actor RunningCalls {
+    private var tasks: [String: Task<Void, Never>] = [:]
+
+    func start(_ id: String, _ task: Task<Void, Never>) { tasks[id] = task }
+    func finish(_ id: String) { tasks[id] = nil }
+    func cancel(_ id: String) { tasks.removeValue(forKey: id)?.cancel() }
+
+    func write(_ reply: String) {
+        try? FileHandle.standardOutput.write(contentsOf: Data((reply + "\n").utf8))
+    }
+
+    func waitForAll() async {
+        for task in tasks.values { await task.value }
     }
 }

@@ -73,7 +73,8 @@ public struct ComposeProgress: Equatable, Sendable {
                 if rest.hasPrefix("["), let close = rest.firstIndex(of: "]") {
                     let tag = rest[rest.index(after: rest.startIndex)..<close].split(separator: " ").map(String.init)
                     guard let service = tag.first, service != "internal" else { continue }
-                    let step = tag.count > 1 && tag[1] != "internal" && tag[1].contains("/") ? tag[1] : nil
+                    // `[api 3/6]`, or `[api builder 3/6]` in a multi-stage build.
+                    let step = tag.dropFirst().last { $0.contains("/") && $0 != "internal" }
                     let detail = step == nil ? "" : String(rest[rest.index(after: close)...]).trimmingCharacters(in: .whitespaces)
                     stepService[number] = service
                     stepTitle[number] = (step, String(detail.prefix(80)))

@@ -115,15 +115,25 @@ public struct Codex: Sendable {
         } catch {
             throw Failure(message: "Couldn’t start Codex: \(error.localizedDescription)")
         }
-        try? input.fileHandleForWriting.write(contentsOf: Data(prompt.utf8))
-        try? input.fileHandleForWriting.close()
-        // Drain stderr so a chatty run can't fill the pipe and stall.
-        let drain = Task.detached { errors.fileHandleForReading.readDataToEndOfFile() }
+        // The watchdog starts first and the prompt is written off this task: a child that
+        // never reads a long prompt can't hang the call.
         let watchdog = Task {
             try await Task.sleep(for: .seconds(timeout))
             if process.isRunning { process.terminate() }
         }
-        let data = await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
+        let writer = input.fileHandleForWriting
+        Task.detached {
+            try? writer.write(contentsOf: Data(prompt.utf8))
+            try? writer.close()
+        }
+        // Drain stderr so a chatty run can't fill the pipe and stall.
+        let drain = Task.detached { errors.fileHandleForReading.readDataToEndOfFile() }
+        // A cancelled call (the MCP client gave up) stops the child rather than leaving it running.
+        let data = await withTaskCancellationHandler {
+            await Task.detached { output.fileHandleForReading.readDataToEndOfFile() }.value
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
         process.waitUntilExit()
         watchdog.cancel()
         _ = await drain.value

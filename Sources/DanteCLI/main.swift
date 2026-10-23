@@ -5,6 +5,9 @@ import Foundation
 // `dante`: opens folders and files in Dante from the terminal. It lives in Dante.app at
 // Contents/Resources/bin/dante and hands a dante://open URL to the app it's inside.
 
+// `dante mcp` writes prompts to Claude Code and Codex; one that exits early must not kill it.
+signal(SIGPIPE, SIG_IGN)
+
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data("dante: \(message)\n".utf8))
     exit(1)

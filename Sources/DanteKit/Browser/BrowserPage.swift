@@ -19,7 +19,9 @@ public struct BrowserHosts: Equatable, Sendable {
     public static let local: Set<String> = ["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]
 
     public func allows(_ url: URL) -> Bool {
-        if url.scheme == "about" || url.scheme == "data" || url.scheme == "blob" { return true }
+        // Not data: or blob: pages: an agent could write a page into the URL that sends what
+        // it read anywhere, with no host to check.
+        if url.scheme == "about" { return true }
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
               let host = url.host(percentEncoded: false)?.lowercased(), !host.isEmpty else { return false }
         if Self.local.contains(host) || host.hasSuffix(".localhost") || host.hasSuffix(".test") { return true }

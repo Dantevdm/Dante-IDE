@@ -28,13 +28,15 @@ enum MotionExporter {
             let path = parts[1]
             let url: URL?
             switch parts[0] {
-            case "piece": url = folder.appending(path: path)
-            case "lib": url = libraries?.appending(path: path)
-            case "fonts": url = fontFolder?.appending(path: path)
+            // Symlinks resolved and kept inside their folder, as the scheme does.
+            case "piece": url = MotionRuntime.contained(path, in: folder)
+            case "lib": url = libraries.flatMap { MotionRuntime.contained(path, in: $0) }
+            case "fonts": url = fontFolder.flatMap { MotionRuntime.contained(path, in: $0) }
             case "project":
-                let name = (path as NSString).lastPathComponent.lowercased()
-                let allowed = MotionRuntime.servedExtensions.contains((path as NSString).pathExtension.lowercased()) && !name.hasPrefix(".env") && !refused(path)
-                url = allowed ? root.appending(path: path) : nil
+                let resolved = MotionRuntime.contained(path, in: root)
+                let inside = resolved.map { ProposedChange.relativePath(of: $0, in: root.resolvingSymlinksInPath()) } ?? path
+                let allowed = MotionRuntime.servedExtensions.contains((inside as NSString).pathExtension.lowercased()) && !refused(path) && !refused(inside)
+                url = allowed ? resolved : nil
             default: url = nil
             }
             return url.flatMap { try? Data(contentsOf: $0) }

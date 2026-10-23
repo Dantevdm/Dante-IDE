@@ -184,7 +184,13 @@ final class JobsModel {
             job.scope = type.flatMap { $0.paths.isEmpty ? nil : $0.paths }
             job.commands = type.flatMap { $0.commands.isEmpty ? nil : $0.commands }
             Self.seedSearchIndex(from: root, to: job.worktreeURL)
-            try prepare?(job.worktreeURL)
+            do {
+                try prepare?(job.worktreeURL)
+            } catch {
+                // Nothing was recorded yet, so take the worktree and branch away again.
+                await JobWorktree.removeWorktree(job, repo: root, deleteBranch: true, force: true)
+                throw error
+            }
             records.append(job)
             save()
             let claude = wake(job.id)
@@ -211,11 +217,14 @@ final class JobsModel {
         if let conversation = job.conversationID, job.engine == .claude {
             let url = ClaudeHistory.transcriptURL(for: conversation, root: job.worktreeURL)
             if FileManager.default.fileExists(atPath: url.path) {
+                // The conversation id is set now, so a message sent straight away (from the phone,
+                // say) continues it; the transcript is read and shown above it when it's in.
+                claude.resume(conversation: conversation, items: [])
                 Task {
                     let items = await Task.detached(priority: .userInitiated) {
                         (try? String(contentsOf: url, encoding: .utf8)).map(ClaudeHistory.items(fromTranscript:)) ?? []
                     }.value
-                    claude.resume(conversation: conversation, items: items)
+                    claude.insertEarlier(items)
                 }
             }
         }

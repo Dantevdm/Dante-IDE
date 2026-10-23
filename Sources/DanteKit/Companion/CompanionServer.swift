@@ -188,7 +188,19 @@ public final class CompanionServer: @unchecked Sendable {
         return error.localizedDescription
     }
 
+    /// Connections that haven't said hello yet, at most: more push out the oldest, so a peer
+    /// holding sockets open can't keep the paired phone out.
+    public static let maximumPending = 3
+
     private func accept(_ connection: NWConnection) {
+        // On the tailnet, only tailnet peers.
+        if CompanionAddress.isTailnet(host), case .hostPort(let peer, _) = connection.endpoint,
+           !CompanionAddress.isTailnet("\(peer)".split(separator: "%").first.map(String.init) ?? "") {
+            connection.cancel()
+            return
+        }
+        let pending = clients.values.filter { $0.device == nil }.sorted { $0.since < $1.since }
+        if pending.count >= Self.maximumPending, let oldest = pending.first { refuse(oldest, "Too many connections waiting.") }
         guard clients.count < Self.maximumClients else {
             connection.cancel()
             return
@@ -327,8 +339,9 @@ public enum CompanionKey {
 }
 
 extension CompanionAddress {
-    /// This Mac's IPv4 addresses, from every interface that's up.
-    public static func local() -> [String] {
+    /// This Mac's IPv4 addresses, from every interface that's up; with `tunnelsOnly`, only
+    /// `utun` interfaces (Tailscale's), so a Wi-Fi that happens to use 100.64/10 isn't picked.
+    public static func local(tunnelsOnly: Bool = false) -> [String] {
         var first: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&first) == 0, let start = first else { return [] }
         defer { freeifaddrs(first) }
@@ -337,6 +350,7 @@ extension CompanionAddress {
             let entry = pointer.pointee
             guard let address = entry.ifa_addr, address.pointee.sa_family == sa_family_t(AF_INET),
                   entry.ifa_flags & UInt32(IFF_UP) != 0 else { continue }
+            if tunnelsOnly, !String(cString: entry.ifa_name).hasPrefix("utun") { continue }
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             if getnameinfo(address, socklen_t(address.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
                 result.append(String(cString: host))
@@ -349,6 +363,6 @@ extension CompanionAddress {
     /// risk), else the tailnet address.
     public static func listening(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
         if let host = environment["DANTE_COMPANION_HOST"], !host.isEmpty { return host }
-        return tailnet(among: local())
+        return tailnet(among: local(tunnelsOnly: true))
     }
 }

@@ -82,6 +82,22 @@ public enum MotionRuntime {
         ["html", "htm", "js", "mjs", "css", "json", "svg", "gltf"].contains((path as NSString).pathExtension.lowercased())
     }
 
+    /// What a scene's page may load: its own scheme, blobs and data, nothing from the network,
+    /// so a scene can't send what it reads anywhere.
+    public static let contentPolicy = "default-src 'self' dante-motion: blob: data:; script-src 'self' dante-motion: blob: 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' dante-motion: blob: data: 'unsafe-inline'; img-src 'self' dante-motion: blob: data:; font-src 'self' dante-motion: blob: data:; media-src 'self' dante-motion: blob: data:; connect-src 'self' dante-motion: blob: data:; frame-src 'none'; object-src 'none'; form-action 'none'"
+
+    /// `relative` inside `base` once symlinks are resolved, or nil when it lands outside it or
+    /// passes through a dot folder (`.ssh`, `.git`, `.env…`) on the way.
+    public static func contained(_ relative: String, in base: URL) -> URL? {
+        let root = base.standardizedFileURL.resolvingSymlinksInPath()
+        let file = root.appending(path: relative).standardizedFileURL.resolvingSymlinksInPath()
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        guard file.path.hasPrefix(rootPath) else { return nil }
+        let inside = file.path.dropFirst(rootPath.count).split(separator: "/")
+        guard !inside.contains(where: { $0.hasPrefix(".") }) else { return nil }
+        return file
+    }
+
     /// A path a scene asked for, made safe: nil when it climbs out of its folder.
     public static func safe(_ path: String) -> String? {
         let decoded = path.removingPercentEncoding ?? path
