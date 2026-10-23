@@ -111,3 +111,57 @@ struct ServiceRecoveryTests {
         #expect(progress.services.first?.ran == 1)
     }
 }
+
+struct CrashReportTests {
+    @Test func nodeCrashNamesTheMissingModule() {
+        let logs = """
+        api-1  | > api@1.0.0 start
+        api-1  | > node server.js
+        api-1  | node:internal/modules/cjs/loader:1228
+        api-1  | Error: Cannot find module 'express'
+        api-1  |     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+        api-1  |     at Module._load (node:internal/modules/cjs/loader:1051:27)
+        api-1  | > api@1.0.0 start
+        api-1  | > node server.js
+        api-1  | Error: Cannot find module 'express'
+        api-1  |     at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+        api-1  | Node.js v22.9.0
+        """
+        let report = CrashReport.read(service: "api", reason: "It crashed (exit 1)", logs: logs)
+        #expect(report.headline == "Error: Cannot find module 'express'")
+        #expect(report.excerpt.last == "Node.js v22.9.0")
+        #expect(report.excerpt.filter { $0.contains("Cannot find module") }.count <= 2)
+        #expect(report.brief.contains("It crashed (exit 1). The logs say: Error: Cannot find module 'express'"))
+        #expect(report.brief.contains("```\n") && report.brief.contains("don't restart"))
+    }
+
+    @Test func pythonCrashNamesTheErrorAfterItsTraceback() {
+        let logs = """
+        worker-1  | INFO: starting worker
+        worker-1  | Traceback (most recent call last):
+        worker-1  |   File "/app/worker.py", line 12, in <module>
+        worker-1  |     main()
+        worker-1  |   File "/app/worker.py", line 8, in main
+        worker-1  |     url = os.environ["QUEUE_URL"]
+        worker-1  | KeyError: 'QUEUE_URL'
+        """
+        let report = CrashReport.read(service: "worker", reason: "It crashed (exit 1)", logs: logs)
+        #expect(report.headline == "KeyError: 'QUEUE_URL'")
+        #expect(report.excerpt.first == "INFO: starting worker")
+    }
+
+    @Test func goPanicAndQuietLogs() {
+        let logs = "api-1  | listening on :8080\napi-1  | panic: assignment to entry in nil map\napi-1  | \napi-1  | goroutine 1 [running]:\napi-1  | main.main()\napi-1  | \t/app/main.go:14 +0x2c"
+        #expect(CrashReport.read(service: "api", reason: "It died", logs: logs).headline == "panic: assignment to entry in nil map")
+        let quiet = CrashReport.read(service: "db", reason: "Unhealthy for 3 minutes", logs: "db-1  | ready\ndb-1  | still ready")
+        #expect(quiet.headline == nil && quiet.summary == nil && quiet.excerpt == ["ready", "still ready"])
+    }
+}
+
+extension CrashReportTests {
+    @Test func aCrashLoopKeepsOnlyTheLastCrash() {
+        let crash = "w-1  | INFO: starting\nw-1  | Traceback (most recent call last):\nw-1  |   File \"/app/w.py\", line 8, in main\nw-1  | KeyError: 'Q'\n"
+        let report = CrashReport.read(service: "w", reason: "It crashed (exit 1)", logs: crash + crash + crash)
+        #expect(report.excerpt == ["INFO: starting", "Traceback (most recent call last):", "  File \"/app/w.py\", line 8, in main", "KeyError: 'Q'"])
+    }
+}

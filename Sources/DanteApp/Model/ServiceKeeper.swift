@@ -12,6 +12,8 @@ final class ServiceKeeper {
         var date: Date
         var text: String
         var failed = false
+        /// What the service's logs said when it went down, for Fix the cause.
+        var crash: CrashReport?
     }
 
     /// What it did, newest last, for the Services page.
@@ -92,14 +94,17 @@ final class ServiceKeeper {
             switch action {
             case .restart(let service, let reason):
                 attempts.append(.init(service: service, date: now))
+                let crash = await Self.crash(service, reason: reason, in: root)
                 guard let command = ServiceRecovery.command(for: action, states: states, stoppedByYou: stoppedByYou) else { continue }
                 let result = await Shell.run(command, in: root)
                 // A restarted service gets its full grace again before it counts as unhealthy.
                 unhealthySince[service] = nil
-                note(result.status == 0 ? "Brought \(service) back: \(reason.lowercasedFirst)." : "Couldn’t restart \(service): \(Self.lastLine(result.stderr.isEmpty ? result.stdout : result.stderr))", failed: result.status != 0)
+                note(result.status == 0 ? "Brought \(service) back: \(reason.lowercasedFirst)." : "Couldn’t restart \(service): \(Self.lastLine(result.stderr.isEmpty ? result.stdout : result.stderr))",
+                     failed: result.status != 0, crash: crash)
             case .giveUp(let service, let reason):
                 gaveUp.insert(service)
-                note("Left \(service) down: \(reason.lowercasedFirst). Its logs say why.", failed: true)
+                let crash = await Self.crash(service, reason: reason, in: root)
+                note("Left \(service) down: \(reason.lowercasedFirst).", failed: true, crash: crash)
             case .apply(let reason):
                 composeText = text
                 guard let command = ServiceRecovery.command(for: action, states: states, stoppedByYou: stoppedByYou) else { continue }
@@ -110,9 +115,16 @@ final class ServiceKeeper {
         }
     }
 
-    private func note(_ text: String, failed: Bool = false) {
-        events.append(Event(date: .now, text: text, failed: failed))
+    private func note(_ text: String, failed: Bool = false, crash: CrashReport? = nil) {
+        events.append(Event(date: .now, text: text, failed: failed, crash: crash))
         if events.count > 20 { events.removeFirst() }
+    }
+
+    /// The service's last log lines, read before it's restarted.
+    private static func crash(_ service: String, reason: String, in root: URL) async -> CrashReport? {
+        let result = await Shell.run(["docker", "compose", "logs", "--no-color", "--tail", "150", service], in: root)
+        guard result.status == 0, !result.stdout.isEmpty else { return nil }
+        return CrashReport.read(service: service, reason: reason, logs: result.stdout)
     }
 
     private static func lastLine(_ output: String) -> String {

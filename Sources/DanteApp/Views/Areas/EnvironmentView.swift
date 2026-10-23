@@ -108,13 +108,14 @@ struct EnvironmentView: View {
                     Banner(symbol: "xmark.octagon.fill", color: theme.red.color, text: error)
                 }
                 if !session.serviceKeeper.events.isEmpty {
-                    KeeperEvents(events: session.serviceKeeper.events)
+                    KeeperEvents(session: session, events: session.serviceKeeper.events, covered: failing?.service)
                 }
                 if let command {
                     CommandOutputCard(run: command, services: compose.services.map(\.name)) { self.command = nil }
                 }
                 if let failing = failing {
-                    DiagnoseCard(session: session, service: failing.service, problem: failing.problem, note: notes[failing.service])
+                    DiagnoseCard(session: session, service: failing.service, problem: failing.problem, note: notes[failing.service],
+                                 crash: session.serviceKeeper.events.last { $0.crash?.service == failing.service }?.crash)
                 }
                 if compose.services.count >= 2, compose.services.contains(where: { !$0.dependsOn.isEmpty }) {
                     Card("How they connect") {
@@ -517,6 +518,8 @@ private struct DiagnoseCard: View {
     let service: String
     let problem: String
     let note: String?
+    /// What its logs said when Keep running last brought it back or gave up.
+    var crash: CrashReport?
 
     var body: some View {
         Card(accent: true) {
@@ -527,7 +530,11 @@ private struct DiagnoseCard: View {
             if let note {
                 Text(note).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             }
-            Button("Find the cause") {
+            if let summary = crash?.summary {
+                Text(summary).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(3).textSelection(.enabled)
+            }
+            Button(crash == nil ? "Find the cause" : "Fix the cause") {
+                if let crash { return session.askClaude(crash.brief) }
                 session.askClaude("The \(service) service is \(problem).\(note.map { " \($0)" } ?? "") Read its logs with `docker compose logs --tail 100 \(service)`, check docker-compose.yml and the code it runs, and tell me why. Propose a fix as a diff.")
             }
             .buttonStyle(DanteButtonStyle(primary: true))
@@ -599,16 +606,33 @@ private struct DockerfilesCard: View {
 /// What Keep running did lately: services brought back, ones left down, compose changes applied.
 private struct KeeperEvents: View {
     @Environment(\.theme) private var theme
+    let session: Session
     let events: [ServiceKeeper.Event]
+    /// The service the page's own Find the cause card is about, which offers the fix instead.
+    var covered: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(events.suffix(3).reversed()) { event in
+            let shown = Array(events.suffix(3).reversed())
+            // One Fix the cause per service, on its newest event.
+            let fixable = Set(Dictionary(shown.compactMap { event in event.crash.flatMap { $0.service == covered ? nil : ($0.service, event.id) } }) { first, _ in first }.values)
+            ForEach(shown) { event in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: event.failed ? "exclamationmark.triangle.fill" : "arrow.clockwise.heart")
                         .font(.dante(size: 11)).foregroundStyle(event.failed ? theme.amber.color : theme.green.color).frame(width: 14)
-                    Text(event.text).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(event.text).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                        if let summary = event.crash?.summary {
+                            Text(summary).font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text.color)
+                                .lineLimit(2).textSelection(.enabled)
+                        }
+                    }
                     Spacer(minLength: 0)
+                    if let crash = event.crash, fixable.contains(event.id), event.failed || crash.headline != nil {
+                        Button("Fix the cause") { session.askClaude(crash.brief) }
+                            .buttonStyle(DanteButtonStyle(primary: event.failed))
+                            .help("Hands \(session.agentName) the end of \(crash.service)’s logs and asks it to fix what makes it crash")
+                    }
                     Text(event.date.formatted(date: .omitted, time: .shortened)).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
                 }
             }

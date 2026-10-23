@@ -626,3 +626,13 @@ tasks:
   title: "Several projects open at once, each in its own window; Recent marks open ones and can still open in this window"
   phase: build
   state: done
+- id: DI-145
+  title: "Tests find Maven and Gradle, and runners in app folders (api/ and web/ side by side)"
+  phase: build
+  state: done
+  notes: "Found on the fresh-eyes tour: a Spring and React repo said No test runner found."
+- id: DI-146
+  title: "Keep running reads a crashed service's logs: the error on the Services page, and Fix the cause hands the agent the last crash"
+  phase: build
+  state: done
+  notes: "Checked on a made-up worker that dies with a KeyError: three restarts, the error shown, one Fix the cause, the brief reached the agent."
