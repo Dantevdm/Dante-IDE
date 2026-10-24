@@ -41,7 +41,7 @@ public struct ListeningPort: Equatable, Sendable {
     }
 
     public static func load() async -> [ListeningPort] {
-        let output = await Shell.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], in: FileManager.default.temporaryDirectory)
+        let output = await Shell.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], in: FileManager.default.temporaryDirectory, timeout: .seconds(15))
         return parse(output.stdout)
     }
 }
@@ -100,7 +100,7 @@ public enum ComposeDiagnosis {
     }
 
     public static func lastHealthFailure(container: String, in root: URL) async -> String? {
-        let output = await Shell.run(["docker", "inspect", "--format", "{{json .State.Health}}", container], in: root)
+        let output = await Shell.run(["docker", "inspect", "--format", "{{json .State.Health}}", container], in: root, timeout: .seconds(20))
         return output.succeeded ? lastHealthFailure(output.stdout) : nil
     }
 }

@@ -464,6 +464,8 @@ public final class ClaudeSession {
                  : "Claude Code isn’t installed.", isError: true)
             return
         }
+        // Exited on its own, and the notice hasn't arrived yet: start again rather than write to it.
+        if let process, !process.isRunning { stop() }
         if process == nil {
             guard start() else { return }
         }
@@ -847,7 +849,8 @@ public final class ClaudeSession {
         process.standardError = errors
         process.terminationHandler = { [weak self] finished in
             let status = finished.terminationStatus
-            Task { @MainActor in self?.processEnded(status: status) }
+            let pid = finished.processIdentifier
+            Task { @MainActor in self?.processEnded(status: status, pid: pid) }
         }
 
         do {
@@ -894,7 +897,8 @@ public final class ClaudeSession {
         process.standardError = errors
         process.terminationHandler = { [weak self] finished in
             let status = finished.terminationStatus
-            Task { @MainActor in self?.processEnded(status: status) }
+            let pid = finished.processIdentifier
+            Task { @MainActor in self?.processEnded(status: status, pid: pid) }
         }
         do {
             try process.run()
@@ -1097,7 +1101,9 @@ public final class ClaudeSession {
         return arguments
     }
 
-    private func processEnded(status: Int32) {
+    private func processEnded(status: Int32, pid: Int32) {
+        // A process that was stopped, or replaced before this notice arrived, is done with.
+        guard process?.processIdentifier == pid else { return }
         if let mcpConfigFile { try? FileManager.default.removeItem(at: mcpConfigFile) }
         mcpConfigFile = nil
         costBeforeThisProcess = totalCostUSD

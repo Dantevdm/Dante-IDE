@@ -47,7 +47,7 @@ extension Session {
                 languages?.changed(open)
             } else {
                 do {
-                    try Data(result.text.utf8).write(to: url, options: .atomic)
+                    try EditorDocument.write(result.text, to: url)
                     written.append(url)
                 } catch {
                     failed.append(path)

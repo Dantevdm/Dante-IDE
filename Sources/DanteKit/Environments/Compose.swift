@@ -167,7 +167,7 @@ public struct ContainerState: Equatable, Sendable, Identifiable {
         // A remote project's containers are the host's; its docker is the one that counts.
         let remote = RemoteRegistry.project(containing: projectRoot) != nil
         guard remote || Shell.which("docker") != nil else { return .failure(.notInstalled) }
-        let output = await Shell.run(["docker", "compose", "ps", "--all", "--format", "json"], in: projectRoot)
+        let output = await Shell.run(["docker", "compose", "ps", "--all", "--format", "json"], in: projectRoot, timeout: .seconds(20))
         guard output.succeeded else {
             if remote, output.status == 127 { return .failure(.notInstalled) }
             let message = output.message

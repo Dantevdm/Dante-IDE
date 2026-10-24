@@ -336,7 +336,7 @@ final class DataModel {
 
     /// Compose's project name, which prefixes its volumes: `name:` in the file, else the folder.
     static func composeProject(in root: URL) async -> String {
-        let output = await Shell.run(["docker", "compose", "config", "--format", "json"], in: root)
+        let output = await Shell.run(["docker", "compose", "config", "--format", "json"], in: root, timeout: .seconds(20))
         if output.succeeded, let name = JSONValue(line: output.stdout)?["name"]?.string, !name.isEmpty { return name }
         return root.lastPathComponent.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
     }

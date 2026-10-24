@@ -83,8 +83,20 @@ public final class EditorDocument: Identifiable {
     public func save() throws {
         // A viewer's text is empty, not the file: writing it would wipe the file.
         guard kind.opensAsText else { return }
-        try Data(text.utf8).write(to: url, options: .atomic)
+        try Self.write(text, to: url)
         savedText = text
         isDirty = false
+    }
+
+    /// Writes atomically without changing what the file is: a symlink keeps pointing where it
+    /// did (its target is written), and the file keeps its permissions, so a script stays
+    /// executable.
+    public nonisolated static func write(_ text: String, to url: URL) throws {
+        let target = url.resolvingSymlinksInPath()
+        let permissions = (try? FileManager.default.attributesOfItem(atPath: target.path))?[.posixPermissions]
+        try Data(text.utf8).write(to: target, options: .atomic)
+        if let permissions {
+            try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: target.path)
+        }
     }
 }

@@ -115,7 +115,7 @@ public struct CIRun: Equatable, Sendable, Identifiable {
         guard Shell.which("gh") != nil else { return .failure(.noGitHubCLI) }
         let output = await Shell.run(
             ["gh", "run", "list", "--limit", "\(limit)", "--json", "databaseId,displayTitle,workflowName,headBranch,status,conclusion,createdAt,url"],
-            in: root
+            in: root, timeout: .seconds(30)
         )
         guard output.succeeded else { return .failure(.failed(output.message)) }
         return .success(parse(output.stdout))

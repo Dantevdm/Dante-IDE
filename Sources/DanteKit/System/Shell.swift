@@ -25,42 +25,64 @@ public enum Shell {
     /// `trimming: false` keeps stdout exactly as written, for file contents. `extra` adds
     /// environment variables, for secrets that mustn't appear in the arguments.
     /// In a remote project's mirror the command runs on its host instead, over ssh.
-    public static func run(_ arguments: [String], in directory: URL, trimming: Bool = true, extra: [String: String] = [:]) async -> Output {
+    /// Cancelling the calling task stops the command; so does `timeout`, which comes back as
+    /// status 124 (like `timeout(1)`). Pollers pass one, so a tool that hangs (a Docker daemon
+    /// that's starting) can't pile up a stuck process and thread every round.
+    public static func run(_ arguments: [String], in directory: URL, trimming: Bool = true, extra: [String: String] = [:],
+                           timeout: Duration? = nil) async -> Output {
         let remote = RemoteRegistry.project(containing: directory)
-        let output: Output = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                let input = configure(process, arguments, in: directory, extra: extra, remote: remote)
-                let out = Pipe(), err = Pipe(), inPipe = Pipe()
-                process.standardOutput = out
-                process.standardError = err
-                process.standardInput = input == nil ? FileHandle.nullDevice : inPipe
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(returning: Output(status: 127, stdout: "", stderr: error.localizedDescription))
-                    return
-                }
-                if let input {
-                    try? inPipe.fileHandleForWriting.write(contentsOf: input)
-                    try? inPipe.fileHandleForWriting.close()
-                }
-                let errors = Box()
-                let group = DispatchGroup()
-                group.enter()
+        let process = Process()
+        let watch = Watch()
+        let output: Output = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    errors.data = err.fileHandleForReading.readDataToEndOfFile()
-                    group.leave()
+                    let input = configure(process, arguments, in: directory, extra: extra, remote: remote)
+                    let out = Pipe(), err = Pipe(), inPipe = Pipe()
+                    process.standardOutput = out
+                    process.standardError = err
+                    process.standardInput = input == nil ? FileHandle.nullDevice : inPipe
+                    do {
+                        guard watch.start(process) else { throw CancellationError() }
+                        try process.run()
+                    } catch {
+                        continuation.resume(returning: Output(status: error is CancellationError ? 130 : 127, stdout: "",
+                                                              stderr: error is CancellationError ? "Cancelled." : error.localizedDescription))
+                        return
+                    }
+                    if let timeout {
+                        DispatchQueue.global().asyncAfter(deadline: .now() + Double(timeout.components.seconds) + Double(timeout.components.attoseconds) / 1e18) {
+                            watch.stop(timedOut: true)
+                        }
+                    }
+                    if let input {
+                        try? inPipe.fileHandleForWriting.write(contentsOf: input)
+                        try? inPipe.fileHandleForWriting.close()
+                    }
+                    let errors = Box()
+                    let group = DispatchGroup()
+                    group.enter()
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        errors.data = err.fileHandleForReading.readDataToEndOfFile()
+                        group.leave()
+                    }
+                    let data = out.fileHandleForReading.readDataToEndOfFile()
+                    group.wait()
+                    process.waitUntilExit()
+                    let timedOut = watch.finish()
+                    var stderr = String(decoding: errors.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let timeout, timedOut {
+                        stderr = ([stderr] + ["\(arguments.first ?? "The command") didn’t finish within \(timeout.components.seconds) seconds, so Dante stopped it."])
+                            .filter { !$0.isEmpty }.joined(separator: "\n")
+                    }
+                    continuation.resume(returning: Output(
+                        status: timedOut ? 124 : process.terminationStatus,
+                        stdout: trimming ? String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) : String(decoding: data, as: UTF8.self),
+                        stderr: stderr
+                    ))
                 }
-                let data = out.fileHandleForReading.readDataToEndOfFile()
-                group.wait()
-                process.waitUntilExit()
-                continuation.resume(returning: Output(
-                    status: process.terminationStatus,
-                    stdout: trimming ? String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) : String(decoding: data, as: UTF8.self),
-                    stderr: String(decoding: errors.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-                ))
             }
+        } onCancel: {
+            watch.stop(timedOut: false)
         }
         // The command may have changed files there (a checkout, a formatter).
         if let remote { RemoteRegistry.commandFinished(for: remote.project) }
@@ -162,5 +184,47 @@ public enum Shell {
 
     private final class Box: @unchecked Sendable {
         var data = Data()
+    }
+
+    /// Stops a running command from another thread (cancellation, a timeout) without racing
+    /// its start or its exit.
+    private final class Watch: @unchecked Sendable {
+        private let lock = NSLock()
+        private var process: Process?
+        private var stopped = false
+        private var finished = false
+        private var timedOut = false
+
+        /// False when the command was cancelled before it started.
+        func start(_ process: Process) -> Bool {
+            lock.withLock {
+                self.process = process
+                return !stopped
+            }
+        }
+
+        func stop(timedOut: Bool) {
+            let process: Process? = lock.withLock {
+                guard !finished, !stopped else { return nil }
+                stopped = true
+                self.timedOut = timedOut
+                return self.process
+            }
+            guard let process, process.isRunning else { return }
+            process.terminate()
+            // A tool that ignores SIGTERM gets SIGKILL a few seconds later.
+            let pid = process.processIdentifier
+            DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak process] in
+                if process?.isRunning == true { kill(pid, SIGKILL) }
+            }
+        }
+
+        /// Whether a timeout stopped it.
+        func finish() -> Bool {
+            lock.withLock {
+                finished = true
+                return timedOut
+            }
+        }
     }
 }

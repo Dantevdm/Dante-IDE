@@ -128,7 +128,8 @@ public struct DockerContainer: Equatable, Sendable, Identifiable {
     /// Every container on this Mac, or nil when Docker isn't there or isn't running.
     public static func load() async -> [DockerContainer]? {
         guard Shell.which("docker") != nil else { return nil }
-        let output = await Shell.run(["docker", "ps", "--all", "--no-trunc", "--format", "{{json .}}"], in: FileManager.default.homeDirectoryForCurrentUser)
+        let output = await Shell.run(["docker", "ps", "--all", "--no-trunc", "--format", "{{json .}}"], in: FileManager.default.homeDirectoryForCurrentUser,
+                                     timeout: .seconds(20))
         return output.succeeded ? parse(output.stdout) : nil
     }
 
@@ -152,7 +153,7 @@ public struct DockerContainer: Equatable, Sendable, Identifiable {
     /// published ports even while it's stopped.
     public static func inspect(_ container: DockerContainer) async -> (container: DockerContainer, environment: [String]) {
         let output = await Shell.run(["docker", "inspect", "--format", "{{json .Config.Env}}\n{{json .HostConfig.PortBindings}}", container.name],
-                                     in: FileManager.default.homeDirectoryForCurrentUser)
+                                     in: FileManager.default.homeDirectoryForCurrentUser, timeout: .seconds(20))
         guard output.succeeded else { return (container, []) }
         let lines = output.stdout.split(separator: "\n").map(String.init)
         var container = container

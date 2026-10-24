@@ -4,6 +4,23 @@ import Testing
 
 @MainActor
 struct WorkspaceTests {
+    @Test func savingKeepsAScriptExecutableAndALinkALink() throws {
+        let folder = try TemporaryFolder()
+        try folder.write("run.sh", "echo one\n")
+        let script = folder.url.appending(path: "run.sh")
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        try FileManager.default.createSymbolicLink(at: folder.url.appending(path: "link.sh"), withDestinationURL: script)
+
+        let document = try EditorDocument(url: folder.url.appending(path: "link.sh"))
+        document.text = "echo two\n"
+        try document.save()
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: folder.url.appending(path: "link.sh").path)
+        #expect(attributes[.type] as? FileAttributeType == .typeSymbolicLink)
+        #expect(try String(contentsOf: script, encoding: .utf8) == "echo two\n")
+        #expect((try FileManager.default.attributesOfItem(atPath: script.path)[.posixPermissions] as? Int) == 0o755)
+    }
+
     @Test func listsFoldersFirstAndHidesIgnored() throws {
         let folder = try TemporaryFolder()
         try folder.write("b.swift", "")

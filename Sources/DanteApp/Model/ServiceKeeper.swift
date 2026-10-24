@@ -122,7 +122,7 @@ final class ServiceKeeper {
 
     /// The service's last log lines, read before it's restarted.
     private static func crash(_ service: String, reason: String, in root: URL) async -> CrashReport? {
-        let result = await Shell.run(["docker", "compose", "logs", "--no-color", "--tail", "150", service], in: root)
+        let result = await Shell.run(["docker", "compose", "logs", "--no-color", "--tail", "150", service], in: root, timeout: .seconds(20))
         guard result.status == 0, !result.stdout.isEmpty else { return nil }
         return CrashReport.read(service: service, reason: reason, logs: result.stdout)
     }

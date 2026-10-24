@@ -73,7 +73,7 @@ public enum PortCheck {
         let pids = Set(ports.map(\.pid)).sorted().map(String.init).joined(separator: ",")
         let temp = FileManager.default.temporaryDirectory
         async let ps = Shell.run(["ps", "-o", "pid=,etime=,command=", "-p", pids], in: temp)
-        async let lsof = Shell.run(["lsof", "-a", "-d", "cwd", "-p", pids, "-Fpn"], in: temp)
+        async let lsof = Shell.run(["lsof", "-a", "-d", "cwd", "-p", pids, "-Fpn"], in: temp, timeout: .seconds(15))
         let processes = parseProcesses(await ps.stdout)
         let directories = parseDirectories(await lsof.stdout)
         return ports.map { port in

@@ -183,7 +183,7 @@ extension Session {
             } else {
                 do {
                     let text = try String(contentsOf: url, encoding: .utf8)
-                    try Data(LSPTextEdit.apply(edits, to: text).utf8).write(to: url, options: .atomic)
+                    try EditorDocument.write(LSPTextEdit.apply(edits, to: text), to: url)
                     written.append(url)
                 } catch {
                     failed.append(url.lastPathComponent)
