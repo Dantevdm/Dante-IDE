@@ -666,3 +666,8 @@ tasks:
   phase: build
   state: review
   notes: "Parsing, picking and the body are tested; the draft script is the one already compiled against Outlook's dictionary. Not tried against real mail (Outlook stays off in the test copy)."
+- id: DI-153
+  title: "Tests on one page: every run kept whoever ran it (you, the agents, jobs), a strip of runs, and a map of every test coloured by its last result"
+  phase: build
+  state: review
+  notes: "Checked in the test copy on a sample package: the agents' and a job's runs, a live run, a flaky test, stale files and choosing an older run. Terminal runs aren't recorded."

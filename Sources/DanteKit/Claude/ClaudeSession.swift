@@ -189,6 +189,11 @@ public final class ClaudeSession {
     public var onDanteTool: (_ name: String, _ input: JSONValue, _ finished: Bool) -> Void = { _, _, _ in }
     /// Claude Code named the conversation (its session id), for linking it to a task.
     public var onConversationStarted: (String) -> Void = { _ in }
+    /// A shell command that ran tests finished (`TestCommandLine.runsTests`): the command, its
+    /// output and whether it failed, so the window can keep the run with the others.
+    public var onTestsRun: (_ command: String, _ output: String, _ failed: Bool) -> Void = { _, _, _ in }
+    /// The project's own `test.command`, which counts as a test command too.
+    public var projectTestCommand: String?
 
     public enum Attention: Equatable, Sendable {
         /// The turn ended; the start of Claude's last reply.
@@ -1190,6 +1195,10 @@ public final class ClaudeSession {
         case .toolResults(let results):
             for result in results {
                 guard let tool = tool(result.toolUseID) else { continue }
+                if tool.name == "Bash", tool.status != .declined, let command = tool.input["command"]?.string,
+                   TestCommandLine.runsTests(command, projectCommand: projectTestCommand) {
+                    onTestsRun(command, result.text, result.isError)
+                }
                 if result.isError {
                     // A declined tool reports an error too; keep it showing as declined.
                     if tool.status != .declined {

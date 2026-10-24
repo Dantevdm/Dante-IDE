@@ -200,6 +200,13 @@ public final class TestRun {
                    duration: duration, brokeOutsideTests: failedOutsideTests,
                    failedTests: results.filter { $0.status == .failed }.map(\.id))
     }
+    /// The run kept whole for `TestRunLog`.
+    public func saved(by runner: TestRunner = .you) -> SavedTestRun {
+        SavedTestRun(date: finished ?? .now, by: runner, command: command.label, results: results, duration: duration,
+                     brokeOutsideTests: failedOutsideTests, narrowed: command.label.contains(" · "),
+                     tail: failedOutsideTests ? Array(output.suffix(30)) : [])
+    }
+
     public var passed: Int { results.count { $0.status == .passed } }
     public var failed: Int { results.count { $0.status == .failed } }
     public var skipped: Int { results.count { $0.status == .skipped } }

@@ -502,6 +502,13 @@ final class Session {
                 self.security.agentScanStarted(by: claude?.engine.title ?? "Claude")
             }
         }
+        // Tests the agent runs count as runs like any other on the Tests page.
+        let root = workspace.url
+        claude.projectTestCommand = TestCommand.detect(projectRoot: root)?.label
+        claude.onTestsRun = { [weak claude] command, output, failed in
+            let runner = TestRunner(.agent, name: claude?.engine.title ?? "Claude")
+            if let run = SavedTestRun.reading(command: command, output: output, failed: failed, by: runner) { TestRunLog.append(run, for: root) }
+        }
         claude.engine = Preferences.shared.agentEngine == .codex && Self.codexPath != nil && claude.remote == nil ? .codex : .claude
         applyClaudePreferences(to: claude)
         return claude
@@ -546,6 +553,14 @@ final class Session {
         claude.onDanteTool = { [weak self] name, input, finished in
             if name == "open_file", !finished { self?.openAgentFile(input, root: job.worktreeURL); return }
             if name == "motion_frames", !finished { self?.renderMotionFrames(input, root: job.worktreeURL) }
+        }
+        // A job's test runs are kept with the project's, named after the job.
+        let root = workspace.url
+        claude.projectTestCommand = TestCommand.detect(projectRoot: root)?.label
+        claude.onTestsRun = { command, output, failed in
+            if let run = SavedTestRun.reading(command: command, output: output, failed: failed, by: TestRunner(.job, name: job.title)) {
+                TestRunLog.append(run, for: root)
+            }
         }
         claude.engine = job.engine == .codex && Self.codexPath != nil ? .codex : .claude
         applyClaudePreferences(to: claude)

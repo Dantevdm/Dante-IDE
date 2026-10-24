@@ -1,10 +1,10 @@
 import Foundation
 
 /// One test from a run.
-public struct TestResult: Equatable, Sendable, Identifiable {
-    public enum Status: Sendable, Equatable { case passed, failed, skipped }
+public struct TestResult: Codable, Equatable, Sendable, Identifiable {
+    public enum Status: String, Codable, Sendable, Equatable { case passed, failed, skipped }
 
-    public struct Issue: Equatable, Sendable {
+    public struct Issue: Codable, Equatable, Sendable {
         public var message: String
         /// As printed: a bare file name, a relative path or an absolute one.
         public var file: String?
