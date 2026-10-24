@@ -77,7 +77,7 @@ final class VineIcon: NSView {
     }
 
     /// The glyph's extent in the logo's 1024 grid, leaves included.
-    static let glyph = CGRect(x: 262, y: 206, width: 534, height: 600)
+    nonisolated static let glyph = CGRect(x: 262, y: 206, width: 534, height: 600)
 
     /// Draws the Vine D centred in `rect`. `sway` is the clock for the leaves (nil holds them
     /// still); the firefly grows and glows with `pulse` (0…1).

@@ -55,7 +55,7 @@ public struct ClaudeRules: Equatable, Sendable {
     /// Judges a tool call. `root` resolves absolute paths into project-relative ones.
     public func verdict(toolName: String, input: JSONValue, root: URL) -> Verdict {
         if toolName == "Bash", let command = input["command"]?.string {
-            if let pattern = never.first(where: { Self.command(command, mentions: $0) }) {
+            if let pattern = never.first(where: { Self.command(command, mentions: $0) || Self.command(command, expandsTo: $0, in: root) }) {
                 return .blocked("This project’s rules (.dante/project.yaml, claude.never) don’t allow commands that touch \(pattern).")
             }
             if let pattern = flag.first(where: { Self.command(command, mentions: $0) }) {
@@ -116,6 +116,23 @@ public struct ClaudeRules: Equatable, Sendable {
         }
         let name = (relative as NSString).lastPathComponent
         return fnmatch(pattern, relative, 0) == 0 || fnmatch(pattern, name, 0) == 0
+    }
+
+    /// Whether a word with a wildcard (`cat .e*`, `secrets/*`) would expand, in the project,
+    /// to a path matching the pattern: the shell does the expanding, so the word alone hides it.
+    static func command(_ command: String, expandsTo pattern: String, in root: URL) -> Bool {
+        let words = command.split { $0.isWhitespace || ";|&<>()'\"`=".contains($0) }.map(String.init)
+        return words.contains { word in
+            guard word.contains(where: { "*?[".contains($0) }), !word.hasPrefix("/"), !word.contains("..") else { return false }
+            let token = word.hasPrefix("./") ? String(word.dropFirst(2)) : word
+            var found = glob_t()
+            defer { globfree(&found) }
+            guard glob(root.path + "/" + token, 0, nil, &found) == 0 else { return false }
+            return (0..<Int(found.gl_pathc)).contains { index in
+                guard let match = found.gl_pathv[index].map({ String(cString: $0) }) else { return false }
+                return path(String(match.dropFirst(root.path.count + 1)), matches: pattern)
+            }
+        }
     }
 
     /// Whether a shell command names a path matching the pattern. A heuristic: it checks

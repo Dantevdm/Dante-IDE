@@ -242,6 +242,17 @@ struct ClaudeRulesTests {
         #expect(rules.verdict(toolName: "Bash", input: ["command": "swift test"], root: root) == .allowed)
     }
 
+    @Test func aWildcardThatReachesANeverPathIsBlocked() throws {
+        let folder = try TemporaryFolder()
+        try folder.write(".env", "TOKEN=x")
+        try folder.write("secrets/key.pem", "x")
+        try folder.write("src/app.ts", "x")
+        for command in ["cat .e*", "head ./.en?", "cat secrets/*", "grep TOKEN .[e]nv"] {
+            guard case .blocked = rules.verdict(toolName: "Bash", input: ["command": .string(command)], root: folder.url) else { Issue.record("\(command)"); continue }
+        }
+        #expect(rules.verdict(toolName: "Bash", input: ["command": "cat src/*.ts"], root: folder.url) == .allowed)
+    }
+
     @Test func flagAndOutsideProposeAddNotes() {
         guard case .note = rules.verdict(toolName: "Edit", input: ["file_path": "/p/db/migrations/001.sql"], root: root) else { Issue.record("flag"); return }
         guard case .note = rules.verdict(toolName: "Write", input: ["file_path": "/p/package.json"], root: root) else { Issue.record("file flag"); return }

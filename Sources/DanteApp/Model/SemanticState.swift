@@ -46,9 +46,9 @@ final class SemanticState {
         guard !isIndexing else { return }
         indexTask = Task { [search] in
             let progress: @Sendable (Int, Int) -> Void = { done, total in
-                Task { @MainActor [weak self] in
+                Task { @MainActor in
                     // Small updates aren't worth a progress bar.
-                    if total > 64 || self?.index == nil { self?.status = .indexing(done: done, total: total) }
+                    if total > 64 || self.index == nil { self.status = .indexing(done: done, total: total) }
                 }
             }
             do {

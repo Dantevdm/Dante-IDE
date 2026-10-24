@@ -32,8 +32,8 @@ final class SecurityModel {
         defer { scanning = false; progress = "" }
         let earlier = report ?? SecurityReport.load(for: root)
         let online = Preferences.shared.checksDependenciesOnline
-        let scanned = await ProjectSecurity.scan(root: root, files: files, options: .init(onlineAdvisories: online, save: false)) { message in
-            Task { @MainActor [weak self] in self?.progress = message }
+        let scanned = await ProjectSecurity.scan(root: root, files: files, options: .init(onlineAdvisories: online, save: false)) { [weak self] message in
+            Task { @MainActor in self?.progress = message }
         }
         // Audit findings stay until the next audit.
         let fresh = ProjectSecurity.keepingAudits(scanned, from: earlier)

@@ -159,7 +159,7 @@ final class NaturalSpeaker {
     // Made outside the main actor: a closure written in a main-actor method is checked to run
     // there, and the audio and pipe threads that call these would trap.
 
-    private nonisolated static func played(_ token: Int, generation: Int) -> AVAudioPlayerNodeCompletionHandler {
+    private nonisolated static func played(_ token: Int, generation: Int) -> @Sendable (AVAudioPlayerNodeCompletionCallbackType) -> Void {
         { _ in Task { @MainActor in NaturalSpeaker.shared.played(token, generation: generation) } }
     }
 
