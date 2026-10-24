@@ -59,33 +59,3 @@ enum HighlightedCode {
         return Language(url: URL(filePath: "file.\(ext)"))
     }
 }
-
-/// A file's text with line numbers, highlighted, selectable and scrolling sideways.
-struct SourceView: View {
-    @Environment(\.theme) private var theme
-    let text: String
-    let language: Language
-
-    var body: some View {
-        let lines = HighlightedCode.lines(text, language: language, theme: theme)
-        ScrollView(.horizontal) {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(lines.indices, id: \.self) { index in
-                    HStack(alignment: .firstTextBaseline, spacing: 14) {
-                        Text("\(index + 1)")
-                            .foregroundStyle(theme.lineNumber.color)
-                            .frame(width: 28, alignment: .trailing)
-                        Text(lines[index])
-                            .foregroundStyle(theme.syntax.plain.color)
-                            .fixedSize()
-                    }
-                    .frame(minHeight: 20)
-                }
-            }
-            .font(.dante(size: 12.5, design: .monospaced))
-            .textSelection(.enabled)
-            .padding(.vertical, 12)
-            .padding(.trailing, 16)
-        }
-    }
-}

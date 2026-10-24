@@ -31,11 +31,6 @@ extension Session {
         }
     }
 
-    func selectTerminal(offset: Int) {
-        guard let index = terminalTabs.firstIndex(where: { $0.id == selectedTerminal }) else { return }
-        selectedTerminal = terminalTabs[(index + offset + terminalTabs.count) % terminalTabs.count].id
-    }
-
     /// Starts Claude Code's sign-in in the terminal; the next message starts a fresh session.
     func signInToClaude() {
         guard let claude, let executable = claude.executable else { return }
