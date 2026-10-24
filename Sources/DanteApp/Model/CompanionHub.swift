@@ -247,6 +247,12 @@ final class CompanionHub {
                 self?.server?.deliver(.briefing(id: id, briefing: briefing), to: device)
             }
             return
+        case .replyMail(let id, let who, let says):
+            Task { [weak self] in
+                let said = await MailReplies.draft(MailReply(who: who, says: says))
+                self?.server?.reply(to: device, id: id, ok: said.contains("is open in Outlook"), message: said)
+            }
+            return
         default:
             break
         }
@@ -281,7 +287,7 @@ final class CompanionHub {
     /// Nil when done, else why not.
     private func act(on message: ClientMessage) -> String? {
         switch message {
-        case .hello, .speech, .library, .page, .briefing:
+        case .hello, .speech, .library, .page, .briefing, .replyMail:
             return nil
         case .openProject(_, let project):
             if let session = session(project) {

@@ -172,11 +172,11 @@ Dante's own task list is [`.dante/tasks.yaml`](.dante/tasks.yaml); this is the s
 
 **Next**
 
-- The assistant acting on the morning update: "reply to Ana that Thursday works" from the wall or the phone, drafted on the Mac for you to send.
+- Nothing queued: what daily use turns up next.
 
 **Waiting for review** (built, being tried in daily use)
 
-Hands reading windows, menus and Outlook, exploring from the iPhone and iPad, the morning update and the iPad wall, Keep running reading crashes, the companion app, Hands and the agents' browser, the team of sub-agents, jobs with away mode, budgets and job types, several projects in several windows, motion everywhere, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
+replies by voice drafted in Outlook, Hands reading windows, menus and Outlook, exploring from the iPhone and iPad, the morning update and the iPad wall, Keep running reading crashes, the companion app, Hands and the agents' browser, the team of sub-agents, jobs with away mode, budgets and job types, several projects in several windows, motion everywhere, the motion studio, presence orb and constellation, the Stage, full voice and hold-to-talk, Codex or Claude in charge, automatic task effort, local models and Looker, search by meaning, the security layer, cloud agents with your own keys, approvals, remote projects over SSH, the debugger, the native Settings window, alarms in Health, and the release build.
 
 ## Requirements
 

@@ -164,12 +164,15 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case page(id: String, project: String, request: CompanionPageRequest)
     /// The morning update; `fresh` gathers it again rather than taking one under five minutes old.
     case briefing(id: String, fresh: Bool)
+    /// "Reply to Ana that Thursday works": the Mac opens a reply in Outlook for the person to
+    /// send, and answers with `result` saying what it did.
+    case replyMail(id: String, who: String, says: String)
 
     public var id: String? {
         switch self {
         case .hello: nil
         case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _),
-             .library(let id, _), .page(let id, _, _), .briefing(let id, _): id
+             .library(let id, _), .page(let id, _, _), .briefing(let id, _), .replyMail(let id, _, _): id
         }
     }
 }

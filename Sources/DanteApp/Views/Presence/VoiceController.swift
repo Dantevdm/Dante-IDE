@@ -616,6 +616,9 @@ final class VoiceController {
                 let briefing = await Briefings.shared.make()
                 say(briefing.spoken)
             }
+        case .reply(let reply):
+            say("Writing it.")
+            Task { say(await MailReplies.draft(reply)) }
         case .usage:
             let model = PresenceController.shared.model
             let out = Sessions.all.contains { $0.claude?.outOfUsageSince != nil }
@@ -662,6 +665,7 @@ final class VoiceController {
         switch command {
         case .ask: "ask"
         case .show: "show"
+        case .reply: "reply"
         default: String(describing: command)
         }
     }

@@ -661,3 +661,8 @@ tasks:
   phase: build
   state: review
   notes: "Pure parts tested; the Outlook scripts compile against Outlook's dictionary. Not tried live: needs Accessibility for Dante and Automation for Outlook, which the user grants."
+- id: DI-152
+  title: "Replies by voice: \"reply to Ana that Thursday works\" on the Mac, iPhone or wall opens a reply in Outlook for you to send"
+  phase: build
+  state: review
+  notes: "Parsing, picking and the body are tested; the draft script is the one already compiled against Outlook's dictionary. Not tried against real mail (Outlook stays off in the test copy)."

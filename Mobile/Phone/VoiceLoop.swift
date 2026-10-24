@@ -718,6 +718,9 @@ final class VoiceLoop {
             guard let target else { return say("There are no projects on your Mac yet.") }
             connection.startJob(brief, project: target.id, awayMinutes: nil)
             say((target.isOpen ? "" : "Opening \(target.name). ") + "Starting a job in \(target.name): \(brief).")
+        case .reply(let reply):
+            say("Writing it.")
+            Task { say(await connection.replyMail(reply)) }
         case .ask(let message):
             guard let target else { return say("There are no projects on your Mac yet.") }
             connection.ask(message, project: target.id, spoken: true)

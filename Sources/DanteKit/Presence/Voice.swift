@@ -22,6 +22,8 @@ public enum VoiceCommand: Equatable, Sendable {
     case usage
     /// The morning update: projects, pipelines, mail and today's meetings.
     case briefing
+    /// "Reply to Ana that Thursday works": a draft reply in Outlook, never sent.
+    case reply(MailReply)
     /// Ends a spoken conversation.
     case goodbye
     /// Go to a page or view in the frontmost project (a `FeatureGuide` id).
@@ -52,6 +54,7 @@ public enum VoiceCommand: Equatable, Sendable {
         if statusQuestions.contains(core) { return .status }
         if usageQuestions.contains(core) { return .usage }
         if Briefing.isRequest(core) { return .briefing }
+        if let reply = MailReply.parse(text) { return .reply(reply) }
         // Only the greeting comes off here: "switch to dante" names a project.
         var greeted = spoken.split(separator: " ").map(String.init)
         while let first = greeted.first, ["hey", "ok", "okay", "claude", "dante", "jarvis", "so"].contains(first) { greeted.removeFirst() }

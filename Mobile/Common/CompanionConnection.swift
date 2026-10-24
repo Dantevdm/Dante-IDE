@@ -142,8 +142,9 @@ final class CompanionConnection {
             exploreRequests.removeValue(forKey: id)?.resume(returning: message)
         case .result(let id, let ok, let message):
             if let request = exploreRequests.removeValue(forKey: id) {
-                // A library or page the Mac couldn't make: the reader says why.
-                request.resume(returning: ok ? nil : .result(id: id, ok: false, message: message))
+                // A library or page the Mac couldn't make (the reader says why), or what became
+                // of a drafted reply.
+                request.resume(returning: .result(id: id, ok: ok, message: message))
                 return
             }
             failure = ok ? nil : message
@@ -300,6 +301,14 @@ final class CompanionConnection {
         case .briefing(_, let briefing)?: .success(briefing)
         case .result(_, _, let message)?: .failure(.init(message: message))
         default: .failure(.unreachable(status))
+        }
+    }
+
+    /// Asks the Mac to open a reply in Outlook; returns what to say. Nothing is sent.
+    func replyMail(_ reply: MailReply) async -> String {
+        switch await explore(timeout: 60, { .replyMail(id: $0, who: reply.who, says: reply.says) }) {
+        case .result(_, _, let message)?: message
+        default: ExploreFailure.unreachable(status).message
         }
     }
 
