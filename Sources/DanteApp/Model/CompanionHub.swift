@@ -185,7 +185,7 @@ final class CompanionHub {
     private func open(_ project: String) -> String? {
         guard let url = recentProjects().first(where: { $0.id == project })?.url else { return "That project isn’t on the Mac any more." }
         guard let openWindow = Opener.openWindow else { return "Open Dante’s window on the Mac once, then try again." }
-        Opener.handle(OpenRequest(items: [.init(path: url.path)]).url, from: nil, openWindow: openWindow)
+        Opener.handle(OpenRequest(items: [.init(path: url.path)], key: JobRequest.localKey()).url, from: nil, openWindow: openWindow)
         return nil
     }
 

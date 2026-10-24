@@ -178,6 +178,7 @@ case .help:
 case .version:
     let info = danteApp().flatMap { Bundle(url: $0)?.infoDictionary }
     print("Dante \(info?["CFBundleShortVersionString"] as? String ?? "(not found)")")
-case .open(let request):
+case .open(var request):
+    request.key = JobRequest.localKey()
     send(request.url)
 }

@@ -37,7 +37,8 @@ enum Opener {
                 job.awayMinutes = nil
             }
             pendingJobs[resolved(job.folder), default: []].append(job)
-            return handle(OpenRequest(items: [.init(path: job.folder)]).url, from: receiver, openWindow: openWindow)
+            // Trusted or confirmed just now: the folder opens without asking again.
+            return handle(OpenRequest(items: [.init(path: job.folder)], key: JobRequest.localKey()).url, from: receiver, openWindow: openWindow)
         }
         guard var request = OpenRequest(url: url) else { return }
         for index in request.items.indices {
@@ -45,6 +46,14 @@ enum Opener {
         }
         let sessions = Sessions.all
         func folder(of session: Session) -> String? { session.workspace.map { resolved($0.url.path) } }
+        // A link from a web page or another app opens only projects you've had open, unless you say so.
+        if !request.isTrusted(by: JobRequest.localKey(create: false)) {
+            let known = Set(sessions.compactMap(folder) + RecentProjects().items.map { resolved($0.path) })
+            let unknown = request.items.map(\.path).filter { path in
+                !known.contains { path == $0 || path.hasPrefix($0 + "/") }
+            }
+            if !unknown.isEmpty, !confirmOpening(unknown) { return }
+        }
         let targets = OpenTarget.plan(
             request,
             openFolders: sessions.compactMap(folder),
@@ -75,6 +84,17 @@ enum Opener {
         }
         // Launch Services brings Dante forward for `dante`; this picks the window.
         shown?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    private static func confirmOpening(_ paths: [String]) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = paths.count == 1 ? "Open \((paths[0] as NSString).lastPathComponent)?" : "Open \(paths.count) items?"
+        alert.informativeText = "A link asked Dante to open:\n\n" + paths.prefix(5).joined(separator: "\n")
+            + "\n\nIt didn’t come from the dante command, and Dante hasn’t had this project open before. Opening files starts their language servers, and some run the project’s build scripts, so open it only if you trust it."
+        alert.addButton(withTitle: "Open")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private static func confirm(_ job: JobRequest) -> Bool {

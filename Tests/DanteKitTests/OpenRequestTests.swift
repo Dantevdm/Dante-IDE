@@ -4,6 +4,18 @@ import Foundation
 import Testing
 
 struct OpenRequestTests {
+    @Test func onlyTheCommandsKeyOrFinderMakesALinkTrusted() throws {
+        let fromCommand = OpenRequest(items: [.init(path: "/home/me/shop")], key: "k123")
+        let read = try #require(OpenRequest(url: fromCommand.url))
+        #expect(read.key == "k123" && read.items == fromCommand.items)
+        #expect(read.isTrusted(by: "k123"))
+        #expect(!read.isTrusted(by: "other"))
+        #expect(!read.isTrusted(by: nil))
+        let fromPage = try #require(OpenRequest(url: URL(string: "dante://open?path=/home/me/Downloads/x/src/main.rs")!))
+        #expect(!fromPage.isTrusted(by: "k123"))
+        #expect(OpenRequest(url: URL(filePath: "/home/me/shop"))?.isTrusted(by: nil) == true)
+    }
+
     let existing: Set<String> = ["/home/me/shop", "/home/me/shop/api/main.go", "/home/me/shop/web/app.ts", "/home/me/notes.md", "/home/me/a b/c:d.txt"]
 
     func parse(_ arguments: [String], in directory: String = "/home/me/shop") throws -> OpenRequest.Command {
@@ -37,7 +49,7 @@ struct OpenRequestTests {
         let request = OpenRequest(items: [.init(path: "/home/me/a b"), .init(path: "/home/me/a b/c&d=e.go", line: 3)], newWindow: true)
         #expect(request.url.absoluteString.hasPrefix("dante://open?path="))
         #expect(OpenRequest(url: request.url) == request)
-        #expect(OpenRequest(url: URL(filePath: "/home/me/shop")) == OpenRequest(items: [.init(path: "/home/me/shop")]))
+        #expect(OpenRequest(url: URL(filePath: "/home/me/shop"))?.items == [.init(path: "/home/me/shop")])
         #expect(OpenRequest(url: URL(string: "dante://open?path=relative")!) == nil)
         #expect(OpenRequest(url: URL(string: "https://example.com")!) == nil)
     }

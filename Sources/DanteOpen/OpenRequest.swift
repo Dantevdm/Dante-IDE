@@ -18,10 +18,23 @@ public struct OpenRequest: Equatable, Sendable {
     public var items: [Item]
     /// Open the folders in new windows even when one has them open already.
     public var newWindow: Bool
+    /// This Mac's key (`JobRequest.localKey`), from the `dante` command. Without it the link
+    /// came from a web page or another app, and a project that isn't open or recent is
+    /// confirmed first: opening files starts language servers, and some run the project's code.
+    public var key: String?
+    /// Finder or the Dock: something you did, not a link.
+    public private(set) var fromFile = false
 
-    public init(items: [Item], newWindow: Bool = false) {
+    public init(items: [Item], newWindow: Bool = false, key: String? = nil) {
         self.items = items
         self.newWindow = newWindow
+        self.key = key
+    }
+
+    public func isTrusted(by localKey: String?) -> Bool {
+        if fromFile { return true }
+        guard let key, let localKey, !localKey.isEmpty else { return false }
+        return key == localKey
     }
 
     public static let scheme = "dante"
@@ -37,6 +50,7 @@ public struct OpenRequest: Equatable, Sendable {
             if let line = item.line { query.append(URLQueryItem(name: "line", value: String(line))) }
         }
         if newWindow { query.append(URLQueryItem(name: "new", value: "1")) }
+        if let key { query.append(URLQueryItem(name: "key", value: key)) }
         components.queryItems = query
         return components.url!
     }
@@ -45,14 +59,18 @@ public struct OpenRequest: Equatable, Sendable {
     public init?(url: URL) {
         if url.isFileURL {
             self.init(items: [Item(path: url.standardizedFileURL.path)])
+            fromFile = true
             return
         }
         guard url.scheme == Self.scheme, url.host == "open",
               let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return nil }
         var items: [Item] = []
         var newWindow = false
+        var key: String?
         for entry in query {
             switch entry.name {
+            case "key":
+                key = entry.value
             case "path":
                 if let value = entry.value, value.hasPrefix("/") { items.append(Item(path: value)) }
             case "line":
@@ -64,7 +82,7 @@ public struct OpenRequest: Equatable, Sendable {
             }
         }
         guard !items.isEmpty else { return nil }
-        self.init(items: items, newWindow: newWindow)
+        self.init(items: items, newWindow: newWindow, key: key)
     }
 
     public enum Command: Equatable, Sendable {

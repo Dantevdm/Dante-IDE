@@ -656,7 +656,7 @@ final class VoiceController {
 
     /// Opens a folder like `dante <folder>` does, through this copy of Dante.
     static func open(_ path: String) {
-        NSWorkspace.shared.open([OpenRequest(items: [.init(path: path)]).url], withApplicationAt: Bundle.main.bundleURL,
+        NSWorkspace.shared.open([OpenRequest(items: [.init(path: path)], key: JobRequest.localKey()).url], withApplicationAt: Bundle.main.bundleURL,
                                 configuration: NSWorkspace.OpenConfiguration())
     }
 

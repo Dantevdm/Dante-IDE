@@ -314,7 +314,7 @@ final class Session {
     /// else in the window that already has it, else in a new window.
     func openProject(_ url: URL) {
         guard workspace != nil, let openWindow = Opener.openWindow else { return open(folder: url) }
-        Opener.handle(OpenRequest(items: [.init(path: url.path)]).url, from: self, openWindow: openWindow)
+        Opener.handle(OpenRequest(items: [.init(path: url.path)], key: JobRequest.localKey()).url, from: self, openWindow: openWindow)
     }
 
     func newProject() {
