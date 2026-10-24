@@ -25,7 +25,7 @@ public struct ClaudeRules: Equatable, Sendable {
     public var isEmpty: Bool { propose.isEmpty && flag.isEmpty && never.isEmpty }
 
     public static func parse(projectYAML yaml: String) -> ClaudeRules {
-        guard let root = (try? Yams.load(yaml: yaml)) as? [String: Any],
+        guard let root = (try? SafeYAML.load(yaml)) as? [String: Any],
               let claude = root["claude"] as? [String: Any] else { return ClaudeRules() }
         func list(_ key: String) -> [String] {
             if let values = claude[key] as? [Any] { return values.map { "\($0)" } }

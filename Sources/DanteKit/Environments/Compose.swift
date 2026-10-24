@@ -58,7 +58,7 @@ public struct ComposeFile: Equatable, Sendable {
     }
 
     public static func parse(_ yaml: String) throws -> [Service] {
-        guard let root = try Yams.load(yaml: yaml) as? [String: Any],
+        guard let root = try SafeYAML.load(yaml) as? [String: Any],
               let services = root["services"] as? [String: Any] else { return [] }
         return services.keys.sorted().map { name in
             let spec = services[name] as? [String: Any] ?? [:]

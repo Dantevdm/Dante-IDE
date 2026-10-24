@@ -226,7 +226,7 @@ public struct SecurityIgnores: Equatable, Sendable {
     public static let path = ".dante/security.yaml"
 
     public static func parse(_ text: String) -> SecurityIgnores {
-        guard let root = (try? Yams.load(yaml: text)) as? [String: Any] else { return SecurityIgnores() }
+        guard let root = (try? SafeYAML.load(text)) as? [String: Any] else { return SecurityIgnores() }
         let tests = (root["tests"] as? [Any])?.map { "\($0)" } ?? (root["tests"] as? String).map { [$0] } ?? []
         let list = root["ignore"] as? [Any] ?? []
         return SecurityIgnores(entries: list.compactMap { item in

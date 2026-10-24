@@ -32,7 +32,7 @@ public struct ProjectInfo: Equatable, Sendable {
     }
 
     public static func parse(projectYAML yaml: String) -> ProjectInfo {
-        guard let root = (try? Yams.load(yaml: yaml)) as? [String: Any] else { return ProjectInfo() }
+        guard let root = (try? SafeYAML.load(yaml)) as? [String: Any] else { return ProjectInfo() }
         var checks: [HealthCheck] = []
         let operate = root["operate"] as? [String: Any]
         // `checks`, or `health` as people (and Claude) often write it; a bare URL works too.

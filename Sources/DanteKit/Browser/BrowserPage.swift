@@ -63,7 +63,7 @@ public struct BrowserHosts: Equatable, Sendable {
     }
 
     public static func parse(_ yaml: String) -> BrowserHosts {
-        guard let root = (try? Yams.load(yaml: yaml)) as? [String: Any], let browser = root["browser"] as? [String: Any] else { return BrowserHosts() }
+        guard let root = (try? SafeYAML.load(yaml)) as? [String: Any], let browser = root["browser"] as? [String: Any] else { return BrowserHosts() }
         let hosts = (browser["hosts"] as? [Any] ?? []).compactMap { $0 as? String }
         // A listed URL counts by its host.
         return BrowserHosts(extra: hosts.map { URL(string: $0)?.host(percentEncoded: false) ?? $0 })

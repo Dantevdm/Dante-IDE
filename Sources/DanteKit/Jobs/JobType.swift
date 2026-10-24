@@ -108,7 +108,7 @@ public struct JobType: Identifiable, Equatable, Sendable {
             return ([:], text)
         }
         let yaml = lines[1..<end].joined(separator: "\n")
-        let meta = ((try? Yams.load(yaml: yaml)) as? [String: Any]) ?? [:]
+        let meta = ((try? SafeYAML.load(yaml)) as? [String: Any]) ?? [:]
         return (meta, lines[(end + 1)...].joined(separator: "\n"))
     }
 

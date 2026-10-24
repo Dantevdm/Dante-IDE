@@ -25,7 +25,7 @@ public enum SpecCheck {
             return [Issue(severity: .error, message: "There’s no project.yaml, so the project has no lifecycle or rules.", path: ".dante/project.yaml")]
         }
         do {
-            let loaded = try Yams.load(yaml: yaml)
+            let loaded = try SafeYAML.load(yaml)
             if !(loaded is [String: Any]) {
                 issues.append(Issue(severity: .error, message: "project.yaml should be a map of keys like name, lifecycle and claude.", path: ".dante/project.yaml"))
             }

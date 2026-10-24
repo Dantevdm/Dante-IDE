@@ -59,7 +59,7 @@ public struct BrandKit: Equatable, Sendable {
     public static let path = ".dante/brand.yaml"
 
     public static func parse(_ text: String, name: String) -> BrandKit {
-        let meta = ((try? Yams.load(yaml: text)) as? [String: Any]) ?? [:]
+        let meta = ((try? SafeYAML.load(text)) as? [String: Any]) ?? [:]
         var kit = BrandKit(name: (meta["name"] as? String)?.nonEmptyTrimmed ?? name)
         kit.isSaved = true
         let colors = (meta["colors"] as? [String: Any]) ?? (meta["colours"] as? [String: Any]) ?? [:]

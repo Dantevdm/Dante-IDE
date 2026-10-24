@@ -97,7 +97,7 @@ public struct MotionPiece: Equatable, Sendable {
     /// Read leniently: missing or odd values fall back to the defaults, `duration` may be
     /// "1:30" or "90s", narration lines may be `- 2.5: text` or `{at, text}`.
     public static func parse(_ text: String, fallbackTitle: String = "Untitled") -> MotionPiece {
-        let meta = ((try? Yams.load(yaml: text)) as? [String: Any]) ?? [:]
+        let meta = ((try? SafeYAML.load(text)) as? [String: Any]) ?? [:]
         var piece = MotionPiece(title: (meta["title"] as? String)?.nonEmptyTrimmed ?? fallbackTitle)
         if let kind = (meta["kind"] as? String).flatMap({ Kind(rawValue: $0.lowercased()) }) { piece.kind = kind }
         if let duration = seconds(meta["duration"]), duration > 0 { piece.duration = min(duration, 3600) }

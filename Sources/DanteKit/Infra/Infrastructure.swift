@@ -393,7 +393,7 @@ extension Infrastructure {
                 // Short-form functions (!Ref, !Sub…) aren't plain YAML; without the tag the
                 // value is still there, and references are found by name below.
                 let plain = text.replacingOccurrences(of: #"!(Ref|GetAtt|Sub|Join|Select|Split|If|Equals|Not|And|Or|FindInMap|Base64|Cidr|ImportValue|GetAZs|Condition|Transform)\b"#, with: "", options: .regularExpression)
-                root = (try? Yams.load(yaml: plain)) as? [String: Any]
+                root = (try? SafeYAML.load(plain)) as? [String: Any]
             }
             guard let root, let resources = root["Resources"] as? [String: Any] else { return nil }
             let names = Set(resources.keys)
@@ -540,7 +540,7 @@ extension Infrastructure {
             guard isGitHub || isGitLab || looksLikeADO else { return nil }
             // ADO template expressions (${{ if … }}:) aren't keys Yams can read as they stand.
             let plain = text.replacingOccurrences(of: #"\$\{\{[^}]*\}\}"#, with: "expr", options: .regularExpression)
-            guard let root = (try? Yams.load(yaml: plain)) as? [String: Any] else { return nil }
+            guard let root = (try? SafeYAML.load(plain)) as? [String: Any] else { return nil }
             let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
             let stem = ((file as NSString).lastPathComponent as NSString).deletingPathExtension
             if isGitHub { return github(root, file: file, stem: stem, lines: lines) }

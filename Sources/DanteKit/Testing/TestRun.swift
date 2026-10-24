@@ -12,7 +12,7 @@ public struct TestCommand: Equatable, Sendable {
 
     public static func detect(projectRoot root: URL) -> TestCommand? {
         if let yaml = try? String(contentsOf: root.appending(path: ".dante/project.yaml"), encoding: .utf8),
-           let project = (try? Yams.load(yaml: yaml)) as? [String: Any],
+           let project = (try? SafeYAML.load(yaml)) as? [String: Any],
            let test = project["test"] as? [String: Any], let command = test["command"] as? String, !command.isEmpty {
             return TestCommand(label: command, arguments: ["sh", "-c", verbose(command)], readsXUnit: false)
         }

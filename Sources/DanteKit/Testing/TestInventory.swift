@@ -85,7 +85,7 @@ public struct TestInventory: Equatable, Sendable {
     }
 
     public static func categoryRules(yaml: String) -> [CategoryRule] {
-        guard let project = (try? Yams.load(yaml: yaml)) as? [String: Any],
+        guard let project = (try? SafeYAML.load(yaml)) as? [String: Any],
               let categories = (project["test"] as? [String: Any])?["categories"] as? [String: Any] else { return [] }
         return categories.keys.sorted().compactMap { name in
             let globs = (categories[name] as? [Any])?.map { "\($0)" } ?? (categories[name] as? String).map { [$0] } ?? []
