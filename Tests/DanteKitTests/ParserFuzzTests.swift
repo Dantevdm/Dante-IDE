@@ -99,6 +99,20 @@ import Testing
         }
     }
 
+    @Test func editsAtAnyPositionNeverCrash() {
+        var random = Seeded(state: 6)
+        for text in Self.inputs(300, seed: 7) {
+            let edits = (0..<Int.random(in: 0...6, using: &random)).map { _ in
+                let start = LSPPosition(line: Int.random(in: -5...40, using: &random), character: Int.random(in: -5...400, using: &random))
+                let end = LSPPosition(line: Int.random(in: -5...40, using: &random), character: Int.random(in: -5...400, using: &random))
+                return LSPTextEdit(range: LSPRange(start: start, end: end), newText: Self.pieces.randomElement(using: &random)!)
+            }
+            _ = LSPTextEdit.apply(edits, to: text)
+            _ = Snippet.expand(text)
+        }
+        #expect(LineIndex("a\nb" as NSString).offset(of: LSPPosition(line: -3, character: 1)) == 1)
+    }
+
     @Test func yamlWithAListOrMapAsAKeyIsInvalidNotACrash() {
         for yaml in ["[a]: b", "? {x: y}\n: z", "services:\n  ? [web]\n  : {image: x}", "claude:\n  never:\n    {a: 1}: 2"] {
             #expect(throws: SafeYAML.Invalid.self) { try SafeYAML.load(yaml) }

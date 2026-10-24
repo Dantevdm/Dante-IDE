@@ -164,8 +164,10 @@ public struct LineIndex: Sendable {
 
     public func offset(of position: LSPPosition) -> Int {
         guard position.line < starts.count else { return length }
-        let start = starts[max(position.line, 0)]
-        let end = position.line + 1 < starts.count ? starts[position.line + 1] - 1 : length
+        // A server's negative line counts as the first, rather than indexing before it.
+        let line = max(position.line, 0)
+        let start = starts[line]
+        let end = line + 1 < starts.count ? starts[line + 1] - 1 : length
         return min(start + max(position.character, 0), end)
     }
 
