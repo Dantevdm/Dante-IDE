@@ -16,6 +16,9 @@ struct HomeView: View {
     @State private var commits: [Date] = []
     @State private var lastTests: TestRecord?
     @State private var agentDays: [Int]?
+    /// Counted in `load()`: every file's language on each redraw was slow in a big repo.
+    @State private var topLanguages: [Language] = []
+    @State private var languageShares: [(name: String, share: Double)] = []
 
     var body: some View {
         AreaPage(
@@ -58,8 +61,8 @@ struct HomeView: View {
 
     private var facts: some View {
         HStack(spacing: 8) {
-            ForEach(LanguageStats.top(workspace.files), id: \.language) { entry in
-                Chip(text: entry.language.displayName, symbol: "chevron.left.forwardslash.chevron.right")
+            ForEach(topLanguages, id: \.self) { language in
+                Chip(text: language.displayName, symbol: "chevron.left.forwardslash.chevron.right")
             }
             if let branch = Git.currentBranch(in: workspace.url) {
                 Chip(text: branch, symbol: "arrow.triangle.branch")
@@ -76,7 +79,7 @@ struct HomeView: View {
     // MARK: Vital signs
 
     private var vitals: some View {
-        let languages = HomePulse.languages(workspace.files)
+        let languages = languageShares
         let report = session.security.report
         let grid = HomePulse.commitGrid(commits)
         let thisWeek = grid.last?.filter { $0 > 0 }.reduce(0, +) ?? 0
@@ -131,6 +134,10 @@ struct HomeView: View {
     private func load() async {
         // The map takes longest on a big repo, so it's built alongside the rest.
         async let mapped: Void = loadSketch()
+        let files = workspace.files
+        (topLanguages, languageShares) = await Task.detached(priority: .userInitiated) {
+            (LanguageStats.top(files).map(\.language), HomePulse.languages(files))
+        }.value
         compose = ComposeFile.load(projectRoot: workspace.url)
         async let snapshot = GitSnapshot.load(in: workspace.url)
         if compose != nil {
@@ -409,7 +416,7 @@ private struct DocsCard: View {
     let workspace: Workspace
 
     var body: some View {
-        let library = DocLibrary(paths: workspace.files)
+        let library = workspace.docLibrary
         let docs = library.all.filter { !$0.path.hasPrefix(".dante/phases/") }
         Card("Documentation") {
             LinkButton("Read") { session.area = .docs }

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// A language server Dante knows how to start, and the languages it handles.
 public struct LanguageServer: Hashable, Sendable {
@@ -76,7 +77,17 @@ public struct LanguageServer: Hashable, Sendable {
         return found
     }
 
+    /// xcrun's answers, kept: the first `--find` can take seconds, and servers start on the main actor.
+    private static let xcrunFound = Mutex<[String: Bool]>([:])
+
     private static func xcrunFinds(_ tool: String) -> Bool {
+        if let known = xcrunFound.withLock({ $0[tool] }) { return known }
+        let found = runXcrunFind(tool)
+        xcrunFound.withLock { $0[tool] = found }
+        return found
+    }
+
+    private static func runXcrunFind(_ tool: String) -> Bool {
         let process = Process()
         process.executableURL = URL(filePath: "/usr/bin/xcrun")
         process.arguments = ["--find", tool]

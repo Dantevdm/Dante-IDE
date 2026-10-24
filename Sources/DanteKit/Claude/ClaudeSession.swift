@@ -692,7 +692,8 @@ public final class ClaudeSession {
         let paths = checkpoint.undo { path, text in
             let url = URL(filePath: path)
             do {
-                if let text { try text.write(to: url, atomically: true, encoding: .utf8) } else { try FileManager.default.removeItem(at: url) }
+                // A file the turn created goes to the Trash: it may have been edited since.
+                if let text { try EditorDocument.write(text, to: url) } else { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
             } catch {
                 failed.append(path)
             }

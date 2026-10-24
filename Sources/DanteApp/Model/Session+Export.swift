@@ -8,7 +8,7 @@ extension Session {
     /// The markdown doc Docs is showing, exported as a Paper-theme PDF to save or print.
     func exportDoc(printing: Bool = false) {
         guard let workspace, let docPath, docPath != DocLibrary.libraryPath,
-              let doc = DocLibrary(paths: workspace.files).doc(preferring: docPath) else { return }
+              let doc = workspace.docLibrary.doc(preferring: docPath) else { return }
         if doc.kind == .diagram, !printing {
             // A diagram as a PDF, in the theme it's shown in.
             let url = workspace.url.appending(path: doc.path)

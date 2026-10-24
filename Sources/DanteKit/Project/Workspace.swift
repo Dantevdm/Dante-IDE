@@ -25,6 +25,8 @@ public final class Workspace {
 
     /// Every file in the project, relative to the root, for quick open. Filled in the background.
     public private(set) var files: [String] = []
+    /// The project's docs, worked out with the file index rather than on every redraw.
+    public private(set) var docLibrary = DocLibrary(paths: [])
     private var fileSet: Set<String> = []
     private var indexTask: Task<Void, Never>?
     /// The root with symlinks resolved, which is how FSEvents reports paths.
@@ -207,10 +209,14 @@ public final class Workspace {
         indexTask?.cancel()
         let root = url
         indexTask = Task { [weak self] in
-            let paths = await Task.detached(priority: .utility) { FileIndex.scan(root) }.value
+            let (paths, library) = await Task.detached(priority: .utility) {
+                let paths = FileIndex.scan(root)
+                return (paths, DocLibrary(paths: paths))
+            }.value
             guard !Task.isCancelled, let self else { return }
             guard paths != self.files else { return }
             self.files = paths
+            self.docLibrary = library
             self.fileSet = Set(paths)
             // Views that read the index reload on a new revision.
             self.revision += 1

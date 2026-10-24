@@ -21,13 +21,12 @@ struct ClaudeAreaView: View {
     @State private var removing: ClaudeSkill?
     @State private var lastReview: Date?
 
-    private var suggestions: [SkillSuggestion] {
-        ClaudeSkills.suggestions(files: workspace.files, stack: languages, hasDante: FileManager.default.fileExists(atPath: workspace.danteFolder.path), existing: skills)
-    }
+    /// Worked out from every file in `load()`, off the main thread: a large repo made each redraw slow.
+    @State private var suggestions: [SkillSuggestion] = []
 
-    private var languages: [String] {
+    nonisolated private static func languages(_ files: [String]) -> [String] {
         let names: [String: String] = ["go": "Go", "js": "JavaScript", "ts": "TypeScript", "py": "Python", "rs": "Rust", "swift": "Swift"]
-        return Array(Set(workspace.files.compactMap { names[($0 as NSString).pathExtension.lowercased()] })).sorted()
+        return Array(Set(files.compactMap { names[($0 as NSString).pathExtension.lowercased()] })).sorted()
     }
 
     private var reviewKey: String { "skillsReview." + workspace.url.path }
@@ -76,6 +75,10 @@ struct ClaudeAreaView: View {
             (ClaudeSkills.load(root: root), ClaudeMemoryFile.load(root: root), ClaudePermissions.load(root: root))
         }.value
         (skills, memory, permissions) = loaded
+        let (files, hasDante, existing) = (workspace.files, FileManager.default.fileExists(atPath: workspace.danteFolder.path), skills)
+        suggestions = await Task.detached(priority: .userInitiated) {
+            ClaudeSkills.suggestions(files: files, stack: Self.languages(files), hasDante: hasDante, existing: existing)
+        }.value
         lastReview = UserDefaults.standard.object(forKey: reviewKey) as? Date
         conversations = Array(await session.claudeConversations().prefix(6))
         if session.claudeUsage == nil { await session.refreshClaudeUsage() }

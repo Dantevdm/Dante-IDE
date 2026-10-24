@@ -300,14 +300,28 @@ public final class LSPClient {
         return true
     }
 
+    /// A request the server doesn't answer in time comes back as null and is cancelled there,
+    /// so a server busy indexing can't leave a jump or a completion waiting for good.
     private func request(_ method: String, _ params: JSONValue?) async -> JSONValue {
         guard process.isRunning else { return .null }
         let id = nextID
         nextID += 1
+        let timeout: Duration = method == "initialize" ? .seconds(120) : method == "shutdown" ? .seconds(3) : .seconds(20)
+        let expiry = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            if !Task.isCancelled { self?.expire(id) }
+        }
+        defer { expiry.cancel() }
         return await withCheckedContinuation { continuation in
             pending[id] = continuation
             send(["jsonrpc": "2.0", "id": .number(Double(id)), "method": .string(method), "params": params ?? .null])
         }
+    }
+
+    private func expire(_ id: Int) {
+        guard let continuation = pending.removeValue(forKey: id) else { return }
+        continuation.resume(returning: .null)
+        notify("$/cancelRequest", ["id": .number(Double(id))])
     }
 
     private func notify(_ method: String, _ params: JSONValue?) {

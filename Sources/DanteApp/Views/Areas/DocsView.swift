@@ -48,7 +48,7 @@ struct DocsView: View {
         }
     }
 
-    private var library: DocLibrary { DocLibrary(paths: workspace.files) }
+    private var library: DocLibrary { workspace.docLibrary }
 
     /// The library shows until a doc is picked, and whenever it's picked again.
     private var showsLibrary: Bool { session.docPath == nil || session.docPath == DocLibrary.libraryPath || showsStandards }
