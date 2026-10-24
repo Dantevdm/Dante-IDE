@@ -98,7 +98,7 @@ public enum DeclarationScanner {
 
     private static let identifier = "([A-Za-z_$][A-Za-z0-9_$]*)"
 
-    nonisolated(unsafe) static let patterns: [Language: [(NSRegularExpression, CodeSymbol.Kind)]] = {
+    static let patterns: [Language: [(NSRegularExpression, CodeSymbol.Kind)]] = {
         let id = identifier
         let swift: [(NSRegularExpression, CodeSymbol.Kind)] = [
             (regex(#"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|private|fileprivate|internal|open|final|static|nonisolated|override|indirect)\s+)*(?:class|struct|enum|protocol|actor|extension|typealias)\s+"# + id), .type),

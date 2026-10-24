@@ -194,6 +194,22 @@ import Testing
 }
 
 @Suite struct JobGuardTests {
+    @Test func awayJobsAskBeforeEditingGitOrClaudeSettings() {
+        let worktree = URL(filePath: "/tmp/dante-job-x")
+        #expect(JobGuard.verdict(toolName: "Edit", input: ["file_path": "/tmp/dante-job-x/src/a.swift"], worktree: worktree, away: true, hasNote: false) == .approve)
+        #expect(JobGuard.verdict(toolName: "Write", input: ["file_path": "/tmp/dante-job-x/.claude/settings.local.json"], worktree: worktree, away: true, hasNote: false) == .ask)
+    }
+
+    @Test func refsSharedWithTheMainCheckoutStayPut() {
+        for command in ["git update-ref refs/heads/main HEAD", "git symbolic-ref HEAD refs/heads/main", "git fetch . HEAD:main",
+                        "git fetch origin +HEAD:refs/heads/main", "git filter-branch -f HEAD", "glab mr create", "glab ci run"] {
+            #expect(JobGuard.forbidden(command) != nil, "\(command)")
+        }
+        for command in ["git fetch", "git fetch origin", "git fetch --prune origin", "git update-index --refresh"] {
+            #expect(JobGuard.forbidden(command) == nil, "\(command)")
+        }
+    }
+
     @Test func wrappersShellsAndOptionsDontHideAPush() {
         for command in ["git -C . push", "env git push", "command git push", "nohup git push origin main", "/usr/bin/git push",
                         "\"git\" push", "sh -c 'git push'", "bash -lc \"git push origin HEAD\"", "eval git push", "git send-pack origin HEAD:main",

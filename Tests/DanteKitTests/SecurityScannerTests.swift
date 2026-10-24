@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import DanteKit
 
@@ -106,10 +107,10 @@ import Testing
     }
 
     @Test func neverPathsAndDataAreNotRead() {
-        var read: [String] = []
+        let read = Mutex<[String]>([])
         _ = SecurityScanner.scan(files: ["data/app.db", "src/a.ts", "private/notes.txt", "node_modules/x/index.js", "dist/app.min.js"],
-                                 read: { read.append($0); return "" }, never: { $0.hasPrefix("private/") })
-        #expect(read == ["src/a.ts"])
+                                 read: { path in read.withLock { $0.append(path) }; return "" }, never: { $0.hasPrefix("private/") })
+        #expect(read.withLock { $0 } == ["src/a.ts"])
     }
 
     @Test func bundledLibrariesAreNotRead() {
@@ -117,10 +118,11 @@ import Testing
                      "web/public/vendor-ish/chart/LICENSE.md", "web/public/vendor-ish/chart/chart.js",
                      "packages/api/LICENSE", "packages/api/server.ts", "App/main.swift"]
         #expect(SecurityScanner.vendoredFolders(files) == ["App/Resources/Lib/three/", "web/public/vendor-ish/chart/"])
-        var read: [String] = []
-        _ = SecurityScanner.scan(files: files, read: { read.append($0); return "" })
+        // Files are read on every core, so the order they're read in varies.
+        let read = Mutex<[String]>([])
+        _ = SecurityScanner.scan(files: files, read: { path in read.withLock { $0.append(path) }; return "" })
         // A monorepo's own package keeps its licence and is still read.
-        #expect(read == ["LICENSE", "packages/api/LICENSE", "packages/api/server.ts", "App/main.swift"])
+        #expect(read.withLock { $0 }.sorted() == ["App/main.swift", "LICENSE", "packages/api/LICENSE", "packages/api/server.ts"])
     }
 
     @Test func idsSurviveMovedLines() {

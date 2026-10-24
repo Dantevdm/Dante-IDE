@@ -18,7 +18,7 @@ public enum SecurityScanner {
     public static let sizeLimit = 1_000_000
 
     /// Scans the project's files. `never` paths (from `project.yaml`) are neither read nor reported.
-    public static func scan(files: [String], read: (String) -> String?, git: GitView? = nil,
+    public static func scan(files: [String], read: @Sendable (String) -> String?, git: GitView? = nil,
                             never: (String) -> Bool = { _ in false }) -> [SecurityFinding] {
         let vendored = vendoredFolders(files)
         let paths = files.filter { !never($0) && isScannable($0) && !isVendored($0, in: vendored) }

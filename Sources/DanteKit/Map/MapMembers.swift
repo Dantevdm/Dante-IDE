@@ -65,7 +65,7 @@ extension SystemMap {
         return [role, size].compactMap { $0 }.joined(separator: " · ")
     }
 
-    nonisolated(unsafe) static let javaMethodPattern = try! NSRegularExpression(
+    static let javaMethodPattern = try! NSRegularExpression(
         pattern: #"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|private|protected|static|final|abstract|synchronized|default|native)\s+)*(?:<[^>]*>\s+)?([\w.$]+(?:<.*?>)?(?:\[\])*)\s+(\w+)\s*\("#)
 
     /// The file's declarations, in order. The type a file is named for wraps the rest, so it's

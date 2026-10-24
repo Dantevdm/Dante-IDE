@@ -15,8 +15,8 @@ public struct ThemeSwap: Equatable, Sendable {
 
     public var isLive: Bool { query != nil }
 
-    nonisolated(unsafe) private static let queryPattern = try! NSRegularExpression(pattern: #"(?:get|has)\(\s*['"](theme|brand|skin)['"]\s*\)|[?&](theme|brand|skin)="#)
-    nonisolated(unsafe) private static let variablePattern = try! NSRegularExpression(pattern: #"(?:import\.meta\.env|process\.env)\.([A-Z][A-Z0-9_]*(?:THEME|BRAND|SKIN)[A-Z0-9_]*)"#)
+    private static let queryPattern = try! NSRegularExpression(pattern: #"(?:get|has)\(\s*['"](theme|brand|skin)['"]\s*\)|[?&](theme|brand|skin)="#)
+    private static let variablePattern = try! NSRegularExpression(pattern: #"(?:import\.meta\.env|process\.env)\.([A-Z][A-Z0-9_]*(?:THEME|BRAND|SKIN)[A-Z0-9_]*)"#)
 
     /// From the frontend's source files' text.
     public static func detect(in texts: [String]) -> ThemeSwap? {

@@ -186,7 +186,6 @@ public final class RemoteSync {
         try await run([SSH.program] + SSH.arguments(host: project.host, command: command))
     }
 
-    @discardableResult
     /// Copies this project's Claude Code transcripts from the host (`~/.claude/projects/…`).
     /// Quietly does nothing when there are none yet.
     public func pullTranscripts() async {
@@ -201,6 +200,7 @@ public final class RemoteSync {
                 "\(project.host):~/\(Shell.quote(folder))", project.transcriptsURL.path + "/"]
     }
 
+    @discardableResult
     private func run(_ arguments: [String]) async throws -> String {
         let output = await Shell.run(arguments, in: FileManager.default.homeDirectoryForCurrentUser)
         guard output.succeeded else { throw Failure(message: Self.explain(output, host: project.host)) }

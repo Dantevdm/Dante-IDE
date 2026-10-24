@@ -102,7 +102,7 @@ public enum ClaudeSkills {
                 "The frontend is built from views or pages.",
                 "Cover where screens live, how they're routed and added to navigation, how they fetch data and handle loading and errors, and the shared helpers and styles to reuse.")
         }
-        if folders.contains("migrations") || folders.contains("migrate") || names.contains { $0.hasSuffix(".sql") } || files.contains(where: { $0.hasSuffix("schema.prisma") }) {
+        if folders.contains("migrations") || folders.contains("migrate") || names.contains(where: { $0.hasSuffix(".sql") }) || files.contains(where: { $0.hasSuffix("schema.prisma") }) {
             add("db-change", "Change the database schema",
                 "The project keeps a database schema in the repo.",
                 "Cover writing the migration (and how to undo it), where the schema and seed data live, how to run it locally, and what to check in code that reads the changed tables.")

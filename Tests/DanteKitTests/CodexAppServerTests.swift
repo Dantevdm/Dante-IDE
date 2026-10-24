@@ -139,18 +139,30 @@ import Testing
 
     @Test func readOnlyCommandsGoAhead() {
         for command in ["rg -n startup NOTES.md", "pwd && rg --files -g 'LIST.md'", "sed -n '1,40p' main.go", "git log --oneline -5 | head -3",
-                        "find . -name '*.swift'", "cat a.txt 2>/dev/null", "ls -la", "sort -n x", "fd -e swift", "tree -L 2", "git log -p -3"] {
+                        "find . -name '*.swift'", "cat a.txt 2>/dev/null", "ls -la", "sort -n x", "fd -e swift", "tree -L 2", "git log -p -3",
+                        "sed -n '1,5p' errors.log", "sed -n -e '3p' web/app.js", "uniq -c counts.txt"] {
             #expect(ApprovalPolicy.readsOnly(command), "\(command)")
         }
         for command in ["sed -i '' s/a/b/ x", "find . -delete", "rm -rf build", "git commit -m x", "cat a > b", "echo $(whoami)",
                         "printf 'x' >> LIST.md", "git push", "awk '{print}' x",
                         "rg --pre ./x.sh foo", "rg --pre=./x.sh foo", "fd . -x sh -c 'id'", "fd -HX rm", "fd --exec-batch rm",
                         "git grep -O'sh evil.sh' foo", "git grep --open-files-in-pager=sh x", "git -c core.pager=sh log",
-                        "sort -o ~/.zshrc payload", "sort -ro out in", "tree -o out.txt", "file -C -m magic", "find . -fprint0 out"] {
+                        "sort -o ~/.zshrc payload", "sort -ro out in", "tree -o out.txt", "file -C -m magic", "find . -fprint0 out",
+                        "sed -n '1w/tmp/x' a", "sed -n 'w out' a", "sed -n -e '1e id' a", "sed -n -f script.sed a", "uniq in.txt ~/.zshrc",
+                        "less '+!id' a"] {
             #expect(!ApprovalPolicy.readsOnly(command), "\(command)")
         }
         #expect(ApprovalPolicy.approves("Bash", input: ["command": "rg TODO"], level: .ask, allow: [], hasRuleNote: false))
         #expect(!ApprovalPolicy.approves("Bash", input: ["command": "make"], level: .ask, allow: [], hasRuleNote: false))
+    }
+
+    @Test func editsToPermissionsAndHooksAlwaysAsk() {
+        for path in [".claude/settings.local.json", "/repo/.claude/settings.json", ".git/config", ".git/hooks/pre-commit", ".mcp.json", ".dante/project.yaml"] {
+            #expect(!ApprovalPolicy.approves("Edit", input: ["file_path": .string(path)], level: .everything, allow: ["Edit"], hasRuleNote: false), "\(path)")
+        }
+        for path in ["src/main.swift", ".claude/agents/tester.md", "docs/git/notes.md", ".dante/tasks.yaml"] {
+            #expect(ApprovalPolicy.approves("Edit", input: ["file_path": .string(path)], level: .edits, allow: [], hasRuleNote: false), "\(path)")
+        }
     }
 
     @Test func claudeAnswersCodexReadOnly() throws {

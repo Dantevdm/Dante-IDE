@@ -32,8 +32,7 @@ struct SearchPanel: View {
     private var textSearch: some View {
         @Bindable var search = search
         let shown = search.references?.result ?? search.result
-        return
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             if let references = search.references {
                 HStack(spacing: 6) {
                     VStack(alignment: .leading, spacing: 2) {

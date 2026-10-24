@@ -481,12 +481,12 @@ private struct FileRow: View {
     let action: () -> Void
     let menu: () -> AnyView
     let drag: () -> NSItemProvider
-    let drop: ([URL]) -> Void
+    let drop: @MainActor @Sendable ([URL]) -> Void
     @State private var hovering = false
     @State private var targeted = false
 
     init(node: FileNode, depth: Int, isActive: Bool, isFocused: Bool, mark: GitStatus.Kind?, action: @escaping () -> Void,
-         @ViewBuilder menu: @escaping () -> some View, drag: @escaping () -> NSItemProvider, drop: @escaping ([URL]) -> Void) {
+         @ViewBuilder menu: @escaping () -> some View, drag: @escaping () -> NSItemProvider, drop: @escaping @MainActor @Sendable ([URL]) -> Void) {
         self.node = node
         self.depth = depth
         self.isActive = isActive

@@ -1,3 +1,4 @@
+import DanteKit
 import SwiftUI
 
 /// The left strip that switches between the workspace's places. A place with several pages

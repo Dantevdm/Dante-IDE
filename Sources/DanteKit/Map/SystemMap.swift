@@ -770,9 +770,9 @@ public struct SystemMap: Equatable, Sendable {
 
     /// Compiled once: Swift `Regex` literals were most of the map's build time on big repos.
     private enum RoutePattern {
-        nonisolated(unsafe) static let handle = try! NSRegularExpression(pattern: #"Handle(?:Func)?\(\s*"(?:([A-Z]+)\s+)?(/[^"]*)""#)
-        nonisolated(unsafe) static let decorator = try! NSRegularExpression(pattern: #"@\w+\.(get|post|put|patch|delete|route|api_route)\(\s*["'](/[^"']*)["']"#)
-        nonisolated(unsafe) static let router = try! NSRegularExpression(pattern: #"\b(?:app|router|r|mux|e|g|api|server|srv|routes|v\d|grp|group|[a-z]\w*(?:Router|Group|Routes))\.(get|post|put|patch|delete|Get|Post|Put|Patch|Delete|GET|POST|PUT|PATCH|DELETE)\(\s*["'`](/[^"'`]*)["'`]"#)
+        static let handle = try! NSRegularExpression(pattern: #"Handle(?:Func)?\(\s*"(?:([A-Z]+)\s+)?(/[^"]*)""#)
+        static let decorator = try! NSRegularExpression(pattern: #"@\w+\.(get|post|put|patch|delete|route|api_route)\(\s*["'](/[^"']*)["']"#)
+        static let router = try! NSRegularExpression(pattern: #"\b(?:app|router|r|mux|e|g|api|server|srv|routes|v\d|grp|group|[a-z]\w*(?:Router|Group|Routes))\.(get|post|put|patch|delete|Get|Post|Put|Patch|Delete|GET|POST|PUT|PATCH|DELETE)\(\s*["'`](/[^"'`]*)["'`]"#)
     }
 
     /// "/api/templates/{id}" → "/api/templates". Version and api prefixes are kept as part
@@ -806,7 +806,7 @@ public struct SystemMap: Equatable, Sendable {
         return found
     }
 
-    nonisolated(unsafe) private static let basePathPattern = try! NSRegularExpression(
+    private static let basePathPattern = try! NSRegularExpression(
         pattern: #"`\$\{\s*(?:[\w.]*?(?:api|url|base|host|server|backend|endpoint)[\w.]*)\s*\}(/[A-Za-z][^`\s?$]*)"#, options: .caseInsensitive)
 
     /// A route group without its api and version prefixes: "/api/v1/orders" → "/orders".
@@ -854,7 +854,7 @@ public struct SystemMap: Equatable, Sendable {
         return names
     }
 
-    nonisolated(unsafe) private static let environmentPattern = try! NSRegularExpression(pattern: [
+    private static let environmentPattern = try! NSRegularExpression(pattern: [
             #"os\.(?:Getenv|LookupEnv)\("([A-Za-z_][A-Za-z0-9_]*)""#,
             #"(?:process|import\.meta)\.env\.([A-Za-z_][A-Za-z0-9_]*)"#,
             #"process\.env\[["']([A-Za-z_][A-Za-z0-9_]*)"#,

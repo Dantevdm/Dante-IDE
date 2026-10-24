@@ -37,7 +37,7 @@ public enum JobGuard {
                 return .refuse("Jobs only change files in their own worktree (\(worktree.path)); \(path) is outside it.")
             }
             guard away else { return nil }
-            return hasNote ? .ask : .approve
+            return hasNote || paths(in: input).contains(where: ApprovalPolicy.isControlFile) ? .ask : .approve
         }
         // Questions, web access and anything else wait for the person while away.
         return away && !ApprovalPolicy.questionTools.contains(toolName) ? .ask : nil
@@ -111,11 +111,16 @@ public enum JobGuard {
                 case "branch" where rest.contains { ["-d", "-D", "-m", "-M", "--delete", "--move", "-f", "--force"].contains($0) }:
                     return "Jobs don’t rename or delete branches."
                 case "reset" where rest.contains("--hard"): return "Jobs don’t reset with --hard; ask the person instead."
+                case "update-ref", "symbolic-ref", "filter-branch", "filter-repo", "replace":
+                    // Refs are shared by every worktree: these would move the main checkout's branch.
+                    return "Jobs don’t rewrite branches or history outside their own commits."
+                case "fetch" where rest.contains(where: { !$0.hasPrefix("-") && $0.contains(":") }):
+                    return "Jobs fetch without refspecs: `fetch <remote> a:b` writes another branch."
                 default: break
                 }
-            case "gh":
-                if let sub = rest.first, ["pr", "release", "repo", "workflow", "api", "secret", "variable"].contains(sub) {
-                    return "Jobs don’t act on GitHub; Dante opens pull requests when you accept the job."
+            case "gh", "glab":
+                if let sub = rest.first, ["pr", "mr", "release", "repo", "workflow", "api", "secret", "variable", "ci"].contains(sub) {
+                    return "Jobs don’t act on GitHub or GitLab; Dante opens pull requests when you accept the job."
                 }
                 if rest.first == "run", let action = rest.dropFirst().first, ["rerun", "cancel", "delete"].contains(action) {
                     return "Jobs only read CI runs; rerunning or cancelling them is for the person."

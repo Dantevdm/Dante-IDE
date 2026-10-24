@@ -54,8 +54,9 @@ private struct HTMLWeb: NSViewRepresentable {
         var loaded: URL?
         let error: Binding<String?>
         init(error: Binding<String?>) { self.error = error }
-        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            decisionHandler(action.request.url?.scheme == "dante-preview" ? .allow : .cancel)
+        // Links stay inside the project: anything but the preview scheme is cancelled.
+        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
+            action.request.url?.scheme == "dante-preview" ? .allow : .cancel
         }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError failure: any Error) {
             error.wrappedValue = failure.localizedDescription

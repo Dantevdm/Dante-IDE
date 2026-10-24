@@ -48,6 +48,8 @@ public enum ApprovalPolicy {
 
     public static func approves(_ toolName: String, input: JSONValue, level: ApprovalLevel, allow: [String], hasRuleNote: Bool) -> Bool {
         guard !questionTools.contains(toolName), !hasRuleNote else { return false }
+        // An edit to what decides permissions or runs commands would grant everything else.
+        if editTools.contains(toolName), JobGuard.paths(in: input).contains(where: isControlFile) { return false }
         if allowed(toolName, input: input, by: allow) { return true }
         // Looking is as safe as Claude's Read tool; Codex looks through the shell.
         if toolName == "Bash", let command = input["command"]?.string, readsOnly(command) { return true }
@@ -56,6 +58,19 @@ public enum ApprovalPolicy {
         case .edits: return editTools.contains(toolName)
         case .everything: return true
         }
+    }
+
+    /// Files that grant permissions or run commands when git, Claude Code or Dante read them:
+    /// git's config and hooks, Claude Code's settings and MCP servers, Dante's project rules.
+    /// Edits to them always ask, at any approval level.
+    static func isControlFile(_ path: String) -> Bool {
+        let parts = path.split(separator: "/").map(String.init)
+        if parts.contains(".git") { return true }
+        guard let name = parts.last else { return false }
+        let folder = parts.dropLast().last
+        if folder == ".claude", name.hasPrefix("settings"), name.hasSuffix(".json") { return true }
+        if folder == ".dante", name == "project.yaml" { return true }
+        return name == ".mcp.json" || name == ".gitmodules" || name == ".gitattributes"
     }
 
     /// Whether allow rules cover the call. A command with several parts (pipes, `&&`) needs
@@ -139,8 +154,8 @@ public enum ApprovalPolicy {
     /// Programs that only read and print, whatever their arguments.
     static let readers: Set<String> = [
         "ls", "cat", "head", "tail", "wc", "pwd", "echo", "rg", "grep", "egrep", "fgrep", "file", "stat", "which", "tree",
-        "du", "basename", "dirname", "realpath", "readlink", "nl", "sort", "uniq", "cut", "tr", "column", "jq", "diff",
-        "cmp", "true", "test", "date", "uname", "cd", "fd", "less", "printf", "sw_vers",
+        "du", "basename", "dirname", "realpath", "readlink", "nl", "sort", "cut", "tr", "column", "jq", "diff",
+        "cmp", "true", "test", "date", "uname", "cd", "fd", "printf", "sw_vers",
     ]
     /// Git subcommands that only read the repository.
     static let gitReaders: Set<String> = ["status", "log", "diff", "show", "rev-parse", "ls-files", "blame", "grep", "describe", "shortlog"]
@@ -156,9 +171,13 @@ public enum ApprovalPolicy {
             switch program {
             case _ where readers.contains(program):
                 return true
+            case "uniq":
+                // `uniq input output` writes the second file.
+                return words.dropFirst().filter { !$0.hasPrefix("-") }.count < 2
             case "sed":
+                // `w file`/`W file` write and GNU's `e` runs a command; the space after `w` is optional.
                 return words.contains("-n") && !words.contains { $0.hasPrefix("-i") || $0.hasPrefix("--in-place") }
-                    && !part.contains("w ") && !part.contains("/e")
+                    && !sedScripts(words).contains { $0.range(of: #"(^|[\s0-9$/;{},!])[wWe]"#, options: .regularExpression) != nil }
             case "find":
                 return !words.contains { ["-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].contains($0) }
             case "git":
@@ -173,6 +192,26 @@ public enum ApprovalPolicy {
         }
     }
 
+    /// The scripts in a sed command: each `-e` value, else the first plain word.
+    static func sedScripts(_ words: [String]) -> [String] {
+        var scripts: [String] = []
+        var plain: String?
+        var index = 1
+        while index < words.count {
+            let word = words[index]
+            if word == "-e" || word == "--expression", index + 1 < words.count {
+                scripts.append(words[index + 1])
+                index += 2
+                continue
+            }
+            if word.hasPrefix("--expression=") { scripts.append(String(word.dropFirst(13))) }
+            if !word.hasPrefix("-"), plain == nil { plain = word }
+            index += 1
+        }
+        // Words were split on spaces, so a quoted script with spaces is checked whole.
+        return (scripts.isEmpty ? plain.map { [$0] } ?? [] : scripts).map { JobGuard.unquoted($0) } + (words.contains("-f") ? ["w"] : [])
+    }
+
     /// Options that make a reading program run another program or write a file: `rg --pre`,
     /// `fd -x`, `git grep -O`, `sort -o`, `tree -o`, `file -C`. Short options may be bundled
     /// (`fd -Hx`, `sort -ro`), so a single-dash word containing the letter counts.
@@ -184,7 +223,6 @@ public enum ApprovalPolicy {
         "file": (["--compile"], ["C"]),
         "git": (["--open-files-in-pager", "--output", "--ext-diff", "--textconv"], ["O"]),
         "find": (["-exec", "-execdir", "-delete", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"], []),
-        "less": ([], []),
     ]
 
     static func runsOrWrites(_ program: String, _ arguments: ArraySlice<String>) -> Bool {
