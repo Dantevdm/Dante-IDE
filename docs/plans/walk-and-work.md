@@ -2,7 +2,7 @@
 
 Hand Dante jobs, go for a walk, and talk to it through earbuds. The Mac does the work; the iPhone is a voice in your ear; the iPad is a desk away from the desk.
 
-Status: steps 1 (jobs on the Mac), 2 (away mode with a time budget, the job guard and `dante job`) and 3 (job types, with the Builder and the pipeline watcher) and 4 (`DanteCore` and the companion server with QR pairing) are built; turn and plan-share budgets and the rest are a plan.
+Status: all eight steps are built: jobs on the Mac, away mode with a time budget, the job guard and `dante job`, job types (the Builder and the pipeline watcher), `DanteCore` and the companion server with QR pairing, the iPhone voice loop with the foreman, notifications with Approve and Decline and the Live Activity, the iPad layout, and the Verifier. Turn and plan-share budgets and a push server (so notifications reach a suspended app) are still a plan.
 
 ## Decisions so far
 
@@ -85,7 +85,7 @@ The browser lives in `dante mcp` itself (`AgentBrowser`: WebKit in a window nobo
 3. Job types from `.dante/jobs/`, with the Builder and the pipeline watcher first.
 4. `DanteCore` and `CompanionServer` with QR pairing.
 5. iPhone: the voice loop with AirPods push-to-talk and the foreman.
-6. iPhone: Live Activity and actionable notifications.
+6. iPhone: Live Activity and actionable notifications. (Built: posted by the running app, since there's no push server; see Mobile/README.md.)
 7. iPad: the desk layout.
 8. Verifier: a browser MCP server passed to the job's `claude`, so it drives its own browser instead of yours. (Built: see below.)
 

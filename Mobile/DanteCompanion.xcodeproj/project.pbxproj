@@ -6,19 +6,58 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D0C000000000000000000A1A /* DanteWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D0C0000000000000000000A3 /* DanteWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D0C000000000000000000A1C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0C0000000000000000000E0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D0C0000000000000000000E2;
+			remoteInfo = DanteWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D0C0000000000000000000C7 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D0C000000000000000000A1A /* DanteWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		D0C0000000000000000000A1 /* Dante.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dante.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D0C0000000000000000000A2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D0C0000000000000000000A3 /* DanteWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DanteWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D0C0000000000000000000A4 /* WidgetInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = WidgetInfo.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D0C0000000000000000000B1 /* Common */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Common; sourceTree = "<group>"; };
 		D0C0000000000000000000B2 /* Phone */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Phone; sourceTree = "<group>"; };
 		D0C0000000000000000000B3 /* DanteCore */ = {isa = PBXFileSystemSynchronizedRootGroup; name = DanteCore; path = ../Sources/DanteCore; sourceTree = "<group>"; };
+		D0C0000000000000000000B4 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; };
+		D0C0000000000000000000B5 /* Widget */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Widget; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		D0C0000000000000000000C1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D0C0000000000000000000C5 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -34,7 +73,10 @@
 				D0C0000000000000000000B1 /* Common */,
 				D0C0000000000000000000B2 /* Phone */,
 				D0C0000000000000000000B3 /* DanteCore */,
+				D0C0000000000000000000B4 /* Shared */,
+				D0C0000000000000000000B5 /* Widget */,
 				D0C0000000000000000000A2 /* Info.plist */,
+				D0C0000000000000000000A4 /* WidgetInfo.plist */,
 				D0C0000000000000000000D2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				D0C0000000000000000000A1 /* Dante.app */,
+				D0C0000000000000000000A3 /* DanteWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -57,20 +100,44 @@
 				D0C0000000000000000000C2 /* Sources */,
 				D0C0000000000000000000C1 /* Frameworks */,
 				D0C0000000000000000000C3 /* Resources */,
+				D0C0000000000000000000C7 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D0C000000000000000000A1B /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D0C0000000000000000000B1 /* Common */,
+				D0C0000000000000000000B2 /* Phone */,
+				D0C0000000000000000000B3 /* DanteCore */,
+				D0C0000000000000000000B4 /* Shared */,
+			);
+			name = DanteCompanion;
+			productName = DanteCompanion;
+			productReference = D0C0000000000000000000A1 /* Dante.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D0C0000000000000000000E2 /* DanteWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D0C0000000000000000000F7 /* Build configuration list for PBXNativeTarget "DanteWidget" */;
+			buildPhases = (
+				D0C0000000000000000000C4 /* Sources */,
+				D0C0000000000000000000C5 /* Frameworks */,
+				D0C0000000000000000000C6 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				D0C0000000000000000000B1 /* Common */,
-				D0C0000000000000000000B2 /* Phone */,
-				D0C0000000000000000000B3 /* DanteCore */,
+				D0C0000000000000000000B4 /* Shared */,
+				D0C0000000000000000000B5 /* Widget */,
 			);
-			name = DanteCompanion;
-			productName = DanteCompanion;
-			productReference = D0C0000000000000000000A1 /* Dante.app */;
-			productType = "com.apple.product-type.application";
+			name = DanteWidget;
+			productName = DanteWidget;
+			productReference = D0C0000000000000000000A3 /* DanteWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -83,6 +150,9 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					D0C0000000000000000000E1 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					D0C0000000000000000000E2 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -102,12 +172,20 @@
 			projectRoot = "";
 			targets = (
 				D0C0000000000000000000E1 /* DanteCompanion */,
+				D0C0000000000000000000E2 /* DanteWidget */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		D0C0000000000000000000C3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D0C0000000000000000000C6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -124,7 +202,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D0C0000000000000000000C4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D0C000000000000000000A1B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D0C0000000000000000000E2 /* DanteWidget */;
+			targetProxy = D0C000000000000000000A1C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		D0C0000000000000000000F3 /* Debug */ = {
@@ -178,6 +271,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Dante scans the pairing code your Mac shows in Settings › Agents.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dante listens while you talk to the agents on your Mac.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Dante turns what you say into text on this phone, so only text reaches your Mac.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -208,6 +302,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Dante scans the pairing code your Mac shows in Settings › Agents.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dante listens while you talk to the agents on your Mac.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Dante turns what you say into text on this phone, so only text reaches your Mac.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -219,6 +314,56 @@
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.dante.companion;
 				PRODUCT_NAME = Dante;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D0C0000000000000000000F8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WidgetInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Dante;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.dante.companion.widget;
+				PRODUCT_NAME = DanteWidget;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D0C0000000000000000000F9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WidgetInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Dante;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.dante.companion.widget;
+				PRODUCT_NAME = DanteWidget;
+				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -243,6 +388,15 @@
 			buildConfigurations = (
 				D0C0000000000000000000F5 /* Debug */,
 				D0C0000000000000000000F6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D0C0000000000000000000F7 /* Build configuration list for PBXNativeTarget "DanteWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0C0000000000000000000F8 /* Debug */,
+				D0C0000000000000000000F9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -6,7 +6,7 @@ The companion app (docs/plans/walk-and-work.md, step 5): the voice in your ear o
 
 1. Open `Mobile/DanteCompanion.xcodeproj` in Xcode.
 2. Select the DanteCompanion target › Signing & Capabilities and pick your team. A free Apple ID works: Xcode makes a Personal Team for it.
-3. If Xcode says the bundle id `dev.dante.companion` is taken, change it to something of your own (`dev.dante.companion.<you>`).
+3. If Xcode says the bundle id `dev.dante.companion` is taken, change it to something of your own (`dev.dante.companion.<you>`), and the DanteWidget target's to match with `.widget` after it (`dev.dante.companion.<you>.widget`): an extension's id must start with its app's. Pick the same team for DanteWidget.
 4. Plug in the iPhone (or pair it over Wi-Fi in Window › Devices and Simulators), choose it as the destination and press Run. The first time, trust the developer on the phone in Settings › General › VPN & Device Management.
 
 With a free team the app stops opening after seven days; run it from Xcode again to reinstall. A paid developer account makes that a year.
@@ -35,12 +35,17 @@ The app compiles `Sources/DanteCore` straight into its target (the project point
 - Wall (the iPad's sidebar): for an iPad mounted on the wall. A large clock, the morning update (refreshed every 15 minutes, made again when the connection comes back) and what the agents are doing in each open project, with the screen kept on and dimmed from 22:00 to 06:00. Turn on Hey Dante there to talk hands-free: speech is recognised on the iPad itself (it needs a device that recognises offline), restarted every 50 seconds and paused while Dante speaks; only what follows "Hey Dante" is acted on, and "Hey Dante" alone listens for the request. Leave with the close button.
 - Replies: say "reply to Ana that Thursday works" on the phone or the wall, and your Mac opens a reply to Ana's latest email in Outlook for you to read and send (it needs mail turned on in the Mac's Settings). Nothing is sent for you.
 - Waiting steps show their diff or command with Approve and Decline; jobs show their state with Stop; New Job starts one on its own branch, optionally in away mode.
+- Notifications (the app asks once, the first time it connects): while the app isn't in front, a step waiting on you, a job ready, stopped or asking, and finished replies (quietly) arrive as notifications, grouped by project, with the badge counting waiting steps. A plain yes-or-no step has Approve (the phone must be unlocked) and Decline on the notification itself: the app reconnects if it has to, checks the step still waits, and sends the answer, posting "Not answered" with the reason when it couldn't. Questions with options open the app instead. Steps answered on the Mac or by voice take their notification with them. There's no push server: notifications come from the app while it runs, which walk mode keeps it doing with the screen locked; once iOS suspends it, nothing arrives until it's opened.
+- Live Activity (iPhone; iOS asks once to allow it): while an agent or job works or a step waits, the Lock Screen and the Dynamic Island show the most urgent thing (a waiting step, then work going on, then a job ready to review) with how many steps wait and how many are working, in the Mac's colours. It starts with the app in front (iOS's rule), follows every snapshot while the app runs, shows Offline when the Mac can't be reached, and goes a minute after everything is quiet, or at once when the phone is unpaired. Tap it to open the app.
 
 ## Layout
 
 - `Common/`: the app, the connection (`CompanionConnection`: WebSocket, challenge, reconnecting with back-off), the Keychain store, the colours, exploring (`Explorer` and `PageCache`, `ExploreViews`) and the iPad's split view (`PadRoot`).
 - `Phone/`: pairing (camera scanner or a pasted link), the home screen and the voice loop.
+- `Shared/`: compiled into the app and the widget extension: the Live Activity's attributes (`DanteActivityAttributes`) and the colours (`Palette`).
+- `Widget/`: the DanteWidget extension, which draws the Live Activity (Lock Screen and Dynamic Island). `WidgetInfo.plist` is its Info.plist.
+- `Common/Notices.swift` and `Common/LiveGlance.swift`: notifications with Approve and Decline, and the Live Activity, both fed by `CompanionConnection.observers`; what they say comes from `CompanionNotice` and `CompanionGlance` (DanteCore, tested on the Mac).
 
-In the simulator (an unsigned build can't use the Keychain), pair and open a page from the command line: `SIMCTL_CHILD_DANTE_PAIR_LINK='<link>' SIMCTL_CHILD_DANTE_EXPLORE=README.md xcrun simctl launch booted dev.dante.companion` (`library` for the list, `dante:system` for the map, `today` for the morning update; `SIMCTL_CHILD_DANTE_WALL=1` opens the iPad's wall). Debug builds only.
+In the simulator (an unsigned build can't use the Keychain), pair and open a page from the command line: `SIMCTL_CHILD_DANTE_PAIR_LINK='<link>' SIMCTL_CHILD_DANTE_EXPLORE=README.md xcrun simctl launch booted dev.dante.companion` (`library` for the list, `dante:system` for the map, `today` for the morning update; `SIMCTL_CHILD_DANTE_WALL=1` opens the iPad's wall). `SIMCTL_CHILD_DANTE_GLANCE_DEMO=1` shows a made-up waiting step as a Live Activity and, two seconds later, a notification, with no Mac: lock the simulator to see them. Debug builds only.
 
 Things the simulator can't show: the camera, the microphone, headset buttons and the locked screen. Try those on a phone with your Beats or other headset connected.

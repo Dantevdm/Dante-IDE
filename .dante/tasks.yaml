@@ -419,7 +419,7 @@ tasks:
 - id: DI-101
   title: "Walk and work: jobs on the Mac, away mode, and an iPhone and iPad companion"
   phase: build
-  state: wip
+  state: review
   spec: docs/plans/walk-and-work.md
   notes: "Step 1 is in: jobs run side by side, each with its own agent in a worktree on a dante/ branch, with a Jobs board, a switcher and inbox in the panel, merge and discard, and pausing and resuming across restarts. Step 2 is in: JobGuard keeps every job off pushes, merges, branch moves, publishing and deploys, away mode with a time budget approves edits, builds, tests and local commits, and `dante job` hands a job over from the terminal (links from elsewhere are confirmed). Step 3 is in: job types in .dante/jobs/ (Builder takes a task; Pipeline watcher starts when CI fails on your branch, watched by Dante with gh, opt-in per Mac), with scope and commands per type, a Job types card and `dante job --type`. Step 4 is in: DanteCore (the companion protocol, for macOS and iOS) and CompanionServer on the tailnet with QR pairing and a challenge-response key check, turned on in Settings › Agents › iPhone and iPad. Step 5 is in: Mobile/DanteCompanion.xcodeproj, an iPhone and iPad app built from DanteCore: pairing by QR or link, the home screen (waiting steps, jobs, new job, latest reply), and the voice loop with walk mode and AirPods presses, spoken through CompanionForeman. Checked in the simulator; the microphone, camera and AirPods still need a phone. Step 8 is in: the agents' own browser (browser_ tools in dante mcp, a private WebKit browser kept to the app's local addresses and listed test hosts, on in Settings › Agents) and a built-in Verifier job type that checks the running app and reports findings with screenshots. Left: Live Activity and actionable notifications (step 6) and the iPad layout (step 7), both waiting on a phone to test with."
 - id: DI-102
@@ -692,3 +692,8 @@ tasks:
   title: "Map: a web client that compose runs opens through docker compose up -d <service> on its published port, not npm run dev"
   phase: build
   state: done
+- id: DI-159
+  title: "iPhone: notifications with Approve and Decline for waiting steps, and a Live Activity on the Lock Screen and in the Dynamic Island while agents work"
+  phase: build
+  state: review
+  notes: "Seen in the simulator with the glance demo: the Live Activity and the notification on the Lock Screen. Approve and Decline from a notification, and updates with the screen locked in walk mode, need a real phone."

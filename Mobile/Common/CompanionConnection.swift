@@ -31,6 +31,9 @@ final class CompanionConnection {
     /// What became of a request: ok, and the Mac's sentence.
     @ObservationIgnored var onResult: (Bool, String) -> Void = { _, _ in }
     @ObservationIgnored var onApprovalModeChanged: (CompanionApprovalMode) -> Void = { _ in }
+    /// Everyone else who follows the Mac: notifications and the Lock Screen's Live Activity.
+    /// Called with the snapshot, whether it's connected, and what the foreman noticed.
+    @ObservationIgnored var observers: [(CompanionSnapshot?, Bool, [CompanionForeman.Event]) -> Void] = []
     @ObservationIgnored private var approvalRequests: [String: CompanionApprovalMode] = [:]
 
     @ObservationIgnored private var socket: URLSessionWebSocketTask?
@@ -126,12 +129,16 @@ final class CompanionConnection {
         case .welcome(let snapshot):
             status = .connected
             attempts = 0
+            // Steps that came up while the phone was away are new to it too.
+            let events = CompanionForeman.events(from: self.snapshot, to: snapshot)
             self.snapshot = snapshot
             startHealthChecks()
+            tell(events)
         case .snapshot(let next):
             let events = CompanionForeman.events(from: snapshot, to: next)
             snapshot = next
             if !events.isEmpty { onEvents(events, next) }
+            tell(events)
         case .refused(let reason):
             refuse(reason)
         case .library(let id, _), .page(let id, _):
@@ -159,6 +166,10 @@ final class CompanionConnection {
         }
     }
 
+    private func tell(_ events: [CompanionForeman.Event]) {
+        for observer in observers { observer(snapshot, status == .connected, events) }
+    }
+
     private func refuse(_ reason: String) {
         stopHealthChecks()
         finishSpeechRequests()
@@ -176,6 +187,7 @@ final class CompanionConnection {
         guard wanted else { return }
         let name = pairing?.name ?? "your Mac"
         status = .offline("Can’t reach \(name). Is Tailscale on here and on the Mac, and is Dante open?")
+        tell([])
         attempts += 1
         let delay = min(30, 1 << min(attempts - 1, 5))
         retry?.cancel()
@@ -360,6 +372,29 @@ final class CompanionConnection {
 
     func answer(_ approval: CompanionSnapshot.Approval, project: String, allow: Bool, note: String? = nil, answers: [String: String]? = nil) {
         send(.answer(id: UUID().uuidString, project: project, approval: approval.id, allow: allow, note: note, answers: answers))
+    }
+
+    /// Answers a step from a notification: the app may have just been woken, so it reconnects
+    /// first, then checks the step still waits. Returns what happened, to say if it didn't work.
+    func answerWhenConnected(approval id: String, project: String, allow: Bool) async -> (ok: Bool, message: String) {
+        let started = Date()
+        resume()
+        // A stale socket only shows itself when its ping fails: give that a moment.
+        try? await Task.sleep(for: .milliseconds(400))
+        while status != .connected || pingID != nil {
+            guard wanted, Date().timeIntervalSince(started) < 12 else {
+                return (false, "Couldn’t reach \(pairing?.name ?? "your Mac") to answer. Open Dante to try again.")
+            }
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        guard let approval = snapshot?.projects.first(where: { $0.id == project })?.approvals.first(where: { $0.id == id }) else {
+            return (false, "That step was already answered.")
+        }
+        switch await explore(timeout: 10, { .answer(id: $0, project: project, approval: approval.id, allow: allow, note: nil, answers: nil) }) {
+        case .result(_, let ok, let message)?: return (ok, message)
+        case nil: return (false, "\(pairing?.name ?? "Your Mac") didn’t confirm the answer. Open Dante to check.")
+        default: return (true, "")
+        }
     }
 
     func startJob(_ brief: String, project: String, awayMinutes: Int?) {
