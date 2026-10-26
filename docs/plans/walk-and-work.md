@@ -2,7 +2,7 @@
 
 Hand Dante jobs, go for a walk, and talk to it through earbuds. The Mac does the work; the iPhone is a voice in your ear; the iPad is a desk away from the desk.
 
-Status: all eight steps are built: jobs on the Mac, away mode with a time budget, the job guard and `dante job`, job types (the Builder and the pipeline watcher), `DanteCore` and the companion server with QR pairing, the iPhone voice loop with the foreman, notifications with Approve and Decline and the Live Activity, the iPad layout, and the Verifier. Turn and plan-share budgets and a push server (so notifications reach a suspended app) are still a plan.
+Status: all eight steps are built: jobs on the Mac, away mode with budgets for time, steps and a share of the plan, the job guard and `dante job`, job types (the Builder and the pipeline watcher), `DanteCore` and the companion server with QR pairing, the iPhone voice loop with the foreman, notifications with Approve and Decline and the Live Activity, the iPad layout, and the Verifier. A push server (so notifications reach a suspended app) is still a plan: it needs a server holding an APNs key.
 
 ## Decisions so far
 

@@ -696,4 +696,4 @@ tasks:
   title: "iPhone: notifications with Approve and Decline for waiting steps, and a Live Activity on the Lock Screen and in the Dynamic Island while agents work"
   phase: build
   state: review
-  notes: "Seen in the simulator with the glance demo: the Live Activity and the notification on the Lock Screen. Approve and Decline from a notification, and updates with the screen locked in walk mode, need a real phone."
+  notes: "Seen in the simulator with the glance demo: the Live Activity on the Lock Screen and in the Dynamic Island (compact: the hand and the count), and the notification in Notification Center. Approve and Decline from a notification, and updates with the screen locked in walk mode, need a real phone."
