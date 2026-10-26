@@ -96,10 +96,15 @@ public struct ClaudeRules: Equatable, Sendable {
     }
 
     /// `--settings` JSON carrying `denyRules`, or nil when there's nothing to deny.
-    public var settingsJSON: String? {
-        guard !never.isEmpty else { return nil }
-        let rules: JSONValue = .array(denyRules.map { .string($0) })
-        return JSONValue.object(["permissions": ["deny": rules]]).jsonLine
+    public var settingsJSON: String? { settingsJSON(fastMode: false) }
+
+    /// The same with Claude Code's fast mode, which it only takes from `--settings` when it runs
+    /// under the Agent SDK's protocol.
+    public func settingsJSON(fastMode: Bool) -> String? {
+        var object: [String: JSONValue] = [:]
+        if !never.isEmpty { object["permissions"] = ["deny": .array(denyRules.map { .string($0) })] }
+        if fastMode { object["fastMode"] = .bool(true) }
+        return object.isEmpty ? nil : JSONValue.object(object).jsonLine
     }
 
     static func path(in input: JSONValue) -> String? {

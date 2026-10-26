@@ -10,7 +10,7 @@ struct ClaudeFooter: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if claude.engine == .codex { CodexModelMenu(session: session, claude: claude) } else { modelMenu }
+            ModelPicker(session: session, claude: claude)
             if let context = claude.context {
                 ContextMeter(used: context.context, window: claude.contextWindow)
                 if fraction(context) >= 0.4, claude.state == .idle {
@@ -68,51 +68,6 @@ struct ClaudeFooter: View {
         Double(usage.context) / Double(max(claude.contextWindow, 1))
     }
 
-    private var modelMenu: some View {
-        Menu {
-            ForEach(Preferences.ClaudeModel.allCases, id: \.self) { model in
-                Button {
-                    Preferences.shared.claudeModel = model
-                    session.applyClaudePreferences()
-                } label: {
-                    if model == Preferences.shared.claudeModel { Label(model.label, systemImage: "checkmark") } else { Text(model.label) }
-                }
-            }
-            Divider()
-            Menu("Effort") {
-                ForEach(Self.efforts, id: \.id) { effort in
-                    Button {
-                        Preferences.shared.claudeEffort = effort.id
-                        session.applyClaudePreferences()
-                    } label: {
-                        if effort.id == Preferences.shared.claudeEffort { Label(effort.title, systemImage: "checkmark") } else { Text(effort.title) }
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "cpu").font(.dante(size: 9.5))
-                Text(Preferences.shared.claudeEffort.isEmpty ? modelName : "\(modelName) · \(Preferences.shared.claudeEffort)")
-            }
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("The model and how hard it thinks, for the next message. Sonnet or Haiku with low effort uses far less of your plan than Opus.")
-    }
-
-    private static let efforts: [(id: String, title: String)] = [
-        ("", "Claude Code’s default"), ("low", "Low: quick answers, small edits"),
-        ("medium", "Medium"), ("high", "High: hard problems"),
-    ]
-
-    private var modelName: String {
-        if Preferences.shared.claudeModel != .default { return Preferences.shared.claudeModel.label }
-        guard let model = claude.model?.lowercased() else { return "Default model" }
-        for name in ["opus", "sonnet", "haiku"] where model.contains(name) { return name.capitalized }
-        return "Default model"
-    }
-
     @ViewBuilder
     private var usageLabel: some View {
         if let window = session.claudeUsage?.current {
@@ -127,87 +82,6 @@ struct ClaudeFooter: View {
                 Text(session.claudeUsage == nil ? "Usage" : "Fresh window")
             }
         }
-    }
-}
-
-/// Codex's models, read once from its app-server, with an effort for each.
-private struct CodexModelMenu: View {
-    @Environment(\.theme) private var theme
-    let session: Session
-    let claude: ClaudeSession
-    @State private var models: [CodexModel] = CodexModelMenu.cache
-
-    @MainActor private static var cache: [CodexModel] = []
-
-    var body: some View {
-        Menu {
-            Button { choose(model: "") } label: { checked("Default", Preferences.shared.codexModel.isEmpty) }
-            if !models.isEmpty { Divider() }
-            ForEach(models) { model in
-                Button { choose(model: model.id) } label: { checked(model.name, Preferences.shared.codexModel == model.id) }
-                    .help(model.summary)
-            }
-            if !efforts.isEmpty {
-                Divider()
-                Menu("Reasoning") {
-                    Button {
-                        Preferences.shared.automaticTaskRouting = true
-                        Sessions.all.forEach { $0.applyClaudePreferences() }
-                    } label: { checked("Automatic by task", Preferences.shared.automaticTaskRouting) }
-                    Divider()
-                    Button { choose(effort: "") } label: { checked("Default", !Preferences.shared.automaticTaskRouting && Preferences.shared.codexEffort.isEmpty) }
-                    ForEach(efforts, id: \.self) { effort in
-                        Button { choose(effort: effort) } label: { checked(effort.capitalized, !Preferences.shared.automaticTaskRouting && Preferences.shared.codexEffort == effort) }
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "cpu").font(.dante(size: 9.5))
-                Text(label)
-            }
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Codex’s model and how hard it thinks, for the next message")
-        .task {
-            guard models.isEmpty, let path = Session.codexPath else { return }
-            let found = await Codex(executable: path).models()
-            Self.cache = found
-            models = found
-        }
-    }
-
-    private var current: CodexModel? {
-        let id = Preferences.shared.codexModel.isEmpty ? (claude.model ?? "") : Preferences.shared.codexModel
-        return models.first { $0.id == id } ?? (Preferences.shared.codexModel.isEmpty ? models.first(where: \.isDefault) : nil)
-    }
-
-    private var efforts: [String] { current?.efforts ?? models.first(where: \.isDefault)?.efforts ?? [] }
-
-    private var label: String {
-        let name = current?.name ?? (Preferences.shared.codexModel.isEmpty ? "Default model" : Preferences.shared.codexModel)
-        if Preferences.shared.automaticTaskRouting {
-            let effort = claude.routingDecision?.effort ?? "auto"
-            return "\(name) · Auto (\(effort))"
-        }
-        let effort = Preferences.shared.codexEffort
-        return effort.isEmpty ? name : "\(name) · \(effort)"
-    }
-
-    @ViewBuilder
-    private func checked(_ title: String, _ on: Bool) -> some View {
-        if on { Label(title, systemImage: "checkmark") } else { Text(title) }
-    }
-
-    private func choose(model: String? = nil, effort: String? = nil) {
-        if let model { Preferences.shared.codexModel = model }
-        if let effort {
-            Preferences.shared.codexEffort = effort
-            Preferences.shared.automaticTaskRouting = false
-        }
-        Sessions.all.forEach { $0.applyClaudePreferences() }
     }
 }
 

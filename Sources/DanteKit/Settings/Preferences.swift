@@ -22,19 +22,57 @@ public final class Preferences {
 
     /// Claude Code's model aliases; `default` leaves the choice to Claude Code.
     public enum ClaudeModel: String, CaseIterable, Sendable {
-        case `default`, opus, sonnet, haiku
+        case `default`, opus, sonnet, fable, haiku
 
         public var label: String {
             switch self {
             case .default: "Claude Code’s default"
             case .opus: "Opus"
             case .sonnet: "Sonnet"
+            case .fable: "Fable"
             case .haiku: "Haiku"
             }
         }
 
-        /// The `--model` value, or nil to pass none.
-        public var argument: String? { self == .default ? nil : rawValue }
+        /// The name with the current version, as the model picker shows it.
+        public var title: String {
+            switch self {
+            case .default: "Default"
+            case .opus: "Opus 5.5"
+            case .sonnet: "Sonnet 5.5"
+            case .fable: "Fable 5.1"
+            case .haiku: "Haiku 5.5"
+            }
+        }
+
+        /// A note beside the name: Fable isn't part of a plan's included use.
+        public var note: String? { self == .fable ? "Requires usage credits" : nil }
+
+        /// Fast mode runs on Opus only.
+        public var hasFastMode: Bool { self == .opus }
+
+        /// The `--model` value, or nil to pass none. Fable goes by its full id, which every
+        /// Claude Code version accepts; the others by alias, so they follow new releases.
+        public var argument: String? {
+            switch self {
+            case .default: nil
+            case .fable: "claude-fable-5-1"
+            default: rawValue
+            }
+        }
+
+        /// The models the picker lists first, in order (1–4).
+        public static let picked: [ClaudeModel] = [.opus, .sonnet, .fable, .haiku]
+
+        /// "Opus 5.5" for a model id Claude Code reports (`claude-opus-5-5`, `claude-sonnet-4-5-20250929`,
+        /// `claude-opus-4-6[1m]`), or nil for one it doesn't recognise.
+        public static func displayName(id: String) -> String? {
+            var parts = id.lowercased().split(separator: "[").first.map { $0.split(separator: "-").map(String.init) } ?? []
+            if parts.first == "claude" { parts.removeFirst() }
+            guard let family = parts.first, ["opus", "sonnet", "haiku", "fable"].contains(family) else { return nil }
+            let numbers = parts.dropFirst().prefix { Int($0) != nil && $0.count <= 2 }
+            return numbers.isEmpty ? family.capitalized : "\(family.capitalized) \(numbers.joined(separator: "."))"
+        }
     }
 
     private let defaults: UserDefaults
@@ -84,6 +122,8 @@ public final class Preferences {
     public var documentsAsWeWork: Bool { didSet { defaults.set(documentsAsWeWork, forKey: Keys.documentsAsWeWork) } }
     /// Claude Code's `--effort` (low, medium, high); empty leaves it to Claude Code.
     public var claudeEffort: String { didSet { defaults.set(claudeEffort, forKey: Keys.claudeEffort) } }
+    /// Claude Code's fast mode (Opus only, billed as extra usage), passed in `--settings`.
+    public var claudeFastMode: Bool { didSet { defaults.set(claudeFastMode, forKey: Keys.claudeFastMode) } }
     /// Who new windows' conversations start with: Claude or Codex.
     public var agentEngine: AgentEngine { didSet { defaults.set(agentEngine.rawValue, forKey: Keys.agentEngine) } }
     /// Ask OSV.dev about the project's dependencies when scanning (sends package names and versions).
@@ -146,6 +186,7 @@ public final class Preferences {
         codexModel = defaults.string(forKey: Keys.codexModel) ?? ""
         codexEffort = defaults.string(forKey: Keys.codexEffort) ?? ""
         claudeEffort = defaults.string(forKey: Keys.claudeEffort) ?? ""
+        claudeFastMode = bool(Keys.claudeFastMode, false)
         teamModels = defaults.dictionary(forKey: Keys.teamModels) as? [String: String] ?? [:]
         teamOff = defaults.stringArray(forKey: Keys.teamOff) ?? []
         documentsAsWeWork = defaults.object(forKey: Keys.documentsAsWeWork) as? Bool ?? true
@@ -212,6 +253,7 @@ public final class Preferences {
         static let codexModel = "codexModel"
         static let codexEffort = "codexEffort"
         static let claudeEffort = "claudeEffort"
+        static let claudeFastMode = "claudeFastMode"
         static let teamModels = "teamModels"
         static let teamOff = "teamOff"
         static let documentsAsWeWork = "documentsAsWeWork"

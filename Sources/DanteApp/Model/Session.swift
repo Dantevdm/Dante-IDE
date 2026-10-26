@@ -575,6 +575,7 @@ final class Session {
         claude.asksFirst = Preferences.shared.claudeAsksFirst
         claude.requestedModel = Preferences.shared.claudeModel.argument
         claude.requestedEffort = Preferences.shared.claudeEffort.isEmpty ? nil : Preferences.shared.claudeEffort
+        claude.requestedFastMode = Preferences.shared.claudeFastMode && Preferences.shared.claudeModel.hasFastMode
         // The team for the main conversation; a job is already one team member's work.
         let off = Preferences.shared.teamRolesOff
         if claude.projectName == nil, off.count < TeamRole.allCases.count {

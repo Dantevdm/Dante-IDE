@@ -312,6 +312,9 @@ public final class ClaudeSession {
     /// Claude Code's `--effort`; nil leaves it to Claude Code. Takes effect on the next message.
     public var requestedEffort: String?
     private var startedEffort: String?
+    /// Claude Code's fast mode; takes effect on the next message.
+    public var requestedFastMode = false
+    private var startedFastMode = false
     /// What the last finished turn cost, for the footer: the conversation it re-read and what it wrote.
     public private(set) var lastTurn: TurnCost?
     private var sessionID: String?
@@ -438,7 +441,7 @@ public final class ClaudeSession {
             note("Task routing: \(decision.difficulty.rawValue), \(detail). \(decision.reason)", isError: false)
         }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
-        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || (engine == .claude && requestedEffort != startedEffort) || delegateCommand != startedDelegate
+        if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || (engine == .claude && (requestedEffort != startedEffort || requestedFastMode != startedFastMode)) || delegateCommand != startedDelegate
             || delegateEnvironment != startedDelegateEnvironment || team?.agents != startedTeam || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
             stop()
         }
@@ -822,7 +825,7 @@ public final class ClaudeSession {
                 mcpConfig = file.path
             }
         }
-        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel, effort: requestedEffort, agents: team?.agents, mcpConfig: mcpConfig)
+        let arguments = Self.arguments(systemPrompt: prompt, rules: rules, resume: sessionID, model: requestedModel, effort: requestedEffort, fastMode: requestedFastMode, agents: team?.agents, mcpConfig: mcpConfig)
         if let remote {
             process.executableURL = URL(filePath: "/usr/bin/env")
             process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
@@ -839,6 +842,7 @@ public final class ClaudeSession {
         startedDelegateEnvironment = delegateEnvironment
         startedModel = requestedModel
         startedEffort = requestedEffort
+        startedFastMode = requestedFastMode
         startedTeam = team?.agents
         startedEngine = .claude
         startedAccount = account
@@ -1081,7 +1085,7 @@ public final class ClaudeSession {
     /// `mcpConfig` is JSON or the path of a file holding it; `delegate` makes the plain config
     /// for the `dante` command when there's none.
     nonisolated static func arguments(systemPrompt: String, rules: ClaudeRules, resume sessionID: String?, model: String? = nil,
-                                      effort: String? = nil, agents: String? = nil, delegate: String? = nil, mcpConfig: String? = nil) -> [String] {
+                                      effort: String? = nil, fastMode: Bool = false, agents: String? = nil, delegate: String? = nil, mcpConfig: String? = nil) -> [String] {
         var arguments = [
             "--output-format", "stream-json",
             "--input-format", "stream-json",
@@ -1091,7 +1095,7 @@ public final class ClaudeSession {
             "--permission-mode", "default",
             "--append-system-prompt", systemPrompt,
         ]
-        if let settings = rules.settingsJSON { arguments += ["--settings", settings] }
+        if let settings = rules.settingsJSON(fastMode: fastMode) { arguments += ["--settings", settings] }
         if let sessionID { arguments += ["--resume", sessionID] }
         if let model { arguments += ["--model", model] }
         if let effort { arguments += ["--effort", effort] }

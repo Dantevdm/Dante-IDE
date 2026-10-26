@@ -679,3 +679,7 @@ tasks:
   title: "Services: Open on each running service (the browser for web, Data for a database), and Data reaches a database with no published port inside its container"
   phase: build
   state: done
+- id: DI-156
+  title: "Chat footer: a model picker like Claude Code's (model chip, ticked models with 1–4 keys, Effort and More models flyouts, fast mode) for Claude and Codex"
+  phase: build
+  state: done

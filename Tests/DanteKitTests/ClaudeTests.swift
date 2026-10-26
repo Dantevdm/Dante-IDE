@@ -267,6 +267,17 @@ struct ClaudeRulesTests {
         #expect(rules.settingsJSON?.contains(#""deny":["Read(**/.env*)""#) == true)
     }
 
+    @Test func modelNamesComeFromClaudeCodesIDs() {
+        #expect(Preferences.ClaudeModel.displayName(id: "claude-opus-5-5") == "Opus 5.5")
+        #expect(Preferences.ClaudeModel.displayName(id: "claude-sonnet-4-5-20250929") == "Sonnet 4.5")
+        #expect(Preferences.ClaudeModel.displayName(id: "claude-opus-4-6[1m]") == "Opus 4.6")
+        #expect(Preferences.ClaudeModel.displayName(id: "claude-fable-5-1") == "Fable 5.1")
+        #expect(Preferences.ClaudeModel.displayName(id: "haiku") == "Haiku")
+        #expect(Preferences.ClaudeModel.displayName(id: "gpt-6") == nil)
+        #expect(Preferences.ClaudeModel.fable.argument == "claude-fable-5-1")
+        #expect(Preferences.ClaudeModel.picked.map(\.title) == ["Opus 5.5", "Sonnet 5.5", "Fable 5.1", "Haiku 5.5"])
+    }
+
     @Test func argumentsCarryRulesAndResume() {
         let arguments = ClaudeSession.arguments(systemPrompt: "p", rules: rules, resume: "s1")
         #expect(arguments.contains("--settings"))
@@ -278,6 +289,10 @@ struct ClaudeRulesTests {
         let withEffort = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, effort: "low")
         #expect(withEffort.suffix(2) == ["--effort", "low"])
         #expect(!ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil).contains("--effort"))
+        let fast = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, fastMode: true)
+        #expect(fast.contains(#"{"fastMode":true}"#))
+        let fastWithRules = ClaudeSession.arguments(systemPrompt: "p", rules: rules, resume: nil, fastMode: true)
+        #expect(fastWithRules.contains { $0.contains(#""fastMode":true"#) && $0.contains(#""deny":"#) })
         #expect(TurnCost(context: 150_000, output: 2_000, replies: 12).read == 1_800_000)
         let delegating = ClaudeSession.arguments(systemPrompt: "p", rules: ClaudeRules(), resume: nil, delegate: "/Apps/Dante.app/bin/dante")
         #expect(delegating.suffix(2).first == "--mcp-config")
