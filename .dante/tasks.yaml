@@ -687,3 +687,4 @@ tasks:
   title: "Drag and drop: explorer rows can be dragged (they were Buttons, which swallow the drag), and files dropped on the editor open in tabs"
   phase: build
   state: done
+  notes: "Confirmed with a real mouse by the user: moving between folders, copying in from Finder, and dropping on the editor."
