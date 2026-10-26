@@ -671,3 +671,7 @@ tasks:
   phase: build
   state: review
   notes: "Checked in the test copy on a sample package: the agents' and a job's runs, a live run, a flaky test, stale files and choosing an older run. Terminal runs aren't recorded."
+- id: DI-154
+  title: "Services: values compose needs that .env doesn't set are caught before a start and filled in (a generated password for a secret)"
+  phase: build
+  state: done

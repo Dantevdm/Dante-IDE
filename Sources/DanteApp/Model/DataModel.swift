@@ -226,7 +226,9 @@ final class DataModel {
             ? await Shell.run(["docker", "compose", "up", "-d", service], in: root)
             : await Shell.run(["docker", "start", service], in: root)
         guard output.succeeded else {
-            status[connection.id] = .failed(output.message)
+            let names = ComposeVariables.named(inError: output.message)
+            status[connection.id] = .failed(names.isEmpty ? output.message
+                : "Compose needs \(names.joined(separator: ", ")), which .env doesn’t set. Services fills it in: a new password for a secret.")
             return
         }
         status[connection.id] = .connecting

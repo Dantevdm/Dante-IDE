@@ -24,6 +24,10 @@ struct EnvironmentView: View {
     @State private var apps: [RunnableApp] = []
     /// This project's containers started outside compose (`docker run --name sp-pg`).
     @State private var others: [DockerContainer] = []
+    /// Values compose needs that neither .env nor the environment has.
+    @State private var missing: [ComposeVariables.Missing] = []
+    /// A start held back until they're filled in.
+    @State private var heldStart: (id: String, arguments: [String])?
 
     struct PortPrompt: Identifiable {
         var conflicts: [PortConflict]
@@ -101,7 +105,15 @@ struct EnvironmentView: View {
         } content: {
             if let compose {
                 facts(compose)
-                if case .failure(let reason) = containers {
+                if !missing.isEmpty {
+                    MissingValuesCard(missing: missing, held: heldStart != nil, gitIgnored: gitIgnoresDotEnv) { typed in
+                        fill(typed)
+                    } cancel: {
+                        heldStart = nil
+                    }
+                }
+                // Compose's own interpolation error says what the card above already does.
+                if case .failure(let reason) = containers, missing.isEmpty || ComposeVariables.named(inError: reason.message).isEmpty {
                     Banner(symbol: "exclamationmark.triangle.fill", color: theme.amber.color, text: reason.message)
                 }
                 if let error = compose.parseError {
@@ -283,8 +295,10 @@ struct EnvironmentView: View {
         }
     }
 
+    /// Docker answers; a compose file missing values counts, since Start then asks for them.
     private var dockerReady: Bool {
-        if case .failure = containers { false } else { true }
+        guard case .failure(let reason) = containers else { return true }
+        return !ComposeVariables.named(inError: reason.message).isEmpty
     }
 
     private func facts(_ compose: ComposeFile) -> some View {
@@ -338,6 +352,7 @@ struct EnvironmentView: View {
         guard compose != nil else { containers = nil; return }
         let next = await ContainerState.load(projectRoot: workspace.url)
         if next != containers { containers = next }
+        checkValues()
         if case .success(let list) = next { await session.forwardPorts(of: list) }
         await diagnose()
     }
@@ -358,10 +373,74 @@ struct EnvironmentView: View {
         if next != notes { notes = next }
     }
 
+    /// What compose would stop on, or start blank: from the compose file, `.env`, the
+    /// environment compose runs in, and the names in compose's own error, if it gave one.
+    private func checkValues() {
+        guard let compose, let yaml = try? String(contentsOf: compose.url, encoding: .utf8) else {
+            if !missing.isEmpty { missing = [] }
+            return
+        }
+        let root = workspace.url
+        let dotEnv = try? String(contentsOf: root.appending(path: ".env"), encoding: .utf8)
+        let example = ComposeVariables.exampleNames.lazy.compactMap { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }.first
+        var errors = ""
+        if case .failure(let reason) = containers { errors += reason.message }
+        if let command, command.status != nil, command.status != 0 { errors += "\n" + command.lines.joined(separator: "\n") }
+        // A remote project's compose runs on the host, whose environment isn't this Mac's.
+        let shell = session.remoteSync == nil ? Shell.environment() : [:]
+        let next = ComposeVariables.missing(compose: yaml, env: ComposeVariables.environment(shell: shell, dotEnv: dotEnv), example: example,
+                                            alsoRequired: ComposeVariables.named(inError: errors))
+        if next != missing { missing = next }
+        if !next.contains(where: \.blocks) { heldStart = nil }
+    }
+
+    /// Whether .gitignore already keeps .env out of the repository.
+    private var gitIgnoresDotEnv: Bool {
+        let text = (try? String(contentsOf: workspace.url.appending(path: ".gitignore"), encoding: .utf8)) ?? ""
+        return GitIgnore.ensuring([".env"], in: text) == nil
+    }
+
+    /// Writes the values into .env (kept out of git), then carries on with a start that waited.
+    private func fill(_ typed: [String: String]) {
+        let root = workspace.url
+        let url = root.appending(path: ".env")
+        let lines = ComposeVariables.plan(missing, typed: typed)
+        guard !lines.isEmpty else { return }
+        do {
+            let existing = try? String(contentsOf: url, encoding: .utf8)
+            try EnvFile.setting(lines, in: existing, comment: "Values docker compose needs, added by Dante").write(to: url, atomically: true, encoding: .utf8)
+            if FileManager.default.fileExists(atPath: root.appending(path: ".git").path) {
+                let ignore = root.appending(path: ".gitignore")
+                if let text = GitIgnore.ensuring([".env"], in: try? String(contentsOf: ignore, encoding: .utf8)) {
+                    try text.write(to: ignore, atomically: true, encoding: .utf8)
+                }
+            }
+        } catch {
+            session.errorMessage = "Couldn’t write .env: \(error.localizedDescription)"
+            return
+        }
+        command = nil
+        // Compose's old error is about values that are there now: ask Docker again.
+        if case .failure = containers { containers = nil }
+        checkValues()
+        let held = heldStart
+        heldStart = nil
+        if let held, !missing.contains(where: \.blocks) {
+            act(held.id, held.arguments)
+        } else {
+            Task { await refresh() }
+        }
+    }
+
     /// Runs a compose command, showing its output as it goes: `up` waits for health
     /// checks and can take a minute before it says anything went wrong.
     /// Starts (`up`) look for taken ports first and ask what to do about them.
     private func act(_ id: String, _ arguments: [String], checkingPorts: Bool = true, plain: Bool = false) {
+        // Compose refuses to start anything while a required value is missing: ask for it first.
+        if !plain, arguments.first == "up", missing.contains(where: \.blocks) {
+            heldStart = (id, arguments)
+            return
+        }
         if !plain, checkingPorts, arguments.first == "up", let compose, session.remoteSync == nil {
             busy = id
             Task {
@@ -410,6 +489,7 @@ struct EnvironmentView: View {
             let status = await process.exitStatus()
             command?.status = status
             await refresh()
+            checkValues()
             // Keep the output only when something went wrong.
             if status == 0 {
                 try? await Task.sleep(for: .seconds(3))
