@@ -91,6 +91,9 @@ public struct DatabaseConnection: Codable, Equatable, Hashable, Sendable, Identi
     /// A password from the project's dev config (a compose file or .env.example), used when
     /// the Keychain has none. Not saved with the connection.
     public var devPassword: String?
+    /// A compose service that doesn't publish its port: only the client inside its container
+    /// reaches it. Found afresh each time, so not saved.
+    public var insideDocker = false
 
     public init(id: String? = nil, name: String, engine: DatabaseEngine, host: String = "localhost", port: Int? = nil,
                 database: String, user: String = "", file: String? = nil, service: String? = nil, readOnly: Bool? = nil,

@@ -675,3 +675,7 @@ tasks:
   title: "Services: values compose needs that .env doesn't set are caught before a start and filled in (a generated password for a secret)"
   phase: build
   state: done
+- id: DI-155
+  title: "Services: Open on each running service (the browser for web, Data for a database), and Data reaches a database with no published port inside its container"
+  phase: build
+  state: done

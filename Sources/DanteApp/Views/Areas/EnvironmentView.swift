@@ -146,6 +146,12 @@ struct EnvironmentView: View {
                             logs: { logService = logService == service.name ? nil : service.name },
                             shell: { session.runInTerminal("docker compose exec \(service.name) sh") },
                             restart: { act("restart:\(service.name)", ["restart", service.name]) },
+                            open: { target in
+                                switch target {
+                                case .data: session.showInData(service: service.name)
+                                case .browser(let url): NSWorkspace.shared.open(url)
+                                }
+                            },
                             start: { act("start:\(service.name)", ["up", "-d", service.name]) }
                         )
                     }
@@ -517,6 +523,19 @@ private struct Banner: View {
     }
 }
 
+/// Icon only when space is short; the title still reads to VoiceOver and in the tooltip.
+private struct CompactLabel: LabelStyle {
+    let compact: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if compact {
+            Label(configuration).labelStyle(.iconOnly)
+        } else {
+            Label(configuration)
+        }
+    }
+}
+
 private struct ServiceCard: View {
     @Environment(\.theme) private var theme
     let service: ComposeFile.Service
@@ -529,7 +548,14 @@ private struct ServiceCard: View {
     let logs: () -> Void
     let shell: () -> Void
     let restart: () -> Void
+    let open: (ServiceOpening) -> Void
     let start: () -> Void
+
+    /// Where Open goes, once the service runs.
+    private var opening: ServiceOpening? {
+        guard let state, state.state == "running" else { return nil }
+        return ServiceOpening.target(service: service, ports: state.ports)
+    }
 
     private var color: Color {
         guard let state else { return note == nil ? theme.text3.color : theme.amber.color }
@@ -561,26 +587,49 @@ private struct ServiceCard: View {
                 fact("Port", state?.ports.joined(separator: " ").nonEmpty ?? service.ports.first ?? "—")
                 fact("Status", state.map { $0.status.replacing(/\s*\((healthy|unhealthy|health: starting)\)$/, with: "") }?.nonEmpty ?? "—")
             }
-            HStack(spacing: 6) {
-                Button(action: logs) { Label("Logs", systemImage: "text.alignleft") }
-                    .buttonStyle(DanteButtonStyle(primary: isShowingLogs))
-                if state?.state == "running" {
-                    Button(action: shell) { Label("Shell", systemImage: "terminal") }
-                        .buttonStyle(DanteButtonStyle())
-                    Button(action: restart) { Label("Restart", systemImage: "arrow.clockwise") }
-                        .buttonStyle(DanteButtonStyle())
-                        .disabled(busy)
-                } else if !checking {
-                    Button(action: start) { Label("Start", systemImage: "play.fill") }
-                        .buttonStyle(DanteButtonStyle())
-                        .disabled(busy)
-                }
+            // Narrow cards keep Open's word and show the rest as icons.
+            ViewThatFits(in: .horizontal) {
+                buttons(compact: false)
+                buttons(compact: true)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(isWarning ? color.opacity(0.6) : theme.line.color, lineWidth: isWarning ? 1.5 : 1))
+    }
+
+
+    private func buttons(compact: Bool) -> some View {
+        HStack(spacing: 6) {
+            if let opening {
+                switch opening {
+                case .data:
+                    Button { open(opening) } label: { Label("Browse", systemImage: "tablecells") }
+                        .buttonStyle(DanteButtonStyle(primary: true)).labelStyle(.titleAndIcon)
+                        .help("Open \(service.name) in Data: its tables, rows and queries.")
+                case .browser(let url):
+                    Button { open(opening) } label: { Label("Open", systemImage: "safari") }
+                        .buttonStyle(DanteButtonStyle(primary: true)).labelStyle(.titleAndIcon)
+                        .help("Open \(url.absoluteString) in your browser.")
+                }
+            }
+            Button(action: logs) { Label("Logs", systemImage: "text.alignleft") }
+                .buttonStyle(DanteButtonStyle(primary: isShowingLogs))
+            if state?.state == "running" {
+                Button(action: shell) { Label("Shell", systemImage: "terminal") }
+                    .buttonStyle(DanteButtonStyle())
+                Button(action: restart) { Label("Restart", systemImage: "arrow.clockwise") }
+                    .buttonStyle(DanteButtonStyle())
+                    .disabled(busy)
+            } else if !checking {
+                Button(action: start) { Label("Start", systemImage: "play.fill") }
+                    .buttonStyle(DanteButtonStyle())
+                    .disabled(busy)
+            }
+        }
+        .labelStyle(CompactLabel(compact: compact))
+        .fixedSize()
     }
 
     private func fact(_ label: String, _ value: String) -> some View {

@@ -59,6 +59,8 @@ public enum DatabaseClient {
             if hasCompose, let service = connection.service { return .compose(service: service) }
             return .local(connection.engine.client)
         }
+        // Nothing on this Mac listens for a service that doesn't publish its port.
+        if connection.insideDocker, hasCompose, let service = connection.service, Shell.which("docker") != nil { return .compose(service: service) }
         if let path = Shell.which(connection.engine.client) { return .local(path) }
         if hasCompose, let service = connection.service, Shell.which("docker") != nil { return .compose(service: service) }
         return .missing

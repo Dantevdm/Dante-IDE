@@ -63,11 +63,14 @@ public enum DataDetector {
         }
         func store(_ name: String) { if !other.contains(name) { other.append(name) } }
         func orm(_ name: String) { if !orms.contains(name) { orms.append(name) } }
-        func add(_ connection: DatabaseConnection) {
+        func add(_ connection: DatabaseConnection, inside: Bool = false) {
+            var connection = connection
+            connection.insideDocker = inside
             if let index = connections.firstIndex(where: { $0.id == connection.id }) {
                 // Keep the first, but fill in what a later source knows.
                 if connections[index].service == nil { connections[index].service = connection.service }
                 if connections[index].devPassword == nil { connections[index].devPassword = connection.devPassword }
+                if inside { connections[index].insideDocker = true }
             } else {
                 connections.append(connection)
             }
@@ -88,7 +91,7 @@ public enum DataDetector {
                     name: service.name, engine: .postgres, port: hostPort(service.ports, container: 5432) ?? 5432,
                     database: value("POSTGRES_DB") ?? user, user: user, service: service.name, readOnly: false,
                     origin: .detected, note: "\(composePath) service", devPassword: value("POSTGRES_PASSWORD")
-                ))
+                ), inside: hostPort(service.ports, container: 5432) == nil)
             } else if name.hasPrefix("mysql") || name.hasPrefix("mariadb") || name.hasPrefix("percona") {
                 signal(.mysql, "\(service.name) service in \(composePath)", composePath)
                 let user = value("MYSQL_USER") ?? value("MARIADB_USER") ?? "root"
@@ -97,7 +100,7 @@ public enum DataDetector {
                     name: service.name, engine: .mysql, port: hostPort(service.ports, container: 3306) ?? 3306,
                     database: value("MYSQL_DATABASE") ?? value("MARIADB_DATABASE") ?? "mysql", user: user, service: service.name, readOnly: false,
                     origin: .detected, note: "\(composePath) service", devPassword: password
-                ))
+                ), inside: hostPort(service.ports, container: 3306) == nil)
             } else if name.hasPrefix("redis") || name.hasPrefix("valkey") || name.hasPrefix("keydb") {
                 store("Redis")
             } else if name.hasPrefix("mongo") {

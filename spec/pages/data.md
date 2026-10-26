@@ -36,6 +36,7 @@ Data connects to the project's databases: browse tables, run queries, read query
 - A table from the Map that isn't in the database yet: a note that the migrations haven't run against it.
 
 ## Edge cases
+- A compose database that doesn't publish its port (no `ports:`) is reached with the client inside its container ("psql inside the db container"), even when psql is installed on this Mac, since nothing listens on localhost for it.
 - Statements run one per argument with a marker after each, so results line up.
 - Saved connections are per Mac, never in the repo.
 

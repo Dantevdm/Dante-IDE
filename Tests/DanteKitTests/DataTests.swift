@@ -138,11 +138,28 @@ import Testing
         #expect(db.database == "shop_dev")
         #expect(db.service == "db")
         #expect(db.devPassword == "devpass")
+        #expect(!db.insideDocker)
         #expect(profile.otherStores == ["Redis"])
         #expect(profile.orms == ["Drizzle"])
         #expect(profile.migrations.first?.path == "drizzle")
         #expect(profile.migrations.first?.count == 2)
         #expect(profile.headline?.hasPrefix("Uses PostgreSQL") == true)
+    }
+
+    @Test func aDatabaseThatDoesntPublishItsPortIsReachedInsideItsContainer() throws {
+        let compose = try ComposeFile.parse("""
+        services:
+          db:
+            image: postgres:17
+            environment:
+              POSTGRES_USER: shop
+        """)
+        let profile = DataDetector.detect(paths: [], compose: ComposeFile(url: URL(filePath: "/p/compose.yaml"), services: compose), read: { _ in nil })
+        let db = try #require(profile.connections.first)
+        #expect(db.insideDocker && db.service == "db")
+        if Shell.which("docker") != nil {
+            #expect(DatabaseClient.route(for: db, hasCompose: true) == .compose(service: "db"))
+        }
     }
 
     @Test func findsPrismaSQLiteAndPythonDrivers() {
