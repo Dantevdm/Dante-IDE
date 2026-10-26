@@ -781,7 +781,8 @@ struct WebLaunchCard: View {
                 }
                 if launch.step == .needsStart, let target {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("\(launch.name) isn’t running: nothing is listening on port \(String(target.port)). Dante will start it with `\(target.command)` in a new terminal tab, wait for it to come up, then open the page.")
+                        Text(target.service.map { "\(launch.name) isn’t running: nothing is listening on port \(String(target.port)). Your compose file runs it as the \($0) service, so Dante will start it with `\(target.command)` (building its image the first time) in a new terminal tab, wait for the port, then open the page." }
+                             ?? "\(launch.name) isn’t running: nothing is listening on port \(String(target.port)). Dante will start it with `\(target.command)` in a new terminal tab, wait for it to come up, then open the page.")
                             .font(.dante(size: 12))
                             .foregroundStyle(theme.text2.color)
                             .fixedSize(horizontal: false, vertical: true)

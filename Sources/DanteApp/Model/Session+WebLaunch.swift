@@ -63,11 +63,13 @@ extension Session {
         let root = workspace.url
         launch.task = Task {
             let target = await Task.detached(priority: .userInitiated) {
-                WebPreview.target(folder: folder, name: name, screen: screen, files: files) { path in
+                let target = WebPreview.target(folder: folder, name: name, screen: screen, files: files) { path in
                     let url = root.appending(path: path)
                     guard ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) < 1_000_000 else { return nil }
                     return try? String(contentsOf: url, encoding: .utf8)
                 }
+                // The project's own way of running it comes first: its compose service.
+                return ComposeFile.load(projectRoot: root).flatMap { WebPreview.throughCompose(target, compose: $0) } ?? target
             }.value
             guard !Task.isCancelled else { return }
             launch.target = target
@@ -104,16 +106,21 @@ extension Session {
         let shell = (ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh").hasSuffix("fish") ? "$status" : "$?"
         runInNewTerminal(Self.launchCommand(target, installing: installing) + "; echo \(shell) > \(status)", title: target.name)
         let started = Date()
-        // A first install can take minutes; a start alone shouldn't.
-        let limit = installing ? 900 : 150
+        if let service = target.service {
+            serviceKeeper.youStarted([service], all: [])
+        }
+        // A first install or image build can take minutes; a dev server alone shouldn't.
+        let limit = installing || target.service != nil ? 900 : 150
         launch.task = Task {
             defer { try? FileManager.default.removeItem(atPath: status) }
             try? await Task.sleep(for: .milliseconds(600))
             launch.step = .waiting
             while !Task.isCancelled {
                 if await Self.isListening(target.port) { break }
-                if let text = try? String(contentsOfFile: status, encoding: .utf8), let code = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
-                    launch.canInstall = code != 130 && code != 143 && FileManager.default.fileExists(atPath: workspace?.url.appending(path: target.folder).appending(path: "package.json").path ?? "")
+                // `docker compose up -d` finishes once the container starts; then the port is awaited.
+                if let text = try? String(contentsOfFile: status, encoding: .utf8), let code = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+                   !(code == 0 && target.service != nil) {
+                    launch.canInstall = target.service == nil && code != 130 && code != 143 && FileManager.default.fileExists(atPath: workspace?.url.appending(path: target.folder).appending(path: "package.json").path ?? "")
                     launch.step = .failed(WebPreview.stopped(code, tool: target.tool))
                     return
                 }

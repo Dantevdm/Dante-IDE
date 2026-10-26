@@ -19,6 +19,9 @@ public enum WebPreview {
         public var tool: String = "npm"
         /// From the repo root: `cd web && npm install`.
         public var installCommand: String = "npm install"
+        /// The compose service that runs it, when the project's compose file has one: then
+        /// `command` is `docker compose up -d <service>` and `port` the port it publishes.
+        public var service: String?
 
         public var url: URL { URL(string: "http://localhost:\(port)" + path) ?? URL(string: "http://localhost:\(port)/")! }
     }
@@ -32,16 +35,49 @@ public enum WebPreview {
     }
 
     /// Checked before starting; `exists` takes a path from the repo root, `which` a tool's name.
+    /// A compose service only needs Docker: its image installs its own dependencies.
     public static func missing(_ target: Target, exists: (String) -> Bool, which: (String) -> String?) -> Missing? {
         if which(target.tool) == nil { return .tool(target.tool) }
+        if target.service != nil { return nil }
         let prefix = target.folder.isEmpty ? "" : target.folder + "/"
         if exists(prefix + "package.json"), !exists(prefix + "node_modules") { return .dependencies }
         return nil
     }
 
+    /// The same frontend run the way the project runs it: through the compose service built
+    /// from its folder (or named after it), on the host port that service publishes for the dev
+    /// server's port (or its first published port). Nil when compose doesn't run it, or runs it
+    /// without publishing a port the browser could reach.
+    public static func throughCompose(_ target: Target, compose: ComposeFile) -> Target? {
+        let app = RunnableApp(folder: target.folder, name: target.name, kind: .frontend, stack: "", command: target.command)
+        guard let name = RunnableApp.service(for: app, in: compose),
+              let service = compose.services.first(where: { $0.name == name }),
+              let port = DataDetector.hostPort(service.ports, container: target.port) ?? firstHostPort(service.ports) else { return nil }
+        var compose = target
+        compose.port = port
+        compose.portSource = "the \(name) service in compose"
+        compose.command = "docker compose up -d \(Shell.quote(name))"
+        compose.tool = "docker"
+        compose.installCommand = ""
+        compose.service = name
+        return compose
+    }
+
+    /// "3000:80", "127.0.0.1:3000:80/tcp" → 3000; a bare "80" publishes nothing fixed.
+    static func firstHostPort(_ ports: [String]) -> Int? {
+        for port in ports {
+            let parts = port.split(separator: "/").first.map { $0.split(separator: ":").map(String.init) } ?? []
+            if parts.count >= 2, let host = Int(parts[parts.count - 2]) { return host }
+        }
+        return nil
+    }
+
     /// Why a dev command stopped, from the shell's exit status.
     public static func stopped(_ code: Int32, tool: String) -> String {
-        switch code {
+        if tool == "docker", code != 130, code != 143 {
+            return "docker compose stopped with exit code \(code). The terminal tab shows why: often a build error, a port already in use or a value missing from .env (Local › Services checks those)."
+        }
+        return switch code {
         case 127: "A command it needs wasn’t found. Usually its dependencies aren’t installed (or are out of date), so `\(tool) install` comes first."
         case 126: "A command it needs couldn’t run (permission denied). Installing its dependencies again usually fixes the file modes."
         case 130, 143: "It was stopped."

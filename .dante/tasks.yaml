@@ -688,3 +688,7 @@ tasks:
   phase: build
   state: done
   notes: "Confirmed with a real mouse by the user: moving between folders, copying in from Finder, and dropping on the editor."
+- id: DI-158
+  title: "Map: a web client that compose runs opens through docker compose up -d <service> on its published port, not npm run dev"
+  phase: build
+  state: done

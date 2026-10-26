@@ -75,4 +75,30 @@ struct WebPreviewTests {
         #expect(WebPreview.missing(target, exists: installed.contains, which: { _ in nil }) == .tool("pnpm"))
         #expect(WebPreview.stopped(127, tool: "pnpm").contains("pnpm install"))
     }
+
+    @Test func runsThroughComposeWhenAServiceBuildsTheFolder() {
+        let files = ["services/web/package.json", "services/web/vite.config.ts"]
+        let target = WebPreview.target(folder: "services/web", name: "web", files: files) {
+            $0.hasSuffix("package.json") ? #"{"scripts":{"dev":"vite"},"devDependencies":{"vite":"5"}}"# : nil
+        }
+        #expect(target.port == 5173 && target.service == nil)
+        let compose = ComposeFile(services: [
+            .init(name: "db", image: "postgres:17", ports: ["5433:5432"]),
+            .init(name: "frontend", build: "./services/web", ports: ["127.0.0.1:8080:5173"]),
+        ])
+        let viaCompose = WebPreview.throughCompose(target, compose: compose)
+        #expect(viaCompose?.service == "frontend" && viaCompose?.port == 8080)
+        #expect(viaCompose?.command == "docker compose up -d frontend" && viaCompose?.tool == "docker")
+        #expect(viaCompose?.url.absoluteString == "http://localhost:8080/")
+        // Only Docker is needed: no node_modules check.
+        #expect(viaCompose.map { WebPreview.missing($0, exists: { _ in false }, which: { _ in "/usr/local/bin/docker" }) } == .some(nil))
+        #expect(viaCompose.map { WebPreview.missing($0, exists: { _ in false }, which: { _ in nil }) } == .tool("docker"))
+        // Another published port when the dev server's isn't mapped; none at all isn't reachable.
+        let nginx = ComposeFile(services: [.init(name: "web", build: "services/web", ports: ["3000:80"])])
+        #expect(WebPreview.throughCompose(target, compose: nginx)?.port == 3000)
+        let unpublished = ComposeFile(services: [.init(name: "web", build: "services/web", ports: ["5173"])])
+        #expect(WebPreview.throughCompose(target, compose: unpublished) == nil)
+        #expect(WebPreview.throughCompose(target, compose: ComposeFile(services: [.init(name: "db", image: "postgres")])) == nil)
+        #expect(WebPreview.stopped(1, tool: "docker").contains("docker compose"))
+    }
 }
