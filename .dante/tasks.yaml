@@ -683,3 +683,7 @@ tasks:
   title: "Chat footer: a model picker like Claude Code's (model chip, ticked models with 1–4 keys, Effort and More models flyouts, fast mode) for Claude and Codex"
   phase: build
   state: done
+- id: DI-157
+  title: "Drag and drop: explorer rows can be dragged (they were Buttons, which swallow the drag), and files dropped on the editor open in tabs"
+  phase: build
+  state: done

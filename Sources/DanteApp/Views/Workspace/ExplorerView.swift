@@ -499,54 +499,56 @@ private struct FileRow: View {
     }
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Group {
-                    if node.isDirectory {
-                        Image(systemName: "chevron.right")
-                            .font(.dante(size: 9, weight: .semibold))
-                            .rotationEffect(.degrees(node.isExpanded ? 90 : 0))
-                            .animation(.easeOut(duration: 0.12), value: node.isExpanded)
-                    }
+        // Not a Button: a Button keeps the mouse-down for itself, so `.onDrag` never starts.
+        HStack(spacing: 5) {
+            Group {
+                if node.isDirectory {
+                    Image(systemName: "chevron.right")
+                        .font(.dante(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(node.isExpanded ? 90 : 0))
+                        .animation(.easeOut(duration: 0.12), value: node.isExpanded)
                 }
-                .frame(width: 10)
-                .foregroundStyle(theme.text3.color)
+            }
+            .frame(width: 10)
+            .foregroundStyle(theme.text3.color)
 
-                Image(systemName: icon)
-                    .font(.dante(size: 12))
-                    .foregroundStyle(node.isDirectory ? theme.accent.color.opacity(0.8) : theme.text3.color)
-                    .frame(width: 16)
-                Text(node.name)
-                    .font(.dante(size: 12.5))
-                    .foregroundStyle(nameColor)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 0)
-                if let mark {
-                    if node.isDirectory {
-                        Circle().fill(markColor(mark).opacity(0.7)).frame(width: 5, height: 5)
-                    } else {
-                        Text(mark.letter)
-                            .font(.dante(size: 10.5, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(markColor(mark))
-                    }
+            Image(systemName: icon)
+                .font(.dante(size: 12))
+                .foregroundStyle(node.isDirectory ? theme.accent.color.opacity(0.8) : theme.text3.color)
+                .frame(width: 16)
+            Text(node.name)
+                .font(.dante(size: 12.5))
+                .foregroundStyle(nameColor)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            if let mark {
+                if node.isDirectory {
+                    Circle().fill(markColor(mark).opacity(0.7)).frame(width: 5, height: 5)
+                } else {
+                    Text(mark.letter)
+                        .font(.dante(size: 10.5, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(markColor(mark))
                 }
             }
-            .padding(.leading, CGFloat(8 + depth * 14))
-            .padding(.trailing, 8)
-            .frame(height: 24)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isActive || targeted ? theme.accentTint.color
-                          : isFocused ? theme.accentTint.opacity(0.55).color
-                          : hovering ? theme.raised.color : .clear)
-            )
-            .overlay {
-                if targeted { RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.accent.color) }
-            }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .padding(.leading, CGFloat(8 + depth * 14))
+        .padding(.trailing, 8)
+        .frame(height: 24)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isActive || targeted ? theme.accentTint.color
+                      : isFocused ? theme.accentTint.opacity(0.55).color
+                      : hovering ? theme.raised.color : .clear)
+        )
+        .overlay {
+            if targeted { RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.accent.color) }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default, action)
         .onHover { hovering = $0 }
         .onDrag(drag)
         .onDrop(of: [.fileURL], isTargeted: Binding(get: { targeted }, set: { targeted = $0 && node.isDirectory })) { providers in

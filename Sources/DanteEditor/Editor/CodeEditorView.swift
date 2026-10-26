@@ -72,6 +72,9 @@ public struct CodeEditorView: NSViewRepresentable {
     /// Called before each change with the text as it was, the range and its replacement,
     /// so marks tied to lines (breakpoints) can move with the code. Nil costs nothing.
     var onEdit: ((NSString, NSRange, String) -> Void)?
+    /// Files dropped on the text (from Finder or the explorer), to open rather than paste as
+    /// paths. Nil leaves drops to the text view.
+    var onDropFiles: (([URL]) -> Void)?
 
     public init(
         text: Binding<String>,
@@ -95,7 +98,8 @@ public struct CodeEditorView: NSViewRepresentable {
         breakpoints: Set<Int> = [],
         onToggleBreakpoint: ((Int) -> Void)? = nil,
         executionLine: Int? = nil,
-        onEdit: ((NSString, NSRange, String) -> Void)? = nil
+        onEdit: ((NSString, NSRange, String) -> Void)? = nil,
+        onDropFiles: (([URL]) -> Void)? = nil
     ) {
         _text = text
         self.language = language
@@ -118,6 +122,7 @@ public struct CodeEditorView: NSViewRepresentable {
         self.breakpoints = breakpoints
         self.onToggleBreakpoint = onToggleBreakpoint
         self.executionLine = executionLine
+        self.onDropFiles = onDropFiles
         self.onEdit = onEdit
     }
 
@@ -171,6 +176,11 @@ public struct CodeEditorView: NSViewRepresentable {
         textView.onCompleteRequest = { [weak completion] in completion?.requestNow() }
         textView.onResign = { [weak completion] in completion?.close() }
         textView.onFocus = { [weak coordinator] in coordinator?.parent.onFocus?() }
+        textView.onDropFiles = { [weak coordinator] urls in
+            guard let handle = coordinator?.parent.onDropFiles else { return false }
+            handle(urls)
+            return true
+        }
         textView.actions = actions
         coordinator.apply(theme: theme, fontSize: fontSize)
         coordinator.apply(wrapsLines: wrapsLines)
@@ -706,7 +716,38 @@ public final class CodeTextView: NSTextView {
     var onCompleteRequest: (() -> Void)?
     var onResign: (() -> Void)?
     var onFocus: (() -> Void)?
+    /// Opens dropped files; returns false when nothing takes them, so they drop as text.
+    var onDropFiles: (([URL]) -> Bool)?
     var actions: EditorActions?
+
+    /// File URLs on a drag's pasteboard; a drag of text has none.
+    private func files(in sender: NSDraggingInfo) -> [URL] {
+        let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        return onDropFiles == nil ? [] : urls ?? []
+    }
+
+    public override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        files(in: sender).isEmpty ? super.draggingEntered(sender) : .copy
+    }
+
+    public override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        files(in: sender).isEmpty ? super.draggingUpdated(sender) : .copy
+    }
+
+    public override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        files(in: sender).isEmpty ? super.prepareForDragOperation(sender) : true
+    }
+
+    public override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = files(in: sender)
+        if !urls.isEmpty, onDropFiles?(urls) == true { return true }
+        return super.performDragOperation(sender)
+    }
+
+    public override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        if let sender, !files(in: sender).isEmpty { return }
+        super.concludeDragOperation(sender)
+    }
 
     /// ⌥Escape and F5 come here: show completions.
     public override func complete(_ sender: Any?) {

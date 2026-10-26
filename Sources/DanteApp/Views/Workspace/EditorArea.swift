@@ -8,6 +8,7 @@ struct EditorArea: View {
     @Environment(ThemeStore.self) private var themeStore
     let session: Session
     let workspace: Workspace
+    @State private var dropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +31,30 @@ struct EditorArea: View {
             }
         }
         .background(theme.codeBackground.color)
+        // Files dropped on the tabs, an empty editor or a viewer open in tabs; the text view
+        // takes its own drops (`onDropFiles`), since it would otherwise paste the paths.
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+            ExplorerView.loadFileURLs(providers) { openDropped($0) }
+            return true
+        }
+        .overlay {
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(theme.accent.color, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                    .padding(4)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    /// Opens dropped files in tabs, the last one in front; folders are left alone.
+    private func openDropped(_ urls: [URL]) {
+        session.draggedFiles = []
+        let files = urls.map(FileOperations.resolved).filter { url in
+            var isFolder: ObjCBool = false
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isFolder) && !isFolder.boolValue
+        }
+        for url in files { session.open(file: url) }
     }
 
     enum Side { case left, right }
@@ -78,7 +103,8 @@ struct EditorArea: View {
             executionLine: session.executionLine(in: document),
             // Only the pane being typed in, or a split on one file would move them twice.
             onEdit: focused && !session.breakpointLines(in: document.url).isEmpty
-                ? { session.shiftBreakpoints(in: document.url, text: $0, range: $1, replacement: $2) } : nil
+                ? { session.shiftBreakpoints(in: document.url, text: $0, range: $1, replacement: $2) } : nil,
+            onDropFiles: { openDropped($0) }
         )
         .id(document.id)
         .task(id: document.id) { session.languages?.opened(document) }
@@ -112,6 +138,7 @@ private struct DocumentEditor: View {
     let onToggleBreakpoint: ((Int) -> Void)?
     let executionLine: Int?
     let onEdit: ((NSString, NSRange, String) -> Void)?
+    let onDropFiles: ([URL]) -> Void
     /// The file as of HEAD; nil when it isn't tracked.
     @State private var base: String?
     @State private var lineChanges: [Int: LineChange] = [:]
@@ -138,7 +165,8 @@ private struct DocumentEditor: View {
             breakpoints: breakpoints,
             onToggleBreakpoint: onToggleBreakpoint,
             executionLine: executionLine,
-            onEdit: onEdit
+            onEdit: onEdit,
+            onDropFiles: onDropFiles
         )
         .task(id: gitRevision) {
             base = await GitGutter.headText(of: document.url, in: root)
