@@ -377,33 +377,32 @@ private struct FailurePanel: View {
 }
 
 /// Stages as chips joined by a line; the running one pulses and a packet travels the line
-/// into it, as links do in the Infra view.
+/// into it, as links do in the Infra view. The track itself is laid out once: only the glow
+/// and the packet animate, in overlays, so a stage that runs for hours (a production stage
+/// waiting for approval) doesn't make the window measure itself again thirty times a second.
 struct StageTrack: View {
     @Environment(\.theme) private var theme
     let stages: [PipelineStage]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !stages.contains { $0.state.isActive })) { context in
-            let phase = context.date.timeIntervalSinceReferenceDate
-            ViewThatFits(in: .horizontal) {
-                track(phase: phase, names: true)
-                track(phase: phase, names: false)
-            }
+        ViewThatFits(in: .horizontal) {
+            track(names: true)
+            track(names: false)
         }
     }
 
-    private func track(phase: Double, names: Bool) -> some View {
+    private func track(names: Bool) -> some View {
         HStack(spacing: 0) {
             ForEach(Array(stages.enumerated()), id: \.element.id) { index, stage in
-                if index > 0 { connector(into: stage, phase: phase) }
-                chip(stage, phase: phase, names: names)
+                if index > 0 { connector(into: stage) }
+                chip(stage, names: names)
             }
         }
     }
 
-    private func chip(_ stage: PipelineStage, phase: Double, names: Bool) -> some View {
+    private func chip(_ stage: PipelineStage, names: Bool) -> some View {
         let color = RunDot.color(stage.state, theme: theme)
-        let pulse = stage.state == .running ? 0.5 + 0.5 * sin(phase * 4) : 0
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         return HStack(spacing: 5) {
             Image(systemName: Self.symbol(stage.state)).font(.dante(size: 10, weight: .semibold))
             if names { Text(stage.name).font(.dante(size: 11.5)).lineLimit(1) }
@@ -411,24 +410,24 @@ struct StageTrack: View {
         .foregroundStyle(stage.state == .skipped || stage.state == .queued ? theme.text3.color : color)
         .padding(.horizontal, 8)
         .frame(height: 22)
-        .background(Capsule().fill(color.opacity(stage.state == .queued || stage.state == .skipped ? 0.06 : 0.12)))
-        .overlay(Capsule().strokeBorder(color.opacity(0.35 + 0.5 * pulse)))
-        .shadow(color: color.opacity(0.35 * pulse), radius: 6 * pulse)
+        .background(shape.fill(color.opacity(stage.state == .queued || stage.state == .skipped ? 0.06 : 0.12)))
+        .overlay {
+            if stage.state == .running {
+                StageGlow(color: color)
+            } else {
+                shape.strokeBorder(color.opacity(0.35))
+            }
+        }
         .help("\(stage.name): \(stage.state.title)")
     }
 
-    private func connector(into stage: PipelineStage, phase: Double) -> some View {
+    private func connector(into stage: PipelineStage) -> some View {
         let reached = stage.state != .queued && stage.state != .skipped
-        return ZStack(alignment: .leading) {
-            Rectangle().fill(reached ? RunDot.color(stage.state, theme: theme).opacity(0.5) : theme.line.color).frame(height: 1.5)
-            if stage.state == .running {
-                GeometryReader { geometry in
-                    Circle().fill(theme.accent.color).frame(width: 5, height: 5)
-                        .offset(x: (phase.truncatingRemainder(dividingBy: 1.2) / 1.2) * max(0, geometry.size.width - 5), y: geometry.size.height / 2 - 2.5)
-                }
+        return Rectangle().fill(reached ? RunDot.color(stage.state, theme: theme).opacity(0.5) : theme.line.color).frame(height: 1.5)
+            .frame(minWidth: 14, maxWidth: 28, maxHeight: 22)
+            .overlay {
+                if stage.state == .running { StagePacket(color: theme.accent.color) }
             }
-        }
-        .frame(minWidth: 14, maxWidth: 28, maxHeight: 22)
     }
 
     static func symbol(_ status: PipelineRun.Status) -> String {
@@ -441,6 +440,40 @@ struct StageTrack: View {
         case .partial: "exclamationmark"
         case .skipped: "arrow.uturn.right"
         }
+    }
+}
+
+/// The running stage's pulsing outline. Its own timeline, drawn over the chip, so the pulse
+/// never changes the track's size.
+private struct StageGlow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let color: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
+            let pulse = 0.5 + 0.5 * sin(context.date.timeIntervalSinceReferenceDate * 4)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(color.opacity(0.35 + 0.5 * pulse))
+                .shadow(color: color.opacity(0.35 * pulse), radius: 6 * pulse)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// A packet travelling the line into the running stage.
+private struct StagePacket: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let color: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
+            Canvas { graphics, size in
+                let t = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.2) / 1.2
+                let x = t * max(0, size.width - 5)
+                graphics.fill(Path(ellipseIn: CGRect(x: x, y: size.height / 2 - 2.5, width: 5, height: 5)), with: .color(color))
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
