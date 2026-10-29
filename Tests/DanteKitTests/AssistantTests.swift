@@ -38,6 +38,7 @@ struct AssistantTests {
     @Test func outlookSaysWhyItCouldNotRead() throws {
         #expect(throws: Outlook.Failure.notRunning) { try Outlook.parseMail("NOT_RUNNING") }
         #expect(throws: Outlook.Failure.newOutlook) { try Outlook.parseMail("EMPTY_INBOX") }
+        #expect(throws: Outlook.Failure.newOutlook) { try Outlook.parseCalendar("EMPTY_INBOX") }
         #expect(Outlook.failure("execution error: Not authorized to send Apple events to Microsoft Outlook. (-1743)") == .notAllowed)
         #expect(Outlook.failure("Microsoft Outlook got an error: Application isn’t running. (-600)") == .notRunning)
         #expect(Outlook.failure("line one\nsomething odd") == .failed("something odd"))

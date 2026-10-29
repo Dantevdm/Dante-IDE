@@ -137,6 +137,8 @@ public enum Outlook {
         set toDate to d
         set out to ""
         tell application "Microsoft Outlook"
+            -- The new Outlook shows scripts no accounts and no mail; its calendar would read as empty.
+            if (count of messages of inbox) is 0 and (count of exchange accounts) + (count of imap accounts) + (count of pop accounts) is 0 then return "EMPTY_INBOX"
             set found to (calendar events whose start time ≥ fromDate and start time < toDate)
             repeat with e in found
                 set place to ""
