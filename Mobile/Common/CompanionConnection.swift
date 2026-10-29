@@ -142,7 +142,7 @@ final class CompanionConnection {
             tell(events)
         case .refused(let reason):
             refuse(reason)
-        case .library(let id, _), .page(let id, _), .screen(let id, _), .place(let id, _):
+        case .library(let id, _), .page(let id, _), .screen(let id, _), .place(let id, _), .git(let id, _):
             exploreRequests.removeValue(forKey: id)?.resume(returning: message)
         case .briefing(let id, let briefing):
             self.briefing = briefing
@@ -354,6 +354,23 @@ final class CompanionConnection {
         }
     }
 
+    /// Version control in a project: the action done on the Mac and the repository read back.
+    /// Network commands and drafting a message can take a while.
+    func git(_ action: CompanionGitAction, project: String) async -> Result<CompanionGit, ExploreFailure> {
+        #if DEBUG
+        if demo { return .success(DemoData.git(action)) }
+        #endif
+        let slow: Bool = switch action {
+        case .push, .pull, .fetch, .writeMessage, .commit: true
+        default: false
+        }
+        switch await explore(timeout: slow ? 150 : 45, { .git(id: $0, project: project, action: action) }) {
+        case .git(_, let git)?: return .success(git)
+        case .result(_, _, let message)?: return .failure(.init(message: message))
+        default: return .failure(.unreachable(status))
+        }
+    }
+
     struct ExploreFailure: Error, Equatable {
         var message: String
 
@@ -439,7 +456,11 @@ final class CompanionConnection {
         status = .connected
         self.snapshot = snapshot
         self.briefing = briefing
+        demo = true
     }
+
+    /// The simulator's demo answers git requests from `DemoData` instead of a Mac.
+    private var demo = false
     #endif
 
     /// Hands' kill switch on the Mac.

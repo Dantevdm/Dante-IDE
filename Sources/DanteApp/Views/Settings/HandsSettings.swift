@@ -14,8 +14,11 @@ struct HandsSettingsSection: View {
         SwiftUI.Section {
             Toggle("Let the agent open apps, find folders and use the keyboard and mouse", isOn: Binding(
                 get: { preferences.handsEnabled }, set: { HandsController.shared.setEnabled($0) }))
-                .help("For the main conversation only, never jobs. Opening apps and finding folders follow your approval level; every keystroke, click and screenshot asks first. Hands never act in Dante, terminals, System Settings or password apps.")
+                .help("For the main conversation only, never jobs. Hands follow your approval level: at Everything they go ahead, below it each keystroke, click and screenshot asks. Hands never act in Dante, terminals, System Settings or password apps, and the kill switch stops them at once.")
             if preferences.handsEnabled {
+                Toggle("Ask before every keystroke and click", isOn: $preferences.handsAsksEachStep)
+                    .help("On: every keyboard, mouse, screen and Outlook step waits for you, even at Everything. Off: they follow the approval level.")
+                    .onChange(of: preferences.handsAsksEachStep) { Sessions.all.forEach { $0.applyClaudePreferences() } }
                 LabeledContent("Kill switch") {
                     Text("\(HandsController.shortcut) anywhere, or Stop on the badge").foregroundStyle(theme.text3.color)
                 }

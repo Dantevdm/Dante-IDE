@@ -48,6 +48,8 @@ struct MacScreenOverlay: ViewModifier {
             }
             .animation(.spring(duration: 0.45, bounce: 0.25), value: open)
             .animation(.spring(duration: 0.45, bounce: 0.2), value: full)
+            // A Hands step to answer brings the screen back, since that's where it's answered.
+            .onChange(of: HandsStrip.waiting(connection)?.1.id) { _, step in if step != nil, active { open = true } }
             .environment(\.showsMacScreen, MacScreenToggle(isOpen: open) { open = true })
     }
 
@@ -59,6 +61,7 @@ struct MacScreenOverlay: ViewModifier {
             LiveScreen(connection: connection, width: 1200)
                 .frame(width: shown, height: shown * 10 / 16)
                 .onTapGesture(count: 2) { withAnimation(.snappy) { full = true } }
+            HandsStrip(connection: connection, compact: true)
             HStack(spacing: 8) {
                 TalkButton(voice: voice, compact: true)
                 StopAllButton(connection: connection, compact: true)
@@ -111,6 +114,10 @@ struct MacScreenOverlay: ViewModifier {
             Color.black.ignoresSafeArea()
             ZoomableScreen(connection: connection)
                 .ignoresSafeArea()
+            VStack(spacing: 12) {
+            HandsStrip(connection: connection, compact: false)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
+                .padding(.horizontal, 20)
             HStack(spacing: 14) {
                 TalkButton(voice: voice, compact: false)
                 Spacer()
@@ -128,6 +135,7 @@ struct MacScreenOverlay: ViewModifier {
             .padding(14)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
             .padding(20)
+            }
         }
         .statusBarHidden()
     }
@@ -314,5 +322,56 @@ struct MacScreenRow: View {
                 .foregroundStyle(toggle.isOpen ? Palette.text3 : Palette.text)
         }
         .disabled(toggle.isOpen)
+    }
+}
+
+/// Hands on the live screen: the step waiting for you with Allow and Decline, or what Hands
+/// are doing, and Stop Hands (the kill switch on the Mac). Nothing when Hands are idle.
+struct HandsStrip: View {
+    let connection: CompanionConnection
+    let compact: Bool
+
+    /// The first Hands step waiting in any project.
+    static func waiting(_ connection: CompanionConnection) -> (CompanionSnapshot.Project, CompanionSnapshot.Approval)? {
+        guard let snapshot = connection.snapshot else { return nil }
+        for project in snapshot.projects {
+            if let approval = project.approvals.first(where: \.isHands) { return (project, approval) }
+        }
+        return nil
+    }
+
+    var body: some View {
+        let waiting = Self.waiting(connection)
+        let hands = connection.snapshot?.hands
+        if waiting != nil || hands != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "hand.point.up.left.fill").foregroundStyle(waiting == nil ? Palette.accent : Palette.amber)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(waiting.map { "\($0.0.lead) wants to: \($0.1.title)" } ?? "\(hands?.agent ?? "The agent"): \(hands?.step ?? "")")
+                            .font(compact ? .subheadline.weight(.semibold) : .headline)
+                            .foregroundStyle(compact ? Palette.text : .white)
+                            .lineLimit(2)
+                        if waiting != nil, !compact { Text(waiting?.0.name ?? "").font(.caption).foregroundStyle(.white.opacity(0.7)) }
+                    }
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 8) {
+                    if let (project, approval) = waiting {
+                        Button("Decline") { connection.answer(approval, project: project.id, allow: false) }
+                            .buttonStyle(.bordered).tint(Palette.red)
+                        Button("Allow") { connection.answer(approval, project: project.id, allow: true) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    Spacer(minLength: 0)
+                    Button { connection.stopHands() } label: { Label("Stop Hands", systemImage: "stop.circle.fill") }
+                        .buttonStyle(.bordered).tint(Palette.red)
+                }
+                .font(compact ? .subheadline.weight(.semibold) : .body.weight(.semibold))
+            }
+            .padding(.horizontal, compact ? 10 : 16).padding(.vertical, compact ? 8 : 12)
+            .background(compact ? Palette.accentTint : .clear)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 }

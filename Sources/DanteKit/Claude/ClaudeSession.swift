@@ -262,6 +262,8 @@ public final class ClaudeSession {
     private var mcpConfigFile: URL?
     /// How much Claude may do without asking (on top of Claude Code's own read-only rule).
     public var approvalLevel: ApprovalLevel = .ask
+    /// Hands' keyboard, mouse, screen and Outlook steps ask even at Everything.
+    public var handsAskEveryStep = false
     /// A job's limits, checked before the approval level: refuse, go ahead, wait, or nil to
     /// leave it to the level. Given the tool, its input, and whether rules or the security
     /// review flagged it.
@@ -395,6 +397,13 @@ public final class ClaudeSession {
         }
     }
 
+    /// A Hands step that controls the Mac waits for a person: below Everything, or always
+    /// when `handsAskEveryStep` is on.
+    public func handsAsk(_ toolName: String, level: ApprovalLevel) -> Bool {
+        guard Hands.Tool.of(mcpName: toolName)?.controls == true else { return false }
+        return handsAskEveryStep || level != .everything
+    }
+
     /// Changing the level can also release eligible steps that are already waiting.
     /// Reuse the policy and job guard; questions and flagged steps keep waiting.
     public func setApprovalLevel(_ level: ApprovalLevel, approvingPending: Bool = false) {
@@ -402,7 +411,11 @@ public final class ClaudeSession {
         guard approvingPending, level != .ask else { return }
         for tool in pendingApprovals {
             let hasNote = tool.ruleNote != nil || tool.securityBlocks
-            guard !hasNote, Hands.Tool.of(mcpName: tool.name)?.controls != true else { continue }
+            guard !hasNote, !handsAsk(tool.name, level: level) else { continue }
+            if Hands.Tool.of(mcpName: tool.name) != nil, level == .everything, guardCall?(tool.name, tool.input, hasNote) != .ask {
+                approve(tool.id)
+                continue
+            }
             let guarded = guardCall?(tool.name, tool.input, hasNote)
             if guarded == .ask { continue }
             if case .refuse? = guarded { continue }
@@ -1263,9 +1276,12 @@ public final class ClaudeSession {
                         }
                     } else if appliesRestOfTurn, Self.editTools.contains(request.toolName), !hasNote {
                         approve(id)
-                    } else if Hands.Tool.of(mcpName: request.toolName)?.controls == true {
-                        // The keyboard, mouse and screen ask every time, at any approval level.
+                    } else if handsAsk(request.toolName, level: approvalLevel) {
+                        // The keyboard, mouse and screen ask below Everything, or always when set to.
                         onAttention(.needsApproval(Self.attentionLabel(request.toolName, input: request.input)))
+                    } else if Hands.Tool.of(mcpName: request.toolName) != nil, approvalLevel == .everything, !hasNote, guarded != .ask {
+                        // At Everything Hands go ahead; the kill switch and refusals still hold.
+                        approve(id)
                     } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames", "mcp__dante__ui_standards"].contains(request.toolName)
                                 || BrowserTools.Tool.of(mcpName: request.toolName) != nil {
                         // Dante's own local tools: nothing leaves the Mac (the browser only

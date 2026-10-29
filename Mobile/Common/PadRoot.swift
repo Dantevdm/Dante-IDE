@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The iPad: the Mac's rail on the left (Home, Map, Quality, Ship, Agents and Docs; Code stays
-/// on the Mac) for the chosen project, with Today and the Wall above it. The sidebar folds
+/// The iPad: the Mac's rail on the left (Home, Map, Quality, Ship with Changes for version
+/// control, Agents and Docs; Code stays on the Mac) for the chosen project, with Today and the Wall above it. The sidebar folds
 /// away with its button, leaving the page full width.
 struct PadRoot: View {
     let connection: CompanionConnection
@@ -14,7 +14,7 @@ struct PadRoot: View {
     @State private var wall = ProcessInfo.processInfo.environment["DANTE_WALL"] == "1"
 
     enum Place: String, Hashable {
-        case today, home, map, tests, security, ship, talk, activity, docs
+        case today, home, map, tests, security, changes, ship, talk, activity, docs
     }
 
     var body: some View {
@@ -35,6 +35,7 @@ struct PadRoot: View {
                     row(.security, "Security", "lock.shield")
                 }
                 Section("Ship") {
+                    row(.changes, "Changes", "arrow.triangle.branch")
                     row(.ship, "Release", "shippingbox")
                 }
                 Section("Agents") {
@@ -87,6 +88,7 @@ struct PadRoot: View {
             case .security: PlaceView(connection: connection, project: project.id, kind: .security)
             case .ship: PlaceView(connection: connection, project: project.id, kind: .ship)
             case .activity: PlaceView(connection: connection, project: project.id, kind: .activity)
+            case .changes: ChangesView(connection: connection, project: project.id)
             case .map: MapPlace(explorer: explorer, project: project.id)
             case .docs: LibraryView(explorer: explorer, project: project.id, name: project.name)
             case .today, .talk: EmptyView()

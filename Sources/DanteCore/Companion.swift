@@ -145,6 +145,8 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case place(id: String, place: CompanionPlace)
     /// The Mac's main screen as a JPEG (`ClientMessage.screen`), nil when it couldn't be taken.
     case screen(id: String, image: Data?)
+    /// The repository after a `ClientMessage.git`.
+    case git(id: String, git: CompanionGit)
 }
 
 /// From the device.
@@ -180,13 +182,15 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// Stops everything: every conversation's turn and every job in every window, and any
     /// Hands step under way. Hands stay switched on.
     case stopAll(id: String)
+    /// Version control in a project (opened first when it's only a recent one).
+    case git(id: String, project: String, action: CompanionGitAction)
 
     public var id: String? {
         switch self {
         case .hello: nil
         case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _),
              .library(let id, _), .page(let id, _, _), .briefing(let id, _), .replyMail(let id, _, _),
-             .screen(let id, _), .stopHands(let id), .stopAll(let id), .place(let id, _, _): id
+             .screen(let id, _), .stopHands(let id), .stopAll(let id), .place(let id, _, _), .git(let id, _, _): id
         }
     }
 }

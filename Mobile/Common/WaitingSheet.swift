@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// On the iPad, a step waiting for you or a question pops up over whatever is open, the Wall
-/// included. A Hands step (keyboard, mouse, screen) and Hands at work show the Mac's screen,
-/// refreshed every second, with a Stop button that is Hands' kill switch on the Mac.
+/// included. Hands steps don't: they show on the live Mac screen (`HandsStrip`), so the view
+/// you're watching stays where it is.
 struct WaitingPrompt: ViewModifier {
     let connection: CompanionConnection
     var active = true
@@ -20,12 +20,9 @@ struct WaitingPrompt: ViewModifier {
 
     private var shown: Prompt? {
         guard let snapshot = connection.snapshot else { return nil }
-        let waiting = snapshot.projects.flatMap { project in project.approvals.map { (project, $0) } }
+        let waiting = snapshot.projects.flatMap { project in project.approvals.filter { !$0.isHands }.map { (project, $0) } }
         if let (project, approval) = waiting.first(where: { !putAway.contains($0.1.id) }) {
             return Prompt(project: project, approval: approval, hands: snapshot.hands, count: waiting.count)
-        }
-        if let hands = snapshot.hands, !putAway.contains("hands") {
-            return Prompt(project: nil, approval: nil, hands: hands, count: 0)
         }
         return nil
     }

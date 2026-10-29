@@ -92,3 +92,17 @@ import Testing
         #expect(!Hands.isStopped(flag: flag))
     }
 }
+
+@MainActor
+struct HandsApprovalTests {
+    @Test func handsFollowTheApprovalLevelUnlessAskedToAskEveryStep() {
+        let session = ClaudeSession(root: URL(filePath: "/tmp"), executable: nil, systemPrompt: { "" })
+        let click = Hands.Tool.click.mcpName
+        #expect(!session.handsAsk(click, level: .everything))
+        #expect(session.handsAsk(click, level: .edits))
+        #expect(session.handsAsk(click, level: .ask))
+        #expect(!session.handsAsk(Hands.Tool.openApp.mcpName, level: .ask))
+        session.handsAskEveryStep = true
+        #expect(session.handsAsk(click, level: .everything))
+    }
+}

@@ -269,6 +269,18 @@ final class CompanionHub {
                 self?.server?.deliver(.screen(id: id, image: image), to: device)
             }
             return
+        case .git(let id, let project, let action):
+            Task { [weak self] in
+                guard let self else { return }
+                guard let session = await opened(project), let root = session.workspace?.url else {
+                    server?.reply(to: device, id: id, ok: false, message: "Couldn’t open that project on the Mac.")
+                    return
+                }
+                let git = await Self.git(action, in: session, root: root)
+                server?.deliver(.git(id: id, git: git), to: device)
+                if action.changes { publish() }
+            }
+            return
         case .stopAll(let id):
             let stopped = Self.stopEverything()
             server?.reply(to: device, id: id, ok: true, message: stopped == 0 ? "Nothing was running." : "Stopped \(stopped == 1 ? "one conversation" : "\(stopped) conversations").")
@@ -316,6 +328,64 @@ final class CompanionHub {
         publish()
     }
 
+    /// Does what the device asked through the window's own git model (so the Changes panel on
+    /// the Mac follows along) and reads the repository back.
+    private static func git(_ action: CompanionGitAction, in session: Session, root: URL) async -> CompanionGit {
+        let git = session.git
+        await git.load(root)
+        if git.branches.isEmpty { await git.loadBranches() }
+        func changes(_ paths: [String]) -> [GitStatus.Change] {
+            let wanted = Set(paths)
+            return git.status?.changes.filter { wanted.contains($0.path) } ?? []
+        }
+        var diff: CompanionGit.Diff?
+        switch action {
+        case .status:
+            break
+        case .diff(let path, let staged):
+            let change = git.status?.changes.first { $0.path == path } ?? GitStatus.Change(path: path)
+            diff = CompanionGit.diff(await GitRepository.diff(of: change, staged: staged, in: root), path: path, staged: staged)
+        case .stage(let paths):
+            await git.stage(changes(paths))
+        case .unstage(let paths):
+            await git.unstage(changes(paths))
+        case .discard(let paths):
+            await git.discard(changes(paths))
+        case .writeMessage:
+            await git.writeMessage(tasks: [])
+        case .commit(let message, let push):
+            git.message = message
+            if git.canCommit {
+                await git.commit(thenPush: push)
+            } else {
+                git.error = GitRepository.Failure(message: git.status?.conflicted.isEmpty == false ? "Resolve the conflicts on the Mac first." : "There’s nothing to commit.")
+            }
+        case .push:
+            await git.push()
+        case .pull:
+            await git.pull()
+        case .fetch:
+            await git.fetch()
+        case .checkout(let name, let isRemote):
+            if let branch = git.branches.first(where: { $0.name == name && $0.isRemote == isRemote }) {
+                await git.checkout(branch)
+            } else {
+                git.error = GitRepository.Failure(message: "There’s no branch called \(name).")
+            }
+        case .createBranch(let name):
+            if GitBranch.isValidName(name) {
+                await git.createBranch(name)
+            } else {
+                git.error = GitRepository.Failure(message: "“\(name)” can’t be a branch name.")
+            }
+        }
+        if action.changes { await git.loadBranches() }
+        let commits = await CompanionGit.recentCommits(in: root)
+        let operation = git.operation.map { $0.kind.rawValue }
+        return CompanionGit.make(status: git.status, branches: git.branches, commits: commits, operation: operation,
+                                 message: git.message, warning: git.messageWarning, notice: git.notice, failure: git.error, diff: diff)
+    }
+
     /// Every working conversation and job in every window stops; a Hands step under way is
     /// refused at once (the stop flag), and Hands come back on a moment later if they were on.
     static func stopEverything() -> Int {
@@ -342,7 +412,7 @@ final class CompanionHub {
     /// Nil when done, else why not.
     private func act(on message: ClientMessage) -> String? {
         switch message {
-        case .hello, .speech, .library, .page, .briefing, .replyMail, .screen, .stopHands, .stopAll, .place:
+        case .hello, .speech, .library, .page, .briefing, .replyMail, .screen, .stopHands, .stopAll, .place, .git:
             return nil
         case .openProject(_, let project):
             if let session = session(project) {

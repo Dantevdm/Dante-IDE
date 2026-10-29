@@ -574,6 +574,7 @@ final class Session {
         claude.automaticTaskRouting = Preferences.shared.automaticTaskRouting
         claude.routesToLocalModels = Preferences.shared.delegatesToLocalModels
         claude.asksFirst = Preferences.shared.claudeAsksFirst
+        claude.handsAskEveryStep = Preferences.shared.handsAsksEachStep
         claude.requestedModel = Preferences.shared.claudeModel.argument
         claude.requestedEffort = Preferences.shared.claudeEffort.isEmpty ? nil : Preferences.shared.claudeEffort
         claude.requestedFastMode = Preferences.shared.claudeFastMode && Preferences.shared.claudeModel.hasFastMode
