@@ -36,6 +36,7 @@ struct CompanionApp: App {
                 }
             }
             .tint(Palette.accent)
+            .styledByLook()
             .overlay {
                 if splash { SplashView(connection: connection) { splash = false } }
             }

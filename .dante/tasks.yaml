@@ -721,3 +721,8 @@ tasks:
   phase: build
   state: review
   notes: "Nav and Wall checked in the iPad simulator with DemoData (portrait and landscape); places tested with made-up input. Not yet seen on the device against the Mac."
+- id: DI-165
+  title: "Companion: careful with mobile data (ask before the live screen, pictures and the Mac's voice); looks that restyle the whole app"
+  phase: build
+  state: review
+  notes: "Looks and the mobile-data prompts checked in the iPad simulator with DemoData; installed on the iPad. Not yet seen on cellular."

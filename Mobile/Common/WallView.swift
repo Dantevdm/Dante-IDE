@@ -41,7 +41,9 @@ struct WallView: View {
                 .padding(gutter)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .background(WallBackdrop().ignoresSafeArea())
+            .background {
+            Group { if Looks.shared.look.isPlain { WallBackdrop() } else { LookBackdrop() } }.ignoresSafeArea()
+        }
             .overlay(alignment: .topTrailing) {
                 Button(action: close) { Image(systemName: "xmark.circle.fill").font(.title) }
                     .foregroundStyle(Palette.text3).padding(20)

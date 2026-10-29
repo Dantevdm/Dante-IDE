@@ -160,7 +160,15 @@ struct LiveScreen: View {
     var body: some View {
         ZStack {
             Color.black
-            if let image {
+            if DataSaver.shared.holdsScreen {
+                VStack(spacing: 10) {
+                    Image(systemName: "antenna.radiowaves.left.and.right").font(.title2)
+                    Text("On mobile data the live screen uses a few MB a minute.").font(.callout).multilineTextAlignment(.center)
+                    Button("Watch anyway") { DataSaver.shared.screenApproved = true }.buttonStyle(.borderedProminent)
+                }
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(16)
+            } else if let image {
                 Image(uiImage: image).resizable().aspectRatio(contentMode: .fit)
             } else {
                 VStack(spacing: 8) {
@@ -176,16 +184,19 @@ struct LiveScreen: View {
                     .padding(6).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8)).padding(8)
             }
         }
-        .task(id: width) {
-            while !Task.isCancelled {
-                if connection.status == .connected, let data = await connection.screen(width: width), let picture = UIImage(data: data) {
+        .task(id: "\(width)|\(DataSaver.shared.holdsScreen)") {
+            while !Task.isCancelled, !DataSaver.shared.holdsScreen {
+                // On mobile data, smaller frames and fewer of them.
+                let saving = DataSaver.shared.onMobileData
+                if connection.status == .connected, let data = await connection.screen(width: saving ? min(width, 800) : width),
+                   let picture = UIImage(data: data) {
                     image = picture
                     stale = false
                 } else {
                     stale = true
                     try? await Task.sleep(for: .seconds(1))
                 }
-                try? await Task.sleep(for: .milliseconds(150))
+                try? await Task.sleep(for: .milliseconds(saving ? 1500 : 150))
             }
         }
     }

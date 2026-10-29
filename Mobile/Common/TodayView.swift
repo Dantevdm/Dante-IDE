@@ -31,7 +31,7 @@ struct TodayView: View {
             }
             .padding(16)
         }
-        .background(Palette.background.ignoresSafeArea())
+        .lookBackground()
         .navigationTitle("Today")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -104,7 +104,7 @@ struct SectionCard: View {
     }
 }
 
-func color(_ status: Briefing.Status) -> Color {
+@MainActor func color(_ status: Briefing.Status) -> Color {
     switch status {
     case .bad: Palette.red
     case .attention: Palette.amber

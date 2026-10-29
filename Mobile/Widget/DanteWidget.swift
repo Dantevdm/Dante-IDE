@@ -101,9 +101,9 @@ private enum Mood {
         }
     }
 
-    static let accent = Palette.accent
+    @MainActor static var accent: Color { Palette.accent }
 
-    var color: Color {
+    @MainActor var color: Color {
         switch self {
         case .waiting: Palette.amber
         case .working: Palette.accent

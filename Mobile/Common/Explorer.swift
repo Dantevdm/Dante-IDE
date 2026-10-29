@@ -61,6 +61,12 @@ final class Explorer {
         }
     }
 
+    /// A copy of this page is on the device, so showing it costs next to nothing.
+    func isKept(_ request: CompanionPageRequest, project: String) -> Bool {
+        let kept: CompanionPage? = cache.read(key: project + "|" + request.cacheKey)
+        return kept != nil
+    }
+
     func clearCache() { cache.clear() }
     var cacheSize: Int { cache.size }
 }

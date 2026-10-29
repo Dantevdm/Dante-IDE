@@ -788,7 +788,8 @@ final class VoiceLoop {
         let generation = speechGeneration
         speechTask = Task { [weak self] in
             guard let self else { return }
-            let audio = await connection.speech(text)
+            // On mobile data the device's own voice speaks, rather than audio from the Mac.
+            let audio = DataSaver.shared.asksFirst ? nil : await connection.speech(text)
             guard !Task.isCancelled, generation == speechGeneration else { return }
             try? activateSession()
             if let audio, audio.count <= CompanionAudio.maximumBytes,

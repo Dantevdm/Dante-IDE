@@ -53,7 +53,7 @@ struct PairView: View {
             }
             .padding(20)
         }
-        .background(Palette.background.ignoresSafeArea())
+        .lookBackground()
         .sheet(isPresented: $scanning) {
             QRScanner { code in
                 scanning = false

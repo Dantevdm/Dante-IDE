@@ -113,6 +113,7 @@ final class CompanionConnection {
             @unknown default: Data()
             }
             guard socket === self.socket else { return }
+            DataSaver.shared.count(data.count)
             if let decoded = CompanionCoding.decode(ServerMessage.self, from: data) { handle(decoded) }
         }
     }

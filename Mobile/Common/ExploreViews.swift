@@ -136,6 +136,7 @@ struct PageView: View {
     @State private var problem: String?
     @State private var pdfPage = 0
     @State private var asked = false
+    @State private var held = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -143,7 +144,7 @@ struct PageView: View {
             content(width: width)
                 .task(id: "\(entry.path)|\(width)|\(scheme == .dark)|\(pdfPage)") { await load(width: width) }
         }
-        .background(Palette.background.ignoresSafeArea())
+        .lookBackground()
         .navigationTitle(entry.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -164,7 +165,13 @@ struct PageView: View {
 
     @ViewBuilder
     private func content(width: Int) -> some View {
-        if let page, page.problem == nil {
+        if held, DataSaver.shared.holdsPictures {
+            DataPrompt(what: "This is a picture the Mac draws for you,", cost: "usually a few hundred KB.") {
+                DataSaver.shared.picturesApproved = true
+                Task { await load(width: width) }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let page, page.problem == nil {
             switch page.kind {
             case .markdown:
                 ScrollView {
@@ -220,6 +227,9 @@ struct PageView: View {
     private func load(width: Int) async {
         problem = nil
         let request = CompanionPageRequest(path: entry.path, page: entry.kind == .pdf ? pdfPage : nil, width: width, scale: scale, dark: scheme == .dark)
+        // On mobile data a picture not kept here waits for a tap.
+        held = [.image, .pdf, .diagram].contains(entry.kind) && DataSaver.shared.holdsPictures && !explorer.isKept(request, project: project)
+        guard !held else { return }
         problem = await explorer.fetch(request, project: project) { page = $0 }
     }
 }
@@ -292,6 +302,7 @@ private struct FigureView: View {
     @State private var page: CompanionPage?
     @State private var problem: String?
     @State private var full = false
+    @State private var held = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -299,6 +310,12 @@ private struct FigureView: View {
                 if let image = page?.image.flatMap(UIImage.init(data:)) {
                     Image(uiImage: image).resizable().scaledToFit()
                         .onTapGesture { full = true }
+                } else if held {
+                    Button { DataSaver.shared.picturesApproved = true } label: {
+                        Label("On mobile data · tap to load pictures", systemImage: "photo.badge.arrow.down")
+                            .font(.footnote.weight(.medium)).frame(maxWidth: .infinity, minHeight: 90)
+                    }
+                    .buttonStyle(.plain).foregroundStyle(Palette.accent)
                 } else if let message = page?.problem ?? problem {
                     Label(message, systemImage: "photo").font(.footnote).foregroundStyle(Palette.text3).padding(12)
                 } else {
@@ -311,8 +328,10 @@ private struct FigureView: View {
             // A diagram's picture carries its own label; a picture's alt text is its caption.
             if figure.index == nil, !figure.caption.isEmpty { Text(figure.caption).font(.caption).foregroundStyle(Palette.text3) }
         }
-        .task(id: "\(width)|\(scheme == .dark)") {
+        .task(id: "\(width)|\(scheme == .dark)|\(DataSaver.shared.holdsPictures)") {
             let request = CompanionPageRequest(path: figure.path ?? docPath, page: figure.index, width: width, scale: scale, dark: scheme == .dark)
+            held = DataSaver.shared.holdsPictures && !explorer.isKept(request, project: project)
+            guard !held else { return }
             problem = await explorer.fetch(request, project: project) { page = $0 }
         }
         .fullScreenCover(isPresented: $full) {

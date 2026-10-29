@@ -7,6 +7,7 @@ struct PhoneHome: View {
     @Bindable var voice: VoiceLoop
     let explorer: Explorer
     @State private var newJob = false
+    @State private var settings = false
     @State private var confirmsUnpair = false
     #if DEBUG
     /// Simulator testing: `DANTE_EXPLORE=library` or a page's path opens it once connected.
@@ -46,13 +47,14 @@ struct PhoneHome: View {
                 }
                 .padding(16)
             }
-            .background(Palette.background.ignoresSafeArea())
+            .lookBackground()
             .navigationTitle(voice.project?.name ?? connection.pairing?.name ?? "Dante")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { projectMenu }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button("Style and Settings…", systemImage: "paintpalette") { settings = true }
                         Button("Unpair This Phone…", systemImage: "link.badge.plus", role: .destructive) { confirmsUnpair = true }
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
@@ -73,6 +75,7 @@ struct PhoneHome: View {
                 if !missing, debugPath == nil, let path = ProcessInfo.processInfo.environment["DANTE_EXPLORE"] { debugPath = path }
             }
             #endif
+            .sheet(isPresented: $settings) { StyleSettings() }
             .sheet(isPresented: $newJob) {
                 if let project = voice.project {
                     NewJobSheet(project: project) { brief, away in connection.startJob(brief, project: project.id, awayMinutes: away) }

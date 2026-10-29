@@ -48,7 +48,7 @@ struct PlaceView: View {
             .frame(maxWidth: 1100, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .background(Palette.background.ignoresSafeArea())
+        .lookBackground()
         .navigationTitle(kind.title)
         .toolbar {
             if loading { ToolbarItem(placement: .primaryAction) { ProgressView() } }
@@ -59,7 +59,8 @@ struct PlaceView: View {
             problem = nil
             while !Task.isCancelled {
                 await load()
-                try? await Task.sleep(for: .seconds(60))
+                // Every five minutes on mobile data.
+                try? await Task.sleep(for: .seconds(DataSaver.shared.asksFirst ? 300 : 60))
             }
         }
     }

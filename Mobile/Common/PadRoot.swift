@@ -10,6 +10,7 @@ struct PadRoot: View {
     @AppStorage("padPlace") private var place: Place = .home
     @AppStorage("padProject") private var chosen = ""
     @State private var columns = NavigationSplitViewVisibility.all
+    @State private var settings = false
     @State private var wall = ProcessInfo.processInfo.environment["DANTE_WALL"] == "1"
 
     enum Place: String, Hashable {
@@ -43,8 +44,19 @@ struct PadRoot: View {
                 Section {
                     row(.docs, "Docs", "book")
                 }
+                Section {
+                    Button { settings = true } label: {
+                        Label("Style and settings", systemImage: "paintpalette").foregroundStyle(Palette.text)
+                    }
+                    if DataSaver.shared.onMobileData {
+                        Label("Mobile data · \(DataSaver.shared.usedText)", systemImage: "antenna.radiowaves.left.and.right")
+                            .foregroundStyle(Palette.amber)
+                    }
+                }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .lookBackground()
             .navigationTitle(connection.pairing?.name ?? "Dante")
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
         } detail: {
@@ -56,6 +68,7 @@ struct PadRoot: View {
         }
         .macScreen(connection, voice: voice, active: !wall)
         .waitingPrompt(connection, active: !wall)
+        .sheet(isPresented: $settings) { StyleSettings() }
         .fullScreenCover(isPresented: $wall) {
             WallView(connection: connection, voice: voice) { wall = false }
                 .macScreen(connection, voice: voice)
