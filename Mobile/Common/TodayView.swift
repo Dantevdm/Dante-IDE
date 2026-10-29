@@ -13,10 +13,10 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if let briefing = connection.briefing {
                     header(briefing)
-                    ForEach(briefing.sections) { section in
+                    ForEach(Array(briefing.sections.enumerated()), id: \.element.id) { index, section in
                         let pipelines = section.kind == .pipelines ? briefing.pipelines ?? [] : []
                         if !section.summary.isEmpty || !section.items.isEmpty || section.problem != nil || !pipelines.isEmpty {
-                            SectionCard(section: section, pipelines: pipelines)
+                            SectionCard(section: section, pipelines: pipelines).arrive(index + 1)
                         }
                     }
                 } else if loading {

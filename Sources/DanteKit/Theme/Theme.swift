@@ -28,32 +28,10 @@ public enum ThemeID: String, CaseIterable, Codable, Sendable {
     }
 }
 
-/// An sRGB colour that converts to both SwiftUI and AppKit.
-public struct RGBA: Sendable, Equatable {
-    public let red, green, blue, alpha: Double
-
-    public init(_ hex: UInt32, alpha: Double = 1) {
-        red = Double((hex >> 16) & 0xFF) / 255
-        green = Double((hex >> 8) & 0xFF) / 255
-        blue = Double(hex & 0xFF) / 255
-        self.alpha = alpha
-    }
-
-    public func opacity(_ alpha: Double) -> RGBA {
-        RGBA(red: red, green: green, blue: blue, alpha: alpha)
-    }
-
-    private init(red: Double, green: Double, blue: Double, alpha: Double) {
-        self.red = red; self.green = green; self.blue = blue; self.alpha = alpha
-    }
-
+/// `RGBA` (DanteCore) as SwiftUI and AppKit colours.
+extension RGBA {
     public var color: Color { Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha) }
     public var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha) }
-    /// For web pages drawn in the app's theme.
-    public var css: String {
-        alpha >= 1 ? String(format: "#%02x%02x%02x", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
-            : "rgba(\(Int((red * 255).rounded())),\(Int((green * 255).rounded())),\(Int((blue * 255).rounded())),\(String(format: "%.3g", alpha)))"
-    }
 }
 
 public struct SyntaxPalette: Sendable, Equatable {

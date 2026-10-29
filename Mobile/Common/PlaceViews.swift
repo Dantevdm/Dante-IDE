@@ -16,13 +16,14 @@ struct PlaceView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if let place {
-                    header(place)
-                    if kind == .home { AgentsNow(connection: connection, project: project) }
+                    header(place).arrive(0)
+                    if kind == .home { AgentsNow(connection: connection, project: project).arrive(1) }
                     if !place.tiles.isEmpty { tiles(place) }
                     if !place.pipelines.isEmpty {
                         Card(title: "Pipelines", symbol: "arrow.triangle.branch") { PipelineList(pipelines: place.pipelines, limit: kind == .home ? 3 : 12) }
+                            .arrive(2 + place.tiles.count)
                     }
-                    ForEach(place.sections) { section in
+                    ForEach(Array(place.sections.enumerated()), id: \.element.id) { index, section in
                         Card(title: section.title, count: section.rows.count + section.more) {
                             if section.rows.isEmpty {
                                 Text("\(section.more) more on the Mac.").font(.subheadline).foregroundStyle(Palette.text3)
@@ -31,6 +32,7 @@ struct PlaceView: View {
                                 if section.more > 0 { Text("And \(section.more) more on the Mac.").font(.footnote).foregroundStyle(Palette.text3) }
                             }
                         }
+                        .arrive(3 + place.tiles.count + index)
                     }
                 } else if let problem {
                     ContentUnavailableView {
@@ -79,7 +81,7 @@ struct PlaceView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(place.project).font(.subheadline.weight(.medium)).foregroundStyle(Palette.text3)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Circle().fill(color(place.status)).frame(width: 10, height: 10)
+                PulseDot(color: color(place.status), pulsing: place.status == .bad || place.status == .attention)
                 Text(place.headline).font(.title2.weight(.semibold)).foregroundStyle(Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -88,10 +90,11 @@ struct PlaceView: View {
 
     private func tiles(_ place: CompanionPlace) -> some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
-            ForEach(place.tiles) { tile in
+            ForEach(Array(place.tiles.enumerated()), id: \.element.id) { index, tile in
                 Button { if let opens = tile.opens { open(opens) } } label: { TileView(tile: tile) }
-                    .buttonStyle(.plain)
+                    .buttonStyle(Pressable())
                     .disabled(tile.opens == nil)
+                    .arrive(2 + index)
             }
         }
     }
@@ -106,6 +109,8 @@ final class PlaceCache {
 
 private struct TileView: View {
     let tile: CompanionPlace.Tile
+    /// The bar fills from empty once the tile is on screen.
+    @State private var grown = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -116,12 +121,15 @@ private struct TileView: View {
             }
             Text(tile.value).font(.title2.weight(.semibold)).foregroundStyle(tile.status == .quiet ? Palette.text : color(tile.status))
                 .lineLimit(1).minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+                .animation(.snappy, value: tile.value)
             if let share = tile.share {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 3).fill(Palette.line)
                         RoundedRectangle(cornerRadius: 3).fill(tile.status == .quiet ? Palette.accent : color(tile.status))
-                            .frame(width: geometry.size.width * min(1, max(0, share)))
+                            .frame(width: geometry.size.width * min(1, max(0, grown ? share : 0)))
+                            .animation(.spring(duration: 0.9, bounce: 0.15).delay(0.25), value: grown)
                     }
                 }
                 .frame(height: 6)
@@ -133,6 +141,16 @@ private struct TileView: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(Palette.card))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.line))
         .contentShape(Rectangle())
+        .onAppear { grown = true }
+    }
+}
+
+/// Buttons that sink a little under the finger and spring back.
+struct Pressable: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.spring(duration: 0.3, bounce: 0.4), value: configuration.isPressed)
     }
 }
 

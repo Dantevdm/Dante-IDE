@@ -20,8 +20,8 @@ struct WallView: View {
                     if wide {
                         HStack(alignment: .top, spacing: 24) {
                             VStack(alignment: .leading, spacing: 24) {
-                                clock(context.date, size: 120)
-                                agents.frame(maxHeight: .infinity, alignment: .top)
+                                clock(context.date, size: 120).arrive(0)
+                                agents.arrive(1).frame(maxHeight: .infinity, alignment: .top)
                             }
                             .frame(width: geometry.size.width * 0.34)
                             cards(columns: 2).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -41,7 +41,7 @@ struct WallView: View {
                 .padding(gutter)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .background(Palette.background.ignoresSafeArea())
+            .background(WallBackdrop().ignoresSafeArea())
             .overlay(alignment: .topTrailing) {
                 Button(action: close) { Image(systemName: "xmark.circle.fill").font(.title) }
                     .foregroundStyle(Palette.text3).padding(20)
@@ -84,11 +84,13 @@ struct WallView: View {
                 .font(.system(size: size, weight: .thin, design: .rounded)).monospacedDigit()
                 .foregroundStyle(Palette.text)
                 .lineLimit(1).minimumScaleFactor(0.5)
+                .contentTransition(.numericText(countsDown: false))
+                .animation(.spring(duration: 0.8), value: now)
             Text(now, format: .dateTime.weekday(.wide).day().month(.wide))
                 .font(.title).foregroundStyle(Palette.text2)
             if let briefing = connection.briefing {
                 HStack(spacing: 10) {
-                    Circle().fill(color(briefing.status)).frame(width: 14, height: 14)
+                    PulseDot(color: color(briefing.status), size: 14, pulsing: briefing.status == .bad || briefing.status == .attention)
                     Text(briefing.greeting).font(.title2.weight(.semibold)).foregroundStyle(Palette.text)
                 }
                 .padding(.top, 8)
@@ -108,13 +110,15 @@ struct WallView: View {
             let shown = briefing.sections.filter { !$0.summary.isEmpty || $0.problem != nil || !$0.items.isEmpty
                 || $0.kind == .pipelines && !(briefing.pipelines ?? []).isEmpty }
             if columns == 1 {
-                VStack(spacing: 16) { ForEach(shown) { card($0, pipelines: briefing.pipelines ?? []) } }
+                VStack(spacing: 16) { ForEach(Array(shown.enumerated()), id: \.element.id) { card($1, pipelines: briefing.pipelines ?? []).arrive($0 + 1) } }
             } else {
                 let rows = stride(from: 0, to: shown.count, by: 2).map { Array(shown[$0..<min($0 + 2, shown.count)]) }
                 VStack(spacing: 16) {
                     ForEach(rows.indices, id: \.self) { index in
                         HStack(alignment: .top, spacing: 16) {
-                            ForEach(rows[index]) { card($0, pipelines: briefing.pipelines ?? []).frame(maxHeight: .infinity, alignment: .top) }
+                            ForEach(Array(rows[index].enumerated()), id: \.element.id) { column, section in
+                                card(section, pipelines: briefing.pipelines ?? []).frame(maxHeight: .infinity, alignment: .top).arrive(1 + index * 2 + column)
+                            }
                             if rows[index].count == 1 { Color.clear.frame(maxWidth: .infinity) }
                         }
                         .frame(maxHeight: .infinity)
@@ -171,8 +175,9 @@ struct WallView: View {
             ForEach(projects, id: \.id) { project in
                 let running = project.jobs.filter { [.starting, .working].contains($0.state) }.count
                 HStack(alignment: .top, spacing: 12) {
-                    Circle().fill(!project.approvals.isEmpty ? Palette.amber : project.working ? Palette.accent : Palette.text3.opacity(0.5))
-                        .frame(width: 12, height: 12).padding(.top, 8)
+                    PulseDot(color: !project.approvals.isEmpty ? Palette.amber : project.working ? Palette.accent : Palette.text3.opacity(0.5),
+                             size: 12, pulsing: project.working || !project.approvals.isEmpty)
+                        .padding(.top, 8)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(project.name).font(.title3.weight(.semibold)).foregroundStyle(Palette.text).lineLimit(1)
                         Text(line(project, running: running)).font(.body)
@@ -246,6 +251,29 @@ private struct WallPipeline: View {
             HStack(spacing: 3) {
                 ForEach(pipeline.stages.prefix(8)) { stage in
                     RoundedRectangle(cornerRadius: 2).fill(stage.status == .quiet && !stage.active ? Palette.line : color(stage.status)).frame(width: 16, height: 6)
+                }
+            }
+        }
+    }
+}
+
+/// The wall's ground: slow light drifting behind the cards, and fireflies once the room is dark.
+private struct WallBackdrop: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { context in
+            let t = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
+            GeometryReader { geometry in
+                let w = geometry.size.width, h = geometry.size.height
+                ZStack {
+                    Palette.background
+                    Circle().fill(Palette.accentTint).frame(width: w * 0.7).blur(radius: 90)
+                        .position(x: w * (0.25 + 0.12 * sin(t / 23)), y: h * (0.3 + 0.1 * cos(t / 29)))
+                    Circle().fill(Palette.green.opacity(scheme == .dark ? 0.16 : 0.08)).frame(width: w * 0.6).blur(radius: 100)
+                        .position(x: w * (0.78 + 0.1 * cos(t / 31)), y: h * (0.72 + 0.1 * sin(t / 19)))
+                    if scheme == .dark { Fireflies(count: 22, brightness: 0.5) }
                 }
             }
         }

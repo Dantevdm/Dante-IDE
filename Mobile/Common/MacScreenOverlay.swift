@@ -25,6 +25,14 @@ struct MacScreenOverlay: ViewModifier {
             case .bottomTrailing: .bottomTrailing
             }
         }
+        var unitPoint: UnitPoint {
+            switch self {
+            case .topLeading: .topLeading
+            case .topTrailing: .topTrailing
+            case .bottomLeading: .bottomLeading
+            case .bottomTrailing: .bottomTrailing
+            }
+        }
     }
 
     func body(content: Content) -> some View {
@@ -32,11 +40,14 @@ struct MacScreenOverlay: ViewModifier {
             .overlay(alignment: corner.alignment) {
                 if active, open, !full, connection.pairing != nil {
                     small.padding(20).offset(drag)
+                        .transition(.scale(scale: 0.6, anchor: corner.unitPoint).combined(with: .opacity))
                 }
             }
             .overlay {
                 if active, open, full { fullScreen.transition(.opacity) }
             }
+            .animation(.spring(duration: 0.45, bounce: 0.25), value: open)
+            .animation(.spring(duration: 0.45, bounce: 0.2), value: full)
             .environment(\.showsMacScreen, MacScreenToggle(isOpen: open) { open = true })
     }
 

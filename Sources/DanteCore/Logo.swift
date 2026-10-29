@@ -1,9 +1,10 @@
+import CoreGraphics
 import Foundation
 
 /// Dante's mark, the Vine D: a stalk for the stem, a vine growing from its tip round into the
 /// bowl and ending in a tendril, leaves along it, fireflies inside. The geometry is in the app
 /// icon's 1024 grid (y down) and the colours are the same in every theme, since a logo doesn't
-/// follow the theme. `DanteLogo` draws it in the app; scripts/make_icon.swift has a copy.
+/// follow the theme. `DanteLogo` draws it in the Mac app and `VineLogo` in the companion; scripts/make_icon.swift has a copy.
 public enum Logo {
     public typealias Curve = (start: CGPoint, control1: CGPoint, control2: CGPoint, end: CGPoint)
 
@@ -73,4 +74,30 @@ public enum Logo {
     public static let forest = [RGBA(0x16382A), RGBA(0x0B2016), RGBA(0x040D08)]
     public static let tileLight = RGBA(0xFFE08A, alpha: 0.22)
     public static let rim = RGBA(0xCFF5A0, alpha: 0.12)
+}
+
+/// An sRGB colour; DanteKit and the companion turn it into SwiftUI and AppKit colours.
+public struct RGBA: Sendable, Equatable {
+    public let red, green, blue, alpha: Double
+
+    public init(_ hex: UInt32, alpha: Double = 1) {
+        red = Double((hex >> 16) & 0xFF) / 255
+        green = Double((hex >> 8) & 0xFF) / 255
+        blue = Double(hex & 0xFF) / 255
+        self.alpha = alpha
+    }
+
+    public func opacity(_ alpha: Double) -> RGBA {
+        RGBA(red: red, green: green, blue: blue, alpha: alpha)
+    }
+
+    private init(red: Double, green: Double, blue: Double, alpha: Double) {
+        self.red = red; self.green = green; self.blue = blue; self.alpha = alpha
+    }
+
+    /// For web pages drawn in the app's theme.
+    public var css: String {
+        alpha >= 1 ? String(format: "#%02x%02x%02x", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
+            : "rgba(\(Int((red * 255).rounded())),\(Int((green * 255).rounded())),\(Int((blue * 255).rounded())),\(String(format: "%.3g", alpha)))"
+    }
 }

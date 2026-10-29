@@ -9,6 +9,8 @@ struct CompanionApp: App {
     @State private var explorer: Explorer
     @State private var notices: Notices
     @State private var glance: LiveGlance
+    /// The launch splash, until the Mac answers.
+    @State private var splash = ProcessInfo.processInfo.environment["DANTE_NO_SPLASH"] != "1"
     /// A pairing link opened while already paired, waiting to be confirmed.
     @State private var offered: CompanionPairing?
     @Environment(\.scenePhase) private var phase
@@ -34,6 +36,9 @@ struct CompanionApp: App {
                 }
             }
             .tint(Palette.accent)
+            .overlay {
+                if splash { SplashView(connection: connection) { splash = false } }
+            }
             .task {
                 // A tapped notification opens its project.
                 notices.onOpen = { project in voice.focus = project }
