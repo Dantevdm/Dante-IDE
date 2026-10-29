@@ -168,6 +168,7 @@ final class Session {
     /// The explorer's selection while one of its rows is being dragged, so a drop moves them all.
     @ObservationIgnored var draggedFiles: [URL] = []
     @ObservationIgnored var symbolIndex: (revision: Int, symbols: [CodeSymbol])?
+    @ObservationIgnored var scanningSymbols = false
 
     /// Bumped when HEAD moves (a commit, checkout or reset), so views comparing against it reload.
     var gitRevision = 0

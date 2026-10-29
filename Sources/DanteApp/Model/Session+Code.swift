@@ -6,8 +6,12 @@ import DanteKit
 extension Session {
     /// Completions for a document, converted for the editor. Ranges are worked out against
     /// the text as it was when asked, which is what the server answered for.
+    /// Without a language server that completes, words and declarations stand in
+    /// (`WordCompletion`), except in prose.
     func completionSource(for document: EditorDocument) -> CompletionSource? {
-        guard let languages, languages.existingClient(for: document.language)?.completes == true else { return nil }
+        guard let languages, languages.existingClient(for: document.language)?.completes == true else {
+            return [.markdown, .plain].contains(document.language) || document.kind != .text ? nil : wordCompletionSource(for: document)
+        }
         return CompletionSource(triggers: languages.completionTriggers(for: document.language)) { [weak document] offset, trigger in
             guard let document else { return [] }
             let text = document.text as NSString
@@ -21,6 +25,49 @@ extension Session {
                     sortText: item.sortText, filterText: item.filterText
                 )
             }
+        }
+    }
+
+    private func wordCompletionSource(for document: EditorDocument) -> CompletionSource {
+        CompletionSource(triggers: []) { [weak self, weak document] offset, _ in
+            guard let self, let document else { return [] }
+            let (text, language, url) = (document.text, document.language, document.url)
+            let keywords = LanguageSpec.for(language).keywords
+            let project = self.symbolsWithoutWaiting()
+            let items = await Task.detached(priority: .userInitiated) {
+                let here = DeclarationScanner.symbols(in: text, language: language, url: url)
+                let others = project.filter { $0.url.standardizedFileURL != url.standardizedFileURL }
+                return WordCompletion.suggestions(in: text, at: offset, keywords: keywords, here: here, project: others)
+            }.value
+            return items.enumerated().map { index, item in
+                EditorCompletion(
+                    id: item.label, label: item.label, detail: item.detail,
+                    kind: item.source == .keyword ? .keyword : item.kind.map(Self.kind) ?? .other,
+                    insertText: item.label, sortText: String(format: "%04d", index), filterText: item.label
+                )
+            }
+        }
+    }
+
+    /// The project's declarations as last scanned, starting a fresh scan when the files have
+    /// changed, so typing never waits for a whole-project pass.
+    private func symbolsWithoutWaiting() -> [CodeSymbol] {
+        if symbolIndex?.revision != workspace?.revision, !scanningSymbols {
+            scanningSymbols = true
+            Task { _ = await projectSymbols(); scanningSymbols = false }
+        }
+        return symbolIndex?.symbols ?? []
+    }
+
+    private static func kind(_ kind: CodeSymbol.Kind) -> EditorCompletion.Kind {
+        switch kind {
+        case .type: .type
+        case .function, .method: .function
+        case .property: .property
+        case .variable: .variable
+        case .constant, .enumCase: .constant
+        case .module: .module
+        case .heading, .other: .other
         }
     }
 

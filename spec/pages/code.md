@@ -21,7 +21,7 @@ Code is the editor: the file explorer, search, problems and the debugger beside 
 ## Actions
 - Open, create, rename, move and delete files and folders. Drag rows onto a folder to move them (a selected row takes the whole selection), and drag files in from Finder to copy them into the folder under the pointer, or the project when dropped below the tree.
 - Drop files from Finder or the explorer onto the editor (the text, the tabs or the empty editor) to open each in a tab; folders are ignored, and dragging selected text within the editor still moves it.
-- Edit with completion, go to definition, find references, rename and format from the language server.
+- Edit with completion, go to definition, find references, rename and format from the language server. Without a server that completes (none installed for TypeScript, Python or Java, say), completion still offers the file's declarations and words, the project's declarations (with their file) and the language's keywords; prose files get none.
 - Command I: edit the selection with the agent and accept or reject its proposal.
 - Search and replace across the project; search by meaning with a local embedding model.
 - Stage, commit (with a drafted message and a secret check), push, pull, switch and create branches; resolve merge conflicts hunk by hunk.
