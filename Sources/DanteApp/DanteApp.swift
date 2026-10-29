@@ -133,7 +133,7 @@ struct RootView: View {
         .frame(minWidth: 960, minHeight: 620)
         // The title bar is hidden; views draw into its space and leave room for the traffic lights.
         .ignoresSafeArea(.container, edges: .top)
-        .background(theme.ground.color)
+        .background(ThemeBackdrop(theme: theme).ignoresSafeArea())
         .environment(\.theme, theme)
         .preferredColorScheme(theme.colorScheme)
         .tint(theme.accent.color)

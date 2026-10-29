@@ -150,7 +150,7 @@ struct MapView: View {
                     .frame(width: 290)
             }
         }
-        .background(theme.ground.color)
+        .background(theme.pageGround)
         .task(id: workspace.revision) { await load() }
         // Opened for a view (voice, show_page): start on it rather than resetting the request.
         .onAppear {

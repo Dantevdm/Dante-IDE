@@ -1,6 +1,7 @@
 import DanteKit
 import Foundation
 import Observation
+import SwiftUI
 
 /// The chosen theme and editor font size, remembered between launches.
 @MainActor
@@ -25,7 +26,13 @@ final class ThemeStore {
         editorFontSize = size > 0 ? size : 13
     }
 
-    func cycle() { id = id.next }
+    func cycle() { choose(id.next) }
+
+    /// Colours fade across to the new theme and its scene cross-fades in.
+    func choose(_ new: ThemeID) {
+        guard new != id else { return }
+        withAnimation(.easeInOut(duration: 0.7)) { id = new }
+    }
 
     func adjustFontSize(by delta: Double) {
         editorFontSize = min(28, max(9, editorFontSize + delta))

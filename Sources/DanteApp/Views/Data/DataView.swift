@@ -68,7 +68,7 @@ struct DataView: View {
                 }
             }
         }
-        .background(theme.ground.color)
+        .background(theme.pageGround)
         .task(id: workspace.revision) {
             let first = model.root == nil
             model.load(workspace: workspace)

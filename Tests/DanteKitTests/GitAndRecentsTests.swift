@@ -54,7 +54,9 @@ struct RecentProjectsTests {
 
     @Test func themesCycle() {
         #expect(ThemeID.dark.next == .light)
-        #expect(ThemeID.paper.next == .dark)
+        #expect(ThemeID.paper.next == .graphite)
+        #expect(ThemeID.auroraNight.next == .dark)
+        #expect(ThemeID.allCases.allSatisfy { $0.theme.id == $0 && $0.counterpart?.counterpart ?? $0 == $0 })
     }
 }
 

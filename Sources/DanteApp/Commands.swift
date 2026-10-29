@@ -179,7 +179,7 @@ struct DanteCommands: Commands {
                 .disabled(session?.workspace?.split == nil)
             Divider()
 
-            Picker("Theme", selection: Binding(get: { themeStore.id }, set: { themeStore.id = $0 })) {
+            Picker("Theme", selection: Binding(get: { themeStore.id }, set: { themeStore.choose($0) })) {
                 ForEach(ThemeID.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
             Button("Next Theme") { themeStore.cycle() }

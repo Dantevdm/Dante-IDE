@@ -15,7 +15,7 @@ struct LaunchView: View {
 
     var body: some View {
         ZStack {
-            theme.ground.color
+            ThemeBackdrop(theme: theme)
             DotGrid(color: theme.line.color)
 
             HStack(spacing: 0) {

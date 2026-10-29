@@ -60,22 +60,45 @@ private struct AppearancePane: View {
     @Environment(\.theme) private var theme
     @Bindable var themeStore: ThemeStore
 
+    /// A look's tile shows the half (light or night) that's in use.
+    private func shownID(_ look: ThemeID) -> ThemeID {
+        if isChosen(look) { return themeStore.id }
+        guard themeStore.id.theme.isDark, let night = look.counterpart, night.theme.isDark else { return look }
+        return night
+    }
+
+    private func isChosen(_ look: ThemeID) -> Bool { themeStore.id == look || themeStore.id == look.counterpart }
+
     var body: some View {
         Form {
-            SwiftUI.Section("Theme") {
-                HStack(spacing: 14) {
-                    ForEach(ThemeID.allCases, id: \.self) { id in
-                        Button { themeStore.id = id } label: {
-                            VStack(spacing: 8) {
-                                ThemePreview(theme: id.theme)
-                                    .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(themeStore.id == id ? theme.accent.color : theme.line.color, lineWidth: themeStore.id == id ? 2 : 1))
-                                Text(id.displayName).font(.dante(size: 12, weight: themeStore.id == id ? .semibold : .regular)).foregroundStyle(theme.text.color)
+            SwiftUI.Section("Look") {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 14)], spacing: 14) {
+                    ForEach(ThemeID.looks, id: \.self) { look in
+                        let shown = shownID(look)
+                        let chosen = isChosen(look)
+                        Button { themeStore.choose(shown) } label: {
+                            VStack(spacing: 6) {
+                                ThemePreview(theme: shown.theme)
+                                    .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(chosen ? theme.accent.color : theme.line.color, lineWidth: chosen ? 2 : 1))
+                                Text(look == .light ? "Classic" : look.displayName)
+                                    .font(.dante(size: 12, weight: chosen ? .semibold : .regular)).foregroundStyle(theme.text.color)
                             }
                         }
                         .buttonStyle(.plain)
+                        .help(look.tagline)
                     }
                 }
                 .padding(.vertical, 6)
+                if themeStore.id.counterpart != nil {
+                    Picker("Light or night", selection: Binding(get: { themeStore.id.theme.isDark }, set: { night in
+                        if night != themeStore.id.theme.isDark, let other = themeStore.id.counterpart { themeStore.choose(other) }
+                    })) {
+                        Text("Light").tag(false)
+                        Text("Night").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .help("Each look comes light and at night. Vine, Tide, Dusk and Aurora move slowly behind the pages; Reduce Motion stills them.")
+                }
             }
             SwiftUI.Section {
                 LabeledContent("Editor font size") {
@@ -129,6 +152,9 @@ private struct ThemePreview: View {
                 .background(theme.codeBackground.color)
             }
         }
+        .padding(.leading, theme.id.scene == .none ? 0 : 10)
+        .padding(.top, theme.id.scene == .none ? 0 : 10)
+        .background(ThemeBackdrop(theme: theme, small: true))
         .frame(width: 150, height: 92)
         .clipShape(RoundedRectangle(cornerRadius: 9))
     }

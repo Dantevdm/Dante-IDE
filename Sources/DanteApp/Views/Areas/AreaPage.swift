@@ -53,7 +53,7 @@ struct AreaPage<Actions: View, Content: View>: View {
             .frame(maxWidth: maxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(theme.ground.color)
+        .background(theme.pageGround)
     }
 }
 

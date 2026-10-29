@@ -119,8 +119,8 @@ private struct ThemeMenu: View {
 
     var body: some View {
         Menu {
-            Picker("Theme", selection: Bindable(themeStore).id) {
-                ForEach(ThemeID.allCases, id: \.self) { Text($0.displayName).tag($0) }
+            Picker("Theme", selection: Binding(get: { themeStore.id }, set: { themeStore.choose($0) })) {
+                ForEach(ThemeID.allCases, id: \.self) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
             }
             .pickerStyle(.inline)
         } label: {
@@ -140,13 +140,7 @@ private struct ThemeMenu: View {
         .accessibilityLabel("Theme")
     }
 
-    private var symbol: String {
-        switch themeStore.id {
-        case .dark: "moon"
-        case .light: "sun.max"
-        case .paper: "book"
-        }
-    }
+    private var symbol: String { themeStore.id.symbol }
 }
 
 /// Shows or hides the Claude panel; a dot marks changes waiting for review.

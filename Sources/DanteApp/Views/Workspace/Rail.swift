@@ -120,7 +120,7 @@ struct PlaceTabs: View {
         .padding(.top, 10)
         .padding(.bottom, 9)
         .frame(maxWidth: .infinity)
-        .background(theme.ground.color)
+        .background(theme.pageGround)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
     }
 }

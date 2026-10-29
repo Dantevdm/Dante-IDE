@@ -330,7 +330,7 @@ struct CommandPalette: View {
             action("Reveal project in Finder", "finder") { NSWorkspace.shared.activateFileViewerSelecting([workspace.url]) },
         ]
         for id in ThemeID.allCases where id != themeStore.id {
-            list.append(action("Theme: \(id.displayName)", id == .dark ? "moon" : (id == .light ? "sun.max" : "book"), nil) { themeStore.id = id })
+            list.append(action("Theme: \(id.displayName)", id.symbol, nil) { themeStore.choose(id) })
         }
         if let claude = session.claude, !claude.items.isEmpty {
             list.append(action("New Claude conversation", "square.and.pencil") { claude.reset() })

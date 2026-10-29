@@ -53,7 +53,7 @@ Native macOS IDE in Swift 6 / SwiftUI, built with SwiftPM (no Xcode project). De
 
 ## Conventions
 
-- Colours come only from `Theme` tokens (`@Environment(\.theme)`), never literals in views. All three themes (Dark, Light, Paper) must look right.
+- Colours come only from `Theme` tokens (`@Environment(\.theme)`), never literals in views. Every theme must look right: Light, Dark, Paper, and the looks shared with the companion, Graphite, Vine, Tide, Dusk and Aurora, each light and at night (`ThemeID.looks`, `counterpart`; Settings › Appearance is a gallery of them with a Light or night choice). Vine, Tide, Dusk and Aurora have a `scene`: `ThemeBackdrop` (DanteApp) draws it behind the window in one Canvas at 15 fps, still while the window isn't key or under Reduce Motion, and pages use `theme.pageGround` (clear over a scene) instead of `ground`; cards, panels and the editor stay opaque. Change themes through `ThemeStore.choose`, which animates the switch.
 - The window's system title bar is hidden; `TitleBar` draws its own and leaves room for the traffic lights.
 - Menu commands reach the window's state via `@FocusedValue(\.session)`.
 - `Section` is SwiftUI's; the workspace's areas are `Session.Area`.

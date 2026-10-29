@@ -115,7 +115,7 @@ struct DocsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .background(theme.ground.color)
+        .background(theme.pageGround)
         .sheet(item: $creating) { kind in
             switch kind {
             case .doc(let template):
