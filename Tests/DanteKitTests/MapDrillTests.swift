@@ -135,13 +135,13 @@ struct MapDrillTests {
 
     @Test func openingTheServiceShowsItsLayers() throws {
         let map = build()
-        let service = try #require(map.parts.first { $0.lane == .backend && $0.name == "java" })
+        let service = try #require(map.parts.first { $0.lane == .backend && $0.name == "shop" })
         let paths = Array(Self.files.keys)
         #expect(map.opens(service, files: paths))
         let inside = try #require(SystemMap.inside(service, files: paths, read: { Self.files[$0] }))
         let pieces = inside.parts.filter { $0.lane == .backend }
         #expect(Set(pieces.map(\.name)) == ["shop", "controllers", "services", "repositories", "models"])
-        #expect(inside.title(of: .backend) == "Inside java")
+        #expect(inside.title(of: .backend) == "Inside shop")
         func id(_ name: String) -> String { pieces.first { $0.name == name }!.id }
         #expect(inside.links.contains { $0.from == id("controllers") && $0.to == id("services") })
         #expect(inside.links.contains { $0.from == id("services") && $0.to == id("repositories") })

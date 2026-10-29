@@ -290,3 +290,37 @@ struct SystemMapTests {
         #expect(!uses(#"options: ["Apple keynote", "Stripe", "Linear"]"#))
     }
 }
+
+struct GroupedServicesMapTests {
+    /// services/java holds two Gradle builds and services/react a Vite app: the backend is the
+    /// two services and the React app is only a client.
+    @Test func groupingFoldersGiveWayToTheirProjects() {
+        let files = [
+            "services/java/order-service/build.gradle.kts",
+            "services/java/order-service/src/main/java/shop/OrderController.java",
+            "services/java/order-service/src/main/java/shop/OrderRepository.java",
+            "services/java/starter-app/build.gradle.kts",
+            "services/java/starter-app/src/main/java/shop/App.java",
+            "services/react/shop-ui/package.json",
+            "services/react/shop-ui/src/main.tsx",
+            "services/react/shop-ui/src/App.tsx",
+        ]
+        let modules = ArchitectureGraph.folders(files)
+        #expect(Set(modules?.nodes.map(\.path) ?? []) == ["services/java/order-service", "services/java/starter-app", "services/react/shop-ui"])
+        let read: (String) -> String? = { $0.hasSuffix("package.json") ? #"{"dependencies":{"react":"18.3.1"}}"# : "" }
+        let map = SystemMap.build(files: files, read: read, modules: modules)
+        #expect(map.parts.filter { $0.lane == .clients }.map(\.name) == ["shop-ui"])
+        #expect(Set(map.parts.filter { $0.lane == .backend }.map(\.name)) == ["order-service", "starter-app"])
+    }
+
+    @Test func aFolderAroundAFrontendStaysOnlyForItsOwnCode() {
+        let files = ["services/react/shop-ui/package.json", "services/react/shop-ui/src/App.tsx", "services/api/main.go", "services/api/routes.go"]
+        let modules = ArchitectureGraph(title: "Folders", source: "test", nodes: [
+            .init(id: "services/react", name: "react", kind: .folder, path: "services/react", detail: ""),
+            .init(id: "services/api", name: "api", kind: .folder, path: "services/api", detail: ""),
+        ], edges: [])
+        let read: (String) -> String? = { $0.hasSuffix("package.json") ? #"{"dependencies":{"react":"18.3.1"}}"# : "" }
+        let map = SystemMap.build(files: files, read: read, modules: modules)
+        #expect(map.parts.filter { $0.lane == .backend }.map(\.name) == ["api"])
+    }
+}

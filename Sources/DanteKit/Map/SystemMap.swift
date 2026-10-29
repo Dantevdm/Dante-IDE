@@ -171,7 +171,7 @@ public struct SystemMap: Equatable, Sendable {
         let name = (path as NSString).lastPathComponent
         return codeExtensions.contains((path as NSString).pathExtension.lowercased())
             || (path as NSString).pathExtension.lowercased() == "sql"
-            || ["package.json", "go.mod", "requirements.txt", "pyproject.toml", "Cargo.toml", "Gemfile", "pubspec.yaml", "index.html", "schema.prisma", "pom.xml", "build.gradle"].contains(name)
+            || ["package.json", "go.mod", "requirements.txt", "pyproject.toml", "Cargo.toml", "Gemfile", "pubspec.yaml", "index.html", "schema.prisma", "pom.xml", "build.gradle", "build.gradle.kts"].contains(name)
     }
 
     /// Whether `body` holds `needle`, compared byte for byte. `String.contains` walks
@@ -253,7 +253,13 @@ public struct SystemMap: Equatable, Sendable {
             let inside = graph.nodes.filter { node in
                 guard node.kind != .external, node.kind != .test else { return false }
                 let path = node.path ?? ""
-                return !clientRoots.contains { !$0.isEmpty && (path == $0 || path.hasPrefix($0 + "/")) }
+                if clientRoots.contains(where: { !$0.isEmpty && (path == $0 || path.hasPrefix($0 + "/")) }) { return false }
+                // A folder that holds a frontend (services/react around services/react/ui) is
+                // backend only for code outside it.
+                if !path.isEmpty, clientRoots.contains(where: { $0.hasPrefix(path + "/") }) {
+                    return backendFiles.contains { $0.hasPrefix(path + "/") }
+                }
+                return true
             }
             // Top of the lane is what runs first: order by the module graph's columns.
             let order = Dictionary(graph.columns.enumerated().flatMap { column, nodes in nodes.map { ($0.id, column) } }) { a, _ in a }

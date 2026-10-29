@@ -123,6 +123,9 @@ public struct ArchitectureGraph: Equatable, Sendable {
         return ArchitectureGraph(title: "Services", source: file.url.lastPathComponent, nodes: nodes, edges: edges)
     }
 
+    /// Files that make their folder a project of its own.
+    static let projectManifests: Set<String> = ["package.json", "build.gradle", "build.gradle.kts", "pom.xml", "go.mod", "Cargo.toml", "pyproject.toml", "setup.py", "Gemfile", "composer.json", "mix.exs"]
+
     /// For stacks Dante can't read yet: the folders that hold code, under a source root
     /// (Sources, src, lib…) when there is one, else at the top of the repo.
     public static func folders(_ paths: [String]) -> ArchitectureGraph? {
@@ -137,6 +140,20 @@ public struct ArchitectureGraph: Equatable, Sendable {
                 counts[parts[0] + "/" + parts[1], default: 0] += 1
             } else if !parts[0].hasPrefix("."), !skipped.contains(parts[0].lowercased()), !roots.contains(parts[0]) {
                 counts[parts[0], default: 0] += 1
+            }
+        }
+        // A folder that only groups projects (services/java holding two Gradle builds) gives
+        // way to the projects in it, each counted on its own.
+        let projects = Set(paths.filter { projectManifests.contains(($0 as NSString).lastPathComponent) || $0.hasSuffix(".csproj") }
+            .map { ($0 as NSString).deletingLastPathComponent })
+        for folder in Array(counts.keys) where !projects.contains(folder) {
+            let inner = projects.filter { $0.hasPrefix(folder + "/") }
+            let outermost = inner.filter { project in !inner.contains { $0 != project && project.hasPrefix($0 + "/") } }
+            guard !outermost.isEmpty else { continue }
+            counts[folder] = nil
+            for project in outermost {
+                let files = paths.filter { $0.hasPrefix(project + "/") && code.contains(($0 as NSString).pathExtension.lowercased()) }.count
+                if files > 0 { counts[project] = files }
             }
         }
         // A source root wins over loose top-level folders.
