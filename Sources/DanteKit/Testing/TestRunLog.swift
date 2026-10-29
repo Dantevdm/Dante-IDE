@@ -42,7 +42,7 @@ public struct SavedTestRun: Codable, Equatable, Identifiable, Sendable {
     public var brokeOutsideTests: Bool
     /// The run asked for only some tests (a filter, one file): it says nothing about the rest.
     public var narrowed: Bool
-    /// The last lines of output, for a run that broke before its tests.
+    /// For a run that failed outside its tests: the lines naming why, then the end (`BrokenRunLines`).
     public var tail: [String]
 
     public init(id: String = UUID().uuidString, date: Date, by: TestRunner, command: String, results: [TestResult], duration: TimeInterval = 0,
@@ -82,7 +82,7 @@ public struct SavedTestRun: Codable, Equatable, Identifiable, Sendable {
         let summary = TestOutputSummary.duration(in: lines)
         return SavedTestRun(date: date, by: runner, command: command.trimmingCharacters(in: .whitespacesAndNewlines), results: results,
                             duration: summary ?? 0, brokeOutsideTests: failed && !failing, narrowed: TestCommandLine.isNarrowed(command),
-                            tail: failed && !failing ? Array(lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.suffix(30)) : [])
+                            tail: failed && !failing ? BrokenRunLines.pick(lines) : [])
     }
 }
 

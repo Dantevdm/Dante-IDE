@@ -51,7 +51,7 @@ struct TestsView: View {
                     }
                 }
                 if let shown = shownRun, shown.brokeOutsideTests, live == nil {
-                    BrokenRunCard(run: shown)
+                    BrokenRunCard(session: session, run: shown, isRunning: live != nil, runAgain: command.map { c in { run(c) } })
                 }
                 if !shownFailures.isEmpty {
                     FailuresCard(session: session, workspace: workspace, failures: shownFailures, command: shownCommand,
@@ -160,7 +160,7 @@ struct TestsView: View {
             if inventory == nil { return "Reading the tests…" }
             if total == 0 { return runs.isEmpty ? "No tests found in the code" : "Runs found tests Dante can’t place in the code" }
             if runs.isEmpty { return "\(total) tests in the code, none run on this Mac yet" }
-            if let shown = shownRun, shown.brokeOutsideTests { return "The last run didn’t get to the tests" }
+            if let shown = shownRun, shown.brokeOutsideTests { return shown.results.isEmpty ? "The last run didn’t get to the tests" : "Tests passed, but the run failed outside them" }
             if failing > 0 {
                 let flakyFailing = map?.tiles.count { $0.state == .failed && $0.flaky } ?? 0
                 return "\(failing) failing of \(total)" + (flakyFailing > 0 ? ", \(flakyFailing == failing ? (failing == 1 ? "it’s" : "all") : "\(flakyFailing)") flaky" : "")
@@ -349,31 +349,86 @@ struct TestsView: View {
     }
 }
 
-/// A run that stopped before its tests: the end of what it printed.
+/// A run that failed outside its tests (a package that didn't build, a setup error, a
+/// panic): why, the lines that say so, and what to do about it.
 private struct BrokenRunCard: View {
     @Environment(\.theme) private var theme
+    let session: Session
     let run: SavedTestRun
+    let isRunning: Bool
+    let runAgain: (() -> Void)?
+
+    private var title: String {
+        run.results.isEmpty ? "The run stopped before any test ran"
+            : "\(run.passed) \(run.passed == 1 ? "test" : "tests") passed, but the run still failed"
+    }
+
+    private var explanation: String {
+        let reason = BrokenRunLines.reason(in: run.tail)
+        let what = run.results.isEmpty
+            ? "Nothing was tested: the runner failed before the first test."
+            : "No test failed, so something around them did: a package that doesn’t build, a setup step or a crash."
+        return (reason.map { "\($0). " } ?? "") + what
+    }
 
     var body: some View {
-        Card("The run stopped before any test ran") {
+        Card(title) {
             Text("\(run.by.label) · \(run.command)").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
         } content: {
-            if run.tail.isEmpty {
-                Text("It failed without printing why.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
-            } else {
-                ScrollView(.horizontal) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        ForEach(Array(run.tail.enumerated()), id: \.offset) { _, line in
-                            Text(line).font(.dante(size: 11, design: .monospaced))
-                                .foregroundStyle(line.contains("error") ? theme.red.color : theme.text2.color).fixedSize()
-                        }
+            VStack(alignment: .leading, spacing: 12) {
+                Text(explanation).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Button { session.askClaude(fixRequest) } label: { ClaudeLabel("Ask \(session.agentName) to fix it") }
+                        .buttonStyle(DanteButtonStyle(primary: true))
+                        .disabled(isRunning)
+                        .help("Sends the command and these lines; \(session.agentName) finds the cause, fixes it and runs the tests again")
+                    if let runAgain {
+                        Button(action: runAgain) { Label("Run again", systemImage: "arrow.counterclockwise") }
+                            .buttonStyle(DanteButtonStyle()).disabled(isRunning)
                     }
-                    .textSelection(.enabled)
-                    .padding(10)
+                    if !run.tail.isEmpty {
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(run.tail.joined(separator: "\n"), forType: .string)
+                        } label: { Label("Copy", systemImage: "doc.on.doc") }
+                            .buttonStyle(DanteButtonStyle())
+                    }
                 }
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.codeBackground.color))
+                if run.tail.isEmpty {
+                    Text("It failed without printing why.").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
+                } else {
+                    ScrollView(.horizontal) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            ForEach(Array(run.tail.enumerated()), id: \.offset) { _, line in
+                                Text(line).font(.dante(size: 11, design: .monospaced))
+                                    .foregroundStyle(color(line)).fixedSize()
+                            }
+                        }
+                        .textSelection(.enabled)
+                        .padding(10)
+                    }
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.codeBackground.color))
+                }
             }
         }
+    }
+
+    private func color(_ line: String) -> Color {
+        if line == "…" { return theme.text3.color }
+        return BrokenRunLines.explains(line) || line.hasPrefix("FAIL") ? theme.red.color : theme.text2.color
+    }
+
+    private var fixRequest: String {
+        """
+        The tests were run with `\(run.command)` and the run failed\(run.results.isEmpty ? " before any test ran" : ", though no test failed (\(run.passed) passed)"). \
+        Find what failed outside the tests (a package that doesn't build, a setup step, a panic, a missing dependency), \
+        fix the cause rather than skipping it, and run the same tests again to check. Lines from the output:
+
+        ```
+        \(run.tail.joined(separator: "\n"))
+        ```
+        """
     }
 }
 

@@ -702,3 +702,8 @@ tasks:
   phase: build
   state: review
   notes: "Checked in a test copy on a made-up Maven + React project: both suites, Run all enabled, kinds and folders right. Not run against Maven here (it would download)."
+- id: DI-161
+  title: "Tests: a run that fails outside its tests says why (the package that didn't build, picked from the whole output) and offers Ask the agent to fix it, Run again and Copy"
+  phase: build
+  state: review
+  notes: "Checked in a test copy with a Go module where one package doesn't compile: the title says the tests passed but the run failed, the reason names the package, and the compile error shows above the final FAIL."

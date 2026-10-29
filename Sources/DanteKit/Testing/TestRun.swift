@@ -214,7 +214,7 @@ public final class TestRun {
     public func saved(by runner: TestRunner = .you) -> SavedTestRun {
         SavedTestRun(date: finished ?? .now, by: runner, command: command.label, results: results, duration: duration,
                      brokeOutsideTests: failedOutsideTests, narrowed: command.label.contains(" · "),
-                     tail: failedOutsideTests ? Array(output.suffix(30)) : [])
+                     tail: failedOutsideTests ? BrokenRunLines.pick(output) : [])
     }
 
     public var passed: Int { results.count { $0.status == .passed } }

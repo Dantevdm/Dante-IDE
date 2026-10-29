@@ -97,7 +97,7 @@ struct TestRunStrip: View {
 
     func describe(_ run: SavedTestRun) -> String {
         let when = run.date.formatted(Calendar.current.isDateInToday(run.date) ? .dateTime.hour().minute() : .dateTime.day().month().hour().minute())
-        let outcome = run.brokeOutsideTests ? "didn’t get to the tests"
+        let outcome = run.brokeOutsideTests ? (run.results.isEmpty ? "didn’t get to the tests" : "\(run.passed) passed, then failed outside the tests")
             : run.results.isEmpty ? "no tests found"
             : run.failed > 0 ? "\(run.failed) failed, \(run.passed) passed" : "all \(run.passed) passed"
         return "\(run.by.label) · \(when) · \(run.command)\(run.narrowed ? " (some tests)" : "") · \(outcome)"
