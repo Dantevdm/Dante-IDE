@@ -66,6 +66,12 @@ public enum Outlook {
         case notRunning
         case notAllowed
         case newOutlook
+        /// The new Outlook's window is read instead, which needs Accessibility.
+        case noAccessibility
+        /// Outlook's window shows no message list (the calendar or another view is open).
+        case noMessageList
+        /// The new Outlook shares its calendar with nothing on the Mac.
+        case newOutlookCalendar
         case failed(String)
 
         public var errorDescription: String? {
@@ -73,6 +79,9 @@ public enum Outlook {
             case .notRunning: "Outlook isn’t open on the Mac."
             case .notAllowed: "Dante isn’t allowed to read Outlook. Allow it in System Settings › Privacy & Security › Automation."
             case .newOutlook: "The new Outlook doesn’t answer Dante. Switch to Legacy Outlook in Outlook’s Help menu, or turn off New Outlook."
+            case .noAccessibility: "Dante reads the new Outlook from its window, which needs Accessibility. Turn Dante on in System Settings › Privacy & Security › Accessibility."
+            case .noMessageList: "Outlook isn’t showing a mail folder. Open your inbox in Outlook and Dante reads it from there."
+            case .newOutlookCalendar: "The new Outlook doesn’t share its calendar with Dante, so today’s meetings aren’t here."
             case .failed(let message): "Outlook didn’t answer: \(message)"
             }
         }
@@ -224,14 +233,27 @@ public enum Outlook {
         .sorted { $0.start < $1.start }
     }
 
+    /// The inbox through AppleScript; the new Outlook, which answers no scripts, through its
+    /// window (`OutlookWindow`).
     public static func mail(hours: Int = 24, limit: Int = 60) async throws(Failure) -> [MailMessage] {
-        try parseMail(try await run(mailScript(hours: hours, limit: limit)))
+        do {
+            return try parseMail(try await run(mailScript(hours: hours, limit: limit)))
+        } catch .newOutlook {
+            return try OutlookWindow.mail(hours: hours, limit: limit)
+        } catch .notRunning {
+            // Scripts can find the new Outlook not running while it is.
+            return try OutlookWindow.mail(hours: hours, limit: limit)
+        }
     }
 
     public static func calendar(on day: Date = .now, calendar: Calendar = .current) async throws(Failure) -> [CalendarEntry] {
         let start = calendar.startOfDay(for: day)
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400)
-        return try parseCalendar(try await run(calendarScript(from: start, to: end, calendar: calendar)))
+        do {
+            return try parseCalendar(try await run(calendarScript(from: start, to: end, calendar: calendar)))
+        } catch .newOutlook {
+            throw .newOutlookCalendar
+        }
     }
 
     static func run(_ script: String) async throws(Failure) -> String {

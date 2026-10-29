@@ -205,6 +205,54 @@ public enum WindowReader {
         return AXUIElementPerformAction(current, kAXPressAction as CFString) == .success ? .chosen(chosen.joined(separator: " › ")) : .failed
     }
 
+    /// A running app's windows, read in the background (it needn't be in front).
+    public static func windows(of bundleID: String, budget: Int = 6_000) -> [Node] {
+        // One read at a time, on a queue of its own: Accessibility calls made at once from
+        // several threads have taken the app down.
+        axQueue.sync { autoreleasepool { readWindows(of: bundleID, budget: budget) } }
+    }
+
+    static let axQueue = DispatchQueue(label: "dante.accessibility")
+
+    private static func readWindows(of bundleID: String, budget: Int) -> [Node] {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else { return [] }
+        let root = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(root, 6)
+        let windows: [AXUIElement] = attribute(root, kAXWindowsAttribute) ?? []
+        return windows.map { window in
+            var left = budget
+            var elements: [[Int]: Element] = [:]
+            return snapshot(window, path: [], depth: 0, budget: &left, elements: &elements)
+        }
+    }
+
+    /// The tree's shape with every word masked (letters as `a`, digits as `9`) except a few
+    /// layout words, for working out how an app lays out its window without reading what's in it.
+    public static func masked(_ node: Node, depth: Int = 0) -> String {
+        let kept: Set<String> = ["unread", "read", "flagged", "replied", "forwarded", "attachment", "attachments", "has", "from", "to",
+                                 "subject", "received", "sent", "am", "pm", "today", "yesterday", "monday", "tuesday", "wednesday",
+                                 "thursday", "friday", "saturday", "sunday", "inbox", "focused", "other", "calendar", "mail",
+                                 "message", "messages", "list", "meeting", "organizer", "location", "all", "day", "event", "high", "importance",
+                                 "pinned", "draft", "preview", "conversation", "items", "item", "of", "at", "on", "and"]
+        func mask(_ text: String) -> String {
+            var out = "", word = ""
+            func flush() {
+                out += kept.contains(word.lowercased()) ? word : String(word.map { $0.isNumber ? "9" : "a" })
+                word = ""
+            }
+            for character in text.prefix(160) {
+                if character.isLetter || character.isNumber { word.append(character) } else { flush(); out.append(character == "\n" ? "⏎" : character) }
+            }
+            flush()
+            return out
+        }
+        var line = String(repeating: "  ", count: depth) + node.role
+        if !node.title.isEmpty { line += " t=“\(mask(node.title))”" }
+        if !node.value.isEmpty { line += " v=“\(mask(node.value))”" }
+        if !node.help.isEmpty { line += " d=“\(mask(node.help))”" }
+        return ([line] + node.children.map { masked($0, depth: depth + 1) }).joined(separator: "\n")
+    }
+
     static func snapshot(_ element: AXUIElement, path: [Int], depth: Int, budget: inout Int, elements: inout [[Int]: Element]) -> Node {
         budget -= 1
         elements[path] = Element(element: element)

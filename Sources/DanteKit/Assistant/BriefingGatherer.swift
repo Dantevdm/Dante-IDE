@@ -54,10 +54,15 @@ public enum BriefingGatherer {
             return all.sorted { $0.0 < $1.0 }.map(\.1)
         }
         async let me = identities(options.projects.map(\.root))
-        async let mail: Result<[ImportantMail], Outlook.Failure>? = options.readsMail ? readMail(since: since, now: options.now, vips: options.vips) : nil
-        async let calendar: Result<[CalendarEntry], Outlook.Failure>? = options.readsCalendar ? readCalendar(on: options.now) : nil
+        // Mail first, then the calendar: Outlook answers one at a time, and the new Outlook's
+        // window is read slowly while a calendar script waits on it.
+        async let outlook: (Result<[ImportantMail], Outlook.Failure>?, Result<[CalendarEntry], Outlook.Failure>?) = {
+            let mail = options.readsMail ? await readMail(since: since, now: options.now, vips: options.vips) : nil
+            let calendar = options.readsCalendar ? await readCalendar(on: options.now) : nil
+            return (mail, calendar)
+        }()
         let input = BriefingComposer.Input(now: options.now, name: options.name, me: await me, projects: await digests,
-                                           mail: await mail, calendar: await calendar)
+                                           mail: await outlook.0, calendar: await outlook.1)
         return BriefingComposer.compose(input)
     }
 

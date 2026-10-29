@@ -1,6 +1,7 @@
 import AppKit
 import DanteEditor
 import DanteKit
+import ApplicationServices
 import SwiftUI
 
 @main
@@ -59,6 +60,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let folder = ProcessInfo.processInfo.environment["DANTE_ORB_SNAPSHOTS"] {
             OrbView.writeSnapshots(to: URL(filePath: folder))
             exit(0)
+        }
+        // `DANTE_AX_SHAPE=<bundle id>=<file>`: an app's windows with every word masked, for
+        // working out how to read it (macOS gives Dante, not the shell, Accessibility).
+        if let spec = ProcessInfo.processInfo.environment["DANTE_AX_SHAPE"], let split = spec.firstIndex(of: "=") {
+            let bundle = String(spec[..<split]), file = String(spec[spec.index(after: split)...])
+            Task.detached(priority: .utility) {
+                try? await Task.sleep(for: .seconds(3))
+                let windows = DanteKit.WindowReader.windows(of: bundle)
+                let text = "trusted \(AXIsProcessTrusted()), \(windows.count) windows\n" + windows.map { DanteKit.WindowReader.masked($0) }.joined(separator: "\n\n")
+                try? text.write(toFile: file, atomically: true, encoding: .utf8)
+            }
+        }
+        // `DANTE_OUTLOOK_CHECK=<file>`: how much of the new Outlook's list reads, as counts and
+        // masked rows only, never the mail itself.
+        if let file = ProcessInfo.processInfo.environment["DANTE_OUTLOOK_CHECK"] {
+            Task.detached(priority: .utility) {
+                try? await Task.sleep(for: .seconds(3))
+                try? await OutlookWindow.check().write(toFile: file, atomically: true, encoding: .utf8)
+            }
         }
         MenuShortcuts.install()
         PresenceController.shared.install()
