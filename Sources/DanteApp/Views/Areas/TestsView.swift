@@ -2,15 +2,19 @@ import DanteKit
 import SwiftUI
 
 /// Tests, on one page: every run on this Mac (yours from here, the agents' and jobs'), the
-/// tests written in the code as a map coloured by their last result, what failed and why, and
-/// the code no test names. The run lives on the session, so it keeps going while you look
-/// elsewhere.
+/// tests written in the code by kind (Front-end, Back-end, Integration, Security…) with a Run
+/// button each, what failed and why, and the code no test names. The run lives on the
+/// session, so it keeps going while you look elsewhere.
 struct TestsView: View {
     @Environment(\.theme) private var theme
     let session: Session
     let workspace: Workspace
 
-    @State private var command: TestCommand?
+    /// `test.command` from project.yaml, which wins over the suites found.
+    @State private var custom: TestCommand?
+    /// Every folder with its own test runner.
+    @State private var suites: [TestSuite] = []
+    @State private var loaded = false
     /// Tests found by reading the code, and code no test names. Loaded off the main thread.
     @State private var inventory: TestInventory?
     @State private var gaps: TestGaps?
@@ -20,15 +24,16 @@ struct TestsView: View {
     @State private var modified: [String: Date] = [:]
     /// A run chosen in the strip; nil shows the latest.
     @State private var selectedRun: String?
-    /// Tests ⌘-clicked on the map.
-    @State private var picked: Set<String> = []
     @State private var showsUntested = false
+
+    /// Everything, with the project's command or each suite in its folder.
+    private var command: TestCommand? { custom ?? TestSuites.command(suites) }
 
     var body: some View {
         AreaPage(eyebrow: nil, title: "Tests", subtitle: nil) {
             actions
         } content: {
-            if command == nil, inventory?.tests.isEmpty ?? false, runs.isEmpty {
+            if loaded, command == nil, inventory?.tests.isEmpty ?? false, runs.isEmpty {
                 EmptyState(symbol: "testtube.2", title: "No tests yet") {
                     Button {
                         session.askClaude("This project has no test setup Dante can find. Suggest a test runner that fits the stack, add it with one example test, and set test.command in .dante/project.yaml.")
@@ -37,6 +42,7 @@ struct TestsView: View {
                 }
             } else {
                 overview
+                if loaded, command == nil, !(inventory?.tests.isEmpty ?? true) { noRunner }
                 if !runs.isEmpty || live != nil {
                     Card("Runs on this Mac") {
                         Text("Yours from here, \(session.agentName)’s and jobs’").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
@@ -51,10 +57,10 @@ struct TestsView: View {
                     FailuresCard(session: session, workspace: workspace, failures: shownFailures, command: shownCommand,
                                  isRunning: live != nil, flaky: map?.flakyKeys ?? [], runOnly: runOnly)
                 }
-                mapCard
                 if let live, live.failedOutsideTests || !live.output.isEmpty {
                     OutputCard(run: live, title: "Output", expanded: live.failedOutsideTests)
                 }
+                kindsSection
                 untested
             }
         }
@@ -92,50 +98,53 @@ struct TestsView: View {
 
     @ViewBuilder
     private var actions: some View {
-        if let command {
-            Chip(text: command.label, symbol: "terminal", mono: true)
-                .help(workspace.lifecycle.hasSpec ? "Set test.command in .dante/project.yaml to change this" : "Detected from the project files")
+        if let custom {
+            Chip(text: custom.label, symbol: "terminal", mono: true).help("test.command in .dante/project.yaml")
+        } else {
+            ForEach(suites) { suite in
+                Chip(text: suite.label, symbol: "terminal", mono: true).help("Found from the project’s files; set test.command in .dante/project.yaml to change it")
+            }
         }
         if let run = session.testRun, run.isRunning {
             Button { run.stop() } label: { Label("Stop", systemImage: "stop.fill") }
                 .buttonStyle(DanteButtonStyle())
         } else {
-            if let runWritten, !picked.isEmpty, let tests = pickedTests {
-                Button { runWritten(tests); picked = [] } label: { Label("Run \(tests.count) picked", systemImage: "checklist") }
-                    .buttonStyle(DanteButtonStyle())
-            }
             if let runOnly, !shownFailures.isEmpty {
                 Button { runOnly(shownFailures) } label: { Label("Re-run failed", systemImage: "arrow.counterclockwise") }
                     .buttonStyle(DanteButtonStyle())
                     .keyboardShortcut("u", modifiers: [.command, .shift])
             }
-            if runWritten != nil, (!changedTests.isEmpty || (inventory?.categories.count ?? 0) > 1) {
-                Menu {
-                    if !changedTests.isEmpty {
-                        Button("Tests for changed files (\(changedTests.count))") { runWritten?(changedTests) }
-                    }
-                    if let inventory, inventory.categories.count > 1 {
-                        Section("By kind") {
-                            ForEach(inventory.categories, id: \.self) { name in
-                                Button("\(name) (\(inventory.count(in: name)))") { runWritten?(inventory.tests.filter { $0.category == name }) }
-                            }
-                        }
-                    }
-                } label: { Label("Run some", systemImage: "line.3.horizontal.decrease") }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .help("Run the tests for changed files, or one kind of test")
-            }
-            if let last = session.testRun?.command, last != command, !last.label.isEmpty {
-                Button { run(last) } label: { Label("Run these again", systemImage: "play") }
+            if let runWritten, !changedTests.isEmpty {
+                Button { runWritten(changedTests) } label: { Label("Run for changes (\(changedTests.count))", systemImage: "line.3.horizontal.decrease") }
                     .buttonStyle(DanteButtonStyle())
-                    .help(last.label)
+                    .help("The tests that go with the files changed in the working tree")
             }
             Button { run() } label: { Label("Run all", systemImage: "play.fill") }
                 .buttonStyle(DanteButtonStyle(primary: true))
                 .disabled(command == nil)
+                .help(command == nil ? "Dante couldn’t find how to run this project’s tests" : command?.label ?? "")
                 .keyboardShortcut("u", modifiers: .command)
         }
+    }
+
+    /// Tests in the code, but nothing Dante knows to run them with.
+    private var noRunner: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "questionmark.circle").font(.dante(size: 18)).foregroundStyle(theme.amber.color)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Dante can’t tell how to run these tests").font(.dante(size: 13.5, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("It looks for a pom.xml, build.gradle, a package.json with a test script, go.mod, Cargo.toml, Package.swift or a pytest setup, up to four folders down. Set test.command in .dante/project.yaml, or let \(session.agentName) work it out.")
+                    .font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button {
+                session.askClaude("Dante can't find how to run this project's tests. Work out the command (each app in its own folder if there are several), check it runs, and set test.command in .dante/project.yaml.")
+            } label: { ClaudeLabel("Ask \(session.agentName)") }
+                .buttonStyle(DanteButtonStyle(primary: true))
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.amber.color.opacity(0.07)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.amber.color.opacity(0.35)))
     }
 
     // MARK: Overview
@@ -189,7 +198,9 @@ struct TestsView: View {
 
     private var subline: String {
         if selectedRun != nil, let shown = shownRun { return "As of the run by \(Self.who(shown.by)) \(shown.date.formatted(.relative(presentation: .named)))" }
-        guard let last = runs.last else { return "Run them from here, or ask \(session.agentName): every run is kept here, whoever starts it" }
+        guard let last = runs.last else {
+            return command == nil ? "Ask \(session.agentName) to run them, or set how below" : "Run them all, or one kind at a time: every run is kept here, whoever starts it"
+        }
         return "Last run by \(Self.who(last.by)) \(last.date.formatted(.relative(presentation: .named))) · \(last.command)"
     }
 
@@ -209,16 +220,16 @@ struct TestsView: View {
         }
     }
 
-    // MARK: Map
+    // MARK: Kinds
 
     @ViewBuilder
-    private var mapCard: some View {
-        if let map, !map.groups.isEmpty {
-            Card("Every test") {
-                Text("\(map.tiles.count) in \(map.groups.count) folder\(map.groups.count == 1 ? "" : "s")").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-            } content: {
-                TestMapView(map: map, open: { test in session.open(file: workspace.url.appending(path: test.file), line: test.line) },
-                            picked: $picked, canPick: runWritten != nil)
+    private var kindsSection: some View {
+        if let map, let inventory, !map.tiles.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(map.kinds(order: inventory.categories)) { kind in
+                    TestKindCard(kind: kind, place: place(of: kind), isRunning: live != nil, run: runWritten,
+                                 open: { test in session.open(file: workspace.url.appending(path: test.file), line: test.line) })
+                }
                 if !map.unmatched.isEmpty {
                     Text("\(map.unmatched.count) result\(map.unmatched.count == 1 ? "" : "s") from the last run don’t match a test Dante read in the code (display names, generated or parameterised tests).")
                         .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
@@ -229,21 +240,45 @@ struct TestsView: View {
         }
     }
 
+    /// The app folders a kind's tests are in: "services/react", or "services/api and services/react".
+    private func place(of kind: TestMap.Kind) -> String? {
+        let folders = Set(kind.tiles.compactMap { TestSuites.suite(for: $0.test.file, in: suites)?.folder }).filter { !$0.isEmpty }.sorted()
+        guard !folders.isEmpty else { return nil }
+        return folders.count <= 2 ? folders.joined(separator: " and ") : "\(folders.count) apps"
+    }
+
     // MARK: Untested
+
+    static func untestedSentence(_ untested: Int, of all: Int) -> String {
+        let what = untested == all
+            ? (all == 1 ? "The one function or type in the code isn’t" : "None of the \(all) functions and types in the code are")
+            : "\(untested) of the \(all) functions and types in the code \(untested == 1 ? "isn’t" : "aren’t")"
+        return what + " named in any test, so no test is clearly aimed at \(untested == 1 ? "it" : "them"). " + (untested == 1 ? "It’s in:" : "These files have the most:")
+    }
 
     @ViewBuilder
     private var untested: some View {
         if let gaps, gaps.untestedCount > 0 {
-            Card("Code no test names") {
-                Text("\(gaps.untestedCount) of \(gaps.declarations) functions and types").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                LinkButton(showsUntested ? "Hide" : "Show") { showsUntested.toggle() }
+            let named = gaps.declarations - gaps.untestedCount
+            Card("Code without tests") {
                 Button { session.askClaude(gaps.prompt()) } label: { ClaudeLabel("Ask what matters most") }
                     .buttonStyle(DanteButtonStyle())
             } content: {
-                if showsUntested {
-                    UntestedView(session: session, workspace: workspace, gaps: gaps, hasTests: !(inventory?.tests.isEmpty ?? true), showsHeader: false)
-                } else {
-                    UntestedStrip(gaps: gaps)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(Self.untestedSentence(gaps.untestedCount, of: gaps.declarations))
+                        .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 10) {
+                        ProgressView(value: gaps.declarations == 0 ? 1 : Double(named) / Double(gaps.declarations))
+                            .tint(theme.green.color).frame(maxWidth: 320)
+                        Text("\(gaps.declarations == 0 ? 100 : named * 100 / gaps.declarations)% named in a test")
+                            .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                    }
+                    UntestedView(session: session, workspace: workspace, gaps: gaps, hasTests: !(inventory?.tests.isEmpty ?? true),
+                                 showsHeader: false, limit: showsUntested ? 1000 : 5)
+                    let files = gaps.files.filter { !$0.untested.isEmpty }.count
+                    if files > 5 {
+                        LinkButton(showsUntested ? "Show fewer" : "Show all \(files) files") { showsUntested.toggle() }
+                    }
                 }
             }
         }
@@ -252,26 +287,24 @@ struct TestsView: View {
     // MARK: Running
 
     private func load() async {
-        command = TestCommand.detect(projectRoot: workspace.url)
-        runs = TestRunLog.load(for: workspace.url)
         let root = workspace.url
         let files = workspace.files
-        let (found, untested, dates) = await Task.detached(priority: .utility) {
-            let inventory = TestInventory.load(root: root, files: files)
+        custom = TestCommand.custom(projectRoot: root)
+        runs = TestRunLog.load(for: root)
+        let (foundSuites, found, untested, dates) = await Task.detached(priority: .utility) {
+            let suites = TestSuites.find(files: files) { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
+            let inventory = TestInventory.load(root: root, files: files, suites: suites)
             var dates: [String: Date] = [:]
             for file in inventory.testFiles {
                 dates[file] = (try? root.appending(path: file).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             }
-            return (inventory, TestGaps.load(root: root, files: files, inventory: inventory), dates)
+            return (suites, inventory, TestGaps.load(root: root, files: files, inventory: inventory), dates)
         }.value
+        suites = foundSuites
         inventory = found
         gaps = untested
         modified = dates
-    }
-
-    private var pickedTests: [WrittenTest]? {
-        let tests = (inventory?.tests ?? []).filter { picked.contains($0.id) }
-        return tests.isEmpty ? nil : tests
+        loaded = true
     }
 
     /// Tests that go with the files changed in the working tree.
@@ -280,16 +313,29 @@ struct TestsView: View {
         return TestImpact.tests(for: changes.map(\.path), in: inventory)
     }
 
-    /// Runs some of the tests with the project's runner, when it can be narrowed.
+    /// Runs some of the tests a run reported, when the runner can be narrowed.
     private var runOnly: (([TestResult]) -> Void)? {
-        guard let command, command.only([TestResult(suite: "", name: "x", status: .passed)]) != nil else { return nil }
-        return { tests in if let narrowed = command.only(tests) { run(narrowed) } }
+        if let custom {
+            guard custom.only([TestResult(suite: "", name: "x", status: .passed)]) != nil else { return nil }
+            return { tests in if let narrowed = custom.only(tests) { run(narrowed) } }
+        }
+        guard !suites.isEmpty, let inventory else { return nil }
+        // Results name tests; find them in the code to know each one's suite.
+        return { results in
+            let keys = Set(results.map { TestMap.key($0.name) })
+            let tests = inventory.tests.filter { keys.contains(TestMap.key($0.name)) }
+            if let narrowed = TestSuites.command(suites, only: tests) { run(narrowed) }
+        }
     }
 
-    /// Runs tests read from the code, when the runner can be narrowed.
+    /// Runs tests read from the code, each with its own suite's runner.
     private var runWritten: (([WrittenTest]) -> Void)? {
-        guard let command, let sample = inventory?.tests.first, command.only(written: [sample]) != nil else { return nil }
-        return { tests in if let narrowed = command.only(written: tests) { run(narrowed) } }
+        if let custom {
+            guard let sample = inventory?.tests.first, custom.only(written: [sample]) != nil else { return nil }
+            return { tests in if let narrowed = custom.only(written: tests) { run(narrowed) } }
+        }
+        guard !suites.isEmpty else { return nil }
+        return { tests in if let narrowed = TestSuites.command(suites, only: tests) { run(narrowed) } }
     }
 
     private func run(_ chosen: TestCommand? = nil) {
@@ -326,29 +372,6 @@ private struct BrokenRunCard: View {
                     .padding(10)
                 }
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.codeBackground.color))
-            }
-        }
-    }
-}
-
-/// Code no test names, as a bar of files: the share of each file's functions with no test.
-private struct UntestedStrip: View {
-    @Environment(\.theme) private var theme
-    let gaps: TestGaps
-
-    var body: some View {
-        let files = gaps.files.filter { !$0.untested.isEmpty && !$0.isInterface }.prefix(60)
-        VStack(alignment: .leading, spacing: 8) {
-            ProgressView(value: gaps.declarations == 0 ? 1 : Double(gaps.declarations - gaps.untestedCount) / Double(gaps.declarations))
-                .tint(theme.green.color)
-            FlowLayout(spacing: 3) {
-                ForEach(Array(files)) { file in
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .strokeBorder(theme.amber.color.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                        .background(RoundedRectangle(cornerRadius: 2).fill(theme.amber.color.opacity(0.15 + 0.5 * (1 - file.testedFraction))))
-                        .frame(width: 13, height: 13)
-                        .help("\(file.path): \(file.untested.count) of \(file.declared.count) untested")
-                }
             }
         }
     }

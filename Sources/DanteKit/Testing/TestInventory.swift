@@ -22,9 +22,10 @@ public struct WrittenTest: Equatable, Sendable, Identifiable {
     }
 }
 
-/// Every test written in a project, sorted into categories: Unit, Integration,
-/// End-to-end, UI and Performance by default, or the project's own from
-/// `test.categories` in project.yaml (a name and the path globs that belong to it).
+/// Every test written in a project, sorted by kind: Front-end and Back-end (tests of one
+/// piece of code, on the side it runs), Integration, Security, End-to-end, UI and Performance,
+/// with Unit for code that's neither side; or the project's own kinds from `test.categories`
+/// in project.yaml (a name and the path globs that belong to it).
 public struct TestInventory: Equatable, Sendable {
     public struct CategoryRule: Equatable, Sendable {
         public var name: String
@@ -37,7 +38,23 @@ public struct TestInventory: Equatable, Sendable {
     }
 
     public static let unit = "Unit", integration = "Integration", endToEnd = "End-to-end", ui = "UI", performance = "Performance"
-    public static let defaultOrder = [unit, integration, endToEnd, ui, performance]
+    public static let frontEnd = "Front-end", backEnd = "Back-end", security = "Security"
+    public static let defaultOrder = [frontEnd, backEnd, unit, integration, security, endToEnd, ui, performance]
+
+    /// What a kind means, in a line.
+    public static func summary(of kind: String) -> String {
+        switch kind {
+        case frontEnd: "Components, pages, hooks and helpers of the web app, each tested on its own"
+        case backEnd: "Server code tested on its own: services, controllers, repositories, helpers"
+        case unit: "Code tested on its own"
+        case integration: "Tests that reach a database, a server or another service"
+        case security: "Who may do what: sign-in, permissions, tokens and attacks"
+        case endToEnd: "The whole app driven the way a person would, in a browser"
+        case ui: "The app’s screens driven by a UI test runner"
+        case performance: "Benchmarks and timing tests"
+        default: "From test.categories in .dante/project.yaml"
+        }
+    }
 
     public var tests: [WrittenTest]
     public var testFiles: [String]
@@ -63,7 +80,8 @@ public struct TestInventory: Equatable, Sendable {
 
     // MARK: Reading
 
-    public static func load(root: URL, files: [String], sizeLimit: Int = 512 * 1024) -> TestInventory {
+    /// `suites` say which side of the code each test file is on (`TestSuites.find`).
+    public static func load(root: URL, files: [String], suites: [TestSuite] = [], sizeLimit: Int = 512 * 1024) -> TestInventory {
         let rules = categoryRules(projectRoot: root)
         var tests: [WrittenTest] = []
         var testFiles: [String] = []
@@ -71,7 +89,7 @@ public struct TestInventory: Equatable, Sendable {
             let url = root.appending(path: file)
             guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= sizeLimit,
                   let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            let found = Self.tests(in: text, path: file, rules: rules)
+            let found = Self.tests(in: text, path: file, rules: rules, side: TestSuites.suite(for: file, in: suites)?.side)
             if isTestFile(file) || !found.isEmpty { testFiles.append(file) }
             tests += found
         }
@@ -133,7 +151,7 @@ public struct TestInventory: Equatable, Sendable {
     }
 
     /// The tests declared in one file.
-    public static func tests(in text: String, path: String, rules: [CategoryRule] = []) -> [WrittenTest] {
+    public static func tests(in text: String, path: String, rules: [CategoryRule] = [], side: TestSuite.Side? = nil) -> [WrittenTest] {
         let lines = text.components(separatedBy: "\n")
         let lower = path.lowercased()
         var found: [(name: String, line: Int, kind: String?)] = []
@@ -189,7 +207,7 @@ public struct TestInventory: Equatable, Sendable {
             scan(Pattern.rubyTest, hint: "test_")
         }
 
-        let fileCategory = category(path: path, text: text, rules: rules)
+        let fileCategory = category(path: path, text: text, rules: rules, side: side)
         let area = Self.area(of: path)
         return found.sorted { $0.line < $1.line }.map { test in
             WrittenTest(name: test.name, file: path, line: test.line,
@@ -206,16 +224,22 @@ public struct TestInventory: Equatable, Sendable {
         if lower.hasPrefix("benchmark") || lower.contains("performance") { return performance }
         if lower.contains("integration") { return integration }
         if lower.contains("e2e") || lower.contains("endtoend") || lower.contains("end to end") { return endToEnd }
+        let security = ["unauthori", "forbidden", "permission", "csrf", "xss", "injection", "security", "accessdenied", "access denied",
+                        "notallowed", "not allowed", "brute", "tamper", "expiredtoken", "expired token", "invalidtoken", "invalid token"]
+        if security.contains(where: lower.contains) { return Self.security }
         return nil
     }
 
-    /// From the project's rules, the folder, then what the file reaches for.
-    public static func category(path: String, text: String, rules: [CategoryRule] = []) -> String {
+    /// From the project's rules, the folder, then what the file reaches for, then the side of
+    /// the code it tests.
+    public static func category(path: String, text: String, rules: [CategoryRule] = [], side: TestSuite.Side? = nil) -> String {
         if let rule = ruleCategory(path, rules) { return rule }
         let lower = path.lowercased()
         let parts = lower.split(separator: "/").map(String.init)
         if parts.contains(where: { ["e2e", "cypress", "playwright", "acceptance"].contains($0) }) || lower.contains(".e2e.") { return endToEnd }
         if parts.contains(where: { $0.hasSuffix("uitests") || $0 == "ui-tests" || $0 == "ui" }) { return ui }
+        let name = (lower as NSString).lastPathComponent
+        if parts.dropLast().contains(where: { $0 == "security" || $0 == "auth" }) || name.contains("security") || name.hasPrefix("auth") { return security }
         if parts.contains(where: { $0.contains("integration") || $0 == "it" }) || lower.contains(".integration.") { return integration }
         if parts.contains(where: { ["bench", "benches", "benchmarks", "perf", "performance"].contains($0) }) { return performance }
         // Tests that start servers, open databases or containers reach past one unit.
@@ -223,7 +247,19 @@ public struct TestInventory: Equatable, Sendable {
         if let signal = signals.first(where: { text.contains($0) }) {
             return signal == "XCUIApplication" ? ui : integration
         }
-        return unit
+        switch side ?? Self.side(of: lower) {
+        case .frontEnd: return frontEnd
+        case .backEnd: return backEnd
+        case .app, nil: return unit
+        }
+    }
+
+    /// The side a test file is on from its language alone, when no suite says.
+    static func side(of path: String) -> TestSuite.Side? {
+        let ext = (path as NSString).pathExtension
+        if ["tsx", "jsx", "vue", "svelte"].contains(ext) { return .frontEnd }
+        if ["java", "kt", "go", "py", "cs", "rb", "php", "rs", "scala"].contains(ext) { return .backEnd }
+        return nil
     }
 
     /// The folder a test file sits in, or "(root)".

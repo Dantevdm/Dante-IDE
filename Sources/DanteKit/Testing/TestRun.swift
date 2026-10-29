@@ -9,13 +9,12 @@ public struct TestCommand: Equatable, Sendable {
     public var arguments: [String]
     /// Whether Dante asks the runner for an xUnit report it can read suites from.
     public var readsXUnit: Bool
+    /// Folders (relative to the project) where the runner writes JUnit XML, read after the
+    /// run for the tests it only counted (Maven, Gradle).
+    public var reportFolders: [String] = []
 
     public static func detect(projectRoot root: URL) -> TestCommand? {
-        if let yaml = try? String(contentsOf: root.appending(path: ".dante/project.yaml"), encoding: .utf8),
-           let project = (try? SafeYAML.load(yaml)) as? [String: Any],
-           let test = project["test"] as? [String: Any], let command = test["command"] as? String, !command.isEmpty {
-            return TestCommand(label: command, arguments: ["sh", "-c", verbose(command)], readsXUnit: false)
-        }
+        if let command = custom(projectRoot: root) { return command }
         if let command = runner(in: root) { return command }
         // A repo of apps side by side (`api/` with a pom.xml, `web/` with package.json): run each in its folder.
         let folders = ((try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
@@ -31,6 +30,14 @@ public struct TestCommand: Equatable, Sendable {
         // Every folder runs even when one fails, and the run fails if any did.
         let script = "status=0; " + found.map { "(cd \(Shell.quote($0.0)) && \($0.1.script)) || status=1; " }.joined() + "exit $status"
         return TestCommand(label: found.map { "\($0.1.label) in \($0.0)" }.joined(separator: " · "), arguments: ["sh", "-c", script], readsXUnit: false)
+    }
+
+    /// `test.command` from project.yaml, which wins over anything detected.
+    public static func custom(projectRoot root: URL) -> TestCommand? {
+        guard let yaml = try? String(contentsOf: root.appending(path: ".dante/project.yaml"), encoding: .utf8),
+              let project = (try? SafeYAML.load(yaml)) as? [String: Any],
+              let test = project["test"] as? [String: Any], let command = test["command"] as? String, !command.isEmpty else { return nil }
+        return TestCommand(label: command, arguments: ["sh", "-c", verbose(command)], readsXUnit: false)
     }
 
     static let skippedFolders: Set<String> = ["node_modules", "vendor", "build", "dist", "target", "docs", "Pods", "venv"]
@@ -177,8 +184,11 @@ public final class TestRun {
     private var process: Shell.Running?
     private static let outputLimit = 4000
 
+    private let root: URL
+
     public init(command: TestCommand, projectRoot root: URL) {
         self.command = command
+        self.root = root
         var arguments = command.arguments
         let report = FileManager.default.temporaryDirectory.appending(path: "dante-tests-\(UUID().uuidString).xml")
         if command.readsXUnit { arguments += ["--xunit-output", report.path] }
@@ -224,6 +234,21 @@ public final class TestRun {
         process?.terminate()
     }
 
+    /// JUnit XML written during this run (Surefire's TEST-*.xml, Gradle's test-results).
+    nonisolated static func reports(in folders: [String], root: URL, since: Date) -> [String] {
+        var texts: [String] = []
+        for folder in folders {
+            let url = root.appending(path: folder)
+            guard let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
+            for case let file as URL in walker where file.pathExtension == "xml" {
+                guard let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                      modified >= since.addingTimeInterval(-2), let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                texts.append(text)
+            }
+        }
+        return texts
+    }
+
     private func read(_ running: Shell.Running, report: URL?) async {
         for await line in running.lines {
             output.append(line)
@@ -243,6 +268,7 @@ public final class TestRun {
                 try? FileManager.default.removeItem(atPath: file)
             }
         }
+        for xml in Self.reports(in: command.reportFolders, root: root, since: started) { parser.applyXUnit(xml) }
         results = parser.results
         let ranToEnd = state == .running
         if ranToEnd { state = .finished(exitStatus: running.status) }

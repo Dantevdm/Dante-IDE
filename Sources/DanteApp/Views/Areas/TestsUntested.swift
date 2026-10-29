@@ -9,6 +9,8 @@ struct UntestedView: View {
     let gaps: TestGaps?
     let hasTests: Bool
     var showsHeader = true
+    /// Only the first few files of logic, as plain rows.
+    var limit: Int? = nil
 
     @State private var showsInterface = false
     @State private var expanded: Set<String> = []
@@ -18,7 +20,9 @@ struct UntestedView: View {
             let logic = gaps.files.filter { !$0.isInterface && !$0.untested.isEmpty }
             let interface = gaps.files.filter { $0.isInterface && !$0.untested.isEmpty }
             if showsHeader { header(gaps) }
-            if logic.isEmpty && interface.isEmpty {
+            if let limit {
+                rows(Array((logic + interface).prefix(limit)))
+            } else if logic.isEmpty && interface.isEmpty {
                 EmptyState(symbol: "checkmark.seal", title: "Every function is named in a test") { EmptyView() }
             } else {
                 Card("Logic") {

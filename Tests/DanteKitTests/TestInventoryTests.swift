@@ -12,7 +12,7 @@ struct TestInventoryTests {
         func BenchmarkRender(b *testing.B) {}
         """
         #expect(TestInventory.tests(in: go, path: "backend/internal/api/smtp_test.go").map { "\($0.name):\($0.line):\($0.category)" }
-                == ["TestSendEmail:3:Unit", "BenchmarkRender:5:Performance"])
+                == ["TestSendEmail:3:Back-end", "BenchmarkRender:5:Performance"])
 
         let swift = """
         struct T {
@@ -43,7 +43,7 @@ struct TestInventoryTests {
         #expect(TestInventory.category(path: "AppUITests/LaunchTests.swift", text: "") == "UI")
         #expect(TestInventory.category(path: "tests/integration/test_db.py", text: "") == "Integration")
         #expect(TestInventory.category(path: "internal/db/db_test.go", text: "db, _ := sql.Open(\"sqlite\", \":memory:\")") == "Integration")
-        #expect(TestInventory.category(path: "internal/api/helpers_test.go", text: "func TestX(t *testing.T) {}") == "Unit")
+        #expect(TestInventory.category(path: "internal/api/helpers_test.go", text: "func TestX(t *testing.T) {}") == "Back-end")
         let rules = TestInventory.categoryRules(yaml: """
         test:
           command: go test ./...

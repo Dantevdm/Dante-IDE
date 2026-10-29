@@ -104,111 +104,179 @@ struct TestRunStrip: View {
     }
 }
 
-// MARK: Map
+// MARK: Kinds
 
-/// The tests written in the code, one square each, in a box per folder. Click a square to open
-/// the test; ⌘-click to pick several and run them.
-struct TestMapView: View {
+/// One kind of test (Front-end, Back-end, Integration…): what it is, how it stands, a Run
+/// button, and its folders and tests folded away underneath.
+struct TestKindCard: View {
     @Environment(\.theme) private var theme
-    let map: TestMap
+    let kind: TestMap.Kind
+    /// Where these tests run, such as "services/react".
+    let place: String?
+    let isRunning: Bool
+    /// Runs some of the tests; nil when the runner can't be narrowed or there's no runner.
+    let run: (([WrittenTest]) -> Void)?
     let open: (WrittenTest) -> Void
-    @Binding var picked: Set<String>
-    let canPick: Bool
-    @State private var filter: TestMap.State?
+    @State private var expanded = false
+    @State private var openAreas: Set<String> = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            legend
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 250, maximum: 520), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
-                ForEach(groups) { group in groupBox(group) }
+        let tiles = kind.tiles
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(kind.name).font(.dante(size: 14.5, weight: .semibold)).foregroundStyle(theme.text.color)
+                Text("\(tiles.count) test\(tiles.count == 1 ? "" : "s")\(place.map { " · \($0)" } ?? "")")
+                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                Text(Self.status(of: kind)).font(.dante(size: 12, weight: kind.count(.failed) > 0 ? .medium : .regular))
+                    .foregroundStyle(kind.count(.failed) > 0 ? theme.red.color : theme.text2.color)
+                Button { run?(tiles.map(\.test)) } label: { Label("Run", systemImage: "play.fill") }
+                    .buttonStyle(DanteButtonStyle())
+                    .disabled(run == nil || isRunning)
+                    .help(run == nil ? "Dante can’t run only these with this project’s runner" : "Run the \(kind.name.lowercased()) tests")
             }
-        }
-    }
-
-    /// Bigger squares when there are few tests, small ones for thousands.
-    private var tileSize: CGFloat {
-        let count = map.tiles.count
-        return count < 120 ? 18 : count < 600 ? 14 : 11
-    }
-
-    private var groups: [TestMap.Group] {
-        guard let filter else { return map.groups }
-        return map.groups.compactMap { group in
-            var kept = group
-            kept.tiles = group.tiles.filter { $0.state == filter }
-            return kept.tiles.isEmpty ? nil : kept
-        }
-    }
-
-    private var legend: some View {
-        HStack(spacing: 6) {
-            ForEach(TestMap.State.allCases, id: \.self) { state in
-                let count = map.count(state)
-                if count > 0 {
-                    Button { filter = filter == state ? nil : state } label: {
-                        HStack(spacing: 6) {
-                            TestTile.swatch(state, theme: theme).frame(width: 10, height: 10)
-                            Text("\(count) \(Self.name(state))").font(.dante(size: 12)).foregroundStyle(theme.text2.color)
+            Text(TestInventory.summary(of: kind.name)).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+            StateBar(kind: kind)
+            LinkButton(expanded ? "Hide the tests" : "Show the tests by folder") { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } }
+            if expanded {
+                VStack(alignment: .leading, spacing: 2) {
+                    let names = Self.shortNames(kind.areas.map(\.name))
+                    ForEach(kind.areas) { area in
+                        areaRow(area, name: names[area.name] ?? area.name)
+                        if openAreas.contains(area.id) {
+                            ForEach(area.tiles) { tile in testRow(tile) }
                         }
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Capsule().fill(filter == state ? theme.accentTint.color : theme.raised.color))
                     }
-                    .buttonStyle(.plain)
-                    .help(filter == state ? "Show every test" : "Show only these")
-                }
-            }
-            if map.staleCount > 0 {
-                HStack(spacing: 6) {
-                    TestTile.swatch(.passed, theme: theme).opacity(0.4).overlay(TestTile.edge(.passed, theme: theme)).frame(width: 10, height: 10)
-                    Text("\(map.staleCount) changed since they ran").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                }
-                .padding(.horizontal, 8)
-                .help("Faded squares: the test’s file changed after the run that set its colour, so it may be out of date")
-            }
-            Spacer()
-            if canPick {
-                Text("⌘-click to pick tests to run").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-            }
-        }
-    }
-
-    private func groupBox(_ group: TestMap.Group) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Text(group.name).font(.dante(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(theme.text.color)
-                    .lineLimit(1).truncationMode(.head)
-                Text(group.category).font(.dante(size: 10.5)).foregroundStyle(theme.text3.color)
-                Spacer(minLength: 4)
-                Text(summary(group)).font(.dante(size: 11)).foregroundStyle(group.count(.failed) > 0 ? theme.red.color : theme.text3.color)
-            }
-            FlowLayout(spacing: 3) {
-                ForEach(group.tiles) { tile in
-                    TestTile(tile: tile, picked: picked.contains(tile.id), size: tileSize)
-                        .onTapGesture {
-                            if canPick, NSEvent.modifierFlags.contains(.command) {
-                                if picked.contains(tile.id) { picked.remove(tile.id) } else { picked.insert(tile.id) }
-                            } else {
-                                open(tile.test)
-                            }
-                        }
-                        .help(TestTile.describe(tile))
                 }
             }
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.raised.color.opacity(0.5)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(group.count(.failed) > 0 ? theme.red.color.opacity(0.45) : theme.line.color))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(kind.count(.failed) > 0 ? theme.red.color.opacity(0.45) : theme.line.color))
     }
 
-    private func summary(_ group: TestMap.Group) -> String {
-        let failed = group.count(.failed)
-        if failed > 0 { return "\(failed) of \(group.tiles.count) failing" }
-        let notRun = group.count(.notRun)
-        if notRun == group.tiles.count { return "\(group.tiles.count) not run" }
-        return "\(group.tiles.count) test\(group.tiles.count == 1 ? "" : "s")"
+    private func areaRow(_ area: TestMap.Group, name: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: openAreas.contains(area.id) ? "chevron.down" : "chevron.right")
+                .font(.dante(size: 9, weight: .semibold)).foregroundStyle(theme.text3.color).frame(width: 10)
+            Image(systemName: "folder").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+            Text(name).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1).truncationMode(.head)
+                .help(area.name)
+            Spacer(minLength: 8)
+            Text(Self.status(of: area)).font(.dante(size: 11.5)).foregroundStyle(area.count(.failed) > 0 ? theme.red.color : theme.text3.color)
+            if let run {
+                IconButton(symbol: "play.fill", label: "Run the tests in \(name)", size: 9) { run(area.tiles.map(\.test)) }
+                    .disabled(isRunning)
+            }
+        }
+        .padding(.vertical, 5).padding(.horizontal, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if openAreas.contains(area.id) { openAreas.remove(area.id) } else { openAreas.insert(area.id) }
+        }
     }
 
+    private func testRow(_ tile: TestMap.Tile) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(Self.color(tile.state, theme: theme)).frame(width: 7, height: 7)
+                .overlay(Circle().strokeBorder(tile.state == .notRun ? theme.text3.color.opacity(0.6) : .clear))
+                .padding(.leading, 30)
+            Text(tile.test.name).font(.dante(size: 12)).foregroundStyle(theme.text.color).lineLimit(1)
+            Text("\((tile.test.file as NSString).lastPathComponent):\(tile.test.line)")
+                .font(.dante(size: 11, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
+            if tile.stale { Chip(text: "changed since").help("Its file changed after the run that set this result") }
+            Spacer(minLength: 8)
+            Text(TestMapView.name(tile.state)).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+            if let run {
+                IconButton(symbol: "play.fill", label: "Run \(tile.test.name)", size: 9) { run([tile.test]) }
+                    .disabled(isRunning)
+            }
+        }
+        .padding(.vertical, 3).padding(.horizontal, 6)
+        .contentShape(Rectangle())
+        .onTapGesture { open(tile.test) }
+        .help(TestMapView.describe(tile))
+    }
+
+    /// "3 failing · 40 passing · 12 not run".
+    static func status(of kind: TestMap.Kind) -> String {
+        status(failed: kind.count(.failed), flaky: kind.count(.flaky), passed: kind.count(.passed), skipped: kind.count(.skipped), notRun: kind.count(.notRun))
+    }
+
+    static func status(of group: TestMap.Group) -> String {
+        status(failed: group.count(.failed), flaky: group.count(.flaky), passed: group.count(.passed), skipped: group.count(.skipped), notRun: group.count(.notRun))
+    }
+
+    static func status(failed: Int, flaky: Int, passed: Int, skipped: Int, notRun: Int) -> String {
+        let total = failed + flaky + passed + skipped + notRun
+        if notRun == total { return "not run yet" }
+        var parts: [String] = []
+        if failed > 0 { parts.append("\(failed) failing") }
+        if flaky > 0 { parts.append("\(flaky) flaky") }
+        if passed > 0 { parts.append(failed == 0 && flaky == 0 && notRun == 0 && skipped == 0 ? "all \(passed) passing" : "\(passed) passing") }
+        if skipped > 0 { parts.append("\(skipped) skipped") }
+        if notRun > 0 { parts.append("\(notRun) not run") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Folder paths without the part they all share: `controllers`, `services/ingest`.
+    static func shortNames(_ paths: [String]) -> [String: String] {
+        let split = paths.map { $0.split(separator: "/").map(String.init) }
+        guard split.count > 1, var shared = split.first else {
+            return Dictionary(uniqueKeysWithValues: paths.map { ($0, $0.split(separator: "/").suffix(2).joined(separator: "/")) })
+        }
+        for parts in split.dropFirst() {
+            var count = 0
+            while count < min(shared.count, parts.count), shared[count] == parts[count] { count += 1 }
+            shared = Array(shared.prefix(count))
+        }
+        var names: [String: String] = [:]
+        for (path, parts) in zip(paths, split) {
+            let rest = parts.dropFirst(shared.count)
+            names[path] = rest.isEmpty ? (parts.last ?? path) : rest.joined(separator: "/")
+        }
+        return names
+    }
+
+    static func color(_ state: TestMap.State, theme: Theme) -> Color {
+        switch state {
+        case .failed: theme.red.color
+        case .flaky: theme.amber.color
+        case .passed: theme.green.color
+        case .skipped: theme.track.color
+        case .notRun: .clear
+        }
+    }
+}
+
+/// A kind's tests as one bar: failing, flaky, passing, skipped, then not run.
+private struct StateBar: View {
+    @Environment(\.theme) private var theme
+    let kind: TestMap.Kind
+
+    var body: some View {
+        let total = max(kind.tiles.count, 1)
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                ForEach([TestMap.State.failed, .flaky, .passed, .skipped], id: \.self) { state in
+                    let count = kind.count(state)
+                    if count > 0 {
+                        Rectangle().fill(TestKindCard.color(state, theme: theme))
+                            .frame(width: geometry.size.width * CGFloat(count) / CGFloat(total))
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(height: 6)
+        .background(theme.track.color.opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+    }
+}
+
+/// Names and descriptions for a test's state.
+enum TestMapView {
     static func name(_ state: TestMap.State) -> String {
         switch state {
         case .failed: "failing"
@@ -216,65 +284,6 @@ struct TestMapView: View {
         case .passed: "passing"
         case .skipped: "skipped"
         case .notRun: "not run"
-        }
-    }
-}
-
-/// One test's square.
-struct TestTile: View {
-    @Environment(\.theme) private var theme
-    let tile: TestMap.Tile
-    let picked: Bool
-    var size: CGFloat = 13
-
-    var body: some View {
-        Group {
-            if tile.waiting {
-                TimelineView(.animation) { context in
-                    let phase = (sin(context.date.timeIntervalSinceReferenceDate * 4 + Double(abs(tile.id.hashValue % 100)) / 10) + 1) / 2
-                    square.opacity(0.3 + 0.5 * phase)
-                }
-            } else if tile.stale {
-                // Out of date: the colour stays readable, faded inside a full-colour edge.
-                square.opacity(0.4).overlay(Self.edge(tile.state, theme: theme))
-            } else {
-                square
-            }
-        }
-        .frame(width: size, height: size)
-        .overlay(alignment: .topTrailing) {
-            if tile.flaky && tile.state == .failed {
-                Circle().fill(theme.amber.color).frame(width: size / 3, height: size / 3).offset(x: 1, y: -1)
-            }
-        }
-        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(picked ? theme.accent.color : .clear, lineWidth: 2).padding(-2))
-        .contentShape(Rectangle())
-    }
-
-    private var square: some View {
-        Self.swatch(tile.state, theme: theme)
-    }
-
-    @ViewBuilder
-    static func swatch(_ state: TestMap.State, theme: Theme) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
-        switch state {
-        case .failed: shape.fill(theme.red.color)
-        case .flaky: shape.fill(theme.amber.color)
-        case .passed: shape.fill(theme.green.color)
-        case .skipped: shape.fill(theme.track.color)
-        case .notRun: shape.strokeBorder(theme.text3.color.opacity(0.6), lineWidth: 1)
-        }
-    }
-
-    @ViewBuilder
-    static func edge(_ state: TestMap.State, theme: Theme) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
-        switch state {
-        case .failed: shape.strokeBorder(theme.red.color, lineWidth: 1.5)
-        case .flaky: shape.strokeBorder(theme.amber.color, lineWidth: 1.5)
-        case .passed: shape.strokeBorder(theme.green.color, lineWidth: 1.5)
-        case .skipped, .notRun: EmptyView()
         }
     }
 
@@ -286,7 +295,7 @@ struct TestTile: View {
         default:
             if let ranAt = tile.ranAt {
                 let who = tile.ranBy?.label ?? "You"
-                lines.append("\(TestMapView.name(tile.state).capitalized) · \(who), \(ranAt.formatted(.relative(presentation: .named)))")
+                lines.append("\(name(tile.state).capitalized) · \(who), \(ranAt.formatted(.relative(presentation: .named)))")
             }
         }
         if tile.flaky, tile.state == .failed { lines.append("Flaky: it has passed in recent runs too") }

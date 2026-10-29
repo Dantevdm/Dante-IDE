@@ -36,6 +36,28 @@ public struct TestMap: Equatable, Sendable {
         public func count(_ state: State) -> Int { tiles.count { $0.state == state } }
     }
 
+    /// One kind of test (`TestInventory` categories: Front-end, Back-end, Integration…) with
+    /// its folders inside.
+    public struct Kind: Equatable, Sendable, Identifiable {
+        public var name: String
+        public var areas: [Group]
+        public var id: String { name }
+        public var tiles: [Tile] { areas.flatMap(\.tiles) }
+        public func count(_ state: State) -> Int { areas.reduce(0) { $0 + $1.count(state) } }
+    }
+
+    /// The tests by kind, in `order` (kinds it doesn't name come after), each kind's folders
+    /// with failures first.
+    public func kinds(order: [String]) -> [Kind] {
+        var byKind: [String: [String: Group]] = [:]
+        for tile in tiles {
+            byKind[tile.test.category, default: [:]][tile.test.area, default: Group(name: tile.test.area, category: tile.test.category, tiles: [])].tiles.append(tile)
+        }
+        let rank: (Group) -> (Int, Int, String) = { group in (-group.count(.failed), -group.count(.flaky), group.name) }
+        let names = order.filter { byKind[$0] != nil } + byKind.keys.filter { !order.contains($0) }.sorted()
+        return names.map { name in Kind(name: name, areas: (byKind[name] ?? [:]).values.sorted { rank($0) < rank($1) }) }
+    }
+
     public var groups: [Group]
     /// Results the runs reported that no written test matched (parameterised and display-named tests, other folders).
     public var unmatched: [TestResult]

@@ -697,3 +697,8 @@ tasks:
   phase: build
   state: review
   notes: "Seen in the simulator with the glance demo: the Live Activity on the Lock Screen and in the Dynamic Island (compact: the hand and the count), and the notification in Notification Center. Approve and Decline from a notification, and updates with the screen locked in walk mode, need a real phone."
+- id: DI-160
+  title: "Tests: runners found in sub-folders (services/api, services/web), tests grouped by kind (front-end, back-end, security…) with Run per kind, folder and test, and a plain Code without tests card"
+  phase: build
+  state: review
+  notes: "Checked in a test copy on a made-up Maven + React project: both suites, Run all enabled, kinds and folders right. Not run against Maven here (it would download)."
