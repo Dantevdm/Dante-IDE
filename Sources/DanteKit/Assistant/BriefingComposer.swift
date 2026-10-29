@@ -94,7 +94,52 @@ public enum BriefingComposer {
         var sections = [projects(input), pipelines(input)]
         if let mail = input.mail { sections.append(self.mail(mail)) }
         if let entries = input.calendar { sections.append(today(entries, now: input.now, calendar: calendar, locale: locale)) }
-        return Briefing(date: input.now, greeting: Briefing.greeting(at: input.now, name: input.name, calendar: calendar), sections: sections)
+        return Briefing(date: input.now, greeting: Briefing.greeting(at: input.now, name: input.name, calendar: calendar), sections: sections,
+                        pipelines: pipelineList(input))
+    }
+
+    /// Each pipeline's newest run, failures first, then running, then by time.
+    static func pipelineList(_ input: Input) -> [Briefing.Pipeline] {
+        var list: [Briefing.Pipeline] = []
+        for project in input.projects {
+            let byPipeline = Dictionary(grouping: project.pipelines) { $0.pipeline + "|" + $0.branch }
+            for (key, runs) in byPipeline {
+                let sorted = runs.sorted { ($0.queued ?? .distantPast) < ($1.queued ?? .distantPast) }
+                guard let run = sorted.last else { continue }
+                list.append(.init(id: project.id + "|" + key, project: project.name, name: run.pipeline, branch: run.branch, number: run.number,
+                                  status: status(run.status), state: run.status.title, started: run.started ?? run.queued, finished: run.finished,
+                                  requestedBy: run.requestedBy.isEmpty ? nil : run.requestedBy, reason: run.reason.isEmpty ? nil : run.reason,
+                                  commit: run.commit.isEmpty ? nil : String(run.commit.prefix(7)), environment: run.environment.title, url: run.url,
+                                  stages: run.stages.map { .init(name: $0.name, status: status($0.state), state: $0.state.title, active: $0.state.isActive) },
+                                  history: sorted.dropLast().suffix(9).map { status($0.status) }))
+            }
+            let byWorkflow = Dictionary(grouping: project.ci) { $0.workflow + "|" + $0.branch }
+            for (key, runs) in byWorkflow {
+                let sorted = runs.sorted { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
+                guard let run = sorted.last else { continue }
+                let state = run.isRunning ? "Running" : run.succeeded ? "Succeeded" : run.conclusion.isEmpty ? "Finished" : run.conclusion.capitalized
+                list.append(.init(id: project.id + "|ci|" + key, project: project.name, name: run.workflow, branch: run.branch, status: status(run),
+                                  state: state, started: run.created, finished: run.isRunning ? nil : run.created, url: run.url,
+                                  history: sorted.dropLast().suffix(9).map(status)))
+            }
+        }
+        func rank(_ pipeline: Briefing.Pipeline) -> Int { pipeline.status == .bad ? 0 : pipeline.isRunning ? 1 : 2 }
+        return list.sorted { (rank($0), $1.started ?? .distantPast) < (rank($1), $0.started ?? .distantPast) }
+    }
+
+    static func status(_ status: PipelineRun.Status) -> Briefing.Status {
+        switch status {
+        case .succeeded: .good
+        case .failed: .bad
+        case .partial, .queued, .running: .attention
+        case .canceled, .skipped: .quiet
+        }
+    }
+
+    static func status(_ run: CIRun) -> Briefing.Status {
+        if run.isRunning { return .attention }
+        if run.succeeded { return .good }
+        return run.conclusion == "cancelled" || run.conclusion == "skipped" ? .quiet : .bad
     }
 
     // MARK: Projects

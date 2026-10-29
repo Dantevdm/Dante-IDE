@@ -711,3 +711,12 @@ tasks:
   title: "Security: a log message that mentions a password (\"login: wrong password\") is no longer flagged as personal information; Claude's model is passed by full id, and a Claude Code too old for it says to run claude update"
   phase: build
   state: review
+- id: DI-163
+  title: "A typed reply answers a waiting step instead of queueing behind it; the iPad pops up waiting steps and questions, shows the Mac's screen with Stop Hands for Hands steps, lists pipelines with stages that open up, folds doc headings; Outlook mail script fixed"
+  phase: build
+  state: review
+  notes: "Unit tests for WaitingReply and that Outlook's scripts compile (the old one reproduced the -2741 error). iPad app builds; not yet seen on the device."
+- id: DI-164
+  title: "iPad: the Mac's rail on the left (Home, Map, Quality, Ship, Agents, Docs; not Code), collapsible"
+  phase: build
+  state: todo

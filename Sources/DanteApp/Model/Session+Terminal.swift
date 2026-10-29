@@ -47,7 +47,8 @@ extension Session {
     /// `instructions` go with the message but aren't shown in the transcript, for long prompts
     /// Dante writes on the user's behalf.
     /// Sends to the main conversation, or to `target` (a job's, from the panel).
-    func askClaude(_ text: String, instructions: String? = nil, attachments extra: [Attachment] = [], in target: ClaudeSession? = nil) {
+    func askClaude(_ text: String, instructions: String? = nil, attachments extra: [Attachment] = [], in target: ClaudeSession? = nil,
+                   typed: Bool = false) {
         guard let claude = target ?? claude, let workspace else { return }
         showsClaude = true
         let diagnostics = workspace.activeDocument.flatMap { languages?.diagnostics(for: $0) } ?? []
@@ -58,7 +59,7 @@ extension Session {
         }
         applyClaudePreferences(to: claude)
         claude.send(text, context: [instructions, brief].compactMap { $0 }.joined(separator: "\n\n"),
-                    attachments: claudeAttachments + extra, allowsLocalResponse: instructions == nil)
+                    attachments: claudeAttachments + extra, allowsLocalResponse: instructions == nil, answersWaiting: typed)
         claudeAttachments = []
     }
 

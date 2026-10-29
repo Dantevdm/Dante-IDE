@@ -77,11 +77,80 @@ public struct Briefing: Codable, Equatable, Sendable {
     public var date: Date
     public var greeting: String
     public var sections: [Section]
+    /// Each pipeline's newest run with its stages, for the Pipelines card to open up. Nil from
+    /// a Mac before this existed.
+    public var pipelines: [Pipeline]?
 
-    public init(date: Date, greeting: String, sections: [Section]) {
+    public init(date: Date, greeting: String, sections: [Section], pipelines: [Pipeline]? = nil) {
         self.date = date
         self.greeting = greeting
         self.sections = sections
+        self.pipelines = pipelines
+    }
+
+    /// A pipeline (Azure DevOps) or workflow (GitHub Actions) as its newest run left it.
+    public struct Pipeline: Codable, Equatable, Sendable, Identifiable {
+        public var id: String
+        /// The project's name.
+        public var project: String
+        public var name: String
+        public var branch: String
+        /// "20261029.3", "#412".
+        public var number: String?
+        public var status: Status
+        /// "Succeeded", "Running", "Partly succeeded".
+        public var state: String
+        public var started: Date?
+        public var finished: Date?
+        public var requestedBy: String?
+        /// "Manual", "Individual CI", "push".
+        public var reason: String?
+        public var commit: String?
+        /// "Prod", "Non-prod".
+        public var environment: String?
+        public var url: URL?
+        public var stages: [Stage]
+        /// The runs before this one, oldest first.
+        public var history: [Status]
+
+        public init(id: String, project: String, name: String, branch: String, number: String? = nil, status: Status, state: String,
+                    started: Date? = nil, finished: Date? = nil, requestedBy: String? = nil, reason: String? = nil, commit: String? = nil,
+                    environment: String? = nil, url: URL? = nil, stages: [Stage] = [], history: [Status] = []) {
+            self.id = id
+            self.project = project
+            self.name = name
+            self.branch = branch
+            self.number = number
+            self.status = status
+            self.state = state
+            self.started = started
+            self.finished = finished
+            self.requestedBy = requestedBy
+            self.reason = reason
+            self.commit = commit
+            self.environment = environment
+            self.url = url
+            self.stages = stages
+            self.history = history
+        }
+
+        public var isRunning: Bool { finished == nil && started != nil }
+
+        public struct Stage: Codable, Equatable, Sendable, Identifiable {
+            public var id: String { name }
+            public var name: String
+            public var status: Status
+            public var state: String
+            /// Still going or waiting to start.
+            public var active: Bool
+
+            public init(name: String, status: Status, state: String, active: Bool = false) {
+                self.name = name
+                self.status = status
+                self.state = state
+                self.active = active
+            }
+        }
     }
 
     /// What Dante says: the greeting, then each section's summary in order.

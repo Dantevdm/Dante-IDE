@@ -140,7 +140,16 @@ final class CompanionHub {
         }
         let open = Set(projects.map(\.id))
         let recent = recentProjects().filter { !open.contains($0.id) }.map { CompanionSnapshot.Recent(id: $0.id, name: $0.url.lastPathComponent) }
-        return CompanionSnapshot(server: pairing?.name ?? "Mac", projects: projects, recent: recent)
+        let hands = HandsController.shared
+        let waitingStep = projects.lazy.flatMap(\.approvals).first(where: \.isHands)
+        let atWork: CompanionSnapshot.HandsAtWork? = if let waitingStep {
+            .init(agent: hands.agent, step: waitingStep.title)
+        } else if hands.visible {
+            .init(agent: hands.agent, step: hands.lastStep)
+        } else {
+            nil
+        }
+        return CompanionSnapshot(server: pairing?.name ?? "Mac", projects: projects, recent: recent, hands: atWork)
     }
 
     /// This Mac's recent projects that still exist, with their companion ids.
@@ -247,6 +256,22 @@ final class CompanionHub {
                 self?.server?.deliver(.briefing(id: id, briefing: briefing), to: device)
             }
             return
+        case .screen(let id):
+            // Only while Hands is on: the screen is what the person asked to watch.
+            guard Preferences.shared.handsEnabled else {
+                server?.deliver(.screen(id: id, image: nil), to: device)
+                return
+            }
+            Task { [weak self] in
+                let image = await Hands.screenJPEG()
+                self?.server?.deliver(.screen(id: id, image: image), to: device)
+            }
+            return
+        case .stopHands(let id):
+            HandsController.shared.stop()
+            server?.reply(to: device, id: id, ok: true, message: "Hands stopped and turned off.")
+            publish()
+            return
         case .replyMail(let id, let who, let says):
             Task { [weak self] in
                 let said = await MailReplies.draft(MailReply(who: who, says: says))
@@ -287,7 +312,7 @@ final class CompanionHub {
     /// Nil when done, else why not.
     private func act(on message: ClientMessage) -> String? {
         switch message {
-        case .hello, .speech, .library, .page, .briefing, .replyMail:
+        case .hello, .speech, .library, .page, .briefing, .replyMail, .screen, .stopHands:
             return nil
         case .openProject(_, let project):
             if let session = session(project) {

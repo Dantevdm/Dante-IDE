@@ -2,6 +2,8 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Hands: the agent in charge opens apps, finds folders and, when allowed, uses the keyboard
 /// and mouse, through Dante's MCP server (`dante mcp`, with `DANTE_HANDS=1`). Off until turned
@@ -258,6 +260,23 @@ public enum Hands {
                 event?.post(tap: .cghidEventTap)
             }
         }
+    }
+
+    /// The main screen as a JPEG no wider than `maxPixels`, for watching Hands from the
+    /// companion. Without Screen Recording permission macOS gives only the wallpaper.
+    public static func screenJPEG(maxPixels: Int = 1600, quality: Double = 0.6) async -> Data? {
+        let folder = FileManager.default.temporaryDirectory
+        let file = folder.appending(path: "dante-screen-\(UUID().uuidString).jpg")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let result = await Shell.run(["screencapture", "-x", "-m", "-t", "jpg", file.path], in: folder)
+        guard result.status == 0, let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil }
+        let options = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: maxPixels,
+                       kCGImageSourceCreateThumbnailWithTransform: true] as CFDictionary
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
     }
 
     /// Main screen size in points, for the screenshot's scale note.

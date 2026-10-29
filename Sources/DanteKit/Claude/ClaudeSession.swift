@@ -415,7 +415,9 @@ public final class ClaudeSession {
     // MARK: Conversation
 
     /// Sends a message. `context` is passed to Claude but not shown in the transcript.
-    public func send(_ text: String, context: String? = nil, attachments: [Attachment] = [], allowsLocalResponse: Bool = true) {
+    /// `answersWaiting`: typed by the person, so it answers a step waiting for approval.
+    public func send(_ text: String, context: String? = nil, attachments: [Attachment] = [], allowsLocalResponse: Bool = true,
+                     answersWaiting: Bool = false) {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
         if state != .working { turnUsage = (0, [:], String(trimmed.prefix(80))) }
@@ -425,6 +427,18 @@ public final class ClaudeSession {
             handToCodex(because: claudeLimitAt != nil || rateLimit?.status == .rejected ? "has reached" : "is nearly at")
         }
         // Mid-turn, a button such as "Find untested code" waits its turn rather than vanishing.
+        // A step waiting for approval: the message answers it rather than queueing behind it.
+        if answersWaiting, state == .working, attachments.isEmpty, let waiting = pendingApprovals.first {
+            append(TranscriptItem(id: "user-\(UUID().uuidString)", content: .user(trimmed, attachments: [])))
+            if waiting.name == "AskUserQuestion", let question = waiting.input["questions"]?.array?.first?["question"]?.string {
+                return answer(waiting.id, answers: [question: trimmed])
+            }
+            switch WaitingReply.read(trimmed) {
+            case .approve: return approve(waiting.id)
+            case .decline: return decline(waiting.id)
+            case .instead(let reply): return decline(waiting.id, message: WaitingReply.declined(saying: reply))
+            }
+        }
         if state == .working {
             queued.append(QueuedMessage(text: text, context: context, attachments: attachments, allowsLocalResponse: allowsLocalResponse))
             return

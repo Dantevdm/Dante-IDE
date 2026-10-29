@@ -71,7 +71,8 @@ extension CompanionSnapshot.Approval {
         }
         let notes = [tool.securityNote, tool.ruleNote].compactMap { $0 }
         self.init(id: item.id, job: item.job, from: item.from, title: ClaudeSession.attentionLabel(tool.name, input: tool.input),
-                  detail: detail, questions: questions, note: notes.isEmpty ? nil : notes.joined(separator: " "))
+                  detail: detail, questions: questions, note: notes.isEmpty ? nil : notes.joined(separator: " "),
+                  hands: Hands.Tool.of(mcpName: tool.name)?.controls == true ? true : nil)
     }
 }
 

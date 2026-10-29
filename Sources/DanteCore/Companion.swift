@@ -141,6 +141,8 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case page(id: String, page: CompanionPage)
     /// The morning update (`ClientMessage.briefing`).
     case briefing(id: String, briefing: Briefing)
+    /// The Mac's main screen as a JPEG (`ClientMessage.screen`), nil when Hands is off.
+    case screen(id: String, image: Data?)
 }
 
 /// From the device.
@@ -167,12 +169,17 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// "Reply to Ana that Thursday works": the Mac opens a reply in Outlook for the person to
     /// send, and answers with `result` saying what it did.
     case replyMail(id: String, who: String, says: String)
+    /// A picture of the Mac's screen, to watch Hands at work. Answered only while Hands is on.
+    case screen(id: String)
+    /// Hands' kill switch: stops every step and turns Hands off on the Mac.
+    case stopHands(id: String)
 
     public var id: String? {
         switch self {
         case .hello: nil
         case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _),
-             .library(let id, _), .page(let id, _, _), .briefing(let id, _), .replyMail(let id, _, _): id
+             .library(let id, _), .page(let id, _, _), .briefing(let id, _), .replyMail(let id, _, _),
+             .screen(let id), .stopHands(let id): id
         }
     }
 }
@@ -185,11 +192,27 @@ public struct CompanionSnapshot: Codable, Equatable, Sendable {
     /// Projects opened lately on the Mac but not open now, most recent first: the device can
     /// open one, and a message for one opens it first. Nil from a Mac before this existed.
     public var recent: [Recent]?
+    /// Hands at work on the Mac (used in the last 20 seconds, or a step waiting), so the device
+    /// can show the screen and a Stop button. Nil when idle, or from a Mac before this existed.
+    public var hands: HandsAtWork?
 
-    public init(server: String, projects: [Project], recent: [Recent]? = nil) {
+    public init(server: String, projects: [Project], recent: [Recent]? = nil, hands: HandsAtWork? = nil) {
         self.server = server
         self.projects = projects
         self.recent = recent
+        self.hands = hands
+    }
+
+    public struct HandsAtWork: Codable, Equatable, Sendable {
+        /// "Claude" or "Codex".
+        public var agent: String
+        /// "Pressed cmd+t".
+        public var step: String
+
+        public init(agent: String, step: String) {
+            self.agent = agent
+            self.step = step
+        }
     }
 
     public struct Recent: Codable, Equatable, Sendable, Identifiable {
@@ -273,10 +296,12 @@ public struct CompanionSnapshot: Codable, Equatable, Sendable {
         public var questions: [Question]
         /// A rule or the security scan flagged it.
         public var note: String?
+        /// A Hands step (keyboard, mouse, screen): the device shows the Mac's screen with it.
+        public var hands: Bool?
 
         public static let detailLimit = 4000
 
-        public init(id: String, job: String?, from: String, title: String, detail: String, questions: [Question] = [], note: String? = nil) {
+        public init(id: String, job: String?, from: String, title: String, detail: String, questions: [Question] = [], note: String? = nil, hands: Bool? = nil) {
             self.id = id
             self.job = job
             self.from = from
@@ -284,7 +309,10 @@ public struct CompanionSnapshot: Codable, Equatable, Sendable {
             self.detail = detail.count > Self.detailLimit ? String(detail.prefix(Self.detailLimit)) + "\n…" : detail
             self.questions = questions
             self.note = note
+            self.hands = hands
         }
+
+        public var isHands: Bool { hands == true }
     }
 
     public struct Question: Codable, Equatable, Sendable {

@@ -141,7 +141,7 @@ final class CompanionConnection {
             tell(events)
         case .refused(let reason):
             refuse(reason)
-        case .library(let id, _), .page(let id, _):
+        case .library(let id, _), .page(let id, _), .screen(let id, _):
             exploreRequests.removeValue(forKey: id)?.resume(returning: message)
         case .briefing(let id, let briefing):
             self.briefing = briefing
@@ -409,6 +409,17 @@ final class CompanionConnection {
         let id = UUID().uuidString
         approvalRequests[id] = mode
         send(.setApprovals(id: id, project: project, mode: mode))
+    }
+
+    /// The Mac's screen as a JPEG, while Hands is on there.
+    func screen() async -> Data? {
+        if case .screen(_, let image)? = await explore(timeout: 8, { .screen(id: $0) }) { return image }
+        return nil
+    }
+
+    /// Hands' kill switch on the Mac.
+    func stopHands() {
+        send(.stopHands(id: UUID().uuidString))
     }
 
     func openProject(_ project: String) {

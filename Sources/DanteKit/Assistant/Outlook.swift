@@ -87,37 +87,37 @@ public enum Outlook {
         if application "Microsoft Outlook" is not running then return "NOT_RUNNING"
         set fs to (ASCII character 31)
         set rs to (ASCII character 30)
-        set since to (current date) - (\(hours) * hours)
-        set out to ""
+        set cutOffDate to (current date) - (\(hours) * hours)
+        set mailOut to ""
         tell application "Microsoft Outlook"
             if (count of messages of inbox) is 0 then return "EMPTY_INBOX"
-            set found to (messages of inbox whose time received > since)
+            set recentMail to (messages of inbox whose time received > cutOffDate)
             set n to 0
-            repeat with m in found
+            repeat with m in recentMail
                 set n to n + 1
                 if n > \(limit) then exit repeat
-                set who to sender of m
+                set mSender to sender of m
                 set whoName to ""
                 set whoAddress to ""
                 try
-                    set whoName to name of who
+                    set whoName to name of mSender
                 end try
                 try
-                    set whoAddress to address of who
+                    set whoAddress to address of mSender
                 end try
-                set body to ""
+                set mBody to ""
                 try
-                    set body to plain text content of m
-                    if (length of body) > 500 then set body to text 1 thru 500 of body
+                    set mBody to plain text content of m
+                    if (length of mBody) > 500 then set mBody to text 1 thru 500 of mBody
                 end try
-                set flagged to "0"
+                set mFlag to "0"
                 try
-                    if todo flag of m is not not flagged then set flagged to "1"
+                    if todo flag of m is not not flagged then set mFlag to "1"
                 end try
-                set out to out & (id of m as text) & fs & (subject of m) & fs & whoName & fs & whoAddress & fs & ((time received of m) as «class isot» as string) & fs & (is read of m as text) & fs & (priority of m as text) & fs & flagged & fs & body & rs
+                set mailOut to mailOut & (id of m as text) & fs & (subject of m) & fs & whoName & fs & whoAddress & fs & ((time received of m) as «class isot» as string) & fs & (is read of m as text) & fs & (priority of m as text) & fs & mFlag & fs & mBody & rs
             end repeat
         end tell
-        return out
+        return mailOut
         """
     }
 

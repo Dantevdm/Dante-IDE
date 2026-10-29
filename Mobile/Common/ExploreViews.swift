@@ -38,6 +38,8 @@ struct LibraryView: View {
     /// On the iPad the reader sits beside the list rather than pushing.
     var selection: Binding<CompanionLibrary.Entry?>?
     @State private var filter = ""
+    /// Headings start folded; a filter opens every one that matches.
+    @State private var unfolded: Set<String> = []
 
     var body: some View {
         Group {
@@ -69,7 +71,9 @@ struct LibraryView: View {
             ForEach(library.sections) { section in
                 let entries = section.entries.filter { filter.isEmpty || $0.title.localizedCaseInsensitiveContains(filter) || $0.path.localizedCaseInsensitiveContains(filter) }
                 if !entries.isEmpty {
-                    Section(section.title) {
+                    Section(isExpanded: Binding(get: { !filter.isEmpty || unfolded.contains(section.title) }, set: { open in
+                        if open { unfolded.insert(section.title) } else { unfolded.remove(section.title) }
+                    })) {
                         ForEach(entries) { entry in
                             if let selection {
                                 Button { selection.wrappedValue = entry } label: { EntryRow(entry: entry) }
@@ -78,11 +82,19 @@ struct LibraryView: View {
                                 NavigationLink { PageView(explorer: explorer, project: project, entry: entry) } label: { EntryRow(entry: entry) }
                             }
                         }
+                    } header: {
+                        HStack {
+                            Text(section.title)
+                            Spacer()
+                            Text("\(entries.count)").monospacedDigit().foregroundStyle(Palette.text3)
+                        }
                     }
                 }
             }
         }
+        .listStyle(.sidebar)
         .searchable(text: $filter, prompt: "Filter")
+        .onChange(of: project) { unfolded = [] }
     }
 }
 

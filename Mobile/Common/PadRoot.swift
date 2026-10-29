@@ -56,8 +56,10 @@ struct PadRoot: View {
                 PhoneHome(connection: connection, voice: voice, explorer: explorer)
             }
         }
+        .waitingPrompt(connection, active: !wall)
         .fullScreenCover(isPresented: $wall) {
             WallView(connection: connection, voice: voice) { wall = false }
+                .waitingPrompt(connection)
         }
         .onChange(of: project) { entry = nil }
         .onChange(of: entry) { if entry != nil { today = false } }

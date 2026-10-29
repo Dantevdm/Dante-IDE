@@ -14,7 +14,10 @@ struct TodayView: View {
                 if let briefing = connection.briefing {
                     header(briefing)
                     ForEach(briefing.sections) { section in
-                        if !section.summary.isEmpty || !section.items.isEmpty || section.problem != nil { SectionCard(section: section) }
+                        let pipelines = section.kind == .pipelines ? briefing.pipelines ?? [] : []
+                        if !section.summary.isEmpty || !section.items.isEmpty || section.problem != nil || !pipelines.isEmpty {
+                            SectionCard(section: section, pipelines: pipelines)
+                        }
                     }
                 } else if loading {
                     ProgressView("Your Mac is gathering it…").frame(maxWidth: .infinity, minHeight: 240)
@@ -68,6 +71,8 @@ struct TodayView: View {
 
 struct SectionCard: View {
     let section: Briefing.Section
+    /// For the Pipelines card: each pipeline, opening up when tapped, in place of the items.
+    var pipelines: [Briefing.Pipeline] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -75,7 +80,8 @@ struct SectionCard: View {
                 .font(.subheadline.weight(.semibold)).foregroundStyle(color(section.status))
             if !section.summary.isEmpty { Text(section.summary).font(.body).foregroundStyle(Palette.text) }
             if let problem = section.problem { Text(problem).font(.footnote).foregroundStyle(Palette.text3) }
-            ForEach(section.items) { item in
+            if !pipelines.isEmpty { PipelineList(pipelines: pipelines) }
+            ForEach(pipelines.isEmpty ? section.items : []) { item in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Circle().fill(color(item.status)).frame(width: 6, height: 6)
                     VStack(alignment: .leading, spacing: 2) {
