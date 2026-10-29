@@ -143,6 +143,8 @@ struct SplashView: View {
     let connection: CompanionConnection
     let done: () -> Void
     @State private var since = Date.now
+    /// The scene behind the mark: the one chosen in Style, or a different one each launch.
+    @State private var dream = Dreams.shared.splashDream()
     @State private var nameShown = false
     @State private var leaving = false
 
@@ -150,9 +152,10 @@ struct SplashView: View {
         GeometryReader { geometry in
             let side = min(geometry.size.width, geometry.size.height)
             ZStack {
-                LinearGradient(colors: Logo.forest.map(\.color), startPoint: .top, endPoint: .bottom)
-                RadialGradient(colors: [Logo.tileLight.color, .clear], center: .init(x: 0.5, y: 0.42), startRadius: 0, endRadius: side * 0.7)
-                Fireflies(count: 44)
+                DreamCanvas(dream: dream, start: since, build: 2.6)
+                // A soft pool of the forest behind the mark, so it reads on any scene.
+                RadialGradient(colors: [Logo.forest[0].color.opacity(0.75), Logo.forest[0].color.opacity(0.35), .clear],
+                               center: .init(x: 0.5, y: 0.45), startRadius: 0, endRadius: side * 0.42)
                 VStack(spacing: side * 0.03) {
                     VineLogo(size: side * 0.42, since: since)
                         .scaleEffect(leaving ? 1.6 : 1)
@@ -173,6 +176,13 @@ struct SplashView: View {
                     Text(status).font(.headline).foregroundStyle(.white.opacity(nameShown ? 0.6 : 0))
                         .contentTransition(.opacity)
                         .animation(.easeInOut(duration: 0.4), value: status)
+                    // Once the Mac answers, what it's up to.
+                    if connection.status == .connected, connection.snapshot != nil {
+                        TickerCard(ticker: CompanionTicker.make(connection.snapshot, connected: true, noted: []), compact: true)
+                            .environment(\.colorScheme, .dark)
+                            .frame(maxWidth: 360)
+                            .transition(.opacity.combined(with: .offset(y: 10)))
+                    }
                 }
                 .opacity(leaving ? 0 : 1)
             }

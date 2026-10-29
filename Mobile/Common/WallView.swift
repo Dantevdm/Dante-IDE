@@ -55,10 +55,12 @@ struct WallView: View {
         }
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
+            Dreams.shared.wallShowing = true
             voice.setWakeWord(listens)
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
+            Dreams.shared.wallShowing = false
             voice.setWakeWord(false)
         }
         .onChange(of: listens) { voice.setWakeWord(listens) }

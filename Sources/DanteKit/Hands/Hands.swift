@@ -265,10 +265,28 @@ public enum Hands {
     /// The main screen as a JPEG no wider than `maxPixels`, for watching Hands from the
     /// companion. Without Screen Recording permission macOS gives only the wallpaper.
     public static func screenJPEG(maxPixels: Int = 1600, quality: Double = 0.6) async -> Data? {
+        await screenJPEG(maxPixels: maxPixels, region: nil, quality: quality)?.data
+    }
+
+    /// The main screen, or the `region` of it, as a JPEG no larger than `maxPixels` on its long
+    /// side, and the part it shows. Taken lossless and compressed once, so text stays crisp; a
+    /// region is cut by `screencapture -R` at the screen's full resolution, which keeps a
+    /// zoomed-in view of a very wide screen sharp.
+    public static func screenJPEG(maxPixels: Int, region: ScreenRegion?, quality: Double = 0.78) async -> (data: Data, region: ScreenRegion?)? {
         let folder = FileManager.default.temporaryDirectory
-        let file = folder.appending(path: "dante-screen-\(UUID().uuidString).jpg")
+        let file = folder.appending(path: "dante-screen-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: file) }
-        let result = await Shell.run(["screencapture", "-x", "-m", "-t", "jpg", file.path], in: folder)
+        var arguments = ["screencapture", "-x", "-m", "-t", "png"]
+        var shown: ScreenRegion?
+        if let region = region?.clamped, !region.isWhole {
+            let bounds = CGDisplayBounds(CGMainDisplayID())
+            let x = (region.x * bounds.width).rounded(.down), y = (region.y * bounds.height).rounded(.down)
+            let w = max((region.width * bounds.width).rounded(.up), 1), h = max((region.height * bounds.height).rounded(.up), 1)
+            arguments.append("-R\(Int(x)),\(Int(y)),\(Int(w)),\(Int(h))")
+            shown = ScreenRegion(x: x / bounds.width, y: y / bounds.height, width: w / bounds.width, height: h / bounds.height)
+        }
+        arguments.append(file.path)
+        let result = await Shell.run(arguments, in: folder)
         guard result.status == 0, let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil }
         let options = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: maxPixels,
                        kCGImageSourceCreateThumbnailWithTransform: true] as CFDictionary
@@ -276,7 +294,7 @@ public enum Hands {
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
-        return CGImageDestinationFinalize(destination) ? data as Data : nil
+        return CGImageDestinationFinalize(destination) ? (data as Data, shown) : nil
     }
 
     /// Main screen size in points, for the screenshot's scale note.

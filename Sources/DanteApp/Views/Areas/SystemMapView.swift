@@ -112,7 +112,8 @@ struct SystemDiagram: View {
             .padding(.bottom, 52)
             .backgroundPreferenceValue(PartBoundsKey.self) { anchors in
                 GeometryReader { proxy in
-                    RecordFrames(frames: anchors.mapValues { proxy[$0] }, recorder: recorder)
+                    let frames = anchors.mapValues { proxy[$0] }
+                    RecordFrames(frames: frames, recorder: recorder)
                     TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
                         Canvas { context, _ in
                             let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
@@ -120,7 +121,7 @@ struct SystemDiagram: View {
                             let lit = reduceMotion ? 1 : min(1, max(0, timeline.date.timeIntervalSince(litAt) / 0.32))
                             let heaviest = max(map.links.map(\.weight).max() ?? 1, 1)
                             for (index, link) in map.links.enumerated() {
-                                guard let from = anchors[link.from].map({ proxy[$0] }), let to = anchors[link.to].map({ proxy[$0] }) else { continue }
+                                guard let from = frames[link.from], let to = frames[link.to] else { continue }
                                 let highlighted = selected != nil && (link.from == selected || link.to == selected)
                                 let dimmed = selected != nil && !highlighted
                                 let width = 1.1 + 1.6 * CGFloat(link.weight) / CGFloat(heaviest)

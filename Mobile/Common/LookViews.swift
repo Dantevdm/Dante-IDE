@@ -265,6 +265,7 @@ struct StyleSettings: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable private var looks = Looks.shared
     @Bindable private var saver = DataSaver.shared
+    @Bindable private var dreams = Dreams.shared
 
     var body: some View {
         NavigationStack {
@@ -284,6 +285,22 @@ struct StyleSettings: View {
                             ForEach(Looks.Appearance.allCases) { Text($0.title).tag($0) }
                         }
                         .pickerStyle(.segmented)
+                    }
+                    section("Splash screen", "What draws itself behind the mark while Dante opens.") {
+                        DreamPicker(choice: $dreams.splash)
+                    }
+                    section("Screensaver", "After a while without a touch, a scene draws itself slowly over ten minutes and keeps living, light by day and lit up at night. A touch, or a step waiting for you, brings Dante back. While charging the screen stays on for it; on battery the device’s Auto-Lock still wins.") {
+                        DreamPicker(choice: $dreams.screensaver)
+                        HStack {
+                            Text("Comes on after").foregroundStyle(Palette.text2)
+                            Picker("Comes on after", selection: $dreams.idleMinutes) {
+                                ForEach(Dreams.idleChoices, id: \.self) { Text(Dreams.idleTitle($0)).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+                        if UIDevice.current.userInterfaceIdiom == .pad {
+                            Toggle("Over the Wall too", isOn: $dreams.overWall).foregroundStyle(Palette.text2)
+                        }
                     }
                     section("Mobile data", saver.onMobileData
                             ? "You’re on mobile data now. \(saver.usedText) used since opening."
@@ -373,5 +390,47 @@ private struct LookTile: View {
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(chosen ? Palette.accent : Palette.line, lineWidth: chosen ? 2.5 : 1))
         .scaleEffect(chosen ? 1.0 : 0.98)
         .animation(.spring(duration: 0.4, bounce: 0.3), value: chosen)
+    }
+}
+
+/// Shuffle, or one scene, each as a live tile already drawn.
+private struct DreamPicker: View {
+    @Binding var choice: Dream?
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                tile(nil)
+                ForEach(Dream.allCases) { tile($0) }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func tile(_ dream: Dream?) -> some View {
+        let chosen = choice == dream
+        return Button { withAnimation(.snappy) { choice = dream } } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                ZStack {
+                    if let dream {
+                        DreamCanvas(dream: dream, start: .distantPast, build: 1, small: true)
+                    } else {
+                        LinearGradient(colors: [Palette.accent.opacity(0.35), Palette.accent.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        Image(systemName: "shuffle").font(.title).foregroundStyle(Palette.accent)
+                    }
+                }
+                .frame(width: 150, height: 96)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(chosen ? Palette.accent : Palette.text3.opacity(0.25), lineWidth: chosen ? 3 : 1)
+                }
+                Text(dream?.title ?? "Shuffle").font(.subheadline.weight(chosen ? .semibold : .regular))
+                    .foregroundStyle(chosen ? Palette.text : Palette.text2)
+            }
+        }
+        .buttonStyle(Pressable())
+        .accessibilityLabel(dream.map { "\($0.title): \($0.tagline)" } ?? "Shuffle: a different scene each time")
+        .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 }

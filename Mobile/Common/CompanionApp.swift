@@ -37,6 +37,7 @@ struct CompanionApp: App {
             }
             .tint(Palette.accent)
             .styledByLook()
+            .background(IdleWatching(connection: connection))
             .overlay {
                 if splash { SplashView(connection: connection) { splash = false } }
             }

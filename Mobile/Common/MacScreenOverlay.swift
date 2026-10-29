@@ -158,12 +158,19 @@ extension EnvironmentValues {
 }
 
 /// The screen, asked for again as soon as each frame arrives (about two a second over the
-/// tailnet), scaled to fit.
+/// tailnet), scaled to fit. Zoomed in (`zoom`), it also asks for just the part in view at the
+/// Mac's full resolution and lays it over the whole frame, so text on a very wide screen
+/// stays sharp; the whole frame keeps coming every few frames for the edges.
 struct LiveScreen: View {
     let connection: CompanionConnection
     var width = 1600
+    /// The zoom once a pinch or drag has settled, from `ZoomableScreen`.
+    var zoom: ScreenZoom?
     @State private var image: UIImage?
+    @State private var detail: (image: UIImage, region: ScreenRegion)?
     @State private var stale = false
+    @State private var size: CGSize = .zero
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         ZStack {
@@ -177,7 +184,22 @@ struct LiveScreen: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .padding(16)
             } else if let image {
-                Image(uiImage: image).resizable().aspectRatio(contentMode: .fit)
+                GeometryReader { geometry in
+                    let fitted = Self.fitted(image.size, in: geometry.size)
+                    ZStack(alignment: .topLeading) {
+                        Image(uiImage: image).resizable().interpolation(.high)
+                            .frame(width: fitted.width, height: fitted.height)
+                            .offset(x: fitted.minX, y: fitted.minY)
+                        if let detail {
+                            Image(uiImage: detail.image).resizable().interpolation(.high)
+                                .frame(width: fitted.width * detail.region.width, height: fitted.height * detail.region.height)
+                                .offset(x: fitted.minX + fitted.width * detail.region.x, y: fitted.minY + fitted.height * detail.region.y)
+                        }
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+                    .onAppear { size = geometry.size }
+                    .onChange(of: geometry.size) { size = geometry.size }
+                }
             } else {
                 VStack(spacing: 8) {
                     ProgressView().tint(.white)
@@ -192,13 +214,21 @@ struct LiveScreen: View {
                     .padding(6).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8)).padding(8)
             }
         }
-        .task(id: "\(width)|\(DataSaver.shared.holdsScreen)") {
+        .task(id: "\(width)|\(DataSaver.shared.holdsScreen)|\(String(describing: zoom))|\(size.width)") {
+            let focus = focusRequest()
+            if focus == nil { detail = nil }
+            var frame = 0
             while !Task.isCancelled, !DataSaver.shared.holdsScreen {
                 // On mobile data, smaller frames and fewer of them.
                 let saving = DataSaver.shared.onMobileData
-                if connection.status == .connected, let data = await connection.screen(width: saving ? min(width, 800) : width),
-                   let picture = UIImage(data: data) {
-                    image = picture
+                // Zoomed in: mostly the part in view, the whole screen every fourth frame.
+                let wantsDetail = focus != nil && !saving && image != nil && frame % 4 != 3
+                frame += 1
+                if connection.status == .connected,
+                   let reply = await connection.screen(width: wantsDetail ? focus!.width : (saving ? min(width, 800) : width),
+                                                       region: wantsDetail ? focus!.region : nil),
+                   let data = reply.image, let picture = UIImage(data: data) {
+                    if let region = reply.region { detail = (picture, region) } else { image = picture }
                     stale = false
                 } else {
                     stale = true
@@ -208,34 +238,72 @@ struct LiveScreen: View {
             }
         }
     }
+
+    /// The part of the screen in view and how many pixels it fills here, nil when not zoomed in.
+    private func focusRequest() -> (region: ScreenRegion, width: Int)? {
+        guard let zoom, zoom.scale > 1.15, let image, size.width > 0 else { return nil }
+        let fitted = Self.fitted(image.size, in: size)
+        // What's in view, in this view's unscaled coordinates: scaled about the middle, then moved.
+        let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+        let visible = CGRect(x: centre.x + (-centre.x - zoom.offset.width) / zoom.scale,
+                             y: centre.y + (-centre.y - zoom.offset.height) / zoom.scale,
+                             width: size.width / zoom.scale, height: size.height / zoom.scale)
+            .insetBy(dx: -size.width / zoom.scale * 0.08, dy: -size.height / zoom.scale * 0.08)
+        let part = visible.intersection(fitted)
+        guard !part.isNull, part.width > 1, part.height > 1 else { return nil }
+        let region = ScreenRegion(x: (part.minX - fitted.minX) / fitted.width, y: (part.minY - fitted.minY) / fitted.height,
+                                  width: part.width / fitted.width, height: part.height / fitted.height).clamped
+        let pixels = Int(max(part.width, part.height) * zoom.scale * displayScale)
+        return (region, min(max(pixels, 400), 3200))
+    }
+
+    static func fitted(_ image: CGSize, in area: CGSize) -> CGRect {
+        guard image.width > 0, image.height > 0 else { return CGRect(origin: .zero, size: area) }
+        let scale = min(area.width / image.width, area.height / image.height)
+        let size = CGSize(width: image.width * scale, height: image.height * scale)
+        return CGRect(x: (area.width - size.width) / 2, y: (area.height - size.height) / 2, width: size.width, height: size.height)
+    }
 }
 
-/// Full screen: pinch to zoom in on part of the Mac's screen, drag to look around, double-tap
-/// to fit it again.
+/// How far a screen view is zoomed and moved.
+struct ScreenZoom: Equatable, CustomStringConvertible {
+    var scale: CGFloat
+    var offset: CGSize
+    var description: String { "\(Int(scale * 100))@\(Int(offset.width)),\(Int(offset.height))" }
+}
+
+/// Full screen: pinch to zoom in on part of the Mac's screen (up to 8×, sharp), drag to look
+/// around, double-tap to fit it again.
 private struct ZoomableScreen: View {
     let connection: CompanionConnection
     @State private var scale: CGFloat = 1
     @State private var settled: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var moved: CGSize = .zero
+    /// What `LiveScreen` sharpens: set when a gesture ends, not on every step of it.
+    @State private var zoom: ScreenZoom?
 
     var body: some View {
-        LiveScreen(connection: connection, width: 2200)
+        LiveScreen(connection: connection, width: 3200, zoom: zoom)
             .scaleEffect(scale)
             .offset(offset)
             .gesture(
                 MagnifyGesture()
-                    .onChanged { scale = min(max(settled * $0.magnification, 1), 5) }
+                    .onChanged { scale = min(max(settled * $0.magnification, 1), 8) }
                     .onEnded { _ in
                         settled = scale
                         if scale == 1 { withAnimation(.snappy) { offset = .zero; moved = .zero } }
+                        zoom = ScreenZoom(scale: scale, offset: offset)
                     }
                     .simultaneously(with: DragGesture()
                         .onChanged { value in
                             guard scale > 1 else { return }
                             offset = CGSize(width: moved.width + value.translation.width, height: moved.height + value.translation.height)
                         }
-                        .onEnded { _ in moved = offset })
+                        .onEnded { _ in
+                            moved = offset
+                            zoom = ScreenZoom(scale: scale, offset: offset)
+                        })
             )
             .onTapGesture(count: 2) {
                 withAnimation(.snappy) {
@@ -244,6 +312,7 @@ private struct ZoomableScreen: View {
                     offset = .zero
                     moved = .zero
                 }
+                zoom = nil
             }
     }
 }

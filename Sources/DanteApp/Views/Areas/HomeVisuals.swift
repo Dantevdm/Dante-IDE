@@ -23,10 +23,13 @@ struct HomeMap: View {
         .frame(maxWidth: .infinity)
         .backgroundPreferenceValue(HomePartKey.self) { anchors in
             GeometryReader { proxy in
+                // Resolved here, never inside the timeline: a GeometryProxy read after its
+                // layout pass has gone crashed the app.
+                let frames = anchors.mapValues { proxy[$0] }
                 TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
                     Canvas { context, _ in
                         let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-                        draw(in: &context, frames: anchors.mapValues { proxy[$0] }, time: time)
+                        draw(in: &context, frames: frames, time: time)
                     }
                 }
             }

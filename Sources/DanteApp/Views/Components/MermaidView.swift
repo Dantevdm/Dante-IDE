@@ -448,10 +448,10 @@ struct ERDiagramView: View {
             .padding(.vertical, 24)
             .backgroundPreferenceValue(DiagramBoundsKey.self) { anchors in
                 GeometryReader { proxy in
+                    let frames = anchors.mapValues { proxy[$0] }
                     TimelineView(.animation(minimumInterval: 1 / 30, paused: !flowing || reduceMotion)) { timeline in
                         let time = timeline.date.timeIntervalSinceReferenceDate
                         Canvas { context, _ in
-                            let frames = anchors.mapValues { proxy[$0] }
                             var placer = LabelPlacer(avoiding: Array(frames.values))
                             for (index, relationship) in diagram.relationships.enumerated() {
                                 draw(relationship, frames, placer: &placer, time: flowing && !reduceMotion ? time + Double(index) * 0.41 : nil, in: &context)

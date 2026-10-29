@@ -143,8 +143,9 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case briefing(id: String, briefing: Briefing)
     /// One of the Mac's places for a project (`ClientMessage.place`).
     case place(id: String, place: CompanionPlace)
-    /// The Mac's main screen as a JPEG (`ClientMessage.screen`), nil when it couldn't be taken.
-    case screen(id: String, image: Data?)
+    /// The Mac's main screen as a JPEG (`ClientMessage.screen`), nil when it couldn't be taken;
+    /// `region` is the part it shows (nil for all of it).
+    case screen(id: String, image: Data?, region: ScreenRegion? = nil)
     /// The repository after a `ClientMessage.git`.
     case git(id: String, git: CompanionGit)
 }
@@ -175,8 +176,9 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case replyMail(id: String, who: String, says: String)
     /// Home, Tests, Security, Ship or Activity for a project, open or recent.
     case place(id: String, project: String, kind: CompanionPlace.Kind)
-    /// A picture of the Mac's screen at most `width` pixels wide, to watch it from the iPad.
-    case screen(id: String, width: Int?)
+    /// A picture of the Mac's screen at most `width` pixels wide, to watch it from the iPad;
+    /// with `region`, only that part, so a zoomed-in view stays sharp on a very wide screen.
+    case screen(id: String, width: Int?, region: ScreenRegion? = nil)
     /// Hands' kill switch: stops every step and turns Hands off on the Mac.
     case stopHands(id: String)
     /// Stops everything: every conversation's turn and every job in every window, and any
@@ -190,7 +192,7 @@ public enum ClientMessage: Codable, Equatable, Sendable {
         case .hello: nil
         case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _),
              .library(let id, _), .page(let id, _, _), .briefing(let id, _), .replyMail(let id, _, _),
-             .screen(let id, _), .stopHands(let id), .stopAll(let id), .place(let id, _, _), .git(let id, _, _): id
+             .screen(let id, _, _), .stopHands(let id), .stopAll(let id), .place(let id, _, _), .git(let id, _, _): id
         }
     }
 }
@@ -362,4 +364,27 @@ extension Data {
         text += String(repeating: "=", count: (4 - text.count % 4) % 4)
         self.init(base64Encoded: text)
     }
+}
+
+/// Part of the Mac's screen, as fractions of its width and height (0…1 from the top left).
+public struct ScreenRegion: Codable, Equatable, Hashable, Sendable {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+
+    /// Kept inside the screen, at least 2% of it each way.
+    public var clamped: ScreenRegion {
+        let w = min(max(width, 0.02), 1), h = min(max(height, 0.02), 1)
+        return ScreenRegion(x: min(max(x, 0), 1 - w), y: min(max(y, 0), 1 - h), width: w, height: h)
+    }
+
+    public var isWhole: Bool { width >= 0.98 && height >= 0.98 }
 }

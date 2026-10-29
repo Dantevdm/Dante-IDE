@@ -262,11 +262,12 @@ final class CompanionHub {
                 return .place(id: id, place: CompanionPlaces.make(kind, input))
             }
             return
-        case .screen(let id, let width):
-            // Asked for by the paired device while its screen view is open; never kept.
+        case .screen(let id, let width, let region):
+            // Asked for by the paired device while its screen view is open; never kept. A
+            // region (zoomed in) comes at the screen's own resolution, up to what the device shows.
             Task { [weak self] in
-                let image = await Hands.screenJPEG(maxPixels: min(max(width ?? 1600, 400), 2400))
-                self?.server?.deliver(.screen(id: id, image: image), to: device)
+                let shot = await Hands.screenJPEG(maxPixels: min(max(width ?? 1600, 400), 3200), region: region)
+                self?.server?.deliver(.screen(id: id, image: shot?.data, region: shot?.region), to: device)
             }
             return
         case .git(let id, let project, let action):

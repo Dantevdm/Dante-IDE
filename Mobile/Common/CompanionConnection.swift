@@ -142,7 +142,7 @@ final class CompanionConnection {
             tell(events)
         case .refused(let reason):
             refuse(reason)
-        case .library(let id, _), .page(let id, _), .screen(let id, _), .place(let id, _), .git(let id, _):
+        case .library(let id, _), .page(let id, _), .screen(let id, _, _), .place(let id, _), .git(let id, _):
             exploreRequests.removeValue(forKey: id)?.resume(returning: message)
         case .briefing(let id, let briefing):
             self.briefing = briefing
@@ -440,7 +440,15 @@ final class CompanionConnection {
 
     /// The Mac's screen as a JPEG at most `width` pixels wide.
     func screen(width: Int = 1600) async -> Data? {
-        if case .screen(_, let image)? = await explore(timeout: 8, { .screen(id: $0, width: width) }) { return image }
+        await screen(width: width, region: nil)?.image
+    }
+
+    /// Part of the screen (nil for all of it); the reply says which part it shows, nil from a
+    /// Mac that always sends the whole screen.
+    func screen(width: Int, region: ScreenRegion?) async -> (image: Data?, region: ScreenRegion?)? {
+        if case .screen(_, let image, let shown)? = await explore(timeout: 8, { .screen(id: $0, width: width, region: region) }) {
+            return (image, shown)
+        }
         return nil
     }
 
