@@ -420,10 +420,15 @@ final class CompanionConnection {
         send(.setApprovals(id: id, project: project, mode: mode))
     }
 
-    /// The Mac's screen as a JPEG, while Hands is on there.
-    func screen() async -> Data? {
-        if case .screen(_, let image)? = await explore(timeout: 8, { .screen(id: $0) }) { return image }
+    /// The Mac's screen as a JPEG at most `width` pixels wide.
+    func screen(width: Int = 1600) async -> Data? {
+        if case .screen(_, let image)? = await explore(timeout: 8, { .screen(id: $0, width: width) }) { return image }
         return nil
+    }
+
+    /// Stops every agent and job on the Mac, and any Hands step.
+    func stopAll() {
+        send(.stopAll(id: UUID().uuidString))
     }
 
     #if DEBUG

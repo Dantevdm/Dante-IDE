@@ -8,6 +8,7 @@ struct WallView: View {
     let voice: VoiceLoop
     let close: () -> Void
     @AppStorage("wallListens") private var listens = false
+    @Environment(\.showsMacScreen) private var macScreen
     @State private var problem: String?
 
     var body: some View {
@@ -208,6 +209,9 @@ struct WallView: View {
             .accessibilityLabel("Talk")
             Text(caption).font(.title3).foregroundStyle(Palette.text2).lineLimit(2)
             Spacer()
+            if !macScreen.isOpen {
+                Button { macScreen.show() } label: { Label("Mac screen", systemImage: "display") }.font(.body)
+            }
             Toggle("Hey Dante", isOn: $listens).toggleStyle(.button).font(.body)
                 .help("Listen for “Hey Dante” while the wall is up. Speech is recognised on this iPad; nothing is sent until you say it.")
         }

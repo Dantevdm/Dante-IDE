@@ -23,6 +23,7 @@ struct PadRoot: View {
                 Section {
                     row(.today, "Today", "sun.horizon")
                     Button { wall = true } label: { Label("Wall", systemImage: "rectangle.inset.filled").foregroundStyle(Palette.text) }
+                    MacScreenRow()
                 }
                 Section(project?.name ?? "Project") {
                     row(.home, "Home", "house")
@@ -53,9 +54,11 @@ struct PadRoot: View {
             }
             .id((project?.id ?? "") + place.rawValue)
         }
+        .macScreen(connection, voice: voice, active: !wall)
         .waitingPrompt(connection, active: !wall)
         .fullScreenCover(isPresented: $wall) {
             WallView(connection: connection, voice: voice) { wall = false }
+                .macScreen(connection, voice: voice)
                 .waitingPrompt(connection)
         }
         .onChange(of: project?.id) { voice.focus = project?.id }

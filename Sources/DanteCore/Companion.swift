@@ -143,7 +143,7 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case briefing(id: String, briefing: Briefing)
     /// One of the Mac's places for a project (`ClientMessage.place`).
     case place(id: String, place: CompanionPlace)
-    /// The Mac's main screen as a JPEG (`ClientMessage.screen`), nil when Hands is off.
+    /// The Mac's main screen as a JPEG (`ClientMessage.screen`), nil when it couldn't be taken.
     case screen(id: String, image: Data?)
 }
 
@@ -173,17 +173,20 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case replyMail(id: String, who: String, says: String)
     /// Home, Tests, Security, Ship or Activity for a project, open or recent.
     case place(id: String, project: String, kind: CompanionPlace.Kind)
-    /// A picture of the Mac's screen, to watch Hands at work. Answered only while Hands is on.
-    case screen(id: String)
+    /// A picture of the Mac's screen at most `width` pixels wide, to watch it from the iPad.
+    case screen(id: String, width: Int?)
     /// Hands' kill switch: stops every step and turns Hands off on the Mac.
     case stopHands(id: String)
+    /// Stops everything: every conversation's turn and every job in every window, and any
+    /// Hands step under way. Hands stay switched on.
+    case stopAll(id: String)
 
     public var id: String? {
         switch self {
         case .hello: nil
         case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _),
              .library(let id, _), .page(let id, _, _), .briefing(let id, _), .replyMail(let id, _, _),
-             .screen(let id), .stopHands(let id), .place(let id, _, _): id
+             .screen(let id, _), .stopHands(let id), .stopAll(let id), .place(let id, _, _): id
         }
     }
 }

@@ -262,16 +262,17 @@ final class CompanionHub {
                 return .place(id: id, place: CompanionPlaces.make(kind, input))
             }
             return
-        case .screen(let id):
-            // Only while Hands is on: the screen is what the person asked to watch.
-            guard Preferences.shared.handsEnabled else {
-                server?.deliver(.screen(id: id, image: nil), to: device)
-                return
-            }
+        case .screen(let id, let width):
+            // Asked for by the paired device while its screen view is open; never kept.
             Task { [weak self] in
-                let image = await Hands.screenJPEG()
+                let image = await Hands.screenJPEG(maxPixels: min(max(width ?? 1600, 400), 2400))
                 self?.server?.deliver(.screen(id: id, image: image), to: device)
             }
+            return
+        case .stopAll(let id):
+            let stopped = Self.stopEverything()
+            server?.reply(to: device, id: id, ok: true, message: stopped == 0 ? "Nothing was running." : "Stopped \(stopped == 1 ? "one conversation" : "\(stopped) conversations").")
+            publish()
             return
         case .stopHands(let id):
             HandsController.shared.stop()
@@ -315,10 +316,33 @@ final class CompanionHub {
         publish()
     }
 
+    /// Every working conversation and job in every window stops; a Hands step under way is
+    /// refused at once (the stop flag), and Hands come back on a moment later if they were on.
+    static func stopEverything() -> Int {
+        let handsOn = Preferences.shared.handsEnabled
+        if handsOn { Hands.stop() }
+        var stopped = 0
+        for session in Sessions.all {
+            let conversations = [session.claude].compactMap { $0 } + Array(session.jobs.sessions.values)
+            for conversation in conversations where conversation.state == .working {
+                conversation.interrupt()
+                stopped += 1
+            }
+        }
+        if handsOn {
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                if Preferences.shared.handsEnabled { Hands.allow() }
+            }
+        }
+        NSSound(named: "Funk")?.play()
+        return stopped
+    }
+
     /// Nil when done, else why not.
     private func act(on message: ClientMessage) -> String? {
         switch message {
-        case .hello, .speech, .library, .page, .briefing, .replyMail, .screen, .stopHands, .place:
+        case .hello, .speech, .library, .page, .briefing, .replyMail, .screen, .stopHands, .stopAll, .place:
             return nil
         case .openProject(_, let project):
             if let session = session(project) {
