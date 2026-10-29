@@ -52,6 +52,11 @@ import Testing
         #expect(rules(#"slog.Info("password changed by its owner", "user_id", user.ID)"#, "api/users.go").isEmpty)
         #expect(rules(#"slog.Info("password changed", "password", body.Password)"#, "api/users.go") == ["pii.log"])
         #expect(rules(#"log.Printf("password: %s", pw)"#, "api/users.go") == ["pii.log"])
+        // A colon in the message is punctuation, not a label, unless a value follows it.
+        #expect(rules(#"slog.Error("login: could not check password", "username", maskEmail(req.Username))"#, "api/auth.go").isEmpty)
+        #expect(rules(#"slog.Warn("login: wrong password", "user_id", user.ID, "error", err)"#, "api/auth.go").isEmpty)
+        #expect(rules(#"log.Printf("login failed, password %s", pw)"#, "api/auth.go") == ["pii.log"])
+        #expect(rules(#"console.log("reset with password: " + pw)"#, "api/auth.ts") == ["pii.log"])
         #expect(rules(#"print(f"reset for {user.email}, password={password}")"#, "auth.py") == ["pii.log"])
         #expect(rules("  id_number VARCHAR(13) NOT NULL,", "db/schema.sql") == ["pii.plain-column"])
         #expect(rules("  id_number_encrypted BYTEA,", "db/schema.sql").isEmpty)

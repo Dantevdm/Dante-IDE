@@ -131,8 +131,10 @@ public enum SecurityScanner {
         return finding
     }
 
-    /// The line with prose string literals emptied: a message with spaces and no placeholder
-    /// (%s, {name}, ${x}, =) only describes what happened. Keys and format strings stay.
+    /// The line with prose taken out of its string literals: a message with spaces only
+    /// describes what happened ("login: invalid password"), so of it only what logs a value
+    /// stays: a word before a placeholder or a trailing label ("password: %s", "{password}",
+    /// "password=" + value). Literals without spaces (keys, format strings) stay whole.
     static func withoutProse(_ line: String) -> String {
         var out = ""
         var literal: String?
@@ -147,8 +149,7 @@ public enum SecurityScanner {
             if escaped { escaped = false; text.append(character); literal = text; continue }
             if character == "\\" { escaped = true; text.append(character); literal = text; continue }
             if character == quote {
-                let prose = text.contains(" ") && !text.contains(where: { "%{=:".contains($0) })
-                out += prose ? "" : text
+                out += text.contains(" ") ? valuesIn(prose: text) : text
                 out.append(character)
                 literal = nil
                 continue
@@ -157,6 +158,16 @@ public enum SecurityScanner {
             literal = text
         }
         return out + (literal ?? "")
+    }
+
+    /// `password: %s`, `user %v`, `{password}`, `${user.idNumber}`, and a label ending the text.
+    private static let valueInProse = try! NSRegularExpression(
+        pattern: #"\w+\s*[:=]?\s*%[-+# 0-9.]*[a-zA-Z]|\$?\{[^}]*\}|\w+\s*[:=]\s*$"#)
+
+    static func valuesIn(prose text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        return valueInProse.matches(in: text, range: range).compactMap { Range($0.range, in: text).map { String(text[$0]) } }
+            .joined(separator: " ")
     }
 
     /// A connection string's host on this machine: a development setting.

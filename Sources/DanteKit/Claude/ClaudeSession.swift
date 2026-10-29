@@ -1335,6 +1335,9 @@ public final class ClaudeSession {
             if result.isError, !result.text.isEmpty, !alreadyShown {
                 note(result.text, isError: true)
             }
+            if result.isError, let advice = ClaudeCodeTooOld.explain(result.text) {
+                note(advice, isError: true)
+            }
             if let retry {
                 handToCodex(because: "has reached")
                 send(retry)

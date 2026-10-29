@@ -275,6 +275,11 @@ struct ClaudeRulesTests {
         #expect(Preferences.ClaudeModel.displayName(id: "haiku") == "Haiku")
         #expect(Preferences.ClaudeModel.displayName(id: "gpt-6") == nil)
         #expect(Preferences.ClaudeModel.fable.argument == "claude-fable-5-1")
+        // Every model by its full id: an older Claude Code maps an alias to the model it knew.
+        #expect(Preferences.ClaudeModel.opus.argument == "claude-opus-5-5")
+        let refusal = #"API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Claude Code 2.1.44 does not support this model; version 2.1.280 or newer is required.","details":{"error_code":"claude_code_version_too_old"}}}"#
+        #expect(ClaudeCodeTooOld.explain(refusal)?.hasPrefix("Claude Code 2.1.44 is too old for the model you picked (it needs 2.1.280 or newer). Run `claude update`") == true)
+        #expect(ClaudeCodeTooOld.explain("API Error: 529 overloaded") == nil)
         #expect(Preferences.ClaudeModel.picked.map(\.title) == ["Opus 5.5", "Sonnet 5.5", "Fable 5.1", "Haiku 5.5"])
     }
 

@@ -23,7 +23,7 @@ import Testing
         preferences.claudeAsksFirst = false
         let reloaded = Preferences(defaults: store)
         #expect(reloaded.indentWidth(for: .typescript) == 8)
-        #expect(reloaded.autoSave == .afterDelay && reloaded.claudeModel.argument == "sonnet" && !reloaded.claudeAsksFirst)
+        #expect(reloaded.autoSave == .afterDelay && reloaded.claudeModel.argument == "claude-sonnet-5-5" && !reloaded.claudeAsksFirst)
         #expect(Preferences.ClaudeModel.default.argument == nil)
     }
 

@@ -51,13 +51,16 @@ public final class Preferences {
         /// Fast mode runs on Opus only.
         public var hasFastMode: Bool { self == .opus }
 
-        /// The `--model` value, or nil to pass none. Fable goes by its full id, which every
-        /// Claude Code version accepts; the others by alias, so they follow new releases.
+        /// The `--model` value, or nil to pass none: the full id of the version the picker
+        /// names, which every Claude Code accepts. An alias resolves inside Claude Code, and an
+        /// older one maps `opus` to the model it knew (Opus 4.6 for 2.1.44), not the one shown.
         public var argument: String? {
             switch self {
             case .default: nil
+            case .opus: "claude-opus-5-5"
+            case .sonnet: "claude-sonnet-5-5"
             case .fable: "claude-fable-5-1"
-            default: rawValue
+            case .haiku: "claude-haiku-5-5"
             }
         }
 

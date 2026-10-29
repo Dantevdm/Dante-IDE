@@ -157,7 +157,7 @@ struct AgentsView: View {
         let installed = models ?? []
         let lead = session.claude?.engine ?? .claude
         let claudeRole = lead == .claude ? "In charge: writes, decides, checks" : "Reviews Codex’s work · Anthropic"
-        var result: [AgentSummary] = [AgentSummary(name: "Claude", role: claudeRole, model: Preferences.shared.claudeModel.argument ?? "Claude",
+        var result: [AgentSummary] = [AgentSummary(name: "Claude", role: claudeRole, model: Preferences.shared.claudeModel == .default ? "Claude" : Preferences.shared.claudeModel.title,
                                                    jobs: byAgent["Claude"] ?? [], color: theme.claude.color, isClaude: true,
                                                    availability: session.claude?.executable == nil ? "Unavailable · install Claude Code" : nil)]
         let codexJobs = byAgent["Codex"] ?? []

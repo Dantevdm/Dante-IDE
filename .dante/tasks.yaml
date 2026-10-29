@@ -707,3 +707,7 @@ tasks:
   phase: build
   state: review
   notes: "Checked in a test copy with a Go module where one package doesn't compile: the title says the tests passed but the run failed, the reason names the package, and the compile error shows above the final FAIL."
+- id: DI-162
+  title: "Security: a log message that mentions a password (\"login: wrong password\") is no longer flagged as personal information; Claude's model is passed by full id, and a Claude Code too old for it says to run claude update"
+  phase: build
+  state: review
