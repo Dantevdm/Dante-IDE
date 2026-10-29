@@ -256,6 +256,12 @@ final class CompanionHub {
                 self?.server?.deliver(.briefing(id: id, briefing: briefing), to: device)
             }
             return
+        case .place(let id, let project, let kind):
+            explore(project, device: device, id: id) { root, _ in
+                let input = await CompanionPlaces.gather(project: project, name: root.lastPathComponent, root: root)
+                return .place(id: id, place: CompanionPlaces.make(kind, input))
+            }
+            return
         case .screen(let id):
             // Only while Hands is on: the screen is what the person asked to watch.
             guard Preferences.shared.handsEnabled else {
@@ -312,7 +318,7 @@ final class CompanionHub {
     /// Nil when done, else why not.
     private func act(on message: ClientMessage) -> String? {
         switch message {
-        case .hello, .speech, .library, .page, .briefing, .replyMail, .screen, .stopHands:
+        case .hello, .speech, .library, .page, .briefing, .replyMail, .screen, .stopHands, .place:
             return nil
         case .openProject(_, let project):
             if let session = session(project) {

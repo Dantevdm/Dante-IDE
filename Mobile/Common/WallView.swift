@@ -13,25 +13,39 @@ struct WallView: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             GeometryReader { geometry in
-                let wide = geometry.size.width > 900
-                VStack(alignment: .leading, spacing: 22) {
-                    top(context.date)
+                let wide = geometry.size.width > geometry.size.height && geometry.size.width > 900
+                let gutter: CGFloat = wide ? 32 : 20
+                VStack(alignment: .leading, spacing: 20) {
                     if wide {
-                        HStack(alignment: .top, spacing: 18) {
-                            sections.frame(maxWidth: .infinity)
-                            agents.frame(width: geometry.size.width * 0.3)
+                        HStack(alignment: .top, spacing: 24) {
+                            VStack(alignment: .leading, spacing: 24) {
+                                clock(context.date, size: 120)
+                                agents.frame(maxHeight: .infinity, alignment: .top)
+                            }
+                            .frame(width: geometry.size.width * 0.34)
+                            cards(columns: 2).frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
+                        .frame(maxHeight: .infinity)
                     } else {
-                        sections
-                        agents
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 20) {
+                                clock(context.date, size: 96)
+                                agents
+                                cards(columns: 1)
+                            }
+                        }
                     }
-                    Spacer(minLength: 0)
                     voiceBar
                 }
-                .padding(wide ? 40 : 20)
+                .padding(gutter)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .background(Palette.background.ignoresSafeArea())
+            .overlay(alignment: .topTrailing) {
+                Button(action: close) { Image(systemName: "xmark.circle.fill").font(.title) }
+                    .foregroundStyle(Palette.text3).padding(20)
+                    .accessibilityLabel("Leave the wall")
+            }
             // Dimmed between ten at night and six in the morning.
             .opacity(Self.isNight(context.date) ? 0.4 : 1)
             .animation(.easeInOut(duration: 2), value: Self.isNight(context.date))
@@ -62,86 +76,117 @@ struct WallView: View {
         return hour >= 22 || hour < 6
     }
 
-    private func top(_ now: Date) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(now, format: .dateTime.hour().minute())
-                    .font(.system(size: 88, weight: .thin, design: .rounded)).monospacedDigit()
-                    .foregroundStyle(Palette.text)
-                Text(now, format: .dateTime.weekday(.wide).day().month(.wide))
-                    .font(.title2).foregroundStyle(Palette.text2)
+    /// The time, the day, and how things stand in one word and a colour.
+    private func clock(_ now: Date, size: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(now, format: .dateTime.hour().minute())
+                .font(.system(size: size, weight: .thin, design: .rounded)).monospacedDigit()
+                .foregroundStyle(Palette.text)
+                .lineLimit(1).minimumScaleFactor(0.5)
+            Text(now, format: .dateTime.weekday(.wide).day().month(.wide))
+                .font(.title).foregroundStyle(Palette.text2)
+            if let briefing = connection.briefing {
+                HStack(spacing: 10) {
+                    Circle().fill(color(briefing.status)).frame(width: 14, height: 14)
+                    Text(briefing.greeting).font(.title2.weight(.semibold)).foregroundStyle(Palette.text)
+                }
+                .padding(.top, 8)
+                Text("Updated \(briefing.date, format: .dateTime.hour().minute())").font(.subheadline).foregroundStyle(Palette.text3)
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 6) {
-                if let briefing = connection.briefing {
-                    HStack(spacing: 8) {
-                        Circle().fill(color(briefing.status)).frame(width: 12, height: 12)
-                        Text(briefing.greeting).font(.title2.weight(.semibold)).foregroundStyle(Palette.text)
-                    }
-                    Text("Updated \(briefing.date, format: .dateTime.hour().minute())").font(.footnote).foregroundStyle(Palette.text3)
-                }
-                if connection.status != .connected {
-                    Label("Can’t reach your Mac", systemImage: "wifi.slash").font(.footnote).foregroundStyle(Palette.amber)
-                } else if let problem {
-                    Text(problem).font(.footnote).foregroundStyle(Palette.text3)
-                }
-                Button(action: close) { Image(systemName: "xmark.circle.fill").font(.title2) }
-                    .foregroundStyle(Palette.text3)
-                    .accessibilityLabel("Leave the wall")
+            if connection.status != .connected {
+                Label("Can’t reach your Mac", systemImage: "wifi.slash").font(.subheadline).foregroundStyle(Palette.amber)
+            } else if let problem {
+                Text(problem).font(.subheadline).foregroundStyle(Palette.text3).lineLimit(2)
             }
         }
     }
 
-    @ViewBuilder private var sections: some View {
+    /// The update's sections as equal cards filling the space: projects, pipelines, mail, today.
+    @ViewBuilder private func cards(columns: Int) -> some View {
         if let briefing = connection.briefing {
-            let shown = briefing.sections.filter { !$0.summary.isEmpty || $0.problem != nil }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 14)], alignment: .leading, spacing: 14) {
-                ForEach(shown) { section in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(section.kind.title, systemImage: section.kind.symbol)
-                            .font(.headline).foregroundStyle(color(section.status))
-                        Text(section.summary.isEmpty ? (section.problem ?? "") : section.summary)
-                            .font(.title3).foregroundStyle(Palette.text).lineLimit(6)
-                        ForEach(section.items.prefix(3)) { item in
-                            HStack(spacing: 8) {
-                                Circle().fill(color(item.status)).frame(width: 6, height: 6)
-                                Text(item.title).font(.subheadline).foregroundStyle(Palette.text2).lineLimit(1)
-                            }
+            let shown = briefing.sections.filter { !$0.summary.isEmpty || $0.problem != nil || !$0.items.isEmpty
+                || $0.kind == .pipelines && !(briefing.pipelines ?? []).isEmpty }
+            if columns == 1 {
+                VStack(spacing: 16) { ForEach(shown) { card($0, pipelines: briefing.pipelines ?? []) } }
+            } else {
+                let rows = stride(from: 0, to: shown.count, by: 2).map { Array(shown[$0..<min($0 + 2, shown.count)]) }
+                VStack(spacing: 16) {
+                    ForEach(rows.indices, id: \.self) { index in
+                        HStack(alignment: .top, spacing: 16) {
+                            ForEach(rows[index]) { card($0, pipelines: briefing.pipelines ?? []).frame(maxHeight: .infinity, alignment: .top) }
+                            if rows[index].count == 1 { Color.clear.frame(maxWidth: .infinity) }
                         }
+                        .frame(maxHeight: .infinity)
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(18)
-                    .background(RoundedRectangle(cornerRadius: 18).fill(Palette.card))
-                    .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Palette.line))
                 }
             }
         } else {
             ContentUnavailableView("Your Mac is writing the update", systemImage: "sun.horizon")
-                .frame(maxWidth: .infinity, minHeight: 200)
+                .frame(maxWidth: .infinity, minHeight: 240)
         }
     }
 
-    /// What the agents are doing now, and what waits on you.
+    private func card(_ section: Briefing.Section, pipelines: [Briefing.Pipeline]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(section.kind.title, systemImage: section.kind.symbol)
+                .font(.title3.weight(.semibold)).foregroundStyle(color(section.status))
+            if !section.summary.isEmpty {
+                Text(section.summary).font(.title3).foregroundStyle(Palette.text)
+                    .lineLimit(section.kind == .projects ? 5 : 3).minimumScaleFactor(0.8)
+            } else if let problem = section.problem {
+                Text(problem).font(.body).foregroundStyle(Palette.text2).lineLimit(3)
+            }
+            if section.kind == .pipelines, !pipelines.isEmpty {
+                ForEach(pipelines.prefix(5)) { pipeline in WallPipeline(pipeline: pipeline) }
+            } else {
+                ForEach(section.items.prefix(4)) { item in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Circle().fill(color(item.status)).frame(width: 8, height: 8)
+                        Text(item.title).font(.body).foregroundStyle(Palette.text2).lineLimit(1)
+                        Spacer(minLength: 6)
+                        if let time = item.time {
+                            Text(time, format: Calendar.current.isDateInToday(time) ? .dateTime.hour().minute() : .dateTime.day().month())
+                                .font(.subheadline).foregroundStyle(Palette.text3)
+                        }
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 22).fill(Palette.card))
+        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(section.status == .bad ? Palette.red.opacity(0.4) : Palette.line))
+    }
+
+    /// What the agents are doing now, and what waits on you, a project a row.
     private var agents: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Agents", systemImage: "sparkles").font(.headline).foregroundStyle(Palette.accent)
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Agents", systemImage: "sparkles").font(.title3.weight(.semibold)).foregroundStyle(Palette.accent)
             let projects = connection.snapshot?.projects ?? []
             if projects.isEmpty {
-                Text("No projects open on your Mac.").font(.body).foregroundStyle(Palette.text2)
+                Text("No projects open on your Mac.").font(.title3).foregroundStyle(Palette.text2)
             }
             ForEach(projects, id: \.id) { project in
                 let running = project.jobs.filter { [.starting, .working].contains($0.state) }.count
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(project.name).font(.title3.weight(.medium)).foregroundStyle(Palette.text)
-                    Text(line(project, running: running)).font(.subheadline)
-                        .foregroundStyle(project.approvals.isEmpty ? Palette.text2 : Palette.amber)
+                HStack(alignment: .top, spacing: 12) {
+                    Circle().fill(!project.approvals.isEmpty ? Palette.amber : project.working ? Palette.accent : Palette.text3.opacity(0.5))
+                        .frame(width: 12, height: 12).padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(project.name).font(.title3.weight(.semibold)).foregroundStyle(Palette.text).lineLimit(1)
+                        Text(line(project, running: running)).font(.body)
+                            .foregroundStyle(project.approvals.isEmpty ? Palette.text2 : Palette.amber)
+                        if project.working, !project.lastReply.isEmpty {
+                            Text(project.lastReply.suffix(140)).font(.subheadline).foregroundStyle(Palette.text3).lineLimit(2)
+                        }
+                    }
                 }
             }
         }
+        .padding(22)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .padding(18)
-        .background(RoundedRectangle(cornerRadius: 18).fill(Palette.card))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Palette.line))
+        .background(RoundedRectangle(cornerRadius: 22).fill(Palette.card))
+        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Palette.line))
     }
 
     private func line(_ project: CompanionSnapshot.Project, running: Int) -> String {
@@ -177,6 +222,28 @@ struct WallView: View {
         case .idle:
             if let problem = voice.problem { return problem }
             return voice.isWaitingForWakeWord ? "Say “Hey Dante, give me my morning update”" : "Tap to talk"
+        }
+    }
+}
+
+/// A pipeline on the wall: its mark, name and where, and its stages.
+private struct WallPipeline: View {
+    let pipeline: Briefing.Pipeline
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: pipeline.isRunning ? "circle.dotted" : pipeline.status == .bad ? "xmark.circle.fill" : pipeline.status == .good ? "checkmark.circle.fill" : "minus.circle")
+                .font(.body.weight(.semibold)).foregroundStyle(pipeline.isRunning ? Palette.accent : color(pipeline.status))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(pipeline.name).font(.body.weight(.medium)).foregroundStyle(Palette.text).lineLimit(1)
+                Text([pipeline.project, pipeline.branch].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(Palette.text3).lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            HStack(spacing: 3) {
+                ForEach(pipeline.stages.prefix(8)) { stage in
+                    RoundedRectangle(cornerRadius: 2).fill(stage.status == .quiet && !stage.active ? Palette.line : color(stage.status)).frame(width: 16, height: 6)
+                }
+            }
         }
     }
 }

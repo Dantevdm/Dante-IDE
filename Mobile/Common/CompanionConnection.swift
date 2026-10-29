@@ -141,7 +141,7 @@ final class CompanionConnection {
             tell(events)
         case .refused(let reason):
             refuse(reason)
-        case .library(let id, _), .page(let id, _), .screen(let id, _):
+        case .library(let id, _), .page(let id, _), .screen(let id, _), .place(let id, _):
             exploreRequests.removeValue(forKey: id)?.resume(returning: message)
         case .briefing(let id, let briefing):
             self.briefing = briefing
@@ -344,6 +344,15 @@ final class CompanionConnection {
         }
     }
 
+    /// Home, Tests, Security, Ship or Activity, written by the Mac from what it keeps.
+    func place(_ kind: CompanionPlace.Kind, project: String) async -> Result<CompanionPlace, ExploreFailure> {
+        switch await explore(timeout: 45, { .place(id: $0, project: project, kind: kind) }) {
+        case .place(_, let place)?: .success(place)
+        case .result(_, _, let message)?: .failure(.init(message: message))
+        default: .failure(.unreachable(status))
+        }
+    }
+
     struct ExploreFailure: Error, Equatable {
         var message: String
 
@@ -416,6 +425,16 @@ final class CompanionConnection {
         if case .screen(_, let image)? = await explore(timeout: 8, { .screen(id: $0) }) { return image }
         return nil
     }
+
+    #if DEBUG
+    /// Simulator testing of the iPad's screens with made-up data and no Mac (`DANTE_WALL_DEMO=1`).
+    func showDemo(_ snapshot: CompanionSnapshot, briefing: Briefing) {
+        pairing = CompanionPairing(host: "100.64.0.1", port: Companion.defaultPort, name: snapshot.server, key: CompanionPairing.newKey())
+        status = .connected
+        self.snapshot = snapshot
+        self.briefing = briefing
+    }
+    #endif
 
     /// Hands' kill switch on the Mac.
     func stopHands() {

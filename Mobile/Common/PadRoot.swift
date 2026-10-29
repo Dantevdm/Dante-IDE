@@ -1,70 +1,126 @@
 import SwiftUI
 
-/// The iPad: projects, then the chosen one's library, then what's open in it. With nothing
-/// open the right side is Home (talk, approvals, jobs), as on the phone.
+/// The iPad: the Mac's rail on the left (Home, Map, Quality, Ship, Agents and Docs; Code stays
+/// on the Mac) for the chosen project, with Today and the Wall above it. The sidebar folds
+/// away with its button, leaving the page full width.
 struct PadRoot: View {
     let connection: CompanionConnection
     let voice: VoiceLoop
     let explorer: Explorer
-    @State private var project: String?
-    @State private var entry: CompanionLibrary.Entry?
+    @AppStorage("padPlace") private var place: Place = .home
+    @AppStorage("padProject") private var chosen = ""
     @State private var columns = NavigationSplitViewVisibility.all
-    @State private var today = false
     @State private var wall = ProcessInfo.processInfo.environment["DANTE_WALL"] == "1"
+
+    enum Place: String, Hashable {
+        case today, home, map, tests, security, ship, talk, activity, docs
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
-            List(selection: $project) {
+            List(selection: Binding(get: { place }, set: { if let new = $0 { place = new } })) {
+                Section { projectPicker }
                 Section {
-                    Button {
-                        entry = nil
-                        today = false
-                    } label: {
-                        Label("Home", systemImage: "house").foregroundStyle(entry == nil && !today ? Palette.accent : Palette.text)
-                    }
-                    Button {
-                        entry = nil
-                        today = true
-                    } label: {
-                        Label("Today", systemImage: "sun.horizon").foregroundStyle(today ? Palette.accent : Palette.text)
-                    }
-                    Button {
-                        wall = true
-                    } label: {
-                        Label("Wall", systemImage: "rectangle.inset.filled").foregroundStyle(Palette.text)
-                    }
+                    row(.today, "Today", "sun.horizon")
+                    Button { wall = true } label: { Label("Wall", systemImage: "rectangle.inset.filled").foregroundStyle(Palette.text) }
                 }
-                Section("Projects") {
-                    ForEach(explorer.projects, id: \.id) { project in
-                        Label(project.name, systemImage: project.isOpen ? "folder.fill" : "folder").tag(project.id)
-                    }
+                Section(project?.name ?? "Project") {
+                    row(.home, "Home", "house")
+                    row(.map, "Map", "point.3.connected.trianglepath.dotted")
+                }
+                Section("Quality") {
+                    row(.tests, "Tests", "checkmark.seal")
+                    row(.security, "Security", "lock.shield")
+                }
+                Section("Ship") {
+                    row(.ship, "Release", "shippingbox")
+                }
+                Section("Agents") {
+                    row(.talk, "Talk and jobs", "bubble.left.and.text.bubble.right", badge: connection.snapshot?.waiting ?? 0)
+                    row(.activity, "Activity", "sparkles")
+                }
+                Section {
+                    row(.docs, "Docs", "book")
                 }
             }
+            .listStyle(.sidebar)
             .navigationTitle(connection.pairing?.name ?? "Dante")
-        } content: {
-            if let project, let name = explorer.projects.first(where: { $0.id == project })?.name {
-                LibraryView(explorer: explorer, project: project, name: name, selection: $entry)
-            } else {
-                ContentUnavailableView("Choose a project", systemImage: "folder", description: Text("Its docs, pictures and diagrams, drawn by your Mac."))
-            }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
         } detail: {
-            if today {
-                NavigationStack { TodayView(connection: connection, voice: voice) }
-            } else if let entry, let project {
-                NavigationStack { PageView(explorer: explorer, project: project, entry: entry) }.id(project + entry.path)
-            } else {
-                PhoneHome(connection: connection, voice: voice, explorer: explorer)
+            Group {
+                // Talk and jobs is the phone's screen, which brings its own stack.
+                if place == .talk { PhoneHome(connection: connection, voice: voice, explorer: explorer) } else { NavigationStack { detail } }
             }
+            .id((project?.id ?? "") + place.rawValue)
         }
         .waitingPrompt(connection, active: !wall)
         .fullScreenCover(isPresented: $wall) {
             WallView(connection: connection, voice: voice) { wall = false }
                 .waitingPrompt(connection)
         }
-        .onChange(of: project) { entry = nil }
-        .onChange(of: entry) { if entry != nil { today = false } }
-        .onChange(of: connection.snapshot?.projects.map(\.id)) {
-            if project == nil { project = explorer.projects.first?.id }
+        .onChange(of: project?.id) { voice.focus = project?.id }
+    }
+
+    @ViewBuilder private var detail: some View {
+        if place == .today {
+            TodayView(connection: connection, voice: voice)
+        } else if let project {
+            switch place {
+            case .home: PlaceView(connection: connection, project: project.id, kind: .home, open: open)
+            case .tests: PlaceView(connection: connection, project: project.id, kind: .tests)
+            case .security: PlaceView(connection: connection, project: project.id, kind: .security)
+            case .ship: PlaceView(connection: connection, project: project.id, kind: .ship)
+            case .activity: PlaceView(connection: connection, project: project.id, kind: .activity)
+            case .map: MapPlace(explorer: explorer, project: project.id)
+            case .docs: LibraryView(explorer: explorer, project: project.id, name: project.name)
+            case .today, .talk: EmptyView()
+            }
+        } else {
+            ContentUnavailableView("No projects on your Mac", systemImage: "folder",
+                                   description: Text(connection.status == .connected ? "Open one in Dante and it shows here." : "Connecting to your Mac…"))
+        }
+    }
+
+    /// The chosen project, else the first open one, else the most recent.
+    private var project: (id: String, name: String, isOpen: Bool)? {
+        explorer.projects.first { $0.id == chosen } ?? explorer.projects.first
+    }
+
+    private var projectPicker: some View {
+        Menu {
+            ForEach(explorer.projects, id: \.id) { candidate in
+                Button {
+                    chosen = candidate.id
+                } label: {
+                    Label(candidate.name, systemImage: candidate.id == project?.id ? "checkmark" : candidate.isOpen ? "folder.fill" : "folder")
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "folder.fill").foregroundStyle(Palette.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(project?.name ?? "No project").font(.headline).foregroundStyle(Palette.text).lineLimit(1)
+                    Text(project.map { $0.isOpen ? "Open on the Mac" : "Recent" } ?? "").font(.caption).foregroundStyle(Palette.text3)
+                }
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(Palette.text3)
+            }
+        }
+    }
+
+    private func row(_ target: Place, _ title: String, _ symbol: String, badge: Int = 0) -> some View {
+        Label(title, systemImage: symbol)
+            .badge(badge)
+            .tag(target)
+    }
+
+    private func open(_ kind: CompanionPlace.Kind) {
+        switch kind {
+        case .home: place = .home
+        case .tests: place = .tests
+        case .security: place = .security
+        case .ship: place = .ship
+        case .activity: place = .activity
         }
     }
 }

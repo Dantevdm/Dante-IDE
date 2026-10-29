@@ -141,6 +141,8 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     case page(id: String, page: CompanionPage)
     /// The morning update (`ClientMessage.briefing`).
     case briefing(id: String, briefing: Briefing)
+    /// One of the Mac's places for a project (`ClientMessage.place`).
+    case place(id: String, place: CompanionPlace)
     /// The Mac's main screen as a JPEG (`ClientMessage.screen`), nil when Hands is off.
     case screen(id: String, image: Data?)
 }
@@ -169,6 +171,8 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// "Reply to Ana that Thursday works": the Mac opens a reply in Outlook for the person to
     /// send, and answers with `result` saying what it did.
     case replyMail(id: String, who: String, says: String)
+    /// Home, Tests, Security, Ship or Activity for a project, open or recent.
+    case place(id: String, project: String, kind: CompanionPlace.Kind)
     /// A picture of the Mac's screen, to watch Hands at work. Answered only while Hands is on.
     case screen(id: String)
     /// Hands' kill switch: stops every step and turns Hands off on the Mac.
@@ -179,7 +183,7 @@ public enum ClientMessage: Codable, Equatable, Sendable {
         case .hello: nil
         case .ask(let id, _, _, _, _), .answer(let id, _, _, _, _, _), .startJob(let id, _, _, _), .stop(let id, _, _), .speech(let id, _), .setApprovals(let id, _, _), .openProject(let id, _),
              .library(let id, _), .page(let id, _, _), .briefing(let id, _), .replyMail(let id, _, _),
-             .screen(let id), .stopHands(let id): id
+             .screen(let id), .stopHands(let id), .place(let id, _, _): id
         }
     }
 }

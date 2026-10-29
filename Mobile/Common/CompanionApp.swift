@@ -49,6 +49,10 @@ struct CompanionApp: App {
                     glance.update(CompanionGlance.make(demo, connected: true), server: demo.server)
                     await notices.demo(demo)
                 }
+                if ProcessInfo.processInfo.environment["DANTE_WALL_DEMO"] == "1" {
+                    connection.showDemo(DemoData.snapshot, briefing: DemoData.briefing)
+                    return
+                }
                 // Simulator testing: `SIMCTL_CHILD_DANTE_PAIR_LINK=<link> xcrun simctl launch …`
                 // (an unsigned build can't keep the pairing in the Keychain).
                 if let link = ProcessInfo.processInfo.environment["DANTE_PAIR_LINK"], let url = URL(string: link),
