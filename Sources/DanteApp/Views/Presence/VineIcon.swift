@@ -50,6 +50,10 @@ final class VineIcon: NSView {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.clock += (1.0 / 20) * (1 + 1.5 * self.intensity)
+                // Every redraw goes through the system's menu bar, so none while nobody can see it
+                // (screens asleep, a full-screen app hiding the bar): fewer trips through code
+                // that has crashed Dante on wake.
+                guard self.window?.occlusionState.contains(.visible) == true else { return }
                 self.needsDisplay = true
             }
         }

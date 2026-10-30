@@ -188,11 +188,11 @@ private struct ClaudePreferencesPane: View {
                 .onChange(of: preferences.claudeModel) { Sessions.all.forEach { $0.applyClaudePreferences() } }
                 Picker("Effort", selection: $preferences.claudeEffort) {
                     Text("Claude Code’s default").tag("")
-                    Text("Low").tag("low")
-                    Text("Medium").tag("medium")
-                    Text("High").tag("high")
+                    ForEach(ModelPicker.claudeEfforts.dropFirst(), id: \.0) { id, title, note, _ in
+                        Text(note.map { "\(title) (\($0))" } ?? title).tag(id)
+                    }
                 }
-                .help("How hard Claude thinks before answering. Low uses the least of your plan; the chat footer’s model menu changes it per message too.")
+                .help("How hard Claude thinks before answering. Low uses the least of your plan, Extra and Max the most (Max 3.5× or more); the chat footer’s model menu changes it per message too.")
                 .onChange(of: preferences.claudeEffort) { Sessions.all.forEach { $0.applyClaudePreferences() } }
                 if SystemStatus.detect().claudePath == nil {
                     Label("Claude Code isn’t installed. Claude chat and coding features are unavailable.", systemImage: "exclamationmark.triangle.fill")

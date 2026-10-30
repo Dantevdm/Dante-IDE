@@ -48,13 +48,27 @@ struct ModelPicker: View {
 
     // MARK: Claude
 
+    /// Claude Code's `--effort` levels: id, title, note and help. Extra is `xhigh`.
+    static let claudeEfforts: [(String, String, String?, String)] = [
+        ("", "Default", nil, "Claude Code’s own choice"),
+        ("low", "Low", nil, "Quick answers and small edits; uses the least"),
+        ("medium", "Medium", "Recommended", "Most work"),
+        ("high", "High", nil, "Hard problems; more thorough, slower"),
+        ("xhigh", "Extra", nil, "Harder problems still; uses your limits faster"),
+        ("max", "Max", "3.5× or more usage", "The most thorough; uses your limits much faster"),
+    ]
+
+    static func effortTitle(_ id: String) -> String {
+        claudeEfforts.first { $0.0 == id }?.1 ?? id.capitalized
+    }
+
     private var claudeMenu: PickerMenu {
         let chosen = Preferences.shared.claudeModel
         let effort = Preferences.shared.claudeEffort
         let fastAllowed = chosen.hasFastMode
         return PickerMenu(
             model: claudeModelName,
-            effortLabel: effort.isEmpty ? nil : effort.capitalized,
+            effortLabel: effort.isEmpty ? nil : Self.effortTitle(effort),
             fast: Preferences.shared.claudeFastMode && fastAllowed,
             heading: "Claude",
             options: Preferences.ClaudeModel.picked.map { model in
@@ -63,10 +77,9 @@ struct ModelPicker: View {
             },
             more: [PickerOption(id: "default", title: "Claude Code’s default", checked: chosen == .default,
                                 help: "Whatever Claude Code picks for your plan") { chooseClaude(.default) }],
-            effortTitle: effort.isEmpty ? "Default" : effort.capitalized,
-            efforts: [("", "Default", "Claude Code’s own choice"), ("low", "Low", "Quick answers and small edits; uses the least"),
-                      ("medium", "Medium", "Most work"), ("high", "High", "Hard problems; uses the most")].map { id, title, help in
-                PickerOption(id: id, title: title, checked: effort == id, help: help) {
+            effortTitle: effort.isEmpty ? "Default" : Self.effortTitle(effort),
+            efforts: Self.claudeEfforts.map { id, title, note, help in
+                PickerOption(id: id, title: title, note: note, checked: effort == id, help: help) {
                     Preferences.shared.claudeEffort = id
                     applyAll()
                 }

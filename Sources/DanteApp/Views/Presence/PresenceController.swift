@@ -243,7 +243,9 @@ final class PresenceController: NSObject {
         if model.mood != mood { model.mood = mood }
         for orb in watchers.allObjects { orb.mood = mood }
         icon?.mood = mood
-        statusItem?.button?.toolTip = "\(mood.title) · \(presence.line)"
+        // Only when it changes: each set is a round trip to the system's menu bar.
+        let tip = "\(mood.title) · \(presence.line)"
+        if let button = statusItem?.button, button.toolTip != tip { button.toolTip = tip }
         recheck?.invalidate()
         recheck = nil
         if let until {
