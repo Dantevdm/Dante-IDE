@@ -214,12 +214,40 @@ public enum PDFTools {
 
     // MARK: Combining and splitting
 
-    /// One document from several, in order; bookmarks of the first are kept.
+    /// One document from several, in order, with every one's bookmarks pointing at its pages
+    /// in the result (the pages are copies, so the old bookmarks would point elsewhere).
     public static func combine(_ documents: [PDFDocument]) -> PDFDocument {
         let result = PDFDocument()
-        for document in documents { insert(document, into: result, at: result.pageCount) }
-        if let outline = documents.first?.outlineRoot { result.outlineRoot = outline }
+        let root = PDFOutline()
+        for document in documents {
+            let offset = result.pageCount
+            insert(document, into: result, at: offset)
+            guard let outline = document.outlineRoot else { continue }
+            for index in 0..<outline.numberOfChildren {
+                guard let child = outline.child(at: index),
+                      let copy = copied(child, from: document, into: result, offset: offset) else { continue }
+                root.insertChild(copy, at: root.numberOfChildren)
+            }
+        }
+        if root.numberOfChildren > 0 { result.outlineRoot = root }
         return result
+    }
+
+    /// A bookmark and its children, aimed at the same places among pages copied in at `offset`.
+    private static func copied(_ item: PDFOutline, from source: PDFDocument, into result: PDFDocument, offset: Int) -> PDFOutline? {
+        let copy = PDFOutline()
+        copy.label = item.label
+        copy.isOpen = item.isOpen
+        if let destination = item.destination, let page = destination.page,
+           let target = result.page(at: offset + source.index(for: page)) {
+            copy.destination = PDFDestination(page: target, at: destination.point)
+        }
+        for index in 0..<item.numberOfChildren {
+            if let child = item.child(at: index), let inner = copied(child, from: source, into: result, offset: offset) {
+                copy.insertChild(inner, at: copy.numberOfChildren)
+            }
+        }
+        return copy
     }
 
     public static func extract(_ document: PDFDocument, pages: [Int]) -> PDFDocument {

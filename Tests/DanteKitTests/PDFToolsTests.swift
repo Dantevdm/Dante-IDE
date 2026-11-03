@@ -60,6 +60,25 @@ struct PDFToolsTests {
         #expect(saved.index(for: first) == 0)
     }
 
+    @Test func briefNamesTheCommand() {
+        let brief = ClaudeBrief.pdfTools(command: "/home/me/Dante.app/Contents/Resources/bin/dante")
+        #expect(brief.contains("/home/me/Dante.app/Contents/Resources/bin/dante pdf"))
+        #expect(brief.contains("merge <out.pdf>"))
+    }
+
+    @Test func combiningKeepsEveryonesBookmarks() throws {
+        let combined = PDFTools.combine([Self.bookmarked(pages: 2), Self.bookmarked(pages: 3)])
+        let url = FileManager.default.temporaryDirectory.appending(path: "combined-\(UUID().uuidString).pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try PDFTools.save(combined, to: url)
+        let saved = try #require(PDFDocument(url: url))
+        let root = try #require(saved.outlineRoot)
+        #expect(root.numberOfChildren == 5)
+        let last = try #require(root.child(at: 4)?.destination?.page)
+        #expect(root.child(at: 4)?.label == "Part 3")
+        #expect(saved.index(for: last) == 4)
+    }
+
     @Test func readsPageRanges() throws {
         #expect(try PDFTools.pages("1-3, 5, 8-", count: 9) == [0, 1, 2, 4, 7, 8])
         #expect(try PDFTools.pages("", count: 3) == [0, 1, 2])

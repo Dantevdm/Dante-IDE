@@ -85,6 +85,15 @@ public enum ClaudeBrief {
     Get it right the first time. Before starting a request that is ambiguous, underspecified, or has several reasonable readings, ask the user with the AskUserQuestion tool and wait for the answers. Ask everything you need in one go (up to four questions), give 2–4 concrete options each with the one you recommend first, and say briefly what each option means for the result. Don't ask what you can find out from the code, the .dante folder or git history; look first. For small, clear requests, just do them.
     """
 
+    /// How to work on PDFs from a shell, with the `dante` command inside this copy of Dante.
+    public static func pdfTools(command: String) -> String {
+        let dante = Shell.quote(command)
+        return """
+        # PDFs
+        Use `\(dante) pdf` for PDFs rather than writing scripts: `info <file>`, `text <file> [--pages 1-3]` and `comments <file>` read one; `merge <out.pdf> <a.pdf> <b.pdf>`, `extract <file> --pages 2,5- -o <out.pdf>`, `split <file> --every 1 -o <folder>`, `rotate <file> --pages 1 --by 90`, `delete <file> --pages 3` and `move <file> --pages 4 --to 1` change pages (saved atomically, in place without -o); `protect <file> -o <out.pdf>` sets the password in DANTE_PDF_PASSWORD, which also opens an encrypted PDF. Pages are 1-based. Run `\(dante) pdf` alone for the details. In the app, PDFs open in Docs with comments, page tools and search.
+        """
+    }
+
     public static func systemPrompt(for workspace: Workspace?) -> String {
         sections(for: workspace).map(\.text).joined(separator: "\n\n")
     }
@@ -97,6 +106,9 @@ public enum ClaudeBrief {
             Section(title: "Pair mode", source: "built in", text:
                 "You are a pair, not an autopilot. The user reviews every file change as a diff and every command before it runs. Make focused edits with the Edit tool, and say briefly what each change does and why."),
         ]
+        if let command = CommandLineTool.bundled()?.path {
+            sections.append(Section(title: "PDFs", source: "built in", text: pdfTools(command: command)))
+        }
         guard let workspace else { return sections }
         if let standards = workspace.standards, let brief = StandardsBrief.brief(standards) {
             sections.append(Section(title: "House standards", source: "docs/standards and themes", text: brief))
