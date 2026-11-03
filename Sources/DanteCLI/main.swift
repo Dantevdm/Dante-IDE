@@ -1,6 +1,7 @@
 import DanteKit
 import DanteOpen
 import Foundation
+import PDFKit
 
 // `dante`: opens folders and files in Dante from the terminal. It lives in Dante.app at
 // Contents/Resources/bin/dante and hands a dante://open URL to the app it's inside.
@@ -137,6 +138,110 @@ func send(_ url: URL, background: Bool = false) -> Never {
         fail("couldn't open Dante: \(error.localizedDescription)")
     }
     exit(open.terminationStatus)
+}
+
+// `dante pdf <info|text|comments|merge|extract|split|rotate|delete|move|protect> …`: the PDF
+// view's tools for scripts and agents. Passwords come from DANTE_PDF_PASSWORD, never arguments.
+if CommandLine.arguments.dropFirst().first == "pdf" {
+    var arguments = Array(CommandLine.arguments.dropFirst(2))
+    let usage = """
+    dante pdf info <file>                          pages, title, author, encryption and what's in it
+    dante pdf text <file> [--pages 1-3]            the text, page by page
+    dante pdf comments <file>                      comments and their replies
+    dante pdf merge <out.pdf> <a.pdf> <b.pdf>…     one PDF from several, in order
+    dante pdf extract <file> --pages 2,5-7 -o <out.pdf>
+    dante pdf split <file> [--every 1 | --at 4,9] [-o <folder>]
+    dante pdf rotate <file> --pages 1-2 [--by 90] [-o <out.pdf>]
+    dante pdf delete <file> --pages 3 [-o <out.pdf>]
+    dante pdf move <file> --pages 5 --to 1 [-o <out.pdf>]
+    dante pdf protect <file> [-o <out.pdf>]        sets DANTE_PDF_PASSWORD as its password
+
+    Pages are 1-based: 1-3, 5, 8- (to the end), last. Without -o, changes are saved in place.
+    An encrypted PDF opens with DANTE_PDF_PASSWORD.
+    """
+    func value(_ names: String...) -> String? {
+        guard let index = arguments.firstIndex(where: names.contains), index + 1 < arguments.count else { return nil }
+        defer { arguments.removeSubrange(index...index + 1) }
+        return arguments[index + 1]
+    }
+    guard let command = arguments.first, !["-h", "--help", "help"].contains(command) else { print(usage); exit(0) }
+    arguments.removeFirst()
+    let password = ProcessInfo.processInfo.environment["DANTE_PDF_PASSWORD"]
+    let here = URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory)
+    func file(_ path: String) -> URL { URL(filePath: path, relativeTo: here).standardizedFileURL }
+    let pagesText = value("--pages", "-p")
+    let output = value("-o", "--output").map(file)
+    let every = value("--every").flatMap(Int.init)
+    let cuts = value("--at")
+    let by = value("--by").flatMap(Int.init) ?? 90
+    let destination = value("--to").flatMap(Int.init)
+    do {
+        if command == "merge" {
+            guard arguments.count >= 3 else { fail("merge takes the output and at least two PDFs") }
+            let target = file(arguments[0])
+            let documents = try arguments.dropFirst().map { try PDFTools.open(file($0), password: password) }
+            try PDFTools.save(PDFTools.combine(documents), to: target)
+            print("Wrote \(target.lastPathComponent): \(documents.map(\.pageCount).reduce(0, +)) pages")
+            exit(0)
+        }
+        guard let path = arguments.first else { fail("\(command) needs a PDF.\n\(usage)") }
+        let source = file(path)
+        let document = try PDFTools.open(source, password: password)
+        let pages = { try PDFTools.pages(pagesText ?? "", count: document.pageCount) }
+        func needsChanges() {
+            if !document.allowsDocumentChanges { fail(PDFTools.Failure.notAllowed("changes").localizedDescription) }
+        }
+        switch command {
+        case "info":
+            print(PDFTools.info(document).summary)
+        case "text":
+            print(PDFTools.text(document, pages: try pages()))
+        case "comments":
+            let threads = PDFTools.threads(in: document)
+            if threads.isEmpty { print("No comments.") }
+            for thread in threads {
+                print("Page \(thread.page + 1) · \(thread.author): \(thread.text)" + (thread.quote.map { "  [on “\($0)”]" } ?? ""))
+                for reply in thread.replies { print("    ↳ \(reply.userName ?? "Someone"): \(reply.contents ?? "")") }
+            }
+        case "extract":
+            guard pagesText != nil, let output else { fail("extract takes --pages and -o") }
+            let chosen = try pages()
+            try PDFTools.save(PDFTools.extract(document, pages: chosen), to: output)
+            print("Wrote \(output.lastPathComponent): \(chosen.count) pages")
+        case "split":
+            let starts = try every.map { PDFTools.splitPoints(every: $0, count: document.pageCount) }
+                ?? cuts.map { try PDFTools.pages($0, count: document.pageCount) } ?? PDFTools.splitPoints(every: 1, count: document.pageCount)
+            let parts = PDFTools.split(document, cuttingAt: starts)
+            let urls = PDFTools.partURLs(for: source, count: parts.count, in: output)
+            if let output { try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true) }
+            for (part, url) in zip(parts, urls) { try PDFTools.save(part, to: url) }
+            print("Wrote \(parts.count) \(parts.count == 1 ? "file" : "files"): \(urls.first!.lastPathComponent) … \(urls.last!.lastPathComponent)")
+        case "rotate", "delete", "move":
+            needsChanges()
+            guard pagesText != nil else { fail("\(command) takes --pages") }
+            let chosen = try pages()
+            switch command {
+            case "rotate": PDFTools.rotate(document, pages: chosen, by: by)
+            case "delete":
+                guard chosen.count < document.pageCount else { fail("that would delete every page") }
+                PDFTools.delete(document, pages: chosen)
+            default:
+                guard let destination, destination >= 1, destination <= document.pageCount + 1 else { fail("move takes --to <page>") }
+                PDFTools.move(document, pages: chosen, to: destination - 1)
+            }
+            try PDFTools.save(document, to: output ?? source, password: output == nil && document.isEncrypted ? password : nil)
+            print("Saved \((output ?? source).lastPathComponent): \(document.pageCount) pages")
+        case "protect":
+            guard let password, !password.isEmpty else { fail("set DANTE_PDF_PASSWORD to the password") }
+            try PDFTools.save(document, to: output ?? source, password: password)
+            print("Protected \((output ?? source).lastPathComponent)")
+        default:
+            fail("no pdf command \(command).\n\(usage)")
+        }
+    } catch {
+        fail(error.localizedDescription)
+    }
+    exit(0)
 }
 
 // `dante job <what to do> [--in folder] [--away minutes] [--codex]`: hands a job to an agent
