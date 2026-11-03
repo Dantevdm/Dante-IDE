@@ -38,6 +38,7 @@ struct DiagramCanvas: View {
     @State private var guides: [DiagramSnap.Guide] = []
     @State private var hover: CGPoint?
     @State private var magnifyStart: CGFloat?
+    @State private var contentOffset: CGPoint = .zero
     @FocusState private var focused: Bool
 
     private var diagram: Diagram { document.diagram }
@@ -74,6 +75,15 @@ struct DiagramCanvas: View {
                         y: (geometry.contentOffset.y + geometry.containerSize.height / 2) / zoom)
             } action: { _, center in
                 viewCenter = center
+            }
+            .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, offset in contentOffset = offset }
+            // A mouse's wheel (or ⌘ and a trackpad) zooms around the pointer; trackpads still pan.
+            .onPointerZoom { factor, point in
+                let new = min(2.5, max(0.25, zoom * factor))
+                guard new != zoom else { return }
+                let target = PointerZoom.offset(keeping: point, at: contentOffset, from: zoom, to: new)
+                zoom = new
+                scroll.scrollTo(point: target)
             }
             .background(theme.panel.color)
             .simultaneousGesture(MagnifyGesture()

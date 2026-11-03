@@ -77,6 +77,8 @@ import Testing
     @Test func recognisesLimitMessages() {
         #expect(Vitality.isLimitMessage("Claude AI usage limit reached|1760000000"))
         #expect(Vitality.isLimitMessage("You've hit your limit · resets 3pm"))
+        #expect(Vitality.isLimitMessage("You've hit your session limit · resets 2:20pm (Africa/Johannesburg)"))
+        #expect(Vitality.isLimitMessage("You've hit your weekly limit · resets Nov 6, 9am"))
         #expect(!Vitality.isLimitMessage("Not logged in · Please run /login"))
     }
 

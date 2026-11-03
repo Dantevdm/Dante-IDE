@@ -24,6 +24,8 @@ Data connects to the project's databases: browse tables, run queries, read query
 ## Actions
 - Connect to a database (a URL or host details); create a new local one (a compose service or a SQLite file) with the wizard.
 - Run queries; explain a query; preview a migration before running it.
+- Completion while writing a query (`SQLCompletion`, from the connection's schema): after FROM, JOIN, INTO, UPDATE and TABLE the tables and views; after `alias.` or `table.` that table's columns (aliases defined later in the statement count); elsewhere the columns of the tables the statement names (all tables when it names none), then keywords in the case being typed, the engine's functions and tables. A space opens the list only after FROM/JOIN; names that need it are quoted (Postgres mixed case).
+- Zoom the schema diagram: the mouse wheel or a pinch zooms around the pointer, ⌘ and a trackpad scroll zooms too, plain trackpad scrolling pans, and the corner has −, the percentage (back to fit) and +. It's drawn as vectors, so text stays sharp at any zoom.
 - Turn read-only on or off for a connection (on for anything not on this Mac).
 - Ask the agent about the data, or to design or compare the schema with the code.
 - Copy a suggestion's SQL, or ask the agent to make the suggested changes as a new migration.

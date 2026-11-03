@@ -21,6 +21,7 @@ Setup is how the agents are set up for this project: skills, memory files, conne
 - Write or tighten a memory file with the agent.
 - Install a plugin (asks first); open settings.json.
 - Resume a recent conversation.
+- Reopening a project (or Dante after a crash) continues the conversation it last had, Claude's session or Codex's thread, for a week per project on this Mac: the transcript shows again and the next message continues it. After a crash a note says Dante closed unexpectedly (pointing at Help › Crash Reports…), and when it closed mid-turn, saying “carry on” picks up from the last step. Clearing the conversation forgets it.
 
 ## Acceptance
 - Nothing is installed or deleted without a confirmation.

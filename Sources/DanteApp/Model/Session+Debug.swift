@@ -81,7 +81,7 @@ extension Session {
         sidebar = .debug
         let points = breakpoints.mapValues { Array($0) }
         let root = workspace.url
-        Task { await session.start(root: root, environment: Shell.environment(), breakpoints: points) }
+        Task { await session.start(root: root, environment: Shell.environment(for: root), breakpoints: points) }
     }
 
     func stopDebugging() {

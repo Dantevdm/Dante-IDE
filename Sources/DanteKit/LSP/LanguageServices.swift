@@ -23,7 +23,7 @@ public final class LanguageServices {
         let options = LanguageServerOptions.load()[server.name]
         guard options?.enabled ?? true else { return nil }
         do {
-            let client = try LSPClient(server: server.applying(options), root: root, environment: Shell.environment(), options: options,
+            let client = try LSPClient(server: server.applying(options), root: root, environment: Shell.environment(for: root), options: options,
                                        host: host(for: server, options: options))
             clients[server.name] = client
             return client

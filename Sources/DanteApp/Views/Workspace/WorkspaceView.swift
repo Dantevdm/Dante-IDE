@@ -39,6 +39,7 @@ struct WorkspaceView: View {
                         case .agents: AgentsView(session: session, workspace: workspace)
                         case .jobs: JobsView(session: session, workspace: workspace)
                         case .security: SecurityView(session: session, workspace: workspace)
+                        case .review: ReviewView(session: session, workspace: workspace)
                         }
                     }
                     .environment(\.underPlaceTabs, session.area.place.pages.count > 1)
@@ -75,6 +76,7 @@ struct WorkspaceView: View {
         .onChange(of: session.place) { previous, _ in session.placeChanged(from: previous) }
         // Git status feeds the Changes tab, the branch button and its sync arrows.
         .task(id: "\(workspace.revision)#\(session.gitRevision)") { await session.git.load(workspace.url) }
+        .task(id: workspace.revision) { await session.reloadMise() }
         .task(id: "\(workspace.revision)#\(Preferences.shared.standardsLibrary)") { await workspace.reloadStandards(library: Preferences.shared.standardsLibraryURL) }
         // Alarms are watched for the whole window, so one that starts firing can notify.
         .task(id: workspace.info.alarms) { session.watchAlarms() }

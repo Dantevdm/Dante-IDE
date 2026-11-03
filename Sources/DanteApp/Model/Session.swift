@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, map, code, tests, security, environments, data, ship, run, timeline, claude, agents, jobs, docs
+    case home, map, code, tests, security, review, environments, data, ship, run, timeline, claude, agents, jobs, docs
 
     var id: String { rawValue }
 
@@ -30,6 +30,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .code: "chevron.left.forwardslash.chevron.right"
         case .tests: "testtube.2"
         case .security: "shield.lefthalf.filled"
+        case .review: "eye"
         case .environments: "server.rack"
         case .data: "cylinder.split.1x2"
         case .ship: "paperplane"
@@ -50,6 +51,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .code: "The editor, file explorer and terminal."
         case .tests: "Tests traced to specs and code paths, coverage by component, and tests Claude can draft."
         case .security: "Secrets, personal information, encryption, injection, dependencies and config: scanned, explained and fixed by Claude or Codex."
+        case .review: "Which code files people have read and understood as they are now, who read them, and asking someone to look."
         case .environments: "Docker Compose services with logs, shells and restarts, and Docker files Claude can write."
         case .data: "The project's databases: create one, browse tables, run queries and see the schema as a diagram."
         case .ship: "A release checklist, a changelog drafted from commits, and the CI pipeline."
@@ -94,7 +96,7 @@ struct RailPlace: Identifiable, Equatable {
 
     var summary: String {
         switch id {
-        case "quality": "Tests and security: what's covered, what fails, and what to fix."
+        case "quality": "Tests, security and review: what's covered, what fails, what to fix and what's been read."
         case "local": "What runs on this Mac: services, databases and the app's health."
         case "ship": "Releases, CI and the project's history."
         case "agents": "Jobs, who did what, and how the agents are set up."
@@ -266,12 +268,16 @@ final class Session {
     var motionCritiques: [URL: MotionCritiqueState] = [:]
     /// The Security area's report, scans and audits.
     let security = SecurityModel()
+    let review = ReviewModel()
     /// 1-based breakpoint lines per file path, saved per project on this Mac.
     var breakpoints: [String: Set<Int>] = [:]
     /// The debugging run, while there is one (and after it ends, until the next).
     var debug: DebugSession?
     /// Set while the open folder is a remote project's mirror.
     var remoteSync: RemoteSync?
+    /// The project's mise setup (tools, tasks, trust), nil without a mise config.
+    var mise: Mise.Status?
+    @ObservationIgnored private var miseKey = ""
     /// The window this session draws into, to bring forward when `dante` opens something in it.
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored var shipCache: ShipCache?
@@ -361,6 +367,7 @@ final class Session {
         loadBreakpoints()
         loadSinceLastVisit(for: workspace)
         claude = makeClaude(for: workspace)
+        restoreConversation(in: url)
         shownJob = nil
         jobs.makeSession = { [weak self, weak workspace] job in
             guard let self, let workspace else { return ClaudeSession(root: job.worktreeURL, executable: nil, systemPrompt: { "" }) }
@@ -512,7 +519,45 @@ final class Session {
         }
         claude.engine = Preferences.shared.agentEngine == .codex && Self.codexPath != nil && claude.remote == nil ? .codex : .claude
         applyClaudePreferences(to: claude)
+        // Remembered per project, so reopening it (after a crash too) carries on here.
+        claude.onConversationStarted = { [weak claude] id in
+            ConversationMemory.save(ConversationMemory(id: id, engine: claude?.isCodexThread(id) == true ? .codex : .claude), for: root)
+        }
+        claude.onReset = { ConversationMemory.forget(for: root) }
         return claude
+    }
+
+    /// Brings back the conversation the project had open, unless it's more than a week old;
+    /// after a crash, says so, and whether it stopped mid-turn.
+    private func restoreConversation(in root: URL) {
+        guard let memory = ConversationMemory.load(for: root), memory.isFresh(), let claude, claude.remote == nil else { return }
+        let crashed = AppLaunch.crashedLastTime
+        switch memory.engine {
+        case .codex:
+            guard Self.codexPath != nil else { return }
+            claude.engine = .codex
+            claude.resumeCodex(thread: memory.id, notice: crashed
+                ? "Dante closed unexpectedly (Help › Crash Reports… shows where). This is the conversation you had with Codex; your next message continues it."
+                : "Picked up where you left off with Codex. Your next message continues it.")
+        case .claude:
+            let url = ClaudeHistory.transcriptURL(for: memory.id, root: root)
+            guard FileManager.default.fileExists(atPath: url.path) else { return ConversationMemory.forget(for: root) }
+            claude.engine = .claude
+            // The id first, so a message sent at once continues it; the transcript follows.
+            claude.resume(conversation: memory.id, items: [], notice: "Picked up where you left off. Your next message continues this conversation.")
+            Task { [weak claude] in
+                let items = await Task.detached(priority: .userInitiated) {
+                    (try? String(contentsOf: url, encoding: .utf8)).map(ClaudeHistory.items(fromTranscript:)) ?? []
+                }.value
+                guard let claude else { return }
+                claude.insertEarlier(items)
+                if crashed {
+                    claude.say(ConversationMemory.stoppedMidTurn(items)
+                        ? "Dante closed unexpectedly while Claude was still working on this. Say “carry on” and it picks up from the last step above."
+                        : "Dante closed unexpectedly (Help › Crash Reports… shows where); this conversation is as it was.")
+                }
+            }
+        }
     }
 
     /// A job's conversation: the project's brief and rules, plus the job's own brief, run in
@@ -589,6 +634,7 @@ final class Session {
         claude.codexExecutable = Self.codexPath
         claude.account = claudeAccount?.identity
         claude.switchesAtLimit = Preferences.shared.switchesToCodexAtLimit
+        claude.continuesAfterLimit = Preferences.shared.continuesAfterLimit
         claude.codexModel = Preferences.shared.codexModel.isEmpty ? nil : Preferences.shared.codexModel
         claude.codexEffort = Preferences.shared.codexEffort.isEmpty ? nil : Preferences.shared.codexEffort
         // The dante MCP server carries local models, and Grok and Jev when they have keys.
@@ -707,6 +753,19 @@ final class Session {
             try? await Task.sleep(for: .milliseconds(450))
             self?.terminalInput = TerminalInput(text: command + "\n", tab: tab.id)
         }
+    }
+
+    /// Reads mise's answer again when a config file changed (or on first open), so every
+    /// command Dante runs in the project gets its tools and variables.
+    func reloadMise() async {
+        guard let root = workspace?.url, remoteSync == nil else { return }
+        let key = Mise.configFiles(in: root).map { name -> String in
+            let date = (try? FileManager.default.attributesOfItem(atPath: root.appending(path: name).path)[.modificationDate] as? Date) ?? nil
+            return "\(name)@\(date?.timeIntervalSince1970 ?? 0)"
+        }.joined(separator: ",")
+        guard key != miseKey else { return }
+        miseKey = key
+        mise = await Mise.load(root: root)
     }
 
     /// Types a command without running it, for ones the person should read first (installs).

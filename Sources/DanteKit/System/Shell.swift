@@ -29,14 +29,14 @@ public enum Shell {
     /// status 124 (like `timeout(1)`). Pollers pass one, so a tool that hangs (a Docker daemon
     /// that's starting) can't pile up a stuck process and thread every round.
     public static func run(_ arguments: [String], in directory: URL, trimming: Bool = true, extra: [String: String] = [:],
-                           timeout: Duration? = nil) async -> Output {
+                           timeout: Duration? = nil, withoutMise: Bool = false) async -> Output {
         let remote = RemoteRegistry.project(containing: directory)
         let process = Process()
         let watch = Watch()
         let output: Output = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    let input = configure(process, arguments, in: directory, extra: extra, remote: remote)
+                    let input = configure(process, arguments, in: directory, extra: extra, remote: remote, withoutMise: withoutMise)
                     let out = Pipe(), err = Pipe(), inPipe = Pipe()
                     process.standardOutput = out
                     process.standardError = err
@@ -94,9 +94,10 @@ public enum Shell {
     /// the ssh command line.
     @discardableResult
     static func configure(_ process: Process, _ arguments: [String], in directory: URL, extra: [String: String] = [:],
-                          remote: (project: RemoteProject, path: String)?) -> Data? {
+                          remote: (project: RemoteProject, path: String)?, withoutMise: Bool = false) -> Data? {
         process.executableURL = URL(filePath: "/usr/bin/env")
-        process.environment = environment().merging(extra) { $1 }
+        let base = withoutMise || remote != nil ? environment() : environment(for: directory)
+        process.environment = base.merging(extra) { $1 }
         if let remote {
             let (arguments, input) = readingEnvironment(arguments, extra)
             let command = SSH.remoteCommand(arguments, in: remote.path, environment: remoteEnvironment)
@@ -171,6 +172,12 @@ public enum Shell {
     /// The full path of a tool, or nil when it isn't installed.
     public static func which(_ name: String) -> String? {
         SystemStatus.findExecutable(name, environment: environment())
+    }
+
+    /// `environment()` with what the project's mise config sets for `directory` (its tools'
+    /// PATH and variables), once `Mise.load` has read it.
+    public static func environment(for directory: URL) -> [String: String] {
+        Mise.applying(Mise.overlay(for: directory), to: environment())
     }
 
     public static func environment() -> [String: String] {

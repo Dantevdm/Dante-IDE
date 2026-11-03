@@ -189,6 +189,8 @@ public final class ClaudeSession {
     public var onDanteTool: (_ name: String, _ input: JSONValue, _ finished: Bool) -> Void = { _, _, _ in }
     /// Claude Code named the conversation (its session id), for linking it to a task.
     public var onConversationStarted: (String) -> Void = { _ in }
+    /// The conversation was ended (New conversation), so nothing should bring it back on its own.
+    public var onReset: () -> Void = {}
     /// A shell command that ran tests finished (`TestCommandLine.runsTests`): the command, its
     /// output and whether it failed, so the window can keep the run with the others.
     public var onTestsRun: (_ command: String, _ output: String, _ failed: Bool) -> Void = { _, _, _ in }
@@ -284,6 +286,51 @@ public final class ClaudeSession {
     public var switchesAtLimit = true
     /// When Claude (not Codex) last stopped at its limit.
     private var claudeLimitAt: Date?
+    /// A turn stopped at the usage limit carries on by itself once the limit resets, when no
+    /// other agent took it over.
+    public var continuesAfterLimit = true
+    /// When the stopped turn will carry on; nil when nothing is waiting.
+    public private(set) var continuesAt: Date?
+    private var continueTask: Task<Void, Never>?
+    /// How many times in a row the carry-on hit the limit again.
+    private var continueAttempts = 0
+    public static let carryOnMessage = "The usage limit stopped you part way through. It has reset now: carry on with what you were doing, from where you left off."
+
+    /// Won't carry on by itself after all.
+    public func cancelContinue() {
+        continueTask?.cancel()
+        continueTask = nil
+        continuesAt = nil
+    }
+
+    /// Carries on now rather than at the reset.
+    public func continueNow() {
+        cancelContinue()
+        guard state == .idle else { return }
+        send(Self.carryOnMessage)
+    }
+
+    private func scheduleContinue(after text: String) {
+        guard continuesAfterLimit, continueAttempts < 4 else { return }
+        let now = Date()
+        // Claude Code's own reset time, else the message's, else try again in half an hour; a
+        // minute's slack so the first message doesn't land before the reset.
+        let reset = [rateLimit?.resetsAt, LimitReset.date(in: text, now: now)].compactMap { $0 }.first { $0 > now }
+            ?? now.addingTimeInterval(30 * 60)
+        let at = reset.addingTimeInterval(60)
+        continuesAt = at
+        continueAttempts += 1
+        note("Carrying on by itself at \(at.formatted(date: .omitted, time: .shortened)), when the limit resets.", isError: false)
+        continueTask?.cancel()
+        continueTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(max(1, at.timeIntervalSinceNow)))
+            guard let self, !Task.isCancelled, self.continuesAt != nil else { return }
+            self.continuesAt = nil
+            self.continueTask = nil
+            guard self.state == .idle else { return }
+            self.send(Self.carryOnMessage)
+        }
+    }
 
     /// Claude's plan is nearly or fully used, as of what Claude Code last said; lapses when
     /// the limit resets (or five hours after a stop, when no reset time came).
@@ -433,6 +480,11 @@ public final class ClaudeSession {
                      answersWaiting: Bool = false) {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
+        // Anything said meanwhile replaces carrying on by itself.
+        if text != Self.carryOnMessage {
+            cancelContinue()
+            continueAttempts = 0
+        }
         if state != .working { turnUsage = (0, [:], String(trimmed.prefix(80))) }
         // Claude's plan is nearly used up: Codex takes this message, before it's spent.
         if state != .working, Self.handsOver(engine: engine, nearlyOut: claudeNearlyOut,
@@ -757,24 +809,37 @@ public final class ClaudeSession {
         lastTurnEngine = nil
         handover = nil
         if executable != nil || codexExecutable != nil { state = .idle }
+        cancelContinue()
+        continueAttempts = 0
+        onReset()
     }
 
     /// Picks up an earlier conversation: its transcript is shown, and the next message
     /// continues it with `--resume`.
-    public func resume(conversation id: String, items earlier: [TranscriptItem]) {
+    public func resume(conversation id: String, items earlier: [TranscriptItem], notice: String = "Earlier conversation. Your next message continues it.") {
         reset()
         sessionID = id
         for item in earlier { append(item) }
-        note("Earlier conversation. Your next message continues it.", isError: false)
+        note(notice, isError: false)
+        onConversationStarted(id)
     }
 
     /// Picks up an earlier Codex conversation by its thread id (a job after a restart): the
     /// next message continues it with `thread/resume`, or starts afresh if Codex can't.
-    public func resumeCodex(thread id: String) {
+    public func resumeCodex(thread id: String, notice: String = "Earlier conversation with Codex. Your next message continues it.") {
         reset()
         codexThread = id
         lastTurnEngine = .codex
-        note("Earlier conversation with Codex. Your next message continues it.", isError: false)
+        note(notice, isError: false)
+        onConversationStarted(id)
+    }
+
+    /// Whether a conversation id is Codex's thread rather than Claude Code's session.
+    public func isCodexThread(_ id: String) -> Bool { codexThread == id }
+
+    /// A line in the transcript from Dante.
+    public func say(_ text: String) {
+        note(text, isError: false)
     }
 
     /// The earlier conversation's items, read after `resume` was already called with none so a
@@ -873,7 +938,8 @@ public final class ClaudeSession {
         startedTeam = team?.agents
         startedEngine = .claude
         startedAccount = account
-        process.environment = Self.environment().merging(blocksPushes ? JobGuard.noPush : [:]) { _, job in job }
+        process.environment = Mise.applying(remote == nil ? Mise.overlay(for: root) : [:], to: Self.environment())
+            .merging(blocksPushes ? JobGuard.noPush : [:]) { _, job in job }
 
         let input = Pipe(), output = Pipe(), errors = Pipe()
         process.standardInput = input
@@ -922,7 +988,8 @@ public final class ClaudeSession {
         process.executableURL = URL(filePath: codexExecutable)
         process.arguments = ["app-server"]
         process.currentDirectoryURL = root
-        process.environment = Self.environment().merging(blocksPushes ? JobGuard.noPush : [:]) { _, job in job }
+        process.environment = Mise.applying(remote == nil ? Mise.overlay(for: root) : [:], to: Self.environment())
+            .merging(blocksPushes ? JobGuard.noPush : [:]) { _, job in job }
         let input = Pipe(), output = Pipe(), errors = Pipe()
         process.standardInput = input
         process.standardOutput = output
@@ -1368,9 +1435,13 @@ public final class ClaudeSession {
             if result.isError, let advice = ClaudeCodeTooOld.explain(result.text) {
                 note(advice, isError: true)
             }
+            if !result.isError { continueAttempts = 0 }
             if let retry {
                 handToCodex(because: "has reached")
                 send(retry)
+            } else if result.isError, Vitality.isLimitMessage(result.text), queued.isEmpty {
+                scheduleContinue(after: result.text)
+                onAttention(.finished(result.text))
             } else if !queued.isEmpty {
                 let next = queued.removeFirst()
                 send(next.text, context: next.context, attachments: next.attachments, allowsLocalResponse: next.allowsLocalResponse)

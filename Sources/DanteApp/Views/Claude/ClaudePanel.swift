@@ -34,6 +34,7 @@ struct ClaudePanel: View {
                 SignInBanner(session: session)
             }
             ApplyAllBar(claude: claude)
+            CarryOnBar(claude: claude)
             Composer(session: session, claude: claude)
         }
         .background(theme.panel.color)
@@ -232,6 +233,32 @@ private struct ApplyAllBar: View {
         var names: [String] = []
         for edit in edits { if let name = edit.change?.url.lastPathComponent, !names.contains(name) { names.append(name) } }
         return names.joined(separator: ", ")
+    }
+}
+
+/// A turn stopped at the usage limit waits to carry on by itself when the limit resets.
+private struct CarryOnBar: View {
+    @Environment(\.theme) private var theme
+    let claude: ClaudeSession
+
+    var body: some View {
+        if let at = claude.continuesAt {
+            HStack(spacing: 8) {
+                Image(systemName: "clock.arrow.circlepath").foregroundStyle(theme.accent.color)
+                Text("Carries on by itself at \(at.formatted(date: .omitted, time: .shortened)), when the limit resets")
+                    .foregroundStyle(theme.text2.color)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Button("Now") { claude.continueNow() }
+                    .buttonStyle(.plain).foregroundStyle(theme.accent.color)
+                    .help("Try straight away, in case the limit has already lifted")
+                Button("Cancel") { claude.cancelContinue() }
+                    .buttonStyle(.plain).foregroundStyle(theme.text3.color)
+            }
+            .font(.dante(size: 11.5))
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+        }
     }
 }
 

@@ -25,7 +25,7 @@ struct QueryView: View {
         VSplitView {
             VStack(spacing: 0) {
                 toolbar
-                CodeEditorView(text: text, language: .sql, theme: theme, fontSize: 13)
+                CodeEditorView(text: text, language: .sql, theme: theme, fontSize: 13, completion: completion)
                     .frame(minHeight: 90)
             }
             .frame(minHeight: 140, idealHeight: 240)
@@ -40,6 +40,32 @@ struct QueryView: View {
             Button("Cancel", role: .cancel) { confirming = [] }
         } message: {
             Text(confirming.map { "• \($0.text.prefix(80))" }.joined(separator: "\n"))
+        }
+    }
+
+    /// Tables, columns, keywords and functions from the connection's schema.
+    private var completion: CompletionSource {
+        CompletionSource(triggers: [".", " "]) { [model, id, connection] offset, typed in
+            let text = model.queries[id]?.text ?? ""
+            if typed == " ", !SQLCompletion.opensAfterSpace(in: text, at: offset) { return [] }
+            let suggestions = SQLCompletion.suggestions(in: text, at: offset, schema: model.schemas[connection.id], engine: connection.engine)
+            return suggestions.enumerated().map { index, item in
+                EditorCompletion(
+                    id: "\(item.kind)-\(item.label)-\(index)", label: item.label, detail: item.detail,
+                    kind: Self.kind(item.kind), insertText: item.insert,
+                    sortText: String(format: "%09d", item.rank * 1000 + index), filterText: item.label
+                )
+            }
+        }
+    }
+
+    private static func kind(_ kind: SQLCompletion.Suggestion.Kind) -> EditorCompletion.Kind {
+        switch kind {
+        case .table, .view: .type
+        case .column: .property
+        case .schema: .module
+        case .keyword: .keyword
+        case .function: .function
         }
     }
 

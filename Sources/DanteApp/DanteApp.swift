@@ -26,6 +26,12 @@ struct DanteApp: App {
             SettingsWindow()
                 .environment(themeStore)
         }
+
+        Window("Crash Reports", id: "crashes") {
+            CrashReportsWindow()
+                .environment(themeStore)
+        }
+        .defaultSize(width: 900, height: 620)
     }
 }
 
@@ -57,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        _ = AppLaunch.crashedLastTime
         if let folder = ProcessInfo.processInfo.environment["DANTE_ORB_SNAPSHOTS"] {
             OrbView.writeSnapshots(to: URL(filePath: folder))
             exit(0)
@@ -104,11 +111,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        CleanExit.quitting()
         for session in Sessions.all {
             session.recordVisit()
             session.claude?.stop()
         }
     }
+}
+
+/// How the last run ended, read once per launch.
+enum AppLaunch {
+    /// The previous run never quit: it crashed or was killed.
+    static let crashedLastTime = CleanExit.launching()
 }
 
 /// One window: the launch screen until a folder is open, then the workspace.

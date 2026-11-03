@@ -26,7 +26,7 @@ public struct ThemeColor: Equatable, Hashable, Sendable {
             green = Double((value >> 8) & 0xff) / 255
             blue = Double(value & 0xff) / 255
         } else {
-            // "214 80% 32%", as grc-ui writes HSL.
+            // "214 80% 32%", as some frontends write HSL.
             let parts = trimmed.replacingOccurrences(of: ",", with: " ").split(separator: " ").map { $0.replacingOccurrences(of: "%", with: "") }
             guard parts.count == 3, let h = Double(parts[0]), let s = Double(parts[1]), let l = Double(parts[2]),
                   (0...360).contains(h), (0...100).contains(s), (0...100).contains(l) else { return nil }
@@ -68,7 +68,7 @@ public struct ThemeColor: Equatable, Hashable, Sendable {
     }
 }
 
-/// A frontend theme in the `theme.json` format (grc-ui's): one folder per look, holding the
+/// A frontend theme in the `theme.json` format: one folder per look, holding the
 /// file and the logos, fonts and pictures it names. Every field but `name` is optional, and a
 /// theme falls back to its set's default theme field by field, except the ones that belong to
 /// a customer alone (`ownFields`). Read leniently: unknown fields are kept and written back.

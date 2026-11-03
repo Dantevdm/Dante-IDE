@@ -29,7 +29,9 @@ public struct Vitality: Equatable, Sendable {
     /// Whether Claude Code's message says a usage limit was hit, as opposed to another error.
     public static func isLimitMessage(_ text: String) -> Bool {
         let lower = text.lowercased()
-        return lower.contains("usage limit") || lower.contains("limit reached") || lower.contains("hit your limit")
+        // "You've hit your limit", "…your session limit", "…your weekly limit".
+        let hitYour = lower.range(of: #"hit your (session |weekly |usage |opus |sonnet )?limit"#, options: .regularExpression) != nil
+        return hitYour || lower.contains("usage limit") || lower.contains("limit reached")
             || lower.contains("rate limit") && lower.contains("claude")
     }
 }

@@ -266,6 +266,7 @@ private struct TabItem: View {
         .overlay(alignment: .trailing) { Rectangle().fill(theme.line.color).frame(width: 1) }
         .contentShape(Rectangle())
         .onTapGesture(perform: select)
+        .onMiddleClick(perform: close)
         .onHover { hovering = $0 }
         .help(document.url.path)
         .accessibilityElement(children: .combine)

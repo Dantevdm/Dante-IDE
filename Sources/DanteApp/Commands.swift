@@ -92,6 +92,10 @@ struct DanteCommands: Commands {
                 .disabled(session?.workspace == nil)
         }
 
+        CommandGroup(after: .help) {
+            Button("Crash Reports…") { openWindow(id: "crashes") }
+        }
+
         CommandMenu("Git") {
             Button("Source Control") { session?.showChanges() }
                 .shortcut("sourceControl")
@@ -109,6 +113,12 @@ struct DanteCommands: Commands {
             Divider()
             Button("Switch Branch…") { session?.showsBranches = true }
                 .shortcut("switchBranch")
+                .disabled(session?.git.isRepository != true)
+            Divider()
+            Button("Mark File as Reviewed") { session?.toggleReviewedActiveFile() }
+                .shortcut("markReviewed")
+                .disabled(session?.git.isRepository != true || session?.workspace?.activeDocument == nil)
+            Button("Review") { session?.area = .review }
                 .disabled(session?.git.isRepository != true)
         }
 

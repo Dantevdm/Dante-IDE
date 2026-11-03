@@ -8,6 +8,7 @@ struct MermaidBlock: View {
     @Environment(\.isExporting) private var isExporting
     let source: String
     @State private var showsSource = false
+    @State private var showsLarge = false
 
     var body: some View {
         let diagram = Mermaid.parse(source)
@@ -26,6 +27,12 @@ struct MermaidBlock: View {
                 Text(caption(diagram))
                 Spacer()
                 if case .unsupported = diagram {} else if !isExporting {
+                    if !showsSource {
+                        Button { showsLarge = true } label: { Label("Open large", systemImage: "arrow.up.left.and.arrow.down.right") }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(theme.accent.color)
+                            .help("Open the diagram on its own to zoom into it")
+                    }
                     Button(showsSource ? "Show diagram" : "Show source") { showsSource.toggle() }
                         .buttonStyle(.plain)
                         .foregroundStyle(theme.accent.color)
@@ -41,6 +48,7 @@ struct MermaidBlock: View {
         .background(DotGrid(color: theme.line2.color, spacing: 16))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.line.color))
+        .sheet(isPresented: $showsLarge) { LargeDiagramSheet(diagram: diagram, title: caption(diagram)) }
     }
 
     private func caption(_ diagram: Mermaid) -> String {
@@ -58,10 +66,14 @@ private struct FitOrScroll<Content: View>: View {
     @Environment(\.isExporting) private var isExporting
     @Environment(\.exportWidth) private var exportWidth
     @Environment(\.theme) private var theme
+    @Environment(\.diagramAtNaturalSize) private var natural
     @ViewBuilder let content: Content
 
     var body: some View {
-        if isExporting {
+        if natural {
+            // Inside a ZoomablePicture, which does the sizing.
+            content.fixedSize()
+        } else if isExporting {
             // Paper can't scroll, so a wide diagram is scaled down to the page.
             let natural = Self.size(of: content.fixedSize().environment(\.theme, theme))
             let scale = natural.width > exportWidth ? exportWidth / natural.width : 1
@@ -95,6 +107,37 @@ private struct FitOrScroll<Content: View>: View {
         var size = CGSize.zero
         ImageRenderer(content: view).render { measured, _ in size = measured }
         return size
+    }
+}
+
+extension EnvironmentValues {
+    /// Draw diagrams at their own size rather than fitting the doc's width (a zoomable view).
+    @Entry var diagramAtNaturalSize = false
+}
+
+/// A diagram in its own window-sized view, to zoom into: Docs' Open large and Data's Diagram.
+struct ZoomableDiagram: View {
+    @Environment(\.theme) private var theme
+    let diagram: Mermaid
+    var flowing = false
+    /// How far fitting may enlarge a small diagram: 1 in a page, more in a sheet of its own.
+    var largestFit: CGFloat = 1
+
+    var body: some View {
+        ZoomablePicture(largestFit: largestFit) {
+            Group {
+                switch diagram {
+                case .flowchart(let chart): FlowchartView(chart: chart)
+                case .sequence(let sequence): SequenceView(diagram: sequence)
+                case .entityRelationship(let er): ERDiagramView(diagram: er, flowing: flowing)
+                case .unsupported: EmptyView()
+                }
+            }
+            .padding(24)
+            .environment(\.diagramAtNaturalSize, true)
+        }
+        .background(theme.panel.color)
+        .background(DotGrid(color: theme.line2.color, spacing: 16))
     }
 }
 
@@ -538,5 +581,31 @@ struct ERDiagramView: View {
     private func cardinality(_ text: String, at point: CGPoint, in context: inout GraphicsContext) {
         let resolved = context.resolve(Text(text).font(.dante(size: 10, weight: .semibold, design: .monospaced)).foregroundColor(theme.accent.color))
         context.draw(resolved, at: point)
+    }
+}
+
+/// Docs' Open large: the diagram filling a sheet the size of the window, to zoom into.
+private struct LargeDiagramSheet: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.dismiss) private var dismiss
+    let diagram: Mermaid
+    let title: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .buttonStyle(DanteButtonStyle(primary: true))
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
+            ZoomableDiagram(diagram: diagram, largestFit: 2)
+        }
+        .frame(minWidth: 900, idealWidth: 1300, minHeight: 600, idealHeight: 850)
+        .background(theme.ground.color)
     }
 }

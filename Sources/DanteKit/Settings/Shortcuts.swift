@@ -86,6 +86,7 @@ public final class Shortcuts {
         .init("pull", "Pull", "Git", nil),
         .init("fetch", "Fetch", "Git", nil),
         .init("switchBranch", "Switch Branch…", "Git", KeyBinding("b", [.control, .shift])),
+        .init("markReviewed", "Mark File as Reviewed", "Git", KeyBinding("r", [.control, .shift])),
         .init("toggleTerminal", "Show or Hide Terminal", "View", KeyBinding("`", [.control])),
         .init("back", "Back", "View", KeyBinding("left", [.command, .control])),
         .init("forward", "Forward", "View", KeyBinding("right", [.command, .control])),

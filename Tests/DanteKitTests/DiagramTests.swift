@@ -12,14 +12,14 @@ struct DiagramTests {
             .init(id: "edge", kind: .group, title: "Edge", hue: .purple, frame: .init(x: 120, y: 80, width: 220, height: 120), parent: "aws"),
             .init(id: "alb", kind: .card, title: "Shared ALB", subtitle: "Load balancer", hue: .purple, frame: .init(x: 132, y: 112, width: 196, height: 64), parent: "edge"),
             .init(id: "compute", kind: .group, title: "Compute", hue: .amber, frame: .init(x: 400, y: 80, width: 220, height: 200), parent: "aws"),
-            .init(id: "grc", kind: .card, title: "GRC Information Service", hue: .amber, frame: .init(x: 412, y: 112, width: 196, height: 64), parent: "compute"),
-            .init(id: "risk", kind: .card, title: "Pricing Engine", hue: .amber, frame: .init(x: 412, y: 190, width: 196, height: 64), parent: "compute"),
+            .init(id: "stock", kind: .card, title: "Stock Information Service", hue: .amber, frame: .init(x: 412, y: 112, width: 196, height: 64), parent: "compute"),
+            .init(id: "pricing", kind: .card, title: "Pricing Engine", hue: .amber, frame: .init(x: 412, y: 190, width: 196, height: 64), parent: "compute"),
             .init(id: "users", kind: .person, title: "Users", frame: .init(x: 40, y: 110, width: 64, height: 72), parent: "aws"),
         ]
         d.links = [
             .init(id: "u-alb", from: "users", to: "alb", line: .flowing, pulse: true, arrow: false),
-            .traffic(id: "alb-grc", from: "alb", to: "grc", label: "/grc", hue: .amber),
-            .traffic(id: "alb-risk", from: "alb", to: "risk", label: "/risk", hue: .amber),
+            .traffic(id: "alb-stock", from: "alb", to: "stock", label: "/stock", hue: .amber),
+            .traffic(id: "alb-pricing", from: "alb", to: "pricing", label: "/pricing", hue: .amber),
         ]
         return d
     }
@@ -64,7 +64,7 @@ struct DiagramTests {
 
     @Test func namesFilesAndIds() {
         #expect(Diagram.slug("OrdersPortal FargateService") == "orders-portal-fargate-service")
-        #expect(Diagram.slug("GRC Information Service") == "grc-information-service")
+        #expect(Diagram.slug("Stock Information Service") == "stock-information-service")
         #expect(Diagram.path(for: "Umbrella target", existing: []) == "docs/diagrams/umbrella-target.dante-diagram.json")
         #expect(Diagram.path(for: "Umbrella target", existing: ["docs/diagrams/umbrella-target.dante-diagram.json"]) == "docs/diagrams/umbrella-target-2.dante-diagram.json")
         #expect(Diagram.title(ofPath: "docs/diagrams/umbrella-target.dante-diagram.json") == "Umbrella target")
@@ -85,60 +85,60 @@ struct DiagramTests {
     @Test func movingAGroupMovesWhatsInIt() {
         var d = Self.sample()
         d.move(["compute"], by: CGSize(width: 10, height: 20))
-        #expect(d.node("grc")?.frame?.x == 422)
-        #expect(d.node("risk")?.frame?.y == 210)
+        #expect(d.node("stock")?.frame?.x == 422)
+        #expect(d.node("pricing")?.frame?.y == 210)
         #expect(d.node("alb")?.frame?.x == 132)
     }
 
     @Test func aCardDraggedOutLeavesItsGroupAndOneDroppedInJoins() {
         var d = Self.sample()
-        d.move(["risk"], by: CGSize(width: -260, height: -40), grows: false)
-        d.adopt(["risk"])
-        #expect(d.node("risk")?.parent == "edge")
+        d.move(["pricing"], by: CGSize(width: -260, height: -40), grows: false)
+        d.adopt(["pricing"])
+        #expect(d.node("pricing")?.parent == "edge")
         #expect(d.count(of: "edge") == 2)
         #expect(d.count(of: "compute") == 1)
         // The group grew to hold it.
         let edge = d.node("edge")!.rect
-        #expect(edge.contains(d.node("risk")!.rect))
+        #expect(edge.contains(d.node("pricing")!.rect))
         // Out past every container: on its own.
-        d.move(["risk"], by: CGSize(width: 0, height: 600), grows: false)
-        d.adopt(["risk"])
-        #expect(d.node("risk")?.parent == nil)
+        d.move(["pricing"], by: CGSize(width: 0, height: 600), grows: false)
+        d.adopt(["pricing"])
+        #expect(d.node("pricing")?.parent == nil)
     }
 
     @Test func aNewCardFindsRoomBesideTheCardsAlreadyThere() {
         var d = Self.sample()
-        let grc = d.node("grc")!.rect
-        let id = d.add(.card, at: CGPoint(x: grc.midX, y: grc.midY), findsRoom: true)
+        let stock = d.node("stock")!.rect
+        let id = d.add(.card, at: CGPoint(x: stock.midX, y: stock.midY), findsRoom: true)
         let added = d.node(id)!.rect
         #expect(!d.nodes.filter { $0.id != id && !$0.kind.isContainer }.contains { $0.rect.intersects(added) })
-        #expect(hypot(added.midX - grc.midX, added.midY - grc.midY) < 200)
+        #expect(hypot(added.midX - stock.midX, added.midY - stock.midY) < 200)
         // Without it, it goes where it's asked.
-        let exact = d.add(.card, at: CGPoint(x: grc.midX, y: grc.midY))
-        #expect(d.node(exact)!.rect.intersects(grc))
+        let exact = d.add(.card, at: CGPoint(x: stock.midX, y: stock.midY))
+        #expect(d.node(exact)!.rect.intersects(stock))
     }
 
     @Test func aContainerNeverShrinksPastWhatItHolds() {
         var d = Self.sample()
         d.resize("compute", to: CGRect(x: 400, y: 80, width: 50, height: 50))
         let compute = d.node("compute")!.rect
-        #expect(compute.contains(d.node("grc")!.rect))
-        #expect(compute.contains(d.node("risk")!.rect))
+        #expect(compute.contains(d.node("stock")!.rect))
+        #expect(compute.contains(d.node("pricing")!.rect))
         d.fit("compute")
         #expect(d.node("compute")!.rect == CGRect(x: 400, y: 80, width: 220, height: 186))
     }
 
     @Test func nudgingGrowsTheContainers() {
         var d = Self.sample()
-        d.move(["risk"], by: CGSize(width: 0, height: 300))
-        #expect(d.node("compute")!.rect.maxY >= d.node("risk")!.rect.maxY + Diagram.inset)
+        d.move(["pricing"], by: CGSize(width: 0, height: 300))
+        #expect(d.node("compute")!.rect.maxY >= d.node("pricing")!.rect.maxY + Diagram.inset)
         #expect(d.node("aws")!.rect.contains(d.node("compute")!.rect))
     }
 
     @Test func deletingTakesWhatsInsideAndTheLinks() {
         var d = Self.sample()
         d.delete(["compute"])
-        #expect(d.node("grc") == nil && d.node("risk") == nil)
+        #expect(d.node("stock") == nil && d.node("pricing") == nil)
         #expect(d.links.map(\.id) == ["u-alb"])
         d.delete(["u-alb"])
         #expect(d.links.isEmpty)
@@ -151,39 +151,39 @@ struct DiagramTests {
         let copy = d.node(copies.first!)!
         #expect(copy.id == "compute-2")
         #expect(copy.parent == "aws")
-        #expect(d.children(of: copy.id).map(\.id).sorted() == ["grc-2", "risk-2"])
+        #expect(d.children(of: copy.id).map(\.id).sorted() == ["pricing-2", "stock-2"])
         #expect(d.links.count == 3)
-        let pasted = d.paste(d.clipboard(["alb", "grc"]), offset: CGSize(width: 0, height: 300))
+        let pasted = d.paste(d.clipboard(["alb", "stock"]), offset: CGSize(width: 0, height: 300))
         #expect(pasted.count == 2)
-        #expect(d.links.contains { $0.from == "alb-2" && $0.to == "grc-3" && $0.label == "/grc" })
+        #expect(d.links.contains { $0.from == "alb-2" && $0.to == "stock-3" && $0.label == "/stock" })
     }
 
     @Test func connectsOnceEachWay() {
         var d = Self.sample()
-        let id = d.connect("grc", to: "risk", label: "asks")
+        let id = d.connect("stock", to: "pricing", label: "asks")
         #expect(id != nil)
-        #expect(d.connect("grc", to: "risk") == id)
-        #expect(d.connect("grc", to: "grc") == nil)
+        #expect(d.connect("stock", to: "pricing") == id)
+        #expect(d.connect("stock", to: "stock") == nil)
         let link = d.link(id!)!
         #expect(link.pulse && link.hue == .amber && link.label == "asks")
     }
 
     @Test func groupsAndUngroups() {
         var d = Self.sample()
-        let group = d.group(["grc", "risk"], title: "Apps")!
+        let group = d.group(["stock", "pricing"], title: "Apps")!
         #expect(d.node(group)?.parent == "compute")
-        #expect(d.node("grc")?.parent == group)
+        #expect(d.node("stock")?.parent == group)
         #expect(d.count(of: "compute") == 0)
-        #expect(d.nodes.firstIndex { $0.id == group }! < d.nodes.firstIndex { $0.id == "grc" }!)
+        #expect(d.nodes.firstIndex { $0.id == group }! < d.nodes.firstIndex { $0.id == "stock" }!)
         d.ungroup(group)
-        #expect(d.node("grc")?.parent == "compute")
+        #expect(d.node("stock")?.parent == "compute")
         #expect(d.node(group) == nil)
     }
 
     @Test func alignsAndDistributes() {
         var d = Self.sample()
-        d.align(["grc", "risk", "alb"], .top)
-        #expect(Set(["grc", "risk", "alb"].map { d.node($0)!.rect.minY }) == [112])
+        d.align(["stock", "pricing", "alb"], .top)
+        #expect(Set(["stock", "pricing", "alb"].map { d.node($0)!.rect.minY }) == [112])
         var row = Diagram(title: "Row")
         row.nodes = [0, 50, 400].enumerated().map { index, x in
             .init(id: "n\(index)", kind: .card, title: "N", frame: .init(x: x, y: 0, width: 100, height: 40))
@@ -306,7 +306,7 @@ struct DiagramTests {
         #expect(text.contains("    subgraph edge[\"Edge\"]"))
         #expect(text.contains("alb[\"Shared ALB<br/>Load balancer\"]"))
         #expect(text.contains("users((\"Users\"))"))
-        #expect(text.contains("alb -->|/grc| grc"))
+        #expect(text.contains("alb -->|/stock| stock"))
         #expect(text.contains("users -.- alb"))
         // Dante's own Mermaid reader takes it.
         if case .flowchart(let chart) = Mermaid.parse(text) {
@@ -324,7 +324,7 @@ struct DiagramTests {
         #expect(svg.contains(">Shared ALB</text>"))
         #expect(svg.contains("<animateMotion"))
         #expect(svg.contains("stroke-dashoffset"))
-        #expect(svg.contains(">/grc</text>"))
+        #expect(svg.contains(">/stock</text>"))
         #expect(svg.contains("data:image/png;base64,person.2.fill"))
         #expect(svg.contains(Theme.light.syntax.keyword.css))
         // The same picture gives the same file.
@@ -351,21 +351,21 @@ struct DiagramTests {
         var d = Self.sample()
         // Crowd it: compute hard against edge, a gap in the middle of the stack.
         d.nodes[d.nodes.firstIndex { $0.id == "compute" }!].frame = .init(x: 350, y: 80, width: 220, height: 260)
-        d.nodes[d.nodes.firstIndex { $0.id == "grc" }!].frame = .init(x: 362, y: 112, width: 196, height: 54)
-        d.nodes[d.nodes.firstIndex { $0.id == "risk" }!].frame = .init(x: 362, y: 260, width: 196, height: 54)
+        d.nodes[d.nodes.firstIndex { $0.id == "stock" }!].frame = .init(x: 362, y: 112, width: 196, height: 54)
+        d.nodes[d.nodes.firstIndex { $0.id == "pricing" }!].frame = .init(x: 362, y: 260, width: 196, height: 54)
         let t = d.tidied()
         func r(_ id: String) -> CGRect { t.node(id)!.rect }
         // Same order, left to right and top to bottom.
         #expect(r("users").maxX < r("edge").minX)
         #expect(r("edge").maxX < r("compute").minX)
-        #expect(r("grc").maxY < r("risk").minY)
+        #expect(r("stock").maxY < r("pricing").minY)
         // Labelled links cross edge → compute, so the gap fits a label; users → edge has none.
         #expect(r("compute").minX - r("edge").maxX == Diagram.labelledColumnGap)
         #expect(r("edge").minX - r("users").maxX == Diagram.columnGap)
         // The stack closes up, and the long title gets a wider column shared by both cards.
-        #expect(r("risk").minY - r("grc").maxY == 12)
-        #expect(r("grc").width > 196)
-        #expect(r("grc").width == r("risk").width)
+        #expect(r("pricing").minY - r("stock").maxY == 12)
+        #expect(r("stock").width > 196)
+        #expect(r("stock").width == r("pricing").width)
         // Containers hold what's in them.
         for node in t.nodes where node.parent != nil {
             #expect(t.node(node.parent!)!.rect.contains(node.rect), "\(node.id) inside \(node.parent!)")
@@ -378,7 +378,7 @@ struct DiagramTests {
         var d = Diagram(title: "Cards")
         d.nodes = [
             .init(id: "a", kind: .card, title: "Bare", frame: .init(x: 40, y: 40, width: 196, height: 90)),
-            .init(id: "b", kind: .card, title: "Full", subtitle: "ECS service", detail: "/risk", frame: .init(x: 40, y: 140, width: 196, height: 40)),
+            .init(id: "b", kind: .card, title: "Full", subtitle: "ECS service", detail: "/pricing", frame: .init(x: 40, y: 140, width: 196, height: 40)),
         ]
         let t = d.tidied()
         #expect(t.node("a")!.rect.height == 48)
@@ -387,10 +387,10 @@ struct DiagramTests {
 
     @Test func tidyingOnlyTheSelectionLeavesTheRestAlone() {
         var d = Self.sample()
-        d.nodes[d.nodes.firstIndex { $0.id == "risk" }!].frame = .init(x: 412, y: 300, width: 196, height: 64)
+        d.nodes[d.nodes.firstIndex { $0.id == "pricing" }!].frame = .init(x: 412, y: 300, width: 196, height: 64)
         let t = d.tidied(only: ["compute"])
         // Inside compute the stack closes up…
-        #expect(t.node("risk")!.rect.minY - t.node("grc")!.rect.maxY == 12)
+        #expect(t.node("pricing")!.rect.minY - t.node("stock")!.rect.maxY == 12)
         // …and nothing outside it moves.
         for id in ["edge", "alb", "users"] { #expect(t.node(id)!.rect == d.node(id)!.rect, "\(id) stayed") }
         #expect(t.node("compute")!.rect.origin == d.node("compute")!.rect.origin)

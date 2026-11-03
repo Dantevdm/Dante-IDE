@@ -105,6 +105,7 @@ private struct TerminalTabButton: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(isSelected ? theme.raised.color : (hovering ? theme.raised.opacity(0.5).color : .clear)))
         .contentShape(Rectangle())
         .onTapGesture(perform: select)
+        .onMiddleClick { if canClose { close() } }
         .onHover { hovering = $0 }
     }
 }

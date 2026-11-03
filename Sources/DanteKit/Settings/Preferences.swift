@@ -113,6 +113,9 @@ public final class Preferences {
     public var asksCodex: Bool { didSet { defaults.set(asksCodex, forKey: Keys.asksCodex) } }
     /// Codex takes over a conversation when Claude's plan is nearly or fully used.
     public var switchesToCodexAtLimit: Bool { didSet { defaults.set(switchesToCodexAtLimit, forKey: Keys.switchesToCodexAtLimit) } }
+    /// A turn stopped at the usage limit (with no other agent to take it) carries on by itself
+    /// when the limit resets.
+    public var continuesAfterLimit: Bool { didSet { defaults.set(continuesAfterLimit, forKey: Keys.continuesAfterLimit) } }
     /// The model Codex uses; empty for Codex's default.
     public var codexModel: String { didSet { defaults.set(codexModel, forKey: Keys.codexModel) } }
     /// How hard Codex thinks (its reasoning effort); empty for the model's default.
@@ -189,6 +192,7 @@ public final class Preferences {
         standardsLibrary = defaults.string(forKey: Keys.standardsLibrary) ?? ""
         asksCodex = bool(Keys.asksCodex, true)
         switchesToCodexAtLimit = bool(Keys.switchesToCodexAtLimit, true)
+        continuesAfterLimit = bool(Keys.continuesAfterLimit, true)
         codexModel = defaults.string(forKey: Keys.codexModel) ?? ""
         codexEffort = defaults.string(forKey: Keys.codexEffort) ?? ""
         claudeEffort = defaults.string(forKey: Keys.claudeEffort) ?? ""
@@ -257,6 +261,7 @@ public final class Preferences {
         static let standardsLibrary = "standardsLibrary"
         static let asksCodex = "asksCodex"
         static let switchesToCodexAtLimit = "switchesToCodexAtLimit"
+        static let continuesAfterLimit = "continuesAfterLimit"
         static let codexModel = "codexModel"
         static let codexEffort = "codexEffort"
         static let claudeEffort = "claudeEffort"

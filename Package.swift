@@ -64,7 +64,12 @@ let package = Package(
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
             // three.js, hairline and DiceBear Open Peeps for motion scenes (see MotionLib/LIBRARIES.md).
-            resources: [.copy("Resources/MotionLib")]
+            resources: [.copy("Resources/MotionLib")],
+            // macOS 27.2's concurrency runtime sometimes crashes inside the main-actor check
+            // Swift 6 puts on closures AppKit and SwiftUI call (TimelineView content at 30 fps,
+            // NSView getters during display), on the main thread where the check would pass.
+            // Release builds leave those checks out; debug builds keep them to catch real misuse.
+            swiftSettings: [.unsafeFlags(["-Xfrontend", "-disable-dynamic-actor-isolation"], .when(configuration: .release))]
         ),
         .testTarget(name: "DanteKitTests", dependencies: ["DanteKit", "DanteOpen", "DanteCore"]),
         .testTarget(name: "DanteEditorTests", dependencies: ["DanteEditor"]),

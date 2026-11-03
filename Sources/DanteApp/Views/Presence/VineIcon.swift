@@ -17,8 +17,10 @@ final class VineIcon: NSView {
     private var timer: Timer?
     private var clock: Double = 0
 
-    override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    // Nonisolated: AppKit asks during display, and the main-actor check on these getters
+    // crashed in macOS 27.2's runtime.
+    nonisolated override var isFlipped: Bool { true }
+    nonisolated override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

@@ -27,6 +27,7 @@ Code is the editor: the file explorer, search, problems and the debugger beside 
 - Stage, commit (with a drafted message and a secret check), push, pull, switch and create branches; resolve merge conflicts hunk by hunk.
 - Set breakpoints and debug Go and Python.
 - Split the editor; back and forward through places.
+- Middle-click a tab (editor, terminal or Data query) to close it, as in a browser; an editor tab with unsaved edits asks first, like its ×.
 
 ## States
 - No file open: the editor shows the shortcuts to start.

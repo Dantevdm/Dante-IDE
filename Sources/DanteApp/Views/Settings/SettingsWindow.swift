@@ -416,6 +416,9 @@ private struct CodexRow: View {
                     .help("When Claude Code warns that your plan is at 90% or more, or stops at its limit, Codex takes over the conversation with a summary of it, and a request Claude couldn’t finish is sent again.")
                     .onChange(of: preferences.switchesToCodexAtLimit) { Sessions.all.forEach { $0.applyClaudePreferences() } }
             }
+            Toggle("Carry on when the limit resets", isOn: $preferences.continuesAfterLimit)
+                .help("When the agent in charge stops at its usage limit and no other agent takes over, the conversation carries on by itself a minute after the limit resets (the time the agent gave, or half an hour). Anything you send first replaces it.")
+                .onChange(of: preferences.continuesAfterLimit) { Sessions.all.forEach { $0.applyClaudePreferences() } }
             if Session.codexPath != nil, preferences.asksCodex || preferences.agentEngine == .codex {
                 TextField("Model", text: $preferences.codexModel, prompt: Text("Codex default"))
                     .onSubmit { Sessions.all.forEach { $0.applyClaudePreferences() } }

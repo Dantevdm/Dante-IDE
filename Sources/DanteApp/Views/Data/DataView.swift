@@ -667,6 +667,7 @@ private struct DataTabButton: View {
     var body: some View {
         Button(action: action) { label }
             .buttonStyle(.plain)
+            .onMiddleClick { close?() }
             .onHover { hovering = $0 }
     }
 

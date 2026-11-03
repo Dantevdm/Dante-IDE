@@ -16,6 +16,7 @@ struct StatusBar: View {
             if let document = workspace.activeDocument, document.kind.opensAsText {
                 LanguageStatus(session: session, document: document)
                 BlameStatus(session: session, workspace: workspace, document: document)
+                ReviewStatus(session: session, workspace: workspace)
                 Text("Ln \(session.cursor.line), Col \(session.cursor.column)")
                 Text(document.language.displayName)
                 Text("UTF-8")
@@ -331,5 +332,40 @@ private struct ProblemsList: View {
         }
         .frame(width: 420)
         .background(theme.panel.color)
+    }
+}
+
+/// The open file's review: who has read this version, or Mark reviewed. A click marks it
+/// (or takes your mark back); Git › Mark File as Reviewed does the same.
+private struct ReviewStatus: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if session.git.isRepository, let path = session.activeReviewPath, let file = session.review.file(path) {
+                let mine = session.review.reviewer.map(file.reviewed(by:)) ?? false
+                Button { session.toggleReviewedActiveFile() } label: {
+                    Label(Self.title(file, mine: mine), systemImage: mine ? "eye.fill" : "eye")
+                        .foregroundStyle(ReviewView.color(file.state, theme))
+                        .lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .help(ReviewView.who(file) + "\n\n" + Shortcuts.label(mine ? "Click to take your mark back" : "Click when you've read and understood it as it is now", "markReviewed"))
+            }
+        }
+        .task(id: workspace.revision) { await session.review.load(root: workspace.url, revision: workspace.revision) }
+    }
+
+    static func title(_ file: CodeReview.FileReview, mine: Bool) -> String {
+        switch file.state {
+        case .notReviewed: "Mark reviewed"
+        case .changed: "Changed since review"
+        case .concern: "Concern raised"
+        case .partly, .reviewed:
+            mine ? (file.current.count > 1 ? "You and \(file.current.count - 1) more" : "You reviewed it")
+                : "\(file.current.count) reviewed · Mark"
+        }
     }
 }

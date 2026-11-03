@@ -22,6 +22,8 @@ Settings holds the appearance, editor, keyboard shortcuts, language servers, fil
 - “Hey Dante” (off by default): while it's on the microphone stays open and speech is recognised on this Mac. Turn it on or off in Settings › Agents (Listen for “Hey Dante”), with the menu bar panel's Hey Dante button (filled while listening), the menu bar item's right-click menu or View › Listen for “Hey Dante”; turning it off closes the microphone at once unless you're talking.
 - Hold ⌃⌥Space in any app to talk; release to send. Repeated key-down events don't restart recording. A quick release during permission/startup cancels the hold without opening the microphone later. Click Talk for the separate pause-to-send conversation mode.
 - Paste a cloud agent's key (kept in the Keychain).
+- Carry on when the limit resets (Agents, on by default): when a turn stops at Claude's usage limit and Codex doesn't take over, the conversation carries on by itself a minute after the reset time the message gives ("resets 2:20pm", "resets Nov 6, 9am", "try again in 45 minutes"; half an hour when it gives none), up to four tries. A bar over the composer says when, with Now and Cancel; sending anything else cancels it.
+- Help › Crash Reports…: a window listing the reports macOS wrote when Dante crashed (this folder and Retired), newest first: the date and where it stopped, the exception, any runtime message and the crashed thread's top frames with Dante's own in the accent colour, a sentence saying whether Dante's code or only macOS was running, Copy, Show in Finder and, when a window has Dante's own code open, Ask the agent to fix it.
 - Type a tool's install command into the terminal (never run by Dante).
 - Project: move .dante to the Trash, set up again, forget saved connections.
 

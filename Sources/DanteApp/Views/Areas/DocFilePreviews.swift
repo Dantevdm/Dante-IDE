@@ -102,18 +102,170 @@ struct FilePreview: View {
     }
 }
 
-struct PDFPreview: NSViewRepresentable {
+/// A PDF in Docs: pages on the panel colour with gaps and shadows, at a readable width
+/// rather than stretched across a wide pane, with the page count, zoom and find above.
+struct PDFPreview: View {
+    @Environment(\.theme) private var theme
     let url: URL
+    @State private var pdf = PDFState()
+    @State private var query = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Text(pdf.pageCount == 0 ? "No pages" : "Page \(pdf.page) of \(pdf.pageCount)")
+                    .font(.dante(size: 12).monospacedDigit())
+                    .foregroundStyle(theme.text2.color)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass").font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                    TextField("Find in PDF", text: $query)
+                        .textFieldStyle(.plain)
+                        .font(.dante(size: 12))
+                        .frame(width: 150)
+                        .onSubmit { pdf.find(query) }
+                    if let found = pdf.found {
+                        Text(found).font(.dante(size: 11).monospacedDigit()).foregroundStyle(theme.text3.color)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(RoundedRectangle(cornerRadius: 6).fill(theme.card.color))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line.color))
+                IconButton(symbol: "minus.magnifyingglass", label: "Zoom out", size: 12) { pdf.zoom(by: 1 / 1.2) }
+                Button { pdf.fit() } label: {
+                    Text(pdf.fitting ? "Fit" : "\(Int((pdf.scale * 100).rounded()))%")
+                        .font(.dante(size: 11.5, weight: .medium).monospacedDigit())
+                        .frame(minWidth: 38)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.text2.color)
+                .help("Fit the page to the width")
+                IconButton(symbol: "plus.magnifyingglass", label: "Zoom in", size: 12) { pdf.zoom(by: 1.2) }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(theme.panel.color)
+            .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
+            PDFKitView(url: url, background: theme.ground.nsColor, state: pdf)
+        }
+        .onChange(of: query) { pdf.found = nil }
+    }
+}
+
+@MainActor
+@Observable
+final class PDFState {
+    var page = 1
+    var pageCount = 0
+    var scale: CGFloat = 1
+    /// Following the pane's width (up to `PDFState.widest`), until zoomed by hand.
+    var fitting = true
+    var found: String?
+    @ObservationIgnored weak var view: PDFView?
+    @ObservationIgnored private var matches: [PDFSelection] = []
+    @ObservationIgnored private var matchIndex = 0
+    @ObservationIgnored private var lastQuery = ""
+
+    /// Pages wider than this on screen are harder to read, so fitting stops there.
+    static let widest: CGFloat = 920
+
+    func zoom(by factor: CGFloat) {
+        guard let view else { return }
+        fitting = false
+        view.scaleFactor = min(5, max(0.2, view.scaleFactor * factor))
+        scale = view.scaleFactor
+    }
+
+    func fit() {
+        fitting = true
+        refit()
+    }
+
+    func refit() {
+        guard fitting, let view, let page = view.document?.page(at: 0) else { return }
+        let width = page.bounds(for: view.displayBox).width
+        guard width > 0 else { return }
+        let room = min(view.bounds.width - 64, Self.widest)
+        let new = max(0.2, room / width)
+        // layout() calls this, and a new scale lays out again, so only real changes count.
+        if abs(view.scaleFactor - new) > 0.002 { view.scaleFactor = new }
+        if scale != view.scaleFactor { scale = view.scaleFactor }
+    }
+
+    func pageChanged() {
+        guard let view, let document = view.document, let current = view.currentPage else { return }
+        page = document.index(for: current) + 1
+        pageCount = document.pageCount
+    }
+
+    /// Return finds the next match, wrapping round.
+    func find(_ query: String) {
+        guard let view, let document = view.document, !query.isEmpty else { return }
+        if query != lastQuery {
+            matches = document.findString(query, withOptions: [.caseInsensitive])
+            matchIndex = 0
+            lastQuery = query
+        } else if !matches.isEmpty {
+            matchIndex = (matchIndex + 1) % matches.count
+        }
+        guard !matches.isEmpty else { found = "None"; return }
+        let match = matches[matchIndex]
+        view.setCurrentSelection(match, animate: true)
+        view.go(to: match)
+        found = "\(matchIndex + 1) of \(matches.count)"
+    }
+}
+
+private struct PDFKitView: NSViewRepresentable {
+    let url: URL
+    let background: NSColor
+    let state: PDFState
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> PDFView {
-        let view = PDFView()
-        view.autoScales = true
+        let view = FittingPDFView()
+        view.state = state
+        view.autoScales = false
         view.displayMode = .singlePageContinuous
-        view.backgroundColor = .clear
+        view.displaysPageBreaks = true
+        view.pageBreakMargins = NSEdgeInsets(top: 14, left: 24, bottom: 14, right: 24)
+        view.pageShadowsEnabled = true
+        view.backgroundColor = background
+        state.view = view
+        context.coordinator.observer = NotificationCenter.default.addObserver(forName: .PDFViewPageChanged, object: view, queue: .main) { [weak state] _ in
+            MainActor.assumeIsolated { state?.pageChanged() }
+        }
         return view
     }
 
     func updateNSView(_ view: PDFView, context: Context) {
-        if view.document?.documentURL != url { view.document = PDFDocument(url: url) }
+        view.backgroundColor = background
+        if view.document?.documentURL != url {
+            view.document = PDFDocument(url: url)
+            state.fitting = true
+            state.found = nil
+            state.refit()
+            state.pageChanged()
+            if let first = view.document?.page(at: 0) { view.go(to: first) }
+        }
+    }
+
+    static func dismantleNSView(_ view: PDFView, coordinator: Coordinator) {
+        if let observer = coordinator.observer { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    final class Coordinator {
+        var observer: (any NSObjectProtocol)?
+    }
+
+    /// Refits as the pane changes width.
+    private final class FittingPDFView: PDFView {
+        weak var state: PDFState?
+        override func layout() {
+            super.layout()
+            state?.refit()
+        }
     }
 }

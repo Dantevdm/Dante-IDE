@@ -329,6 +329,9 @@ struct EnvironmentView: View {
     /// The project's apps and its containers outside compose.
     @ViewBuilder
     private func projectCards(compose: ComposeFile?) -> some View {
+        if let mise = session.mise {
+            MiseCard(session: session, mise: mise)
+        }
         if !apps.isEmpty {
             AppsCard(session: session, apps: apps, hasCompose: compose != nil, composeName: compose?.url.lastPathComponent ?? "docker-compose.yml",
                      databases: others.filter { $0.engine != nil }.map(\.name))
@@ -1083,6 +1086,81 @@ private struct ContainersCard: View {
                         .disabled(busy != nil)
                 }
             }
+        }
+    }
+}
+
+/// The project's mise config: the tools it pins (and which aren't installed), its tasks and
+/// the variables it sets. Dante lays mise's environment over every command it runs here, but
+/// never trusts a config or installs anything itself: those commands are typed, not run.
+private struct MiseCard: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let mise: Mise.Status
+
+    var body: some View {
+        Card("Tools from mise", trailing: { Text(mise.configs.joined(separator: " · ")).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color) }) {
+            VStack(alignment: .leading, spacing: 10) {
+                if mise.notInstalled {
+                    notice("This project pins its tools with mise, which isn't installed. Without it, commands here use whatever versions are on the PATH.",
+                           button: "Type the install command", command: "brew install mise")
+                } else if mise.untrusted {
+                    notice("mise won't read this project's config until you trust it (a config can run commands). Until then Dante's commands use the PATH's versions.",
+                           button: "Type mise trust", command: "mise trust")
+                } else {
+                    if let problem = mise.problem {
+                        Text(problem).font(.dante(size: 12)).foregroundStyle(theme.amber.color)
+                    }
+                    if !mise.missing.isEmpty {
+                        notice("\(mise.missing.map { "\($0.name) \($0.version)" }.joined(separator: ", ")) \(mise.missing.count == 1 ? "isn't" : "aren't") installed yet.",
+                               button: "Type mise install", command: "mise install")
+                    }
+                    ForEach(mise.tools) { tool in
+                        HStack(spacing: 8) {
+                            Image(systemName: tool.installed ? "checkmark.circle.fill" : "arrow.down.circle")
+                                .foregroundStyle(tool.installed ? theme.green.color : theme.amber.color)
+                            Text(tool.name).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color)
+                            Text(tool.version).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
+                            if let requested = tool.requested, requested != tool.version {
+                                Text("asks for \(requested)").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                            }
+                            Spacer()
+                        }
+                    }
+                    if !mise.variables.isEmpty {
+                        Text("Sets \(mise.variables.joined(separator: ", "))")
+                            .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color)
+                            .lineLimit(2)
+                    }
+                    if !mise.tasks.isEmpty {
+                        Divider()
+                        ForEach(mise.tasks) { task in
+                            HStack(spacing: 8) {
+                                Text(task.name).font(.dante(size: 12.5, weight: .medium, design: .monospaced)).foregroundStyle(theme.text.color)
+                                Text(task.description.isEmpty ? task.run.joined(separator: " && ") : task.description)
+                                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color).lineLimit(1)
+                                Spacer()
+                                Button { session.runInNewTerminal("mise run \(Shell.quote(task.name))", title: task.name) } label: {
+                                    Label("Run", systemImage: "play.fill")
+                                }
+                                .buttonStyle(DanteButtonStyle())
+                                .controlSize(.small)
+                                .help("Run it in a terminal tab of its own")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func notice(_ text: String, button: String, command: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(text).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button(button) { session.typeInTerminal(command) }
+                .buttonStyle(DanteButtonStyle())
+                .help("Typed into the terminal for you to read and run; Dante doesn't run it")
         }
     }
 }

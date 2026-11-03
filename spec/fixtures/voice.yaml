@@ -13,6 +13,8 @@ cases:
     navigate: settings
   - say: tests
     navigate: tests
+  - say: show me the code review
+    navigate: review
   - say: open the services
     navigate: environments
   - say: show me the history
