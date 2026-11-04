@@ -40,7 +40,7 @@ public enum CompanionPages {
         case .image: .image
         case .pdf: .pdf
         case .diagram: .diagram
-        case .document, .html: .text
+        case .document, .html, .mindmap: .text
         case .slides, .motion: nil
         }
     }

@@ -298,6 +298,7 @@ struct DocRow: View {
         case .slides: "rectangle.on.rectangle"
         case .motion: "film.stack"
         case .diagram: "point.3.filled.connected.trianglepath.dotted"
+        case .mindmap: "point.3.connected.trianglepath.dotted"
         default: "doc.text"
         }
     }

@@ -19,6 +19,8 @@ public struct DocLibrary: Equatable, Sendable {
             case motion
             /// A `.dante-diagram.json` drawn in the Map's style, opened in the diagram editor.
             case diagram
+            /// An XMind file (`.xmind`), opened in the mind map editor.
+            case mindmap
         }
 
         public init(path: String) { self.path = path }
@@ -26,6 +28,7 @@ public struct DocLibrary: Equatable, Sendable {
         public var kind: Kind {
             if MotionPiece.isManifest(path) { return .motion }
             if Diagram.isDiagram(path) { return .diagram }
+            if MindMap.isMindMap(path) { return .mindmap }
             let ext = (path as NSString).pathExtension.lowercased()
             if DocLibrary.markdownExtensions.contains(ext) { return .markdown }
             if ext == "pdf" { return .pdf }
@@ -44,6 +47,7 @@ public struct DocLibrary: Equatable, Sendable {
                 return spaced.prefix(1).uppercased() + spaced.dropFirst()
             }
             if kind == .diagram { return Diagram.title(ofPath: path) }
+            if kind == .mindmap { return MindMap.title(ofPath: path) }
             let name = (path as NSString).lastPathComponent
             let base = kind == .markdown ? (name as NSString).deletingPathExtension : name
             if base.uppercased() == base || kind != .markdown { return base }
@@ -169,7 +173,7 @@ public struct DocLibrary: Equatable, Sendable {
         } else {
             switch group.title {
             case "Project", Self.aroundTheCode: return directory
-            case "Motion", "Diagrams": return ""
+            case "Motion", "Diagrams", "Mind maps": return ""
             case "Docs": root = directory.split(separator: "/").first.map(String.init) ?? ""
             case "Notes": root = ".dante"
             default: root = directory.split(separator: "/").prefix(2).joined(separator: "/")
@@ -197,6 +201,7 @@ public struct DocLibrary: Equatable, Sendable {
     public static func isDoc(_ path: String) -> Bool {
         if MotionPiece.isManifest(path) { return path.contains("/") }
         if Diagram.isDiagram(path) { return true }
+        if MindMap.isMindMap(path) { return true }
         // A piece's scene, stills and exports are its own: Docs lists the piece.
         if path.hasPrefix(MotionPiece.folder + "/") || path.contains("/renders/") { return false }
         let ext = (path as NSString).pathExtension.lowercased()
@@ -249,7 +254,7 @@ public struct DocLibrary: Equatable, Sendable {
         if !around.isEmpty { groups.append(Group(title: Self.aroundTheCode, docs: around.sorted(by: Self.ordered))) }
     }
 
-    static let order = ["Project", "Motion", "Diagrams", "Specs", "Decisions", "Runbooks", "Notes", "Phases", "Docs"]
+    static let order = ["Project", "Motion", "Diagrams", "Mind maps", "Specs", "Decisions", "Runbooks", "Notes", "Phases", "Docs"]
 
     /// "infrastructure" reads "Infrastructure", "build-tools" "Build tools"; dot folders stay, and
     /// a folder named like one of the groups above reads "notes/".
@@ -275,6 +280,7 @@ public struct DocLibrary: Equatable, Sendable {
         }
         if MotionPiece.isManifest(path) { return "Motion" }
         if Diagram.isDiagram(path) { return "Diagrams" }
+        if MindMap.isMindMap(path) { return "Mind maps" }
         if parts[0].lowercased() == "docs" || parts[0].lowercased() == "documentation" { return "Docs" }
         return nil
     }

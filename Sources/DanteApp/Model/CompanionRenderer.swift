@@ -197,6 +197,8 @@ enum CompanionRenderer {
     /// Word, RTF, OpenDocument and HTML as plain text, through `textutil`.
     nonisolated static func plainText(_ file: URL) async -> String? {
         if ["txt", "text", "log", "csv"].contains(file.pathExtension.lowercased()) { return try? String(contentsOf: file, encoding: .utf8) }
+        // A mind map reads as its outline.
+        if MindMap.isMindMap(file.path) { return (try? Data(contentsOf: file)).flatMap { try? MindMap.read($0) }?.outline() }
         let result = await Shell.run(["textutil", "-convert", "txt", "-stdout", file.path], in: file.deletingLastPathComponent())
         return result.status == 0 ? result.stdout : nil
     }

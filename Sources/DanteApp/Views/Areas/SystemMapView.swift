@@ -76,8 +76,10 @@ struct SystemDiagram: View {
                             .frame(width: columnWidth(column[0].lane), alignment: .leading)
                     }
                 }
-                // Columns centre on each other so arrows between short and long ones stay level.
-                HStack(alignment: .center, spacing: Self.gap) {
+                // Columns centre on each other so arrows between short and long ones stay level,
+                // but a short one drops at most a little way, or one long column (thirteen
+                // tables) leaves the first screen empty.
+                LaneRow(spacing: Self.gap, deepestDrop: 140) {
                     ForEach(columns, id: \.first!.lane) { column in
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(Array(column.enumerated()), id: \.element.lane) { index, section in
@@ -1066,6 +1068,31 @@ private struct AccessSection: View {
                 }
                 .buttonStyle(DanteButtonStyle())
             }
+        }
+    }
+}
+
+
+/// Columns side by side, each centred on the tallest but never lower than `deepestDrop`
+/// from the top.
+private struct LaneRow: Layout {
+    var spacing: CGFloat
+    var deepestDrop: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let width = sizes.map(\.width).reduce(0, +) + spacing * CGFloat(max(0, sizes.count - 1))
+        return CGSize(width: width, height: sizes.map(\.height).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let tallest = sizes.map(\.height).max() ?? 0
+        var x = bounds.minX
+        for (subview, size) in zip(subviews, sizes) {
+            let drop = min((tallest - size.height) / 2, deepestDrop)
+            subview.place(at: CGPoint(x: x, y: bounds.minY + drop), proposal: ProposedViewSize(size))
+            x += size.width + spacing
         }
     }
 }

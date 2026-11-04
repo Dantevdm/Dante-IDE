@@ -88,7 +88,7 @@ struct EditorArea: View {
             fontSize: themeStore.editorFontSize,
             diagnostics: session.languages?.diagnostics(for: document) ?? [],
             canJump: session.languages?.existingClient(for: document.language) != nil,
-            root: workspace.url,
+            root: workspace.git.root,
             gitRevision: session.gitRevision,
             isFocused: focused,
             onCursorChange: { if focused { session.cursor = $0 } },

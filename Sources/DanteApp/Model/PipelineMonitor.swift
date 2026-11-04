@@ -88,7 +88,7 @@ final class PipelineMonitor {
     }
 
     private func detect(_ root: URL) async {
-        let remote = await Shell.run(["git", "remote", "get-url", "origin"], in: root).stdout
+        let remote = await Shell.run(["git", "remote", "get-url", "origin"], in: GitLocation.find(projectRoot: root).root).stdout
         let files = Self.pipelineFiles(in: root)
         wantsLink = false
         if let linked = Self.linked(Self.links(for: root)) {
@@ -109,7 +109,8 @@ final class PipelineMonitor {
     }
 
     static func pipelineFiles(in root: URL) -> (azure: [String], github: [String]) {
-        let github = CIRun.hasWorkflows(projectRoot: root) ? [".github/workflows"] : []
+        let repo = GitLocation.find(projectRoot: root)
+        let github = CIRun.hasWorkflows(projectRoot: repo.root) ? [repo.prefix + ".github/workflows"] : []
         var azure: [String] = []
         if let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
             for case let url as URL in walker {
@@ -159,7 +160,7 @@ final class PipelineMonitor {
                 return
             }
         case .github:
-            switch await CIRun.load(projectRoot: root, limit: 30) {
+            switch await CIRun.load(projectRoot: GitLocation.find(projectRoot: root).root, limit: 30) {
             case .success(let runs):
                 fresh = runs.map(PipelineRun.init)
                 problem = nil

@@ -64,7 +64,7 @@ struct HomeView: View {
             ForEach(topLanguages, id: \.self) { language in
                 Chip(text: language.displayName, symbol: "chevron.left.forwardslash.chevron.right")
             }
-            if let branch = Git.currentBranch(in: workspace.url) {
+            if let branch = Git.currentBranch(in: workspace.git.root) {
                 Chip(text: branch, symbol: "arrow.triangle.branch")
             }
             if !workspace.files.isEmpty {
@@ -139,15 +139,14 @@ struct HomeView: View {
             (LanguageStats.top(files).map(\.language), HomePulse.languages(files))
         }.value
         compose = ComposeFile.load(projectRoot: workspace.url)
-        async let snapshot = GitSnapshot.load(in: workspace.url)
+        async let snapshot = GitSnapshot.load(in: workspace.git.root)
         if compose != nil {
             containers = await ContainerState.load(projectRoot: workspace.url)
         }
         git = await snapshot
         lastTests = TestRecord.load(for: workspace.url).last
         if session.security.report == nil { session.security.loadSaved(root: workspace.url) }
-        let root = workspace.url
-        let log = await Shell.run(["git", "log", "-n", "50000", "--format=%ct"], in: root)
+        let log = await Shell.run(["git", "log", "-n", "50000", "--format=%ct"], in: workspace.git.root)
         commits = log.stdout.split(separator: "\n").compactMap { Double($0.trimmingCharacters(in: .whitespaces)).map { Date(timeIntervalSince1970: $0) } }
         let project = workspace.name, since = Calendar.current.date(byAdding: .day, value: -7, to: .now) ?? .now
         agentDays = await Task.detached(priority: .utility) {

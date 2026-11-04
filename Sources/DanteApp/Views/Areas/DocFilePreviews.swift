@@ -80,7 +80,7 @@ struct FilePreview: View {
                 }
             case .slides:
                 QuickLookPreview(url: url)
-            case .document, .markdown, .motion, .diagram:
+            case .document, .markdown, .motion, .diagram, .mindmap:
                 ScrollView {
                     Text(text ?? "Reading…")
                         .font(.dante(size: 14))

@@ -52,7 +52,7 @@ struct DiffView: View {
         }
         .background(theme.codeBackground.color)
         .task(id: "\(target.change.path)#\(target.staged)#\(workspace.revision)") {
-            diff = await GitRepository.diff(of: target.change, staged: target.staged, in: workspace.url)
+            diff = await GitRepository.diff(of: workspace.git.repoChange(target.change), staged: target.staged, in: workspace.git.root)
         }
     }
 

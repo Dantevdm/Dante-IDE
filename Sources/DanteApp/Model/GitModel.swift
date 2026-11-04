@@ -30,6 +30,8 @@ final class GitModel {
     }
 
     private var root: URL?
+    /// Where the repository is in the project; status paths are made project paths with it.
+    private(set) var location: GitLocation?
 
     var isRepository: Bool { status != nil }
     var changeCount: Int { status?.changes.count ?? 0 }
@@ -39,10 +41,12 @@ final class GitModel {
         return hasMessage && (!status.staged.isEmpty || !status.unstaged.isEmpty || amend) && status.conflicted.isEmpty
     }
 
-    func load(_ root: URL?) async {
-        self.root = root
-        guard let root else { status = nil; branches = []; return }
-        status = await GitRepository.status(in: root)
+    func load(_ location: GitLocation?) async {
+        self.location = location
+        self.root = location?.root
+        guard let location else { status = nil; branches = []; return }
+        let root = location.root
+        status = await GitRepository.status(in: root).map(location.projectStatus)
         operation = status == nil ? nil : await GitRepository.operation(in: root)
         // Keep the open diff on the side of the file that still has changes.
         if let target = diff {
@@ -65,18 +69,21 @@ final class GitModel {
     // MARK: Changes
 
     func stage(_ changes: [GitStatus.Change]) async {
-        await perform(nil) { try await GitRepository.stage(changes.map(\.path), in: $0) }
+        let paths = changes.map { repo($0).path }
+        await perform(nil) { try await GitRepository.stage(paths, in: $0) }
         if var target = diff, changes.contains(where: { $0.path == target.change.path }) { target.staged = true; diff = target }
     }
 
     func unstage(_ changes: [GitStatus.Change]) async {
         let fresh = status?.isNewRepository ?? false
-        await perform(nil) { try await GitRepository.unstage(changes.map(\.path), in: $0, newRepository: fresh) }
+        let paths = changes.map { repo($0).path }
+        await perform(nil) { try await GitRepository.unstage(paths, in: $0, newRepository: fresh) }
         if var target = diff, changes.contains(where: { $0.path == target.change.path }) { target.staged = false; diff = target }
     }
 
     func discard(_ changes: [GitStatus.Change]) async {
-        await perform(nil) { try await GitRepository.discard(changes, in: $0) }
+        let repoChanges = changes.map(repo)
+        await perform(nil) { try await GitRepository.discard(repoChanges, in: $0) }
     }
 
     /// Commits what's staged, or everything when nothing is.
@@ -101,7 +108,8 @@ final class GitModel {
 
     /// Writes and stages the resolved file, then shows the next conflict.
     func resolve(_ path: String, text: String) async {
-        guard await perform("Marking resolved…", { try await GitRepository.markResolved(path, text: text, in: $0) }) else { return }
+        let repoPath = location?.repoPath(path) ?? path
+        guard await perform("Marking resolved…", { try await GitRepository.markResolved(repoPath, text: text, in: $0) }) else { return }
         notice = "Resolved \((path as NSString).lastPathComponent)"
         diff = status?.conflicted.first.map { DiffTarget(change: $0, staged: false) }
     }
@@ -184,6 +192,9 @@ final class GitModel {
         }
     }
 
+    /// A change as git names it (without the repository's folder in front).
+    func repo(_ change: GitStatus.Change) -> GitStatus.Change { location?.repoChange(change) ?? change }
+
     /// Runs a git command against the window's repository, then re-reads the status.
     @discardableResult
     private func perform(_ label: String?, _ work: @escaping (URL) async throws -> Void) async -> Bool {
@@ -194,14 +205,14 @@ final class GitModel {
         defer { busy = nil }
         do {
             try await work(root)
-            await load(root)
+            await load(location)
             return true
         } catch let failure as GitRepository.Failure {
             error = failure
         } catch {
             self.error = GitRepository.Failure(message: error.localizedDescription)
         }
-        await load(root)
+        await load(location)
         return false
     }
 }

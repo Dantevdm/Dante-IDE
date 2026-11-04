@@ -140,6 +140,69 @@ func send(_ url: URL, background: Bool = false) -> Never {
     exit(open.terminationStatus)
 }
 
+// `dante mindmap <outline|mermaid|write|new> …`: mind maps (XMind files) as outlines, for
+// scripts and agents, which write an outline rather than editing the zip.
+if CommandLine.arguments.dropFirst().first == "mindmap" {
+    let arguments = Array(CommandLine.arguments.dropFirst(2))
+    let usage = """
+    dante mindmap outline <file.xmind> [--sheet 2]   the map as a markdown outline
+    dante mindmap mermaid <file.xmind> [--sheet 2]   the map as a Mermaid mindmap
+    dante mindmap write <file.xmind> <outline.md|->  the outline into the map (made if it's new)
+    dante mindmap new <file.xmind> <central topic>   an empty map
+
+    An outline is "# Central topic" then "-" items nested by two spaces; "##" headings make
+    main branches too. Writing keeps other sheets, and the notes and styles of topics whose
+    titles stay the same.
+    """
+    guard let command = arguments.first, !["-h", "--help", "help"].contains(command), arguments.count >= 2 else { print(usage); exit(0) }
+    let here = URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory)
+    let target = URL(filePath: arguments[1], relativeTo: here).standardizedFileURL
+    let sheet = arguments.firstIndex(of: "--sheet").flatMap { arguments.indices.contains($0 + 1) ? Int(arguments[$0 + 1]) : nil }.map { $0 - 1 } ?? 0
+    func load() -> MindMap {
+        guard let data = try? Data(contentsOf: target) else { fail("can't read \(target.lastPathComponent)") }
+        do { return try MindMap.read(data) } catch { fail((error as? LocalizedError)?.errorDescription ?? "\(error)") }
+    }
+    func save(_ map: MindMap) {
+        do {
+            try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try map.data().write(to: target, options: .atomic)
+        } catch { fail("can't write \(target.lastPathComponent): \(error.localizedDescription)") }
+    }
+    switch command {
+    case "outline":
+        let map = load()
+        guard map.sheets.indices.contains(sheet) else { fail("there's no sheet \(sheet + 1); the map has \(map.sheets.count)") }
+        print(map.outline(sheet: sheet), terminator: "")
+    case "mermaid":
+        let map = load()
+        guard map.sheets.indices.contains(sheet) else { fail("there's no sheet \(sheet + 1); the map has \(map.sheets.count)") }
+        print(map.mermaid(sheet: sheet), terminator: "")
+    case "write":
+        guard arguments.count >= 3 else { fail("write takes the map and an outline file (or - for stdin)") }
+        let text: String
+        if arguments[2] == "-" {
+            text = String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
+        } else {
+            guard let read = try? String(contentsOf: URL(filePath: arguments[2], relativeTo: here), encoding: .utf8) else { fail("can't read \(arguments[2])") }
+            text = read
+        }
+        let outline = MindMap.fromOutline(text, title: MindMap.title(ofPath: target.path))
+        let existing = FileManager.default.fileExists(atPath: target.path) ? load() : nil
+        let map = existing.map { $0.replacingTree(with: outline, sheet: min(sheet, $0.sheets.count - 1)) } ?? outline
+        save(map)
+        let count = map.sheets[min(sheet, map.sheets.count - 1)].root.all.count
+        print("Wrote \(target.lastPathComponent): \(count) topic\(count == 1 ? "" : "s")")
+    case "new":
+        if FileManager.default.fileExists(atPath: target.path) { fail("\(target.lastPathComponent) already exists") }
+        let title = arguments.dropFirst(2).joined(separator: " ")
+        save(MindMap(title: title.isEmpty ? MindMap.title(ofPath: target.path) : title))
+        print("Wrote \(target.lastPathComponent)")
+    default:
+        fail("unknown mindmap command \(command).\n\(usage)")
+    }
+    exit(0)
+}
+
 // `dante pdf <info|text|comments|merge|extract|split|rotate|delete|move|protect> …`: the PDF
 // view's tools for scripts and agents. Passwords come from DANTE_PDF_PASSWORD, never arguments.
 if CommandLine.arguments.dropFirst().first == "pdf" {

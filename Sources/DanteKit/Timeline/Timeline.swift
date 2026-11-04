@@ -38,9 +38,9 @@ public struct TimelineEvent: Equatable, Sendable, Identifiable {
 public enum Timeline {
     /// Everything Dante can find, newest first.
     @MainActor
-    public static func load(root: URL, tests: [TestRecord], ci: [CIRun], claudeFolder: URL? = nil, commitLimit: Int = 200) async -> [TimelineEvent] {
+    public static func load(root: URL, gitRoot: URL? = nil, tests: [TestRecord], ci: [CIRun], claudeFolder: URL? = nil, commitLimit: Int = 200) async -> [TimelineEvent] {
         let folder = claudeFolder ?? ClaudeTranscripts.folder(for: root)
-        async let log = Shell.run(["git", "log", "-n", "\(commitLimit)", "--format=%H%x1f%s%x1f%an%x1f%cI%x1f%D"], in: root)
+        async let log = Shell.run(["git", "log", "-n", "\(commitLimit)", "--format=%H%x1f%s%x1f%an%x1f%cI%x1f%D"], in: gitRoot ?? root)
         let sessions = await Task.detached { ClaudeTranscripts.sessions(in: folder) }.value
         var events = commits(from: await log.stdout)
         events += sessions

@@ -72,8 +72,8 @@ struct ShipView: View {
     private func load() async {
         // Show the last result while the fresh one loads (CI goes to the network).
         if git == nil, let cache = session.shipCache { (git, ci) = (cache.git, cache.ci) }
-        async let snapshot = GitSnapshot.load(in: workspace.url)
-        async let runs = CIRun.load(projectRoot: workspace.url)
+        async let snapshot = GitSnapshot.load(in: workspace.git.root)
+        async let runs = CIRun.load(projectRoot: workspace.git.root)
         git = await snapshot
         ci = await runs
         session.shipCache = ShipCache(git: git, ci: ci)
@@ -83,7 +83,7 @@ struct ShipView: View {
         guard let draft else { return }
         Task {
             do {
-                try await Git.tag(draft.version, message: "Release \(draft.version)\n\n\(draft.markdown)", in: workspace.url)
+                try await Git.tag(draft.version, message: "Release \(draft.version)\n\n\(draft.markdown)", in: workspace.git.root)
                 await load()
             } catch {
                 session.errorMessage = "Couldn’t create the tag: \(error.localizedDescription)"

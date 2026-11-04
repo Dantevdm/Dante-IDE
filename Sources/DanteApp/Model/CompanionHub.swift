@@ -273,11 +273,11 @@ final class CompanionHub {
         case .git(let id, let project, let action):
             Task { [weak self] in
                 guard let self else { return }
-                guard let session = await opened(project), let root = session.workspace?.url else {
+                guard let session = await opened(project), let location = session.workspace?.git else {
                     server?.reply(to: device, id: id, ok: false, message: "Couldn’t open that project on the Mac.")
                     return
                 }
-                let git = await Self.git(action, in: session, root: root)
+                let git = await Self.git(action, in: session, location: location)
                 server?.deliver(.git(id: id, git: git), to: device)
                 if action.changes { publish() }
             }
@@ -331,9 +331,10 @@ final class CompanionHub {
 
     /// Does what the device asked through the window's own git model (so the Changes panel on
     /// the Mac follows along) and reads the repository back.
-    private static func git(_ action: CompanionGitAction, in session: Session, root: URL) async -> CompanionGit {
+    private static func git(_ action: CompanionGitAction, in session: Session, location: GitLocation) async -> CompanionGit {
         let git = session.git
-        await git.load(root)
+        let root = location.root
+        await git.load(location)
         if git.branches.isEmpty { await git.loadBranches() }
         func changes(_ paths: [String]) -> [GitStatus.Change] {
             let wanted = Set(paths)
@@ -345,7 +346,7 @@ final class CompanionHub {
             break
         case .diff(let path, let staged):
             let change = git.status?.changes.first { $0.path == path } ?? GitStatus.Change(path: path)
-            diff = CompanionGit.diff(await GitRepository.diff(of: change, staged: staged, in: root), path: path, staged: staged)
+            diff = CompanionGit.diff(await GitRepository.diff(of: git.repo(change), staged: staged, in: root), path: path, staged: staged)
         case .stage(let paths):
             await git.stage(changes(paths))
         case .unstage(let paths):

@@ -35,6 +35,10 @@ cases:
     ask: true
   - say: show me the diagrams
     navigate: docs.diagrams
+  - say: show me the mind maps
+    navigate: docs.mindmaps
+  - say: make a mind map of the release plan
+    ask: true
   - say: show me the ui standards
     navigate: docs.standards
   - say: write a runbook for restarting the dashboard
@@ -50,6 +54,7 @@ names:
   infra on the map: map.infra
   the data page: data
   the diagrams: docs.diagrams
+  the mind maps: docs.mindmaps
   the customer themes: docs.standards
   map: map
   docker: environments

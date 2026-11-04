@@ -90,7 +90,7 @@ public enum ClaudeBrief {
         let dante = Shell.quote(command)
         return """
         # PDFs
-        Use `\(dante) pdf` for PDFs rather than writing scripts: `info <file>`, `text <file> [--pages 1-3]` and `comments <file>` read one; `merge <out.pdf> <a.pdf> <b.pdf>`, `extract <file> --pages 2,5- -o <out.pdf>`, `split <file> --every 1 -o <folder>`, `rotate <file> --pages 1 --by 90`, `delete <file> --pages 3` and `move <file> --pages 4 --to 1` change pages (saved atomically, in place without -o); `protect <file> -o <out.pdf>` sets the password in DANTE_PDF_PASSWORD, which also opens an encrypted PDF. Pages are 1-based. Run `\(dante) pdf` alone for the details. In the app, PDFs open in Docs with comments, page tools and search.
+        Use `\(dante) pdf` for PDFs rather than writing scripts: `info <file>`, `text <file> [--pages 1-3]` and `comments <file>` read one; `merge <out.pdf> <a.pdf> <b.pdf>`, `extract <file> --pages 2,5- -o <out.pdf>`, `split <file> --every 1 -o <folder>`, `rotate <file> --pages 1 --by 90`, `delete <file> --pages 3` and `move <file> --pages 4 --to 1` change pages (saved atomically, in place without -o); `protect <file> -o <out.pdf>` sets the password in DANTE_PDF_PASSWORD, which also opens an encrypted PDF. Pages are 1-based. Run `\(dante) pdf` alone for the details. Mind maps are XMind files: read one with `\(dante) mindmap outline <file>` and write one from a markdown outline with `\(dante) mindmap write <file> <outline.md>` (`-` reads stdin), never by editing the zip. In the app, PDFs open in Docs with comments, page tools and search.
         """
     }
 
@@ -107,7 +107,7 @@ public enum ClaudeBrief {
                 "You are a pair, not an autopilot. The user reviews every file change as a diff and every command before it runs. Make focused edits with the Edit tool, and say briefly what each change does and why."),
         ]
         if let command = CommandLineTool.bundled()?.path {
-            sections.append(Section(title: "PDFs", source: "built in", text: pdfTools(command: command)))
+            sections.append(Section(title: "PDFs and mind maps", source: "built in", text: pdfTools(command: command)))
         }
         guard let workspace else { return sections }
         if let standards = workspace.standards, let brief = StandardsBrief.brief(standards) {

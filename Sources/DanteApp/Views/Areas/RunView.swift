@@ -48,7 +48,7 @@ struct RunView: View {
                 session.logWatch?.stop()
                 session.logWatch = LogWatch(command: command, projectRoot: workspace.url)
             }
-            latestTag = await GitSnapshot.load(in: workspace.url, recentLimit: 1, sinceTagLimit: 1).latestTag
+            latestTag = await GitSnapshot.load(in: workspace.git.root, recentLimit: 1, sinceTagLimit: 1).latestTag
         }
     }
 }

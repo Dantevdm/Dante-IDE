@@ -65,12 +65,15 @@ struct DocsView: View {
                 StandardsView(session: session, workspace: workspace)
             } else if let selected {
                 VStack(spacing: 0) {
-                    if selected.kind != .diagram {
+                    if selected.kind != .diagram, selected.kind != .mindmap {
                         toolbar(for: selected)
                         Rectangle().fill(theme.line.color).frame(height: 1)
                     }
                     if selected.kind == .diagram {
                         DiagramEditorView(session: session, workspace: workspace, path: selected.path)
+                            .id(selected.path)
+                    } else if selected.kind == .mindmap {
+                        MindMapEditorView(session: session, workspace: workspace, path: selected.path)
                             .id(selected.path)
                     } else if selected.kind == .motion {
                         MotionView(session: session, workspace: workspace, path: selected.path)
@@ -108,6 +111,7 @@ struct DocsView: View {
                 ) {
                     Button("Add files…", action: pickFiles).buttonStyle(DanteButtonStyle())
                     Button("New diagram…") { creating = .diagram }.buttonStyle(DanteButtonStyle())
+                    Button("New mind map…") { creating = .mindmap }.buttonStyle(DanteButtonStyle())
                     Button("New motion piece…") { creating = .motion }.buttonStyle(DanteButtonStyle())
                     Button("New document…") { creating = .doc(nil) }.buttonStyle(DanteButtonStyle(primary: true))
                 }
@@ -122,6 +126,7 @@ struct DocsView: View {
                 NewDocSheet(session: session, workspace: workspace, library: library, switchTo: switchCreation,
                             template: template ?? (library.all.contains { $0.path.lowercased() == "readme.md" } ? .document : .readme))
             case .diagram: NewDiagramSheet(session: session)
+            case .mindmap: NewMindMapSheet(session: session)
             case .motion: NewMotionSheet(session: session)
             }
         }
@@ -133,7 +138,7 @@ struct DocsView: View {
         }
         // "Show me the diagrams": the library, where the Diagrams card is.
         .task(id: session.areaView) {
-            if session.areaView == "diagrams", !showsLibrary || showsStandards { session.showDoc(DocLibrary.libraryPath) }
+            if session.areaView == "diagrams" || session.areaView == "mindmaps", !showsLibrary || showsStandards { session.showDoc(DocLibrary.libraryPath) }
             if session.areaView == "standards", !showsStandards { session.showDoc(DocLibrary.standardsPath) }
         }
         .overlay {

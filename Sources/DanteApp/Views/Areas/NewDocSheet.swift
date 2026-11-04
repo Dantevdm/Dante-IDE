@@ -5,23 +5,26 @@ import SwiftUI
 enum DocCreation: Identifiable, Hashable {
     case doc(DocTemplate?)
     case diagram
+    case mindmap
     case motion
 
     var id: String {
         switch self {
         case .doc(let template): "doc:" + (template?.rawValue ?? "")
         case .diagram: "diagram"
+        case .mindmap: "mindmap"
         case .motion: "motion"
         }
     }
 
     /// Every kind, in the order the create bar and the sheet show them.
-    static let all: [DocCreation] = DocTemplate.allCases.map { .doc($0) } + [.diagram, .motion]
+    static let all: [DocCreation] = DocTemplate.allCases.map { .doc($0) } + [.diagram, .mindmap, .motion]
 
     var title: String {
         switch self {
         case .doc(let template): template?.title ?? "Document"
         case .diagram: "Diagram"
+        case .mindmap: "Mind map"
         case .motion: "Video or deck"
         }
     }
@@ -40,6 +43,7 @@ enum DocCreation: Identifiable, Hashable {
         switch self {
         case .doc(let template): template?.symbol ?? "doc.text"
         case .diagram: "point.3.filled.connected.trianglepath.dotted"
+        case .mindmap: "point.3.connected.trianglepath.dotted"
         case .motion: "film.stack"
         }
     }
@@ -48,6 +52,7 @@ enum DocCreation: Identifiable, Hashable {
         switch self {
         case .doc(let template): template?.summary ?? ""
         case .diagram: "In the Map's style, or copied from it"
+        case .mindmap: "Ideas round a central topic, as an XMind file"
         case .motion: "A video, deck, explainer or motion website"
         }
     }

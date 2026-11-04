@@ -263,6 +263,7 @@ struct DocsLibraryView: View {
         case "Docs": "books.vertical"
         case "Motion": "film.stack"
         case "Diagrams": "point.3.filled.connected.trianglepath.dotted"
+        case "Mind maps": "point.3.connected.trianglepath.dotted"
         case DocLibrary.aroundTheCode: "chevron.left.forwardslash.chevron.right"
         default: "folder"
         }
@@ -278,6 +279,7 @@ struct DocsLibraryView: View {
         case .html: "globe"
         case .motion: "film.stack"
         case .diagram: "point.3.filled.connected.trianglepath.dotted"
+        case .mindmap: "point.3.connected.trianglepath.dotted"
         }
     }
 }

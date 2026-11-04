@@ -143,7 +143,7 @@ private struct BlameStatus: View {
         .task(id: "\(document.url.path)|\(document.text.hashValue)|\(workspace.revision)|\(session.git.isRepository)") {
             if blame != nil { try? await Task.sleep(for: .milliseconds(700)) }
             guard !Task.isCancelled, session.git.isRepository else { return }
-            blame = await GitBlame.load(file: document.url, text: document.text, root: workspace.url)
+            blame = await GitBlame.load(file: document.url, text: document.text, root: workspace.git.root)
         }
     }
 }

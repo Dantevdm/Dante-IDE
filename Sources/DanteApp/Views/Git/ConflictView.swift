@@ -295,7 +295,7 @@ struct ConflictView: View {
         if conflict?.hunks.map(\.ours) != parsed.hunks.map(\.ours) { basesChecked = false }
         conflict = parsed.fillingBases(from: conflict ?? parsed)
         loaded = true
-        if parsed.hunks.contains(where: { $0.base == nil }), let diff3 = await GitRepository.diff3(of: change.path, in: workspace.url) {
+        if parsed.hunks.contains(where: { $0.base == nil }), let diff3 = await GitRepository.diff3(of: workspace.git.repoPath(change.path) ?? change.path, in: workspace.git.root) {
             conflict = parsed.fillingBases(from: diff3)
         }
         basesChecked = true

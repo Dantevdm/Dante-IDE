@@ -83,7 +83,17 @@ public final class Workspace {
         lifecycle = Lifecycle.load(projectRoot: url)
         tasks = TaskBoard(projectRoot: url)
         resolvedRootPath = url.resolvingSymlinksInPath().standardizedFileURL.path
+        git = GitLocation.find(projectRoot: url)
         reloadSpec()
+    }
+
+    /// The repository git features use: this folder, or the one repo just inside it.
+    public private(set) var git: GitLocation = GitLocation(root: URL(filePath: "/"))
+
+    /// Looks again (after `git init` in the folder, or a clone into it).
+    public func refreshGitLocation() {
+        let found = GitLocation.find(projectRoot: url)
+        if found != git { git = found }
     }
 
     /// Reads the standards docs and themes again, off the main thread.
