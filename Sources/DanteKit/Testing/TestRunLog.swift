@@ -146,6 +146,7 @@ public enum TestCommandLine {
         ["uv", "run", "pytest"], ["poetry", "run", "pytest"], ["npm", "test"], ["npm", "run", "test"], ["npm", "t"], ["pnpm", "test"], ["pnpm", "run", "test"],
         ["yarn", "test"], ["bun", "test"], ["npx", "jest"], ["npx", "vitest"], ["jest"], ["vitest"], ["mvn", "test"], ["mvn", "verify"],
         ["./mvnw", "test"], ["./mvnw", "verify"], ["gradle", "test"], ["./gradlew", "test"], ["dotnet", "test"], ["xcodebuild", "test"],
+        ["npx", "playwright", "test"], ["playwright", "test"], ["pnpm", "exec", "playwright", "test"], ["yarn", "playwright", "test"], ["bunx", "playwright", "test"],
         ["rspec"], ["bundle", "exec", "rspec"], ["mix", "test"], ["deno", "test"], ["scripts/kit-tests.sh"],
     ]
 

@@ -22,6 +22,8 @@ public struct TestResult: Codable, Equatable, Sendable, Identifiable {
     public var status: Status
     public var duration: Double?
     public var issues: [Issue]
+    /// Screenshots, videos and traces (Playwright); nil for most runners.
+    public var attachments: [Attachment]?
 
     public var id: String { suite + "/" + name }
 
@@ -47,7 +49,7 @@ public struct TestOutputParser: Sendable {
 
     public mutating func consume(_ rawLine: String) {
         let line = rawLine.trimmingCharacters(in: .whitespaces)
-        if swiftTesting(line) || xcTest(line) || cargo(line) || goTest(line) || pytest(line) || jest(line) { return }
+        if swiftTesting(line) || xcTest(line) || cargo(line) || goTest(line) || pytest(line) || playwright(line) || jest(line) { return }
     }
 
     // MARK: Swift
@@ -177,6 +179,31 @@ public struct TestOutputParser: Sendable {
         }
         record(TestResult(suite: file, name: String(match.2), status: status, duration: match.3.flatMap { Double($0) }.map { $0 / 1000 }))
         return true
+    }
+
+    private mutating func playwright(_ line: String) -> Bool {
+        // ✓  1 [chromium] › e2e/login.spec.ts:5:7 › Login › signs in (1.2s)
+        // ✘  2 [firefox] › e2e/cart.spec.ts:9:3 › adds a line (30.0s)
+        // -  3 [webkit] › e2e/cart.spec.ts:20:3 › pays
+        guard let match = line.firstMatch(of: /^(✓|✘|-|ok|x)\s+\d+\s+(?:\[([^\]]+)\]\s+›\s+)?(\S+?):\d+:\d+\s+›\s+(.+?)(?:\s+\((\d+(?:\.\d+)?)(ms|s|m)\))?$/) else { return false }
+        let status: TestResult.Status = match.1 == "✓" || match.1 == "ok" ? .passed : match.1 == "-" ? .skipped : .failed
+        let name = match.4.split(separator: "›").last.map { $0.trimmingCharacters(in: .whitespaces) } ?? String(match.4)
+        let value = match.5.flatMap { Double($0) }
+        let seconds = value.map { match.6 == "ms" ? $0 / 1000 : match.6 == "m" ? $0 * 60 : $0 }
+        var result = TestResult(suite: String(match.3), name: name, status: status, duration: seconds)
+        // One line per browser: a failure in any of them stands.
+        if let existing = results.first(where: { $0.id == result.id }), existing.status == .failed { result.status = .failed }
+        record(result)
+        return true
+    }
+
+    /// Replaces what the list lines said with the JSON report's fuller results.
+    public mutating func applyPlaywright(_ report: [TestResult]) {
+        for result in report {
+            let stem = (result.suite as NSString).lastPathComponent
+            results.removeAll { $0.name == result.name && ($0.suite == result.suite || result.suite.hasSuffix("/" + $0.suite) || ($0.suite as NSString).lastPathComponent == stem) }
+            results.append(result)
+        }
     }
 
     private mutating func record(_ result: TestResult) {

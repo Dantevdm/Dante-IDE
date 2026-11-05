@@ -301,7 +301,8 @@ struct TestsView: View {
                         ForEach(Array(kinds.enumerated()), id: \.element.id) { index, kind in
                             if index > 0 { Rectangle().fill(theme.line.color).frame(height: 1) }
                             TestKindCard(kind: kind, place: place(of: kind), isRunning: live != nil, run: runWritten,
-                                         open: { test in session.open(file: workspace.url.appending(path: test.file), line: test.line) })
+                                         open: { test in session.open(file: workspace.url.appending(path: test.file), line: test.line) },
+                                         session: session)
                         }
                     }
                 }
@@ -576,6 +577,9 @@ private struct FailuresCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.codeBackground.color))
                         .padding(.leading, 15)
+                    }
+                    if let attachments = result.attachments, !attachments.isEmpty {
+                        TestEvidence(session: session, attachments: attachments).padding(.leading, 15)
                     }
                 }
             }

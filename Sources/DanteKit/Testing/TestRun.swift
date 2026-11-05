@@ -12,6 +12,9 @@ public struct TestCommand: Equatable, Sendable {
     /// Folders (relative to the project) where the runner writes JUnit XML, read after the
     /// run for the tests it only counted (Maven, Gradle).
     public var reportFolders: [String] = []
+    /// Playwright JSON reports (relative to the project), read after the run for each test's
+    /// errors, screenshots, videos and traces.
+    public var playwrightReports: [String] = []
 
     public static func detect(projectRoot root: URL) -> TestCommand? {
         if let command = custom(projectRoot: root) { return command }
@@ -269,6 +272,13 @@ public final class TestRun {
             }
         }
         for xml in Self.reports(in: command.reportFolders, root: root, since: started) { parser.applyXUnit(xml) }
+        for report in command.playwrightReports {
+            let url = root.appending(path: report)
+            guard let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                  modified >= started.addingTimeInterval(-2), let data = try? Data(contentsOf: url) else { continue }
+            let folder = String(report.dropLast(Playwright.reportFile.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            parser.applyPlaywright(PlaywrightReport.results(data, projectRoot: root.path, suiteFolder: folder))
+        }
         results = parser.results
         let ranToEnd = state == .running
         if ranToEnd { state = .finished(exitStatus: running.status) }

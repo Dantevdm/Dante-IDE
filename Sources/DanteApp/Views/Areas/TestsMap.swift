@@ -117,8 +117,11 @@ struct TestKindCard: View {
     /// Runs some of the tests; nil when the runner can't be narrowed or there's no runner.
     let run: (([WrittenTest]) -> Void)?
     let open: (WrittenTest) -> Void
+    /// For showing a browser test's screenshots, video and trace.
+    var session: Session? = nil
     @State private var expanded = false
     @State private var openAreas: Set<String> = []
+    @State private var evidenceFor: String?
 
     var body: some View {
         let tiles = kind.tiles
@@ -193,6 +196,12 @@ struct TestKindCard: View {
             if tile.stale { Chip(text: "changed since").help("Its file changed after the run that set this result") }
             Spacer(minLength: 8)
             Text(TestMapView.name(tile.state)).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+            if let session, let attachments = tile.result?.attachments, !attachments.isEmpty {
+                IconButton(symbol: "camera", label: "Screenshots, video and trace from \(tile.test.name)", size: 9) { evidenceFor = tile.id }
+                    .popover(isPresented: Binding(get: { evidenceFor == tile.id }, set: { if !$0 { evidenceFor = nil } })) {
+                        TestEvidence(session: session, attachments: attachments).padding(14).frame(minWidth: 320)
+                    }
+            }
             if let run {
                 IconButton(symbol: "play.fill", label: "Run \(tile.test.name)", size: 9) { run([tile.test]) }
                     .disabled(isRunning)

@@ -12,6 +12,7 @@ Tests shows every test in the code by kind (Front-end, Back-end, Integration, Se
 - Tests are grouped by kind, not folder: Front-end (tests of the web app's code), Back-end (server code tested on its own), Unit (code on neither side), Integration, Security, End-to-end, UI and Performance, or the project's own kinds from test.categories.
 - Each app folder with its own runner (Maven, Gradle, npm, Go, pytest, Cargo, Swift), up to four folders down, runs in its own folder; Maven and Gradle results are read from the JUnit reports they write.
 - Choose a run in the strip to see the page as that run left it.
+- Playwright browser tests run beside a folder's unit tests, as a suite of their own, and each failure shows what the browser saw: its screenshots, the video and the trace.
 
 ## Shows
 - Overview: one sentence on where the tests stand ("2 failing of 32, 1 flaky", "All 32 passing", "32 tests in the code, none run on this Mac yet"), who ran last and when, with the command tidied ("go test ./internal/api -run EndToEnd in order-service (+1 more)": no `cd`, environment assignments, `$(…)`, redirections or pipes, so no home folder or password lookup shows). Under it five measures side by side, like a quality gate: Gate (Passing, Failing, or Not run; Failing too when the run broke outside the tests), Success (the share of the tests run that passed, with a bar), Coverage (lines covered from the project's coverage report, or – with "no coverage report"), Flaky (failed, then passed) and Duration (of the last or shown run, with how many tests changed since). Counts are of tests, not subtests: Go's `TestTotals/rounds_down` beside `TestTotals` isn't counted again, so they agree with the tests written in the code. While a run goes it says how long it has run and how many passed and failed so far.
@@ -30,6 +31,7 @@ Tests shows every test in the code by kind (Front-end, Back-end, Integration, Se
 - Ask the agent to fix the failures, or one; ask what untested code matters most, or to write tests for a file.
 - Back to the latest after choosing an older run.
 - Ask the agent to set up tests when the project has none.
+- A browser test's evidence: a failure (and the camera button on a test's row) shows its screenshots, which open in a viewer tab; Video opens the recording; Trace opens Playwright's own trace viewer (every action, network call and DOM snapshot) from the project's install, in a terminal tab of its own. Each names its browser when the test ran in several.
 
 ## States
 - No tests and no runner: an offer to have the agent set tests up.
@@ -41,6 +43,7 @@ Tests shows every test in the code by kind (Front-end, Back-end, Integration, Se
 - Runs are kept per Mac (Application Support/Dante/tests, the newest 40), never in the repo; Home, the timeline and the morning update read the same runs.
 - An agent's or job's command counts as a test run when it starts with a known runner (swift test, go test, cargo test, pytest, npm/pnpm/yarn/bun test, jest, vitest, mvn, gradle, dotnet test, xcodebuild test, rspec…) or contains the project's test.command; its results are read from the output it got back, so a very long output may be cut short.
 - Runs typed in the terminal aren't recorded.
+- Playwright: a folder with playwright.config.(ts|js|mjs|cjs|mts|cts) gets a Playwright suite beside its npm one ("playwright test in shop-ui"), scoped to the config's testDir (`testDir: './e2e'`); with no testDir it takes only test files in e2e, playwright or end-to-end folders, leaving the rest to the unit runner. It runs the project's own node_modules/.bin/playwright, found from the folder upwards (never npx, so nothing downloads; without one the run says to install the project's packages), with CI=true, the list reporter for live results and the JSON reporter written to test-results/.dante-playwright.json, read when the run ends. A narrowed run passes the test files and a --grep of the test names. A test that ran in several browsers is one result: failed if any browser failed, each error named with its browser and retry; flaky (failed, then passed on a retry) passes with a note. Playwright clears test-results/ when tests run again, so evidence from an older run may be gone, and the page says so. An agent's `npx playwright test` (or pnpm exec, yarn, bunx) counts as a run.
 - A test is matched to results by name; a display-named, generated or parameterised test the code reading doesn't find is counted under "don't match a test Dante read in the code".
 - Flaky means a failure followed by a pass in the last twenty runs; a test that passed and then started failing is broken, not flaky.
 

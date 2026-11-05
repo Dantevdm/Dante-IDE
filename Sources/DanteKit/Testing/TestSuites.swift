@@ -4,7 +4,7 @@ import Foundation
 /// A repo can hold several, at any depth; each runs in its own folder.
 public struct TestSuite: Equatable, Sendable, Identifiable {
     public enum Tool: String, Equatable, Sendable {
-        case swift, cargo, go, maven, gradle, node, pytest
+        case swift, cargo, go, maven, gradle, node, pytest, playwright
 
         /// Tools that cover the folders below them (Maven modules, Gradle subprojects, npm
         /// workspaces), so a nested folder with the same tool isn't a suite of its own.
@@ -24,14 +24,23 @@ public struct TestSuite: Equatable, Sendable, Identifiable {
     public var side: Side?
     /// For node: what the test script runs with (jest, vitest, react-scripts…), for its flags.
     public var framework: String?
-    public var id: String { folder }
+    /// Playwright's testDir, relative to `folder`.
+    public var testDir: String?
+    public var id: String { tool == .playwright ? folder + "#playwright" : folder }
 
-    public init(folder: String, tool: Tool, runner: String, side: Side? = nil, framework: String? = nil) {
+    public init(folder: String, tool: Tool, runner: String, side: Side? = nil, framework: String? = nil, testDir: String? = nil) {
         self.folder = folder
         self.tool = tool
         self.runner = runner
         self.side = side
         self.framework = framework
+        self.testDir = testDir
+    }
+
+    /// The folder its tests are in: a Playwright suite's testDir, otherwise its folder.
+    public var scope: String {
+        guard tool == .playwright, let testDir, !testDir.isEmpty else { return folder }
+        return folder.isEmpty ? testDir : folder + "/" + testDir
     }
 
     /// "./mvnw test in services/api".
@@ -42,12 +51,16 @@ public struct TestSuite: Equatable, Sendable, Identifiable {
         case .go: "go test ./..."
         case .maven, .gradle, .node: "\(runner) test"
         case .pytest: "pytest"
+        case .playwright: "playwright test"
         }
         return folder.isEmpty ? base : "\(base) in \(folder)"
     }
 
     public func contains(_ path: String) -> Bool {
-        folder.isEmpty || path.hasPrefix(folder + "/")
+        if tool == .playwright, testDir?.isEmpty == false {
+            return path.hasPrefix(scope + "/")
+        }
+        return folder.isEmpty || path.hasPrefix(folder + "/")
     }
 
     /// Where the runner writes JUnit XML that names each test (Maven and Gradle print only counts).
@@ -92,6 +105,13 @@ public struct TestSuite: Equatable, Sendable, Identifiable {
             return "CI=true \(runner) test" + separator + extra.map { " " + $0 }.joined()
         case .pytest:
             return "python3 -m pytest -v" + Array(Set(local)).sorted().map { " " + Shell.quote($0) }.joined()
+        case .playwright:
+            // Paths on the command line are matched against the testDir, so pass them whole.
+            var arguments = Array(Set(local)).sorted().map(Shell.quote)
+            if narrowed {
+                arguments += ["--grep", Shell.quote(names.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|"))]
+            }
+            return Playwright.script(arguments: arguments)
         }
     }
 }
@@ -114,9 +134,15 @@ public enum TestSuites {
         var suites: [TestSuite] = []
         for folder in folders.keys.sorted(by: { ($0.split(separator: "/").count, $0) < ($1.split(separator: "/").count, $1) }) {
             let names = Set(folders[folder] ?? [])
+            // Playwright runs beside the folder's unit tests, not instead of them.
+            if let config = Playwright.configNames.first(where: names.contains) {
+                let prefix = folder.isEmpty ? "" : folder + "/"
+                suites.append(TestSuite(folder: folder, tool: .playwright, runner: "playwright", side: .frontEnd,
+                                        testDir: read(prefix + config).map(Playwright.testDir(inConfig:)) ?? "tests"))
+            }
             guard let suite = suite(in: folder, names: names, has: { fileSet.contains($0) }, read: read) else { continue }
             // A Maven module or npm workspace under a suite of the same kind is run by it.
-            if suites.contains(where: { $0.tool.family == suite.tool.family && ($0.folder.isEmpty || folder.hasPrefix($0.folder + "/")) }) { continue }
+            if suites.contains(where: { $0.tool != .playwright && $0.tool.family == suite.tool.family && ($0.folder.isEmpty || folder.hasPrefix($0.folder + "/")) }) { continue }
             suites.append(suite)
         }
         return suites
@@ -175,7 +201,11 @@ public enum TestSuites {
 
     /// The suite a file belongs to: the deepest folder holding it.
     public static func suite(for path: String, in suites: [TestSuite]) -> TestSuite? {
-        suites.filter { $0.contains(path) }.max { $0.folder.count < $1.folder.count }
+        // The deepest scope wins; Playwright's testDir is deeper than its folder's unit tests.
+        // With no testDir of its own, a Playwright suite takes only files in e2e-looking folders.
+        let looksEndToEnd = path.lowercased().split(separator: "/").contains { ["e2e", "playwright", "end-to-end"].contains($0) }
+        return suites.filter { $0.contains(path) && ($0.tool != .playwright || $0.scope != $0.folder || looksEndToEnd) }
+            .max { ($0.scope.count, $0.tool == .playwright ? 1 : 0) < ($1.scope.count, $1.tool == .playwright ? 1 : 0) }
     }
 
     /// One command for several suites, or for `tests` (each run by its own suite). Every
@@ -194,6 +224,7 @@ public enum TestSuites {
         let count = tests.map { $0.count == 1 ? $0[0].name : "\($0.count) tests" }
         let name = label ?? parts.map(\.suite.label).joined(separator: " · ") + (count.map { " · \($0)" } ?? "")
         let reports = parts.flatMap(\.suite.reportFolders)
+        let playwrightReports = parts.filter { $0.suite.tool == .playwright }.map { ($0.suite.folder.isEmpty ? "" : $0.suite.folder + "/") + Playwright.reportFile }
         // Swift at the root runs directly, so Dante can ask for its xUnit report.
         if parts.count == 1, parts[0].suite.tool == .swift, parts[0].suite.folder.isEmpty {
             var arguments = ["swift", "test"]
@@ -208,6 +239,6 @@ public enum TestSuites {
         }
         let script = parts.count == 1 ? line(parts[0])
             : "status=0; " + parts.map { "(\(line($0))) || status=1; " }.joined() + "exit $status"
-        return TestCommand(label: name, arguments: ["sh", "-c", script], readsXUnit: false, reportFolders: reports)
+        return TestCommand(label: name, arguments: ["sh", "-c", script], readsXUnit: false, reportFolders: reports, playwrightReports: playwrightReports)
     }
 }
