@@ -5,13 +5,12 @@ import SwiftUI
 
 /// A PDF in Docs or Code: the pages at a readable width, with a sidebar of pages (drag to
 /// reorder; rotate, delete, insert, extract, split), bookmarks and comments; search as you
-/// type; one or two pages; dark reading; undo for every change; and a tools palette.
+/// type; one or two pages; dark reading; undo for every change; and a ribbon of tools.
 struct PDFPreview: View {
     @Environment(\.theme) private var theme
     let url: URL
     @State private var pdf = PDFState()
     @State private var sidebar: Sidebar? = .pages
-    @State private var showsTools = false
     @State private var protecting = false
 
     enum Sidebar: String, CaseIterable, Identifiable {
@@ -30,6 +29,9 @@ struct PDFPreview: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            if !pdf.locked, pdf.document != nil {
+                PDFRibbon(toolbox: PDFToolbox(pdf: pdf, sidebar: sidebar, showSidebar: { sidebar = $0 }, protect: { protecting = true }))
+            }
             if let recovery = pdf.recovery { recoveryBanner(recovery) }
             if let problem = pdf.problem {
                 Text(problem)
@@ -83,12 +85,6 @@ struct PDFPreview: View {
                 .fixedSize()
             Spacer(minLength: 8)
             searchField
-            IconButton(symbol: pdf.twoUp ? "book" : "doc", label: pdf.twoUp ? "One page at a time" : "Two pages side by side", size: 12) {
-                pdf.twoUp.toggle()
-            }
-            IconButton(symbol: pdf.darkReading ? "sun.max" : "moon", label: pdf.darkReading ? "Light pages" : "Dark reading: light text on dark pages", size: 12) {
-                pdf.darkReading.toggle()
-            }
             IconButton(symbol: "minus.magnifyingglass", label: "Zoom out", size: 12) { pdf.zoom(by: 1 / 1.2) }
             Button { pdf.fit() } label: {
                 Text(pdf.fitting ? "Fit" : "\(Int((pdf.scale * 100).rounded()))%")
@@ -99,14 +95,6 @@ struct PDFPreview: View {
             .foregroundStyle(theme.text2.color)
             .help("Fit the page to the width")
             IconButton(symbol: "plus.magnifyingglass", label: "Zoom in", size: 12) { pdf.zoom(by: 1.2) }
-            Button { showsTools = true } label: {
-                Label("Tools", systemImage: "square.grid.2x2").font(.dante(size: 12, weight: .medium))
-            }
-            .buttonStyle(DanteButtonStyle())
-            .help("Every PDF tool, searchable")
-            .popover(isPresented: $showsTools, arrowEdge: .bottom) {
-                PDFToolsPalette(pdf: pdf, protect: { protecting = true }, comment: { sidebar = .comments }) { showsTools = false }
-            }
             if pdf.dirty {
                 Button("Save") { pdf.save() }
                     .buttonStyle(DanteButtonStyle(primary: true))
@@ -472,98 +460,6 @@ private struct PDFCommentsList: View {
         .padding(10)
         .contentShape(Rectangle())
         .onTapGesture { pdf.go(to: thread.page) }
-    }
-}
-
-// MARK: The tools palette
-
-/// Every tool by name, filtered as you type; Return runs the first.
-private struct PDFToolsPalette: View {
-    @Environment(\.theme) private var theme
-    let pdf: PDFState
-    let protect: () -> Void
-    let comment: () -> Void
-    let close: () -> Void
-    @State private var filter = ""
-
-    struct Tool: Identifiable {
-        var title: String
-        var detail: String
-        var symbol: String
-        var enabled = true
-        var run: () -> Void
-        var id: String { title }
-    }
-
-    private var tools: [Tool] {
-        let pages = pdf.targets.count == 1 ? "page \(pdf.targets[0] + 1)" : "\(pdf.targets.count) pages"
-        let changes = pdf.canChange
-        return [
-            Tool(title: "Rotate left", detail: pages, symbol: "rotate.left", enabled: changes) { pdf.rotate(by: -90) },
-            Tool(title: "Rotate right", detail: pages, symbol: "rotate.right", enabled: changes) { pdf.rotate(by: 90) },
-            Tool(title: "Delete pages", detail: pages, symbol: "trash", enabled: changes) { pdf.deletePages() },
-            Tool(title: "Insert a blank page", detail: "after \(pages)", symbol: "doc.badge.plus", enabled: changes) { pdf.insertBlank() },
-            Tool(title: "Insert pages from a PDF…", detail: "after \(pages)", symbol: "square.and.arrow.down.on.square", enabled: changes) { pdf.choosePDFs(atEnd: false) },
-            Tool(title: "Combine with other PDFs…", detail: "adds their pages at the end", symbol: "rectangle.stack.badge.plus", enabled: changes) { pdf.choosePDFs(atEnd: true) },
-            Tool(title: "Extract pages…", detail: "\(pages) to a new PDF", symbol: "doc.on.doc") { pdf.extractPages() },
-            Tool(title: "Split after this page…", detail: "two files", symbol: "scissors") { pdf.split(everyPage: false) },
-            Tool(title: "Split into single pages…", detail: "a file per page", symbol: "square.split.2x1") { pdf.split(everyPage: true) },
-            Tool(title: "Comment", detail: "on the selected text or this page", symbol: "text.bubble", enabled: pdf.canComment) { comment() },
-            Tool(title: "Highlight the selected text", detail: "without a note", symbol: "highlighter", enabled: pdf.canComment) { pdf.highlightSelection() },
-            Tool(title: pdf.twoUp ? "One page at a time" : "Two pages side by side", detail: "reading layout", symbol: "book") { pdf.twoUp.toggle() },
-            Tool(title: pdf.darkReading ? "Light pages" : "Dark reading", detail: "light text on dark pages", symbol: "moon") { pdf.darkReading.toggle() },
-            Tool(title: "Fit to width", detail: "zoom", symbol: "arrow.left.and.right") { pdf.fit() },
-            Tool(title: "Copy this page's text", detail: "page \(pdf.page)", symbol: "doc.plaintext", enabled: pdf.document?.allowsCopying ?? false) { pdf.copyPageText() },
-            Tool(title: "Protect with a password…", detail: "opening will need it", symbol: "lock", enabled: changes) { protect() },
-            Tool(title: "Save a copy…", detail: "the whole PDF", symbol: "square.and.arrow.down") { pdf.saveCopy() },
-            Tool(title: "Save", detail: pdf.dirty ? "in place" : "nothing to save", symbol: "checkmark.circle", enabled: pdf.dirty) { pdf.save() },
-            Tool(title: "Show in Finder", detail: pdf.url?.lastPathComponent ?? "", symbol: "folder") {
-                if let url = pdf.url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-            },
-        ]
-    }
-
-    private var shown: [Tool] {
-        let words = filter.lowercased().split(separator: " ")
-        return tools.filter { tool in words.allSatisfy { (tool.title + " " + tool.detail).lowercased().contains($0) } }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TextField("Search PDF tools", text: $filter)
-                .textFieldStyle(.roundedBorder)
-                .font(.dante(size: 13))
-                .padding(10)
-                .onSubmit { if let tool = shown.first(where: \.enabled) { run(tool) } }
-            Rectangle().fill(theme.line.color).frame(height: 1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(shown) { tool in
-                        Button { run(tool) } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: tool.symbol).frame(width: 18).foregroundStyle(theme.accent.color)
-                                Text(tool.title).font(.dante(size: 12.5))
-                                Spacer()
-                                Text(tool.detail).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).lineLimit(1)
-                            }
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!tool.enabled)
-                        .opacity(tool.enabled ? 1 : 0.45)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            .frame(height: 360)
-        }
-        .frame(width: 380)
-    }
-
-    private func run(_ tool: Tool) {
-        close()
-        tool.run()
     }
 }
 
