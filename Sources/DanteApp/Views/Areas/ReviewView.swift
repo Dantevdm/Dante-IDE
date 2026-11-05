@@ -69,15 +69,15 @@ struct ReviewView: View {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             }
         }
-        .task(id: workspace.revision) { await model.load(root: workspace.url, revision: workspace.revision) }
+        .task(id: workspace.revision) { await model.load(root: workspace.git.root, revision: workspace.revision) }
         .sheet(isPresented: $asking) {
             AskForReviewSheet(model: model, folders: model.coverage?.folders().map(\.path).filter { $0 != "." } ?? [],
-                              openFile: openPath, root: workspace.url)
+                              openFile: openPath, root: workspace.git.root)
         }
     }
 
     private var openPath: String? {
-        workspace.activeDocument.flatMap { ReviewView.relative($0.url, to: workspace.url) }
+        workspace.activeDocument.flatMap { ReviewView.relative($0.url, to: workspace.git.root) }
     }
 
     static func relative(_ url: URL, to root: URL) -> String? {
@@ -242,7 +242,7 @@ struct ReviewView: View {
             Menu {
                 Button("Ask someone to read this folder…") { asking = true }
                 Button("Mark all \(folder.files.count) as reviewed") {
-                    Task { await model.mark(folder.files.map(\.path), .reviewed, root: workspace.url) }
+                    Task { await model.mark(folder.files.map(\.path), .reviewed, root: workspace.git.root) }
                 }
             } label: { Image(systemName: "ellipsis") }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
@@ -257,7 +257,7 @@ struct ReviewView: View {
         return HStack(spacing: 10) {
             StatusDot(color: color(file.state))
                 .help(Self.label(file.state))
-            Button { session.open(file: workspace.url.appending(path: file.path)) } label: {
+            Button { session.open(file: workspace.git.root.appending(path: file.path)) } label: {
                 Text((file.path as NSString).lastPathComponent)
                     .font(.dante(size: 12.5, design: .monospaced))
                     .lineLimit(1)
@@ -274,7 +274,7 @@ struct ReviewView: View {
             }
             .help(Self.who(file))
             Button(mine ? "✓ Reviewed" : "Mark reviewed") {
-                Task { await model.mark([file.path], mine ? .cleared : .reviewed, root: workspace.url) }
+                Task { await model.mark([file.path], mine ? .cleared : .reviewed, root: workspace.git.root) }
             }
             .buttonStyle(DanteButtonStyle())
             .help(mine ? "You've marked this version. Press to take your mark back." : "You've read and understood this file as it is now")
@@ -286,7 +286,7 @@ struct ReviewView: View {
             .popover(isPresented: Binding(get: { concernPath == file.path }, set: { if !$0 { concernPath = nil } })) {
                 ConcernPopover(path: file.path) { note in
                     concernPath = nil
-                    Task { await model.mark([file.path], .concern, note: note, root: workspace.url) }
+                    Task { await model.mark([file.path], .concern, note: note, root: workspace.git.root) }
                 }
             }
         }

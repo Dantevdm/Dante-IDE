@@ -355,7 +355,7 @@ private struct ReviewStatus: View {
                 .help(ReviewView.who(file) + "\n\n" + Shortcuts.label(mine ? "Click to take your mark back" : "Click when you've read and understood it as it is now", "markReviewed"))
             }
         }
-        .task(id: workspace.revision) { await session.review.load(root: workspace.url, revision: workspace.revision) }
+        .task(id: workspace.revision) { await session.review.load(root: workspace.git.root, revision: workspace.revision) }
     }
 
     static func title(_ file: CodeReview.FileReview, mine: Bool) -> String {

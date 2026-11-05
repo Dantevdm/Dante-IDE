@@ -87,7 +87,7 @@ extension Session {
     /// The open file's path in the project, when it's one Review counts.
     var activeReviewPath: String? {
         guard let workspace, let document = workspace.activeDocument else { return nil }
-        return ReviewView.relative(document.url, to: workspace.url)
+        return ReviewView.relative(document.url, to: workspace.git.root)
     }
 
     /// Git › Mark File as Reviewed (⌃⇧R) and the status bar's chip: marks the open file as read
@@ -97,8 +97,8 @@ extension Session {
         if workspace.activeDocument?.isDirty == true { saveActive() }
         let mine = review.reviewer.map { review.file(path)?.reviewed(by: $0) ?? false } ?? false
         Task {
-            if review.coverage == nil { await review.load(root: workspace.url, revision: workspace.revision) }
-            await review.mark([path], mine ? .cleared : .reviewed, root: workspace.url)
+            if review.coverage == nil { await review.load(root: workspace.git.root, revision: workspace.revision) }
+            await review.mark([path], mine ? .cleared : .reviewed, root: workspace.git.root)
         }
     }
 }
