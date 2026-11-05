@@ -25,6 +25,7 @@ struct TestsView: View {
     /// A run chosen in the strip; nil shows the latest.
     @State private var selectedRun: String?
     @State private var showsUntested = false
+    @State private var coverage: CoverageReport?
 
     /// Everything, with the project's command or each suite in its folder.
     private var command: TestCommand? { custom ?? TestSuites.command(suites) }
@@ -170,7 +171,8 @@ struct TestsView: View {
         }()
         let state: Color = live != nil ? theme.accent.color : failing > 0 || shownRun?.brokeOutsideTests == true ? theme.red.color
             : flaky > 0 ? theme.amber.color : runs.isEmpty ? theme.text3.color : theme.green.color
-        return HStack(spacing: 18) {
+        return VStack(alignment: .leading, spacing: 14) {
+        HStack(spacing: 18) {
             Circle().fill(state).frame(width: 12, height: 12)
             VStack(alignment: .leading, spacing: 3) {
                 Text(headline).font(.dante(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
@@ -185,11 +187,8 @@ struct TestsView: View {
                 }
             }
             Spacer()
-            stat(passing, "passing", theme.green.color)
-            stat(failing, "failing", theme.red.color)
-            stat(flaky, "flaky", theme.amber.color)
-            stat(notRun, "not run", theme.text2.color)
-            if stale > 0 { stat(stale, "changed since", theme.text2.color) }
+        }
+            measures(passing: passing, failing: failing, flaky: flaky, notRun: notRun, stale: stale)
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
@@ -201,7 +200,7 @@ struct TestsView: View {
         guard let last = runs.last else {
             return command == nil ? "Ask \(session.agentName) to run them, or set how below" : "Run them all, or one kind at a time: every run is kept here, whoever starts it"
         }
-        return "Last run by \(Self.who(last.by)) \(last.date.formatted(.relative(presentation: .named))) · \(last.command)"
+        return "Last run by \(Self.who(last.by)) \(last.date.formatted(.relative(presentation: .named))) · \(TestCommandLine.tidy(last.command).label)"
     }
 
     /// "you", "Codex", "the job “Fix the rounding”".
@@ -213,9 +212,75 @@ struct TestsView: View {
         }
     }
 
-    private func stat(_ value: Int, _ label: String, _ color: Color) -> some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            Text("\(value)").font(.dante(size: 18, weight: .medium, design: .monospaced)).foregroundStyle(value > 0 ? color : theme.text3.color)
+    /// The run's measures side by side, like a quality gate: the verdict, how much passed,
+    /// coverage, flaky tests and how long it took.
+    private func measures(passing: Int, failing: Int, flaky: Int, notRun: Int, stale: Int) -> some View {
+        let ran = passing + failing + flaky
+        let broke = shownRun?.brokeOutsideTests == true
+        let gate: (String, Color, String) = runs.isEmpty || ran == 0 ? ("Not run", theme.text3.color, "no results yet")
+            : failing > 0 || broke ? ("Failing", theme.red.color, broke && failing == 0 ? "the run itself failed" : "\(failing) failing")
+            : ("Passing", theme.green.color, notRun > 0 ? "\(notRun) not run" : "every test ran")
+        let success = ran == 0 ? nil : Double(passing + flaky) / Double(ran)
+        let covered = coverage.map { report -> Double in
+            let lines = report.files.values.reduce(into: (0, 0)) { $0.0 += $1.covered; $0.1 += $1.total }
+            return lines.1 == 0 ? 0 : Double(lines.0) / Double(lines.1)
+        }
+        let duration = (shownRun ?? runs.last)?.duration ?? 0
+        return HStack(spacing: 0) {
+            measure("Gate", gate.0, gate.2, gate.1)
+            divider
+            measure("Success", success.map { "\(Int(($0 * 100).rounded(.down)))%" } ?? "–",
+                    ran == 0 ? "of the tests run" : "\(passing + flaky) of \(ran) passed",
+                    success.map { $0 == 1 ? theme.green.color : $0 >= 0.9 ? theme.amber.color : theme.red.color } ?? theme.text3.color,
+                    fill: success)
+            divider
+            measure("Coverage", covered.map { "\(Int(($0 * 100).rounded()))%" } ?? "–",
+                    coverage.map { "from \($0.source)" } ?? "no coverage report",
+                    covered.map { $0 >= 0.8 ? theme.green.color : $0 >= 0.5 ? theme.amber.color : theme.red.color } ?? theme.text3.color,
+                    fill: covered)
+            divider
+            measure("Flaky", "\(flaky)", "failed, then passed", flaky > 0 ? theme.amber.color : theme.text3.color)
+            divider
+            measure("Duration", duration > 0 ? Self.length(duration) : "–",
+                    stale > 0 ? "\(stale) changed since" : "the \(selectedRun == nil ? "last" : "shown") run", theme.text.color)
+        }
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.ground.color.opacity(0.5)))
+    }
+
+    private var divider: some View { Rectangle().fill(theme.line.color).frame(width: 1, height: 38) }
+
+    private func measure(_ title: String, _ value: String, _ detail: String, _ color: Color, fill: Double? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title.uppercased()).font(.dante(size: 10, weight: .semibold)).tracking(0.6).foregroundStyle(theme.text3.color)
+            Text(value).font(.dante(size: 20, weight: .semibold, design: .monospaced)).foregroundStyle(color)
+                .contentTransition(.numericText())
+            if let fill {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous).fill(theme.track.color.opacity(0.6))
+                        RoundedRectangle(cornerRadius: 2, style: .continuous).fill(color).frame(width: proxy.size.width * fill)
+                    }
+                }
+                .frame(width: 80, height: 4)
+            }
+            Text(detail).font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+    }
+
+    /// "48s", "3m 12s".
+    static func length(_ seconds: TimeInterval) -> String {
+        let whole = Int(seconds.rounded())
+        return whole < 60 ? (seconds < 10 ? String(format: "%.1fs", seconds) : "\(whole)s") : "\(whole / 60)m \(whole % 60)s"
+    }
+
+    private func legend(_ state: TestMap.State, _ label: String) -> some View {
+        HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(state == .notRun ? theme.track.color.opacity(0.6) : TestKindCard.color(state, theme: theme))
+                .frame(width: 9, height: 9)
             Text(label).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
         }
     }
@@ -226,9 +291,19 @@ struct TestsView: View {
     private var kindsSection: some View {
         if let map, let inventory, !map.tiles.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(map.kinds(order: inventory.categories)) { kind in
-                    TestKindCard(kind: kind, place: place(of: kind), isRunning: live != nil, run: runWritten,
-                                 open: { test in session.open(file: workspace.url.appending(path: test.file), line: test.line) })
+                Card("By kind") {
+                    HStack(spacing: 10) {
+                        legend(.passed, "passed"); legend(.failed, "failed"); legend(.flaky, "flaky"); legend(.notRun, "not run")
+                    }
+                } content: {
+                    VStack(spacing: 0) {
+                        let kinds = map.kinds(order: inventory.categories)
+                        ForEach(Array(kinds.enumerated()), id: \.element.id) { index, kind in
+                            if index > 0 { Rectangle().fill(theme.line.color).frame(height: 1) }
+                            TestKindCard(kind: kind, place: place(of: kind), isRunning: live != nil, run: runWritten,
+                                         open: { test in session.open(file: workspace.url.appending(path: test.file), line: test.line) })
+                        }
+                    }
                 }
                 if !map.unmatched.isEmpty {
                     Text("\(map.unmatched.count) result\(map.unmatched.count == 1 ? "" : "s") from the last run don’t match a test Dante read in the code (display names, generated or parameterised tests).")
@@ -304,6 +379,7 @@ struct TestsView: View {
         inventory = found
         gaps = untested
         modified = dates
+        coverage = await Task.detached(priority: .utility) { CoverageReport.load(root: root, files: files) }.value
         loaded = true
     }
 

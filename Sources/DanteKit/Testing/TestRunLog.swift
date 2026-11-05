@@ -58,9 +58,21 @@ public struct SavedTestRun: Codable, Equatable, Identifiable, Sendable {
         self.tail = tail
     }
 
-    public var passed: Int { results.count { $0.status == .passed } }
-    public var failed: Int { results.count { $0.status == .failed } }
-    public var skipped: Int { results.count { $0.status == .skipped } }
+    /// Counted as tests: subtests (`TestTotals/rounds_down` beside `TestTotals`) are left out,
+    /// so the counts agree with the tests written in the code.
+    public var passed: Int { tests.count { $0.status == .passed } }
+    public var failed: Int { tests.count { $0.status == .failed } }
+    public var skipped: Int { tests.count { $0.status == .skipped } }
+    /// The results without subtests whose parent test is also in the run.
+    public var tests: [TestResult] { Self.withoutSubtests(results) }
+
+    public static func withoutSubtests(_ results: [TestResult]) -> [TestResult] {
+        let names = Set(results.map { "\($0.suite)\u{0}\($0.name)" })
+        return results.filter { result in
+            guard let slash = result.name.lastIndex(of: "/") else { return true }
+            return !names.contains("\(result.suite)\u{0}\(result.name[..<slash])")
+        }
+    }
     public var succeeded: Bool { failed == 0 && !brokeOutsideTests }
     public var failures: [TestResult] { results.filter { $0.status == .failed } }
 
@@ -152,6 +164,93 @@ public enum TestCommandLine {
             if runners.contains(where: { runner in words.count >= runner.count && Array(words.prefix(runner.count)) == runner }) { return true }
         }
         return false
+    }
+
+    /// A command as a person would say it: the test runner and its arguments, and the folder
+    /// it ran in, without the `cd`, environment assignments, `$(…)` lookups, redirections and
+    /// `| tail` an agent wraps it in. "go test ./api -run EndToEnd" in "order-service".
+    public struct Tidy: Equatable, Sendable {
+        public var command: String
+        public var folder: String?
+        /// Other runner invocations in the same line.
+        public var more: Int
+
+        public var label: String {
+            command + (folder.map { " in \($0)" } ?? "") + (more > 0 ? " (+\(more) more)" : "")
+        }
+    }
+
+    public static func tidy(_ line: String) -> Tidy {
+        let flat = line.replacingOccurrences(of: "\n", with: " ")
+        var folder: String?
+        var runs: [String] = []
+        var others: [String] = []
+        var piping = false
+        for piece in pieces(flat) {
+            if piece.separator == "|" { piping = true }
+            let words = piece.text.split(whereSeparator: \.isWhitespace).map(String.init)
+            if piping && piece.separator == "|" { continue } // tail, grep, tee
+            piping = false
+            guard let first = words.first else { continue }
+            if first == "cd", words.count > 1 {
+                let path = words.dropFirst().joined(separator: " ").trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                let name = (path as NSString).lastPathComponent
+                folder = name.isEmpty || name == "." ? folder : name
+                continue
+            }
+            var kept = words
+            while let word = kept.first, word.contains("=") && !word.hasPrefix("-") || ["env", "time", "caffeinate", "nice"].contains(word) {
+                kept.removeFirst()
+            }
+            kept = kept.filter { !$0.hasPrefix("2>") && !$0.hasPrefix(">") && !$0.hasPrefix("1>") && $0 != "&>" && !$0.contains("/dev/null") }
+            guard !kept.isEmpty else { continue }
+            let text = kept.joined(separator: " ")
+            if runsTests(text) { runs.append(text) } else { others.append(text) }
+        }
+        let command = runs.first ?? others.last ?? flat.trimmingCharacters(in: .whitespaces)
+        return Tidy(command: command, folder: folder, more: max(0, Set(runs).count - 1))
+    }
+
+    /// Like `parts`, but each piece with the separator before it, so pipes can be told apart.
+    static func pieces(_ line: String) -> [(text: String, separator: String)] {
+        var pieces: [(String, String)] = []
+        var current = ""
+        var separator = ""
+        var quote: Character?
+        var depth = 0
+        let characters = Array(line)
+        var index = 0
+        while index < characters.count {
+            let character = characters[index]
+            let next = index + 1 < characters.count ? characters[index + 1] : nil
+            if let open = quote {
+                if character == open { quote = nil }
+                current.append(character)
+            } else if character == "\"" || character == "'" {
+                quote = character
+                current.append(character)
+            } else if character == "$", next == "(" {
+                depth += 1
+                current.append(character)
+            } else if character == ")", depth > 0 {
+                depth -= 1
+                current.append(character)
+            } else if depth == 0, character == "&" || character == "|", next == character {
+                pieces.append((current.trimmingCharacters(in: .whitespaces), separator))
+                current = ""
+                separator = String([character, character])
+                index += 1
+            } else if depth == 0, character == ";" || (character == "|" && characters[max(0, index - 1)] != ">" ) {
+                pieces.append((current.trimmingCharacters(in: .whitespaces), separator))
+                current = ""
+                separator = String(character)
+            } else {
+                current.append(character)
+            }
+            index += 1
+        }
+        pieces.append((current.trimmingCharacters(in: .whitespaces), separator))
+        return pieces.filter { !$0.0.isEmpty }.map { (text: $0.0, separator: $0.1) }
     }
 
     /// Asked for only some tests: a filter, a `-run`, `-k`, `-t`, or test files named.

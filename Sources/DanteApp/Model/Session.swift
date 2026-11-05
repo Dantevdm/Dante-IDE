@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, map, code, tests, security, review, environments, data, ship, run, timeline, claude, agents, jobs, docs
+    case home, map, code, report, tests, security, review, environments, data, ship, run, timeline, claude, agents, jobs, docs
 
     var id: String { rawValue }
 
@@ -28,6 +28,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .home: "house"
         case .map: "point.3.connected.trianglepath.dotted"
         case .code: "chevron.left.forwardslash.chevron.right"
+        case .report: "chart.bar.doc.horizontal.fill"
         case .tests: "testtube.2"
         case .security: "shield.lefthalf.filled"
         case .review: "eye"
@@ -49,6 +50,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .home: "Where the project is: what changed, the environment, Claude and docs at a glance."
         case .map: "Architecture, process flows, data model and cloud diagrams generated from the code."
         case .code: "The editor, file explorer and terminal."
+        case .report: "The quality gate and an A to E grade for tests, security, review and coverage, for all the code and for new code, as a report to export."
         case .tests: "Tests traced to specs and code paths, coverage by component, and tests Claude can draft."
         case .security: "Secrets, personal information, encryption, injection, dependencies and config: scanned, explained and fixed by Claude or Codex."
         case .review: "Which code files people have read and understood as they are now, who read them, and asking someone to look."

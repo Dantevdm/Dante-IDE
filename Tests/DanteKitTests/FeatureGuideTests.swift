@@ -111,7 +111,7 @@ struct FeatureGuideTests {
         for feature in FeatureGuide.features { #expect(brief.contains(feature.summary)) }
         #expect(brief.contains("- Map › Infrastructure:"))
         #expect(brief.contains("- Quality › Security:"))
-        #expect(FeatureGuide.overview.hasPrefix("Dante has 8 places: Home; Map; Code; Quality, with Tests, Security and Review; Local, with Services, Data and Health;"))
+        #expect(FeatureGuide.overview.hasPrefix("Dante has 8 places: Home; Map; Code; Quality, with Report, Tests, Security and Review; Local, with Services, Data and Health;"))
     }
 }
 
@@ -130,7 +130,7 @@ struct PageToolsTests {
         }
         #expect(FeatureGuide.resolve("local.services")?.id == "environments")
         #expect(FeatureGuide.resolve("Map › Infrastructure")?.id == "map.infra")
-        #expect(FeatureGuide.resolve("quality")?.id == "tests")
+        #expect(FeatureGuide.resolve("quality")?.id == "report")
         #expect(DelegateServer.pages("nowhere").hasPrefix("No page nowhere."))
         let names = DelegateServer.pageTools.compactMap { $0["name"]?.string }
         #expect(names == ["dante_pages", "show_page"])

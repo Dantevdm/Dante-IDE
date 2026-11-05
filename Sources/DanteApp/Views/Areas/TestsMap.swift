@@ -100,7 +100,7 @@ struct TestRunStrip: View {
         let outcome = run.brokeOutsideTests ? (run.results.isEmpty ? "didn’t get to the tests" : "\(run.passed) passed, then failed outside the tests")
             : run.results.isEmpty ? "no tests found"
             : run.failed > 0 ? "\(run.failed) failed, \(run.passed) passed" : "all \(run.passed) passed"
-        return "\(run.by.label) · \(when) · \(run.command)\(run.narrowed ? " (some tests)" : "") · \(outcome)"
+        return "\(run.by.label) · \(when) · \(TestCommandLine.tidy(run.command).label)\(run.narrowed ? " (some tests)" : "") · \(outcome)"
     }
 }
 
@@ -122,22 +122,29 @@ struct TestKindCard: View {
 
     var body: some View {
         let tiles = kind.tiles
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(kind.name).font(.dante(size: 14.5, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text("\(tiles.count) test\(tiles.count == 1 ? "" : "s")\(place.map { " · \($0)" } ?? "")")
-                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 8)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.dante(size: 9.5, weight: .semibold)).foregroundStyle(theme.text3.color).frame(width: 10)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(kind.name).font(.dante(size: 13.5, weight: .semibold)).foregroundStyle(kind.count(.failed) > 0 ? theme.red.color : theme.text.color)
+                    Text("\(tiles.count) test\(tiles.count == 1 ? "" : "s")\(place.map { " · \($0)" } ?? "")")
+                        .font(.dante(size: 11)).foregroundStyle(theme.text3.color).lineLimit(1).truncationMode(.middle)
+                }
+                .frame(width: 190, alignment: .leading)
+                .help(TestInventory.summary(of: kind.name))
+                StateBar(kind: kind).frame(maxWidth: .infinity)
                 Text(Self.status(of: kind)).font(.dante(size: 12, weight: kind.count(.failed) > 0 ? .medium : .regular))
                     .foregroundStyle(kind.count(.failed) > 0 ? theme.red.color : theme.text2.color)
+                    .frame(width: 150, alignment: .trailing)
+                    .lineLimit(1)
                 Button { run?(tiles.map(\.test)) } label: { Label("Run", systemImage: "play.fill") }
                     .buttonStyle(DanteButtonStyle())
                     .disabled(run == nil || isRunning)
                     .help(run == nil ? "Dante can’t run only these with this project’s runner" : "Run the \(kind.name.lowercased()) tests")
             }
-            Text(TestInventory.summary(of: kind.name)).font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-            StateBar(kind: kind)
-            LinkButton(expanded ? "Hide the tests" : "Show the tests by folder") { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } }
             if expanded {
                 VStack(alignment: .leading, spacing: 2) {
                     let names = Self.shortNames(kind.areas.map(\.name))
@@ -150,10 +157,8 @@ struct TestKindCard: View {
                 }
             }
         }
-        .padding(14)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(kind.count(.failed) > 0 ? theme.red.color.opacity(0.45) : theme.line.color))
     }
 
     private func areaRow(_ area: TestMap.Group, name: String) -> some View {
@@ -269,9 +274,9 @@ private struct StateBar: View {
                 Spacer(minLength: 0)
             }
         }
-        .frame(height: 6)
+        .frame(height: 10)
         .background(theme.track.color.opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
     }
 }
 
