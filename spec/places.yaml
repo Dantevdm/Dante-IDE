@@ -12,7 +12,7 @@ places:
     pages: [code]
   - id: quality
     title: Quality
-    pages: [report, tests, security, review]
+    pages: [report, tests, security, review, bliksem]
   - id: local
     title: Local
     pages: [environments, data, run]

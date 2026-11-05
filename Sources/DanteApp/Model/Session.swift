@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, map, code, report, tests, security, review, environments, data, ship, run, timeline, claude, agents, jobs, docs
+    case home, map, code, report, tests, security, review, bliksem, environments, data, ship, run, timeline, claude, agents, jobs, docs
 
     var id: String { rawValue }
 
@@ -32,6 +32,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .tests: "testtube.2"
         case .security: "shield.lefthalf.filled"
         case .review: "eye"
+        case .bliksem: "bolt.fill"
         case .environments: "server.rack"
         case .data: "cylinder.split.1x2"
         case .ship: "paperplane"
@@ -54,6 +55,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .tests: "Tests traced to specs and code paths, coverage by component, and tests Claude can draft."
         case .security: "Secrets, personal information, encryption, injection, dependencies and config: scanned, explained and fixed by Claude or Codex."
         case .review: "Which code files people have read and understood as they are now, who read them, and asking someone to look."
+        case .bliksem: "Hammer the running app with load, throw garbage at its routes, or break one of its services and time the recovery."
         case .environments: "Docker Compose services with logs, shells and restarts, and Docker files Claude can write."
         case .data: "The project's databases: create one, browse tables, run queries and see the schema as a diagram."
         case .ship: "A release checklist, a changelog drafted from commits, and the CI pipeline."
@@ -270,6 +272,7 @@ final class Session {
     var motionCritiques: [URL: MotionCritiqueState] = [:]
     /// The Security area's report, scans and audits.
     let security = SecurityModel()
+    let bliksem = BliksemModel()
     let review = ReviewModel()
     /// 1-based breakpoint lines per file path, saved per project on this Mac.
     var breakpoints: [String: Set<Int>] = [:]

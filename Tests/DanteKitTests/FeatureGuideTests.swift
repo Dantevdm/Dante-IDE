@@ -111,7 +111,7 @@ struct FeatureGuideTests {
         for feature in FeatureGuide.features { #expect(brief.contains(feature.summary)) }
         #expect(brief.contains("- Map › Infrastructure:"))
         #expect(brief.contains("- Quality › Security:"))
-        #expect(FeatureGuide.overview.hasPrefix("Dante has 8 places: Home; Map; Code; Quality, with Report, Tests, Security and Review; Local, with Services, Data and Health;"))
+        #expect(FeatureGuide.overview.hasPrefix("Dante has 8 places: Home; Map; Code; Quality, with Report, Tests, Security, Review and Bliksem; Local, with Services, Data and Health;"))
     }
 }
 

@@ -17,6 +17,9 @@ struct PortCheckTests {
         let vite = PortHolder(listening: ListeningPort(port: 5173, pid: 900, command: "node"), commandLine: "node vite", directory: "/home/me/shop/web")
         let other = PortHolder(listening: ListeningPort(port: 8080, pid: 901, command: "java"), commandLine: "java -jar x.jar", directory: "/home/me/shopping")
         #expect(server.belongs(to: root) && vite.belongs(to: root) && !other.belongs(to: root))
+        // lsof gives /tmp's real folder.
+        let temp = PortHolder(listening: ListeningPort(port: 8765, pid: 902, command: "Python"), commandLine: "python app.py", directory: "/private/tmp/shop")
+        #expect(temp.belongs(to: URL(filePath: "/tmp/shop")) && temp.belongs(to: URL(filePath: "/private/tmp/shop")))
     }
 
     @Test func findsConflictsOnlyForServicesThatArentRunning() {

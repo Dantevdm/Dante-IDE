@@ -24,10 +24,15 @@ public struct PortHolder: Equatable, Sendable, Identifiable {
 
     /// Started from inside the project, or running a program that lives there.
     public func belongs(to root: URL) -> Bool {
-        let base = root.standardizedFileURL.path
+        // lsof names /tmp and /var by their real folders under /private.
+        func real(_ path: String) -> String {
+            ["/tmp", "/var", "/etc"].contains { path == $0 || path.hasPrefix($0 + "/") } ? "/private" + path : path
+        }
+        let base = real(root.standardizedFileURL.path)
         func inside(_ path: String?) -> Bool {
             guard let path, !path.isEmpty else { return false }
-            return path == base || path.hasPrefix(base + "/")
+            let full = real(path)
+            return full == base || full.hasPrefix(base + "/")
         }
         let program = commandLine.split(separator: " ").first.map(String.init)
         return inside(directory) || inside(program)

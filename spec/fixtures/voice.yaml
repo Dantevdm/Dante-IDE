@@ -19,6 +19,12 @@ cases:
     navigate: report
   - say: show me the code review
     navigate: review
+  - say: show me the load testing
+    navigate: bliksem
+  - say: open bliksem
+    navigate: bliksem
+  - say: open chaos testing
+    navigate: bliksem
   - say: open the services
     navigate: environments
   - say: show me the history

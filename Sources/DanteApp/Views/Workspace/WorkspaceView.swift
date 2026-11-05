@@ -41,6 +41,7 @@ struct WorkspaceView: View {
                         case .jobs: JobsView(session: session, workspace: workspace)
                         case .security: SecurityView(session: session, workspace: workspace)
                         case .review: ReviewView(session: session, workspace: workspace)
+                        case .bliksem: BliksemView(session: session, workspace: workspace)
                         }
                     }
                     .environment(\.underPlaceTabs, session.area.place.pages.count > 1)
