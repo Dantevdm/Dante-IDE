@@ -9,7 +9,7 @@ struct PDFTool: Identifiable {
     var id: String
     /// The name in the tool search and the ScreenTip's heading.
     var title: String
-    /// The ribbon's label, short enough for two lines under a large icon.
+    /// The toolbar label beside its icon: a word or two.
     var label: String
     /// What it acts on right now ("page 6", "3 pages").
     var detail: String
@@ -125,14 +125,13 @@ struct PDFToolbox {
 
 // MARK: The ribbon
 
-/// Word's ribbon for PDFs: tabs, then groups of large and small buttons with their names
-/// underneath, dropdowns for related tools, and a ScreenTip on each. The tabs can fold the
-/// ribbon away; "Search tools" finds any tool by name.
+/// The PDF toolbar: one row with the tabs on the left, that tab's tools beside them as small
+/// buttons in groups split by hairlines, and "Search tools" on the right. Each tool has a
+/// ScreenTip; dropdowns hold related tools.
 struct PDFRibbon: View {
     @Environment(\.theme) private var theme
     let toolbox: PDFToolbox
     @AppStorage("pdf.ribbon.tab") private var tab = Tab.home.rawValue
-    @AppStorage("pdf.ribbon.collapsed") private var collapsed = false
     @State private var searching = false
 
     enum Tab: String, CaseIterable, Identifiable {
@@ -147,41 +146,38 @@ struct PDFRibbon: View {
     }
 
     enum Item {
-        /// A tall button: icon over its name.
-        case large(String)
-        /// Up to three short buttons stacked.
-        case small([String])
-        /// A tall button that opens a list of tools.
+        case tools([String])
+        /// A button that opens a list of tools.
         case menu(label: String, symbol: String, tip: String, [String])
     }
 
     static func groups(_ tab: Tab) -> [Group] {
         switch tab {
         case .file:
-            [Group(title: "Save", items: [.large("save"), .large("saveCopy")]),
-             Group(title: "Protect", items: [.large("protect")]),
-             Group(title: "File", items: [.large("finder"), .large("copyText")])]
+            [Group(title: "Save", items: [.tools(["save", "saveCopy"])]),
+             Group(title: "Protect", items: [.tools(["protect"])]),
+             Group(title: "File", items: [.tools(["finder", "copyText"])])]
         case .home:
-            [Group(title: "Pages", items: [.large("delete"), .small(["rotateLeft", "rotateRight", "blank"])]),
-             Group(title: "Comments", items: [.large("comment"), .large("highlight")]),
-             Group(title: "Clipboard", items: [.large("copyText")]),
-             Group(title: "Save", items: [.large("save"), .small(["saveCopy", "finder"])])]
+            [Group(title: "Pages", items: [.tools(["delete", "rotateLeft", "rotateRight", "blank"])]),
+             Group(title: "Comments", items: [.tools(["comment", "highlight"])]),
+             Group(title: "Clipboard", items: [.tools(["copyText"])]),
+             Group(title: "Save", items: [.tools(["save", "saveCopy", "finder"])])]
         case .insert:
-            [Group(title: "Pages", items: [.large("blank"), .large("insertPDF")]),
-             Group(title: "Documents", items: [.large("combine")])]
+            [Group(title: "Pages", items: [.tools(["blank", "insertPDF"])]),
+             Group(title: "Documents", items: [.tools(["combine"])])]
         case .organise:
-            [Group(title: "Rotate", items: [.large("rotateLeft"), .large("rotateRight")]),
-             Group(title: "Pages", items: [.large("delete"), .large("extract")]),
+            [Group(title: "Rotate", items: [.tools(["rotateLeft", "rotateRight"])]),
+             Group(title: "Pages", items: [.tools(["delete", "extract"])]),
              Group(title: "Split", items: [.menu(label: "Split", symbol: "scissors",
                                                  tip: "Cut the PDF into separate files, after this page or one per page.",
                                                  ["splitAfter", "splitEach"])])]
         case .review:
-            [Group(title: "Comments", items: [.large("comment"), .large("highlight"), .large("comments")]),
-             Group(title: "Navigate", items: [.large("bookmarks")])]
+            [Group(title: "Comments", items: [.tools(["comment", "highlight", "comments"])]),
+             Group(title: "Navigate", items: [.tools(["bookmarks"])])]
         case .view:
-            [Group(title: "Layout", items: [.large("single"), .large("twoUp")]),
-             Group(title: "Reading", items: [.large("dark")]),
-             Group(title: "Zoom", items: [.large("fit"), .small(["zoomIn", "zoomOut"])]),
+            [Group(title: "Layout", items: [.tools(["single", "twoUp"])]),
+             Group(title: "Reading", items: [.tools(["dark"])]),
+             Group(title: "Zoom", items: [.tools(["fit", "zoomIn", "zoomOut"])]),
              Group(title: "Sidebar", items: [.menu(label: "Sidebar", symbol: "sidebar.left",
                                                    tip: "Show the pages, the bookmarks or the comments beside the PDF.",
                                                    ["thumbnails", "bookmarks", "comments"])])]
@@ -191,152 +187,113 @@ struct PDFRibbon: View {
     private var current: Tab { Tab(rawValue: tab) ?? .home }
 
     var body: some View {
-        VStack(spacing: 0) {
-            tabStrip
-            if !collapsed {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 0) {
-                        ForEach(Array(Self.groups(current).enumerated()), id: \.element.id) { index, group in
-                            if index > 0 { Rectangle().fill(theme.line.color).frame(width: 1).padding(.vertical, 8) }
-                            groupView(group)
-                        }
+        HStack(spacing: 0) {
+            tabs
+            Rectangle().fill(theme.line.color).frame(width: 1, height: 16).padding(.horizontal, 6)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(Array(Self.groups(current).enumerated()), id: \.element.id) { index, group in
+                        if index > 0 { Rectangle().fill(theme.line.color).frame(width: 1, height: 16).padding(.horizontal, 5) }
+                        groupView(group)
                     }
-                    .padding(.horizontal, 6)
                 }
-                .frame(height: 88)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .id(current)
+                .transition(.opacity)
+                .padding(.trailing, 18)
             }
+            // A soft edge, so tools that don't fit read as scrolling on rather than cut off.
+            .mask {
+                HStack(spacing: 0) {
+                    Rectangle().fill(theme.text.color)
+                    LinearGradient(colors: [theme.text.color, theme.text.color.opacity(0)], startPoint: .leading, endPoint: .trailing).frame(width: 18)
+                }
+            }
+            Spacer(minLength: 8)
+            search
         }
+        .padding(.horizontal, 8)
+        .frame(height: 34)
         .background(theme.panel.color)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.line.color).frame(height: 1) }
-        .animation(.easeOut(duration: 0.18), value: collapsed)
+        .animation(.easeOut(duration: 0.15), value: tab)
     }
 
-    private var tabStrip: some View {
-        HStack(spacing: 2) {
+    private var tabs: some View {
+        HStack(spacing: 0) {
             ForEach(Tab.allCases) { item in
-                let on = item == current && !collapsed
-                Button {
-                    if item == current { collapsed.toggle() } else { tab = item.rawValue; collapsed = false }
-                } label: {
+                let on = item == current
+                Button { tab = item.rawValue } label: {
                     Text(item.rawValue)
-                        .font(.dante(size: 12.5, weight: on ? .semibold : .regular))
+                        .font(.dante(size: 12, weight: on ? .semibold : .regular))
                         .foregroundStyle(on ? theme.accent.color : theme.text2.color)
-                        .padding(.horizontal, 10)
-                        .frame(height: 28)
-                        .overlay(alignment: .bottom) {
-                            if on { RoundedRectangle(cornerRadius: 1).fill(theme.accent.color).frame(height: 2).padding(.horizontal, 8) }
-                        }
+                        .padding(.horizontal, 7)
+                        .frame(height: 22)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(on ? theme.accent.color.opacity(0.1) : .clear))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(item == current ? (collapsed ? "Show the ribbon" : "Click again to fold the ribbon away") : "")
-            }
-            Spacer(minLength: 12)
-            Button { searching = true } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "lightbulb").font(.dante(size: 11))
-                    Text("Search tools").font(.dante(size: 12))
-                }
-                .foregroundStyle(theme.text3.color)
-                .padding(.horizontal, 9)
-                .frame(width: 180, height: 22, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 6).fill(theme.card.color))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line.color))
-            }
-            .buttonStyle(.plain)
-            .help("Find any PDF tool by name")
-            .popover(isPresented: $searching, arrowEdge: .bottom) {
-                PDFToolsPalette(tools: toolbox.all) { searching = false }
-            }
-            IconButton(symbol: collapsed ? "chevron.down" : "chevron.up", label: collapsed ? "Show the ribbon" : "Fold the ribbon away", size: 11) {
-                collapsed.toggle()
             }
         }
-        .padding(.horizontal, 8)
-        .frame(height: 30)
+    }
+
+    private var search: some View {
+        Button { searching = true } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "magnifyingglass").font(.dante(size: 10.5))
+                Text("Search tools").font(.dante(size: 11.5))
+            }
+            .foregroundStyle(theme.text3.color)
+            .padding(.horizontal, 8)
+            .frame(width: 130, height: 22, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6).fill(theme.card.color))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line.color))
+        }
+        .buttonStyle(.plain)
+        .help("Find any PDF tool by name")
+        .popover(isPresented: $searching, arrowEdge: .bottom) {
+            PDFToolsPalette(tools: toolbox.all) { searching = false }
+        }
     }
 
     private func groupView(_ group: Group) -> some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 2) {
-                ForEach(Array(group.items.enumerated()), id: \.offset) { _, item in
-                    switch item {
-                    case .large(let id):
-                        if let tool = toolbox.tools([id]).first { RibbonLargeButton(tool: tool) }
-                    case .small(let ids):
-                        VStack(alignment: .leading, spacing: 1) {
-                            ForEach(toolbox.tools(ids)) { RibbonSmallButton(tool: $0) }
-                        }
-                    case .menu(let label, let symbol, let tip, let ids):
-                        RibbonMenuButton(label: label, symbol: symbol, tip: tip, tools: toolbox.tools(ids))
-                    }
+        HStack(spacing: 1) {
+            ForEach(Array(group.items.enumerated()), id: \.offset) { _, item in
+                switch item {
+                case .tools(let ids):
+                    ForEach(toolbox.tools(ids)) { RibbonSmallButton(tool: $0) }
+                case .menu(let label, let symbol, let tip, let ids):
+                    RibbonMenuButton(label: label, symbol: symbol, tip: tip, tools: toolbox.tools(ids))
                 }
             }
-            .padding(.top, 6)
-            Spacer(minLength: 0)
-            Text(group.title)
-                .font(.dante(size: 10.5))
-                .foregroundStyle(theme.text3.color)
-                .padding(.bottom, 5)
         }
-        .padding(.horizontal, 6)
-        .frame(height: 88)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(group.title)
     }
 }
 
 // MARK: Buttons
 
-private struct RibbonLargeButton: View {
-    @Environment(\.theme) private var theme
-    let tool: PDFTool
-    @State private var hovering = false
-    @State private var tip = false
-
-    var body: some View {
-        Button { tip = false; tool.run() } label: {
-            VStack(spacing: 3) {
-                Image(systemName: tool.symbol)
-                    .font(.dante(size: 19))
-                    .frame(height: 24)
-                    .foregroundStyle(tool.isOn == true ? theme.accent.color : theme.text.color)
-                Text(tool.label)
-                    .font(.dante(size: 11))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .foregroundStyle(theme.text2.color)
-                    .frame(width: 62)
-            }
-            .padding(.vertical, 4)
-            .frame(minHeight: 60, alignment: .top)
-            .ribbonBackground(hovering: hovering && tool.enabled, on: tool.isOn == true)
-        }
-        .buttonStyle(.plain)
-        .disabled(!tool.enabled)
-        .opacity(tool.enabled ? 1 : 0.4)
-        .screenTip(title: tool.title, text: tool.tip, detail: tool.enabled ? tool.detail : tool.unavailable, hovering: $hovering, shows: $tip)
-        .accessibilityLabel(tool.title)
-    }
-}
-
 private struct RibbonSmallButton: View {
     @Environment(\.theme) private var theme
     let tool: PDFTool
+    /// Tools whose icon says it all; their ScreenTip still names them.
+    static let iconOnly: Set<String> = ["rotateLeft", "rotateRight", "zoomIn", "zoomOut"]
     @State private var hovering = false
     @State private var tip = false
 
     var body: some View {
         Button { tip = false; tool.run() } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: tool.symbol)
                     .font(.dante(size: 12))
-                    .frame(width: 16)
+                    .frame(width: 15)
                     .foregroundStyle(tool.isOn == true ? theme.accent.color : theme.text.color)
-                Text(tool.label).font(.dante(size: 11.5)).foregroundStyle(theme.text2.color).fixedSize()
+                if !Self.iconOnly.contains(tool.id) {
+                    Text(tool.label).font(.dante(size: 11.5)).foregroundStyle(theme.text2.color).fixedSize()
+                }
             }
             .padding(.horizontal, 6)
-            .frame(height: 22)
+            .frame(height: 24)
             .ribbonBackground(hovering: hovering && tool.enabled, on: tool.isOn == true)
         }
         .buttonStyle(.plain)
@@ -347,7 +304,7 @@ private struct RibbonSmallButton: View {
     }
 }
 
-/// A large button with a chevron that drops down its tools, each with what it acts on.
+/// A small button with a chevron that drops down its tools, each with what it acts on.
 private struct RibbonMenuButton: View {
     @Environment(\.theme) private var theme
     let label: String
@@ -360,18 +317,14 @@ private struct RibbonMenuButton: View {
 
     var body: some View {
         Button { tipShown = false; open = true } label: {
-            VStack(spacing: 3) {
-                Image(systemName: symbol).font(.dante(size: 19)).frame(height: 24)
+            HStack(spacing: 5) {
+                Image(systemName: symbol).font(.dante(size: 12)).frame(width: 15)
                     .foregroundStyle(tools.contains { $0.isOn == true } ? theme.accent.color : theme.text.color)
-                HStack(spacing: 3) {
-                    Text(label).font(.dante(size: 11))
-                    Image(systemName: "chevron.down").font(.dante(size: 7.5, weight: .bold))
-                }
-                .foregroundStyle(theme.text2.color)
-                .frame(width: 62)
+                Text(label).font(.dante(size: 11.5)).foregroundStyle(theme.text2.color).fixedSize()
+                Image(systemName: "chevron.down").font(.dante(size: 7.5, weight: .bold)).foregroundStyle(theme.text3.color)
             }
-            .padding(.vertical, 4)
-            .frame(minHeight: 60, alignment: .top)
+            .padding(.horizontal, 6)
+            .frame(height: 24)
             .ribbonBackground(hovering: hovering || open, on: false)
         }
         .buttonStyle(.plain)
