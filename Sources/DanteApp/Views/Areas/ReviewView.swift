@@ -56,6 +56,10 @@ struct ReviewView: View {
             if let message = model.errorMessage {
                 Text(message).font(.dante(size: 12.5)).foregroundStyle(theme.red.color)
             }
+            PullRequestCard(host: model.host, open: { path, line in
+                let url = workspace.git.root.appending(path: path)
+                if let line { session.open(file: url, line: line) } else { session.open(file: url) }
+            }, refresh: { Task { await model.loadHost(root: workspace.git.root, force: true) } })
             if let coverage = model.coverage {
                 if coverage.files.isEmpty {
                     EmptyState(symbol: "eye", title: "No code files to review",
@@ -70,6 +74,7 @@ struct ReviewView: View {
             }
         }
         .task(id: workspace.revision) { await model.load(root: workspace.git.root, revision: workspace.revision) }
+        .task { await model.loadHost(root: workspace.git.root) }
         .sheet(isPresented: $asking) {
             AskForReviewSheet(model: model, folders: model.coverage?.folders().map(\.path).filter { $0 != "." } ?? [],
                               openFile: openPath, root: workspace.git.root)
@@ -267,6 +272,10 @@ struct ReviewView: View {
             if let concern = file.current.first(where: { $0.verdict == .concern }) {
                 Text(concern.note ?? "Concern raised").font(.dante(size: 12)).foregroundStyle(theme.red.color).lineLimit(1)
             }
+            if let threads = model.host.openThreads[file.path] {
+                Chip(text: "\(threads)", symbol: "text.bubble", color: theme.amber.color)
+                    .help("\(threads) open comment thread\(threads == 1 ? "" : "s") on the pull request")
+            }
             Spacer(minLength: 8)
             HStack(spacing: -4) {
                 ForEach(file.current, id: \.by) { mark in ReviewerBadge(name: mark.by, current: true, concern: mark.verdict == .concern) }
@@ -390,7 +399,7 @@ struct ReviewerBadge: View {
 }
 
 /// Chips that wrap onto as many lines as they need.
-private struct FlowChips<Item: Hashable, Content: View>: View {
+struct FlowChips<Item: Hashable, Content: View>: View {
     let items: [Item]
     @ViewBuilder let content: (Item) -> Content
 

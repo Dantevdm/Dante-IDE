@@ -15,6 +15,69 @@ final class ReviewModel {
     var errorMessage: String?
     private var loadedRevision = -1
 
+    /// The repository's pull requests on its git host, read with git's own sign-in.
+    var host = HostReview()
+
+    struct HostReview {
+        enum Status: Equatable { case unknown, notHosted, loading, failed(BitbucketError), loaded }
+        var status: Status = .unknown
+        var remote: BitbucketRemote?
+        var branch: String?
+        var base: String?
+        /// The branch's own open pull request, if it has one.
+        var current: BitbucketPullRequest?
+        var others: [BitbucketPullRequest] = []
+        var threads: [BitbucketThread] = []
+        var checked: Date?
+
+        /// Open threads per file, for the file rows.
+        var openThreads: [String: Int] {
+            threads.reduce(into: [:]) { counts, thread in
+                if let path = thread.root.path, !thread.resolved { counts[path, default: 0] += 1 }
+            }
+        }
+    }
+
+    /// Reads the branch's pull request, its reviewers and comments from Bitbucket. Network, so
+    /// it runs when Review opens (at most every two minutes) and on Check again, not per edit.
+    func loadHost(root: URL, force: Bool = false) async {
+        if host.status == .loading { return }
+        if !force, let checked = host.checked, Date().timeIntervalSince(checked) < 120 { return }
+        let origin = await Shell.run(["git", "remote", "get-url", "origin"], in: root, timeout: .seconds(10))
+        guard origin.status == 0, let remote = BitbucketRemote.parse(origin.stdout) else {
+            host = HostReview(status: .notHosted, checked: Date())
+            return
+        }
+        async let branchRead = Shell.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], in: root, timeout: .seconds(10))
+        async let baseRead = Shell.run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], in: root, timeout: .seconds(10))
+        let branch = await branchRead.stdout, base = await baseRead
+        var next = host
+        next.remote = remote
+        next.branch = branch.isEmpty || branch == "HEAD" ? nil : branch
+        next.base = base.status == 0 ? base.stdout.replacingOccurrences(of: "origin/", with: "") : nil
+        next.status = .loading
+        host = next
+        guard let signIn = await BitbucketSignIn.borrow(for: remote, in: root) else {
+            host.status = .failed(.noSignIn(ssh: remote.isSSH))
+            host.checked = Date()
+            return
+        }
+        let client = BitbucketClient(remote: remote, signIn: signIn)
+        do throws(BitbucketError) {
+            let open = try await client.openPullRequests(branch: nil)
+            let current = open.first { $0.source == next.branch }
+            next.current = current
+            next.others = open.filter { $0.id != current?.id }
+            next.threads = []
+            if let current { next.threads = BitbucketThread.threads(try await client.comments(of: current.id)) }
+            next.status = .loaded
+        } catch {
+            next.status = .failed(error)
+        }
+        next.checked = Date()
+        host = next
+    }
+
     /// Re-reads the marks and the files' hashes; cheap enough for each workspace revision.
     func load(root: URL, revision: Int, force: Bool = false) async {
         guard force || revision != loadedRevision, !loading else { return }

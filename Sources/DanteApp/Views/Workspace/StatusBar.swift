@@ -354,8 +354,22 @@ private struct ReviewStatus: View {
                 .buttonStyle(.plain)
                 .help(ReviewView.who(file) + "\n\n" + Shortcuts.label(mine ? "Click to take your mark back" : "Click when you've read and understood it as it is now", "markReviewed"))
             }
+            if let path = session.activeReviewPath {
+                let threads = session.review.host.threads.filter { $0.root.path == path && !$0.resolved }
+                if !threads.isEmpty {
+                    Button { session.area = .review } label: {
+                        Label("\(threads.count)", systemImage: "text.bubble").foregroundStyle(theme.amber.color)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 10)
+                    .help("Open comments on the pull request:\n" + threads.prefix(5).map { thread in
+                        "\(thread.root.line.map { "Line \($0)" } ?? "File") · \(thread.root.author.name): \(thread.root.text.split(separator: "\n").first ?? "")"
+                    }.joined(separator: "\n") + "\n\nClick for Review")
+                }
+            }
         }
         .task(id: workspace.revision) { await session.review.load(root: workspace.git.root, revision: workspace.revision) }
+        .task { await session.review.loadHost(root: workspace.git.root) }
     }
 
     static func title(_ file: CodeReview.FileReview, mine: Bool) -> String {
