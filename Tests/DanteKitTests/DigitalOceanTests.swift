@@ -482,3 +482,24 @@ struct DigitalOceanTests {
     #expect((sent["services"] as? [[String: Any]])?.first?["source_dir"] as? String == "/")
     #expect((sent["services"] as? [[String: Any]])?.first?["dockerfile_path"] as? String == "api/Dockerfile")
 }
+
+@Test func aPreDeployJobOnADevDatabaseIsFlagged() throws {
+    let text = """
+    name: shop
+    jobs:
+      - {name: migrate, kind: PRE_DEPLOY, run_command: shop migrate up}
+    databases:
+      - {name: db, engine: PG, production: false}
+    """
+    let spec = try DOAppSpec.read(text).get()
+    let ids = DOAdvice.analyse(.init(file: spec, fileText: text)).map { String($0.id.split(separator: "|")[0]) }
+    #expect(ids.contains("dev-db-pre-deploy"))
+    let after = try DOAppSpec.read(text.replacingOccurrences(of: "PRE_DEPLOY", with: "POST_DEPLOY")).get()
+    #expect(!DOAdvice.analyse(.init(file: after, fileText: text)).contains { $0.id.hasPrefix("dev-db-pre-deploy") })
+}
+
+@Test func swappingDatabasesInOneDeployIsExplained() {
+    let message = "error validating databases field \"databases.create_delete\": cannot create and delete a database in a single spec change"
+    #expect(DOClient.explain(message).contains("Keep the old database"))
+    #expect(DOClient.explain("missing database create permission: forbidden").contains("Sign out and sign in again"))
+}

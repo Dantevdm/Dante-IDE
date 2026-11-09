@@ -263,6 +263,16 @@ private struct ComponentPlanRow: View {
 }
 
 enum DeployFormat {
+    /// A job by when it runs.
+    static func job(_ kind: String?) -> String {
+        switch kind?.uppercased() {
+        case "PRE_DEPLOY": "Job · before each deploy"
+        case "POST_DEPLOY": "Job · after each deploy"
+        case "FAILED_DEPLOY": "Job · when a deploy fails"
+        default: "Job"
+        }
+    }
+
     /// "ams" → "Amsterdam (ams)": DigitalOcean's region codes mean little on their own.
     static func region(_ code: String) -> String {
         PlanCard.regions.first { $0.0 == code }.map { "\($0.1) (\(code))" } ?? code

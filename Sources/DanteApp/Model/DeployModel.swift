@@ -398,7 +398,7 @@ final class DeployModel {
                         registryToMake = Self.registryName(person: person, app: object["name"] as? String)
                     }
                 } catch {
-                    deployProblem = DOSignIn.explain(error.message)
+                    deployProblem = DOClient.explain(error.message)
                     stage = nil
                     return
                 }
@@ -563,7 +563,7 @@ final class DeployModel {
                 await refresh()
                 watch()
             } catch {
-                deployProblem = DOSignIn.explain(error.message)
+                deployProblem = DOClient.explain(error.message)
                 stage = nil
             }
         }
@@ -700,7 +700,7 @@ final class DeployModel {
     static func estimate(_ spec: DOAppSpec?, sizes: [DOInstanceSize]) -> Double? {
         guard let spec, !sizes.isEmpty else { return nil }
         var total = 0.0
-        for (kind, component) in spec.components where kind != .staticSite {
+        for (kind, component) in spec.components where kind != .staticSite && !(kind == .job && component.kind?.uppercased().hasSuffix("_DEPLOY") == true) {
             let size = sizes.first { $0.slug == (component.instanceSizeSlug ?? DOPlan.smallestService) }
             total += (size?.monthly ?? 5) * Double(component.instanceCount ?? 1)
         }

@@ -213,6 +213,15 @@ public struct DOClient: Sendable {
         return Self.plain(text)
     }
 
+    /// DigitalOcean's refusals in words, with what to do: a missing scope (`DOSignIn.explain`),
+    /// or adding one database while removing another in the same deploy.
+    public static func explain(_ message: String) -> String {
+        if message.contains("create_delete") || message.lowercased().contains("cannot create and delete a database") {
+            return "DigitalOcean can’t add one database and remove another in the same deploy. Keep the old database in the spec for this deploy, and remove it in the next one."
+        }
+        return DOSignIn.explain(message)
+    }
+
     /// Log text without the terminal colour codes App Platform's builder writes.
     public static func plain(_ text: String) -> String {
         text.replacing(/\x{1B}\[[0-9;?]*[A-Za-z]/, with: "")

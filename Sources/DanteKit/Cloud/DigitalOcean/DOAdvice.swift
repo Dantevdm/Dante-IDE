@@ -211,6 +211,13 @@ public struct DOAdvice: Equatable, Sendable, Identifiable {
                     add("dev-db", .medium, .data, "\(database.name) is a dev database",
                         "Dev databases have no backups, no standby and limited connections: fine to try things, not for real data.",
                         fix: "Move to a managed database cluster (production: true with cluster_name) before real data goes in.", place: database.name)
+                    // App Platform grants a dev database's user rights on the public schema only
+                    // when a deployment completes, so a job before it can't create tables yet.
+                    for job in spec.jobs ?? [] where job.kind?.uppercased() == "PRE_DEPLOY" {
+                        add("dev-db-pre-deploy", .high, .reliability, "\(job.name) runs before \(database.name) can be written to",
+                            "App Platform gives a dev database's user its rights on the public schema only once a deployment completes, so a pre-deploy job (migrations) on a new dev database fails with \"permission denied for schema public\".",
+                            fix: "Make \(job.name) a POST_DEPLOY job until the first deployment has gone live; a dev database made by a failed deployment never got the rights, so rename it to get a fresh one.", place: job.name)
+                    }
                 } else if let cluster = database.clusterName {
                     let rules = inputs.trustedSources[cluster]
                     if rules?.isEmpty == true {

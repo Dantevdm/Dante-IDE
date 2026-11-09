@@ -104,7 +104,7 @@ struct DeploySheet: View {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 // Ids by name: the two lists share one grid, so offsets would collide.
                 ForEach(Array(items.enumerated()), id: \.element.component.name) { index, item in
-                    PartTile(symbol: symbol(for: item.kind), name: item.component.name, kind: item.kind.title,
+                    PartTile(symbol: symbol(for: item.kind), name: item.component.name, kind: item.kind == .job ? DeployFormat.job(item.component.kind) : item.kind.title,
                              detail: item.kind == .staticSite ? "CDN" : DeployFormat.size(item.component.instanceSizeSlug ?? DOPlan.smallestService)
                                 + ((item.component.instanceCount ?? 1) > 1 ? " × \(item.component.instanceCount ?? 1)" : ""),
                              price: price(item.kind, item.component), source: item.component.sourceDir.map { $0 + "/" })
@@ -312,6 +312,8 @@ struct DeploySheet: View {
 
     private func price(_ kind: DOAppSpec.Kind, _ component: DOAppSpec.Component) -> Double? {
         if kind == .staticSite { return 0 }
+        // A job run around a deploy is billed for the seconds it runs, not a month.
+        if kind == .job, component.kind?.uppercased().hasSuffix("_DEPLOY") == true { return nil }
         let slug = component.instanceSizeSlug ?? DOPlan.smallestService
         return model.sizes.first { $0.slug == slug }?.monthly.map { $0 * Double(component.instanceCount ?? 1) }
     }
