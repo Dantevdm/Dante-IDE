@@ -308,11 +308,17 @@ private struct DeployProgressCard: View {
                         if let connect = model.source.connectURL, problem.lowercased().contains(connectHint) {
                             Button("Let App Platform read the repository") { NSWorkspace.shared.open(connect) }.buttonStyle(DanteButtonStyle(primary: true))
                         }
-                        Button("Try again") { model.prepare(workspace: workspace) }.buttonStyle(DanteButtonStyle())
-                        Button { session.askClaude(DeployBrief.failedDeploy(problem: problem, lines: model.buildLines)) } label: {
-                            Label("Ask \(session.agentName) to fix it", systemImage: "wand.and.stars")
+                        if problem.contains("Sign out and sign in again") {
+                            Button("Sign in again") { model.signInAgain() }.buttonStyle(DanteButtonStyle(primary: true))
+                        } else {
+                            Button("Try again") { model.prepare(workspace: workspace) }.buttonStyle(DanteButtonStyle())
                         }
-                        .buttonStyle(DanteButtonStyle())
+                        if !problem.contains("Sign out and sign in again") {
+                            Button { session.askClaude(DeployBrief.failedDeploy(problem: problem, lines: model.buildLines)) } label: {
+                                Label("Ask \(session.agentName) to fix it", systemImage: "wand.and.stars")
+                            }
+                            .buttonStyle(DanteButtonStyle())
+                        }
                         Button("Dismiss") { model.deployProblem = nil }.buttonStyle(DanteButtonStyle())
                     }
                 }

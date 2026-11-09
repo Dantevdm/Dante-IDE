@@ -273,6 +273,18 @@ final class DeployModel {
         }
     }
 
+    /// Signs out and straight back in, for a sign-in granted before Dante asked for a scope it
+    /// now needs. The linked app stays linked.
+    func signInAgain() {
+        deployProblem = nil
+        Task {
+            await DOAccount.signOut()
+            signedIn = false
+            person = nil
+            signIn()
+        }
+    }
+
     func signOut() {
         Task {
             await DOAccount.signOut()
@@ -386,7 +398,7 @@ final class DeployModel {
                         registryToMake = Self.registryName(person: person, app: object["name"] as? String)
                     }
                 } catch {
-                    deployProblem = error.message
+                    deployProblem = DOSignIn.explain(error.message)
                     stage = nil
                     return
                 }
@@ -538,7 +550,7 @@ final class DeployModel {
                 await refresh()
                 watch()
             } catch {
-                deployProblem = error.message
+                deployProblem = DOSignIn.explain(error.message)
                 stage = nil
             }
         }

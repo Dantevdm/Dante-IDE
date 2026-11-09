@@ -407,3 +407,12 @@ struct DigitalOceanTests {
         #expect(DOSpecSend.prepare(&plain).map(\.key) == ["POSTGRES_PASSWORD"])
     }
 }
+
+@Test func aMissingScopeAsksToSignInAgain() {
+    let message = "missing database create permission: rpc error: code = PermissionDenied desc = forbidden"
+    #expect(DOSignIn.missingScope(in: message) == "database:create")
+    #expect(DOSignIn.scopes.contains("database:create"))
+    #expect(DOSignIn.explain(message).contains("Sign out and sign in again"))
+    #expect(DOSignIn.explain("missing droplet delete permission: forbidden").contains("doesn’t ask for that"))
+    #expect(DOSignIn.explain("Some other failure.") == "Some other failure.")
+}

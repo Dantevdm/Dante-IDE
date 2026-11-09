@@ -20,11 +20,31 @@ public enum DOSignIn {
     public static func redirect(port: UInt16) -> String { "http://127.0.0.1:\(port)\(redirectPath)" }
 
     /// What Dante asks for: App Platform, the container registry it pushes images to, the
-    /// metrics it shows, and reading databases for their trusted sources. Nothing else.
+    /// metrics it shows, and databases: reading them for their trusted sources, and creating
+    /// the dev database a spec's `databases:` asks App Platform for. Nothing else.
     public static let scopes = [
         "account:read", "app:read", "app:create", "app:update", "app:delete",
-        "registry:read", "registry:create", "registry:update", "monitoring:read", "database:read",
+        "registry:read", "registry:create", "registry:update", "monitoring:read", "database:read", "database:create",
     ]
+
+    /// The scope an error says the sign-in lacks: DigitalOcean answers "missing database create
+    /// permission: rpc error: …" when a token without `database:create` asks for a dev database.
+    public static func missingScope(in message: String) -> String? {
+        let pattern = /missing ([a-z_]+) ([a-z_]+) permission/
+        guard let match = message.lowercased().firstMatch(of: pattern) else { return nil }
+        return "\(match.1):\(match.2)"
+    }
+
+    /// An error about a missing scope, in words, with what to do about it.
+    public static func explain(_ message: String) -> String {
+        guard let scope = missingScope(in: message) else { return message }
+        let parts = scope.split(separator: ":")
+        let what = parts.count == 2 ? "\(parts[1]) \(parts[0])s" : scope
+        if scopes.contains(scope) {
+            return "This DigitalOcean sign-in isn’t allowed to \(what) (\(scope)): it was granted before Dante asked for that. Sign out and sign in again to allow it."
+        }
+        return "This DigitalOcean sign-in isn’t allowed to \(what) (\(scope)), and Dante doesn’t ask for that. DigitalOcean said: \(message)"
+    }
 
     public typealias Failure = MicrosoftSignIn.Failure
 
