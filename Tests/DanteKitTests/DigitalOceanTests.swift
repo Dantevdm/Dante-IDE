@@ -416,3 +416,10 @@ struct DigitalOceanTests {
     #expect(DOSignIn.explain("missing droplet delete permission: forbidden").contains("doesn’t ask for that"))
     #expect(DOSignIn.explain("Some other failure.") == "Some other failure.")
 }
+
+@Test func onlyRepositoryErrorsOfferRepositoryAccess() {
+    #expect(!DOSource.needsRepositoryAccess("DigitalOcean took too long to answer."))
+    #expect(!DOSource.needsRepositoryAccess("DigitalOcean couldn't be reached: The request timed out."))
+    #expect(DOSource.needsRepositoryAccess("GitHub user does not have access to acme/shop"))
+    #expect(DOSource.needsRepositoryAccess("unable to clone repository: authentication required"))
+}

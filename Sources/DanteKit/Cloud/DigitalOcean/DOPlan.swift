@@ -46,6 +46,14 @@ public enum DOSource: Equatable, Sendable {
         }
     }
 
+    /// Whether a failure says App Platform can't read the repository (so the page offers
+    /// `connectURL`), rather than anything else that merely mentions git or DigitalOcean.
+    public static func needsRepositoryAccess(_ problem: String) -> Bool {
+        let text = problem.lowercased()
+        guard ["repo", "github", "gitlab", "bitbucket"].contains(where: { text.contains($0) }) else { return false }
+        return ["access", "permission", "authori", "install", "connect", "not found", "unable to", "could not", "couldn't"].contains { text.contains($0) }
+    }
+
     /// The page where the person lets App Platform read their repositories.
     public var connectURL: URL? {
         switch self {

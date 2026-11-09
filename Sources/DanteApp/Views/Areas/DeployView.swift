@@ -305,7 +305,7 @@ private struct DeployProgressCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(problem).font(.dante(size: 12.5)).foregroundStyle(theme.red.color).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                     HStack(spacing: 8) {
-                        if let connect = model.source.connectURL, problem.lowercased().contains(connectHint) {
+                        if let connect = model.source.connectURL, DOSource.needsRepositoryAccess(problem) {
                             Button("Let App Platform read the repository") { NSWorkspace.shared.open(connect) }.buttonStyle(DanteButtonStyle(primary: true))
                         }
                         if problem.contains("Sign out and sign in again") {
@@ -336,8 +336,6 @@ private struct DeployProgressCard: View {
             }
         }
     }
-
-    private var connectHint: String { "git" }
 
     private func text(_ stage: DeployModel.Stage) -> String {
         switch stage {

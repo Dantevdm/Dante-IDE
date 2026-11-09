@@ -30,6 +30,8 @@ public struct DOClient: Sendable {
         public var isMissing: Bool { status == 404 }
         /// The request was dropped because the page that asked went away: not worth saying.
         public var isCancelled: Bool { id == "cancelled" }
+        /// No answer in time: the request may still have done its work on DigitalOcean's side.
+        public var isTimedOut: Bool { id == "timed_out" }
         static let cancelled = Failure(status: 0, id: "cancelled", message: "Cancelled.")
 
         /// DigitalOcean's `{"id": "…", "message": "…"}`.
@@ -57,13 +59,14 @@ public struct DOClient: Sendable {
         try await send(method, path, query: query, json: body.flatMap { try? JSONSerialization.data(withJSONObject: $0) })
     }
 
-    func send(_ method: String, _ path: String, query: [String: String] = [:], json body: Data?) async throws(Failure) -> Data {
+    func send(_ method: String, _ path: String, query: [String: String] = [:], json body: Data?, timeout: TimeInterval = 30) async throws(Failure) -> Data {
         guard let token = await token() else { throw .signedOut }
         var components = URLComponents(url: Self.base.appending(path: path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
         guard let url = components.url, url.host == Self.host, url.scheme == "https" else { throw Failure(status: 0, message: "Not a DigitalOcean address.") }
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.timeoutInterval = timeout
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
@@ -73,6 +76,7 @@ public struct DOClient: Sendable {
         let data: Data, response: URLResponse
         do { (data, response) = try await Self.session.data(for: request) } catch {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { throw Failure.cancelled }
+            if (error as? URLError)?.code == .timedOut { throw Failure(status: 0, id: "timed_out", message: "DigitalOcean took too long to answer.") }
             throw Failure(status: 0, message: "DigitalOcean couldn't be reached: \(error.localizedDescription)")
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -122,17 +126,17 @@ public struct DOClient: Sendable {
 
     /// Checks a spec and prices it without making anything.
     public func propose(_ spec: Data, appID: String? = nil) async throws(Failure) -> DOProposal {
-        let data = try await send("POST", "apps/propose", json: Self.wrap(spec, appID: appID))
+        let data = try await send("POST", "apps/propose", json: Self.wrap(spec, appID: appID), timeout: 90)
         return (try? DOJSON.decoder.decode(DOProposal.self, from: data)) ?? DOProposal()
     }
 
     public func create(_ spec: Data) async throws(Failure) -> DOApp {
-        guard let app = DOApp.parse(object(try await send("POST", "apps", json: Self.wrap(spec)))["app"] as Any) else { throw Failure(status: 0, message: "DigitalOcean made the app but its answer wasn't readable.") }
+        guard let app = DOApp.parse(object(try await send("POST", "apps", json: Self.wrap(spec), timeout: 120))["app"] as Any) else { throw Failure(status: 0, message: "DigitalOcean made the app but its answer wasn't readable.") }
         return app
     }
 
     public func update(_ id: String, spec: Data) async throws(Failure) -> DOApp {
-        guard let app = DOApp.parse(object(try await send("PUT", "apps/\(id)", json: Self.wrap(spec)))["app"] as Any) else { throw Failure(status: 0, message: "DigitalOcean updated the app but its answer wasn't readable.") }
+        guard let app = DOApp.parse(object(try await send("PUT", "apps/\(id)", json: Self.wrap(spec), timeout: 120))["app"] as Any) else { throw Failure(status: 0, message: "DigitalOcean updated the app but its answer wasn't readable.") }
         return app
     }
 

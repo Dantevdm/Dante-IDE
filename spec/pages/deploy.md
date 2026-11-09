@@ -49,6 +49,8 @@ Deploy puts the project on DigitalOcean's App Platform and keeps an eye on it: s
 - A spec with a database: variables naming the database's password, user, host, port, name, URL or CA (`POSTGRES_PASSWORD`, `PGHOST`, `DATABASE_URL`, `DB_USER`…) are bound to it (`${db.PASSWORD}` and friends) when the plan is written and again when the sheet opens, so they're never asked for; `DATABASE_URL` is added. With several databases, Postgres wins.
 - Secrets: the file holds SECRET variables without values. Typed values are sent once and not saved; on a later deploy DigitalOcean's encrypted value is sent back unchanged. A value written into the file is a critical finding.
 - An update whose spec didn't change starts a deployment of what's pushed, so Deploy again always deploys.
+- Creating or updating an app waits up to two minutes for DigitalOcean (pricing 90 seconds, everything else 30). When creating times out, the app may still have been made, so Dante looks for an app with the spec's name for a minute and links it rather than making a second; only when none appears does it say to try again.
+- Let App Platform read the repository is offered only when the failure is about reading the repository, not for every message that names git or DigitalOcean.
 - Pricing swaps images not yet built for a stand-in, so the size is priced before anything is built.
 - Requests only go to api.digitalocean.com and DigitalOcean's sign-in, without following redirects; logs come from the signed links the API gives. The live site is asked only for its own headers.
 

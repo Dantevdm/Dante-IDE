@@ -542,7 +542,16 @@ final class DeployModel {
                         _ = try await client.deploy(existing.id, forceBuild: true)
                     }
                 } else {
-                    sent = try await client.create(DOSpecSend.json(spec))
+                    do throws(DOClient.Failure) {
+                        sent = try await client.create(DOSpecSend.json(spec))
+                    } catch let error where error.isTimedOut {
+                        // A slow answer may still have made the app; trying again would make a second.
+                        stage = .sending
+                        guard let name = spec["name"] as? String, let made = await Self.findApp(named: name, client: client) else {
+                            throw DOClient.Failure(status: 0, message: "DigitalOcean took too long to answer, and no app named \(spec["name"] as? String ?? "after the spec") has appeared. Try again in a minute.")
+                        }
+                        sent = made
+                    }
                     UserDefaults.standard.set(sent.id, forKey: Self.appKey(root))
                 }
                 app = sent
@@ -554,6 +563,16 @@ final class DeployModel {
                 stage = nil
             }
         }
+    }
+
+    /// Looks for an app a timed-out create may have made, for up to a minute.
+    private static func findApp(named name: String, client: DOClient) async -> DOApp? {
+        for attempt in 0..<6 {
+            if attempt > 0 { try? await Task.sleep(for: .seconds(10)) }
+            if Task.isCancelled { return nil }
+            if let apps = try? await client.apps(), let app = apps.first(where: { $0.name == name }) { return app }
+        }
+        return nil
     }
 
     private func receive(_ event: DODocker.Event) {
