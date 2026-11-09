@@ -40,6 +40,13 @@ struct DeployView: View {
             }
             AdviceCard(session: session, workspace: workspace)
         }
+        #if DEBUG
+        .task {
+            guard ProcessInfo.processInfo.environment["DANTE_DEPLOY_DEMO"] == "1" else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            model.showDemo(workspace: workspace)
+        }
+        #endif
         .task(id: workspace.revision) {
             await model.load(workspace: workspace)
         }
@@ -256,6 +263,11 @@ private struct ComponentPlanRow: View {
 }
 
 enum DeployFormat {
+    /// "ams" → "Amsterdam (ams)": DigitalOcean's region codes mean little on their own.
+    static func region(_ code: String) -> String {
+        PlanCard.regions.first { $0.0 == code }.map { "\($0.1) (\(code))" } ?? code
+    }
+
     /// "apps-s-1vcpu-0.5gb" → "1 vCPU · 0.5 GB".
     static func size(_ slug: String) -> String {
         let parts = slug.split(separator: "-")
@@ -275,106 +287,6 @@ enum DeployFormat {
 }
 
 // MARK: Deploying
-
-private struct DeploySheet: View {
-    @Environment(\.theme) private var theme
-    let session: Session
-    let workspace: Workspace
-    private var model: DeployModel { session.deploy }
-
-    var body: some View {
-        @Bindable var model = model
-        VStack(alignment: .leading, spacing: 14) {
-            Text(model.app == nil ? "Deploy to DigitalOcean" : "Deploy \(model.app?.name ?? "") again")
-                .font(.dante(size: 17, weight: .semibold)).foregroundStyle(theme.text.color)
-            if let spec = model.spec {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(spec.components.enumerated()), id: \.offset) { index, item in
-                        if index > 0 { Rectangle().fill(theme.line.color).frame(height: 1) }
-                        ComponentPlanRow(kind: item.kind, component: item.component)
-                    }
-                }
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                // Whose account it goes on comes first: the consent page picks a team, often a company's.
-                if let team = model.person?.team, !team.isEmpty {
-                    line("building.2", "On the \(team) team’s account and bill. To use another team, sign out and choose it when you sign in again.")
-                }
-                if model.app == nil {
-                    line("plus.circle", "Makes a new app, \(model.spec?.name ?? ""), in \(model.spec?.region ?? model.region).")
-                }
-                if let registry = model.registryInUse {
-                    line("shippingbox", "Pushes to the team’s registry, \(registry), adding nothing else to it.")
-                }
-                if let full = model.registryFull {
-                    line("exclamationmark.triangle", full, warn: true)
-                }
-                if let registry = model.registryToMake {
-                    line("shippingbox", "Makes a container registry, \(registry), on the free Starter plan (500 MB).")
-                }
-                if model.spec?.components.contains(where: { $0.component.image?.registryType == "DOCR" }) == true {
-                    line("hammer", "Builds the images here for linux/amd64 with Docker and pushes them (this can take a few minutes).")
-                }
-                if model.source.isGitHost {
-                    if model.unpushed > 0 {
-                        line("exclamationmark.triangle", "\(model.unpushed) commit\(model.unpushed == 1 ? " isn’t" : "s aren’t") pushed yet: App Platform builds what’s on \(model.branch) on the host.", warn: true)
-                    }
-                    if model.dirty {
-                        line("exclamationmark.triangle", "Uncommitted changes aren’t included.", warn: true)
-                    }
-                }
-                if let databases = model.spec?.databases, databases.contains(where: { $0.production != true }) {
-                    line("cylinder.split.1x2", "Adds a dev database: no backups, so not for real data yet.")
-                }
-            }
-            if !model.needed.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Secrets the app needs").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
-                    Text("Sent once to DigitalOcean, which keeps them encrypted. Dante doesn’t save them.")
-                        .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-                    ForEach(model.needed) { needed in
-                        HStack {
-                            Text(needed.key).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color).frame(width: 200, alignment: .leading)
-                            SecureField(needed.component ?? "app", text: Binding(get: { model.typedSecrets[needed.id] ?? "" }, set: { model.typedSecrets[needed.id] = $0 }))
-                                .textFieldStyle(.roundedBorder)
-                        }
-                    }
-                }
-            }
-            HStack {
-                if model.stage == .checking {
-                    ProgressView().controlSize(.small)
-                    Text("Pricing it…").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                } else if model.needed.isEmpty {
-                    let cost = model.proposal?.appCost ?? model.estimate
-                    Text(cost.map { "About \(DeployFormat.money($0))" } ?? "DigitalOcean didn’t give a price")
-                        .font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
-                        .help(model.proposal?.appCost == nil ? "Estimated from the instance sizes; billed by the second" : "DigitalOcean’s own price for this spec; billed by the second")
-                }
-                Spacer()
-                Button("Cancel") { model.cancelDeploy() }.buttonStyle(DanteButtonStyle()).keyboardShortcut(.cancelAction)
-                if model.needed.isEmpty {
-                    // No Return shortcut: this spends money, so only a deliberate click deploys.
-                    Button("Deploy") { model.confirm(workspace: workspace) }
-                        .buttonStyle(DanteButtonStyle(primary: true))
-                        .disabled(model.stage != .confirming || model.registryFull != nil)
-                } else {
-                    Button("Continue") { model.secretsEntered() }
-                        .buttonStyle(DanteButtonStyle(primary: true)).keyboardShortcut(.defaultAction)
-                        .disabled(model.needed.contains { (model.typedSecrets[$0.id] ?? "").isEmpty })
-                }
-            }
-        }
-        .padding(22)
-        .frame(width: 520)
-        .background(theme.panel.color)
-    }
-
-    private func line(_ symbol: String, _ text: String, warn: Bool = false) -> some View {
-        Label(text, systemImage: symbol).font(.dante(size: 12.5)).foregroundStyle(warn ? theme.amber.color : theme.text2.color)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
 
 private struct DeployProgressCard: View {
     @Environment(\.theme) private var theme
@@ -461,7 +373,7 @@ private struct LiveCard: View {
                     } else {
                         Text("No address yet").font(.dante(size: 15, weight: .semibold)).foregroundStyle(theme.text2.color)
                     }
-                    Text([app.current?.phase.title, app.region.map { "in \($0)" }, model.person.map { $0.label }].compactMap { $0 }.joined(separator: " · "))
+                    Text([app.current?.phase.title, app.region.map { "in " + DeployFormat.region($0) }, model.person.map { $0.label }].compactMap { $0 }.joined(separator: " · "))
                         .font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
                 Spacer()

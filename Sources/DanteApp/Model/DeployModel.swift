@@ -62,6 +62,12 @@ final class DeployModel {
     var stage: Stage?
     var needed: [DOSpecSend.Needed] = []
     var typedSecrets: [String: String] = [:]
+    /// Secrets the spec's database answers itself (`${db.PASSWORD}`), shown rather than asked for.
+    var databaseBindings: [(needed: DOSpecSend.Needed, binding: String)] = []
+    /// Values for the needed secrets in the project's env files and mise, by `Needed.id`; used
+    /// only when the person presses Fill, and never shown.
+    var envMatches: [String: String] = [:]
+    var filledFromEnv: Set<String> = []
     var proposal: DOProposal?
     var estimate: Double?
     var registryToMake: String?
@@ -72,7 +78,7 @@ final class DeployModel {
     var buildLines: [String] = []
     var deployProblem: String?
     private var preparedSpec: [String: Any]?
-    private var builds: [(build: DOImageBuild, repository: String)] = []
+    private(set) var builds: [(build: DOImageBuild, repository: String)] = []
     private var deployTask: Task<Void, Never>?
     private var watchTask: Task<Void, Never>?
 
@@ -356,7 +362,10 @@ final class DeployModel {
             if object["region"] == nil { object["region"] = region }
             let live = app?.specJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
             var probe = object
+            databaseBindings = DOSpecSend.databaseBindings(in: object)
             needed = DOSpecSend.prepare(&probe, secrets: typedSecrets, live: live)
+            envMatches = Self.envValues(for: needed, spec: object, root: workspace.url)
+            filledFromEnv = []
             let planned = DOPlan.make(projectName: workspace.url.lastPathComponent, files: workspace.files, read: Self.reader(workspace.url),
                                       compose: ComposeFile.load(projectRoot: workspace.url), source: .builtHere, branch: branch, region: region).builds
             builds = DODocker.builds(for: object, planned: planned)
@@ -408,11 +417,73 @@ final class DeployModel {
         }
     }
 
+    #if DEBUG
+    /// `DANTE_DEPLOY_DEMO=1`: opens the deploy sheet on the project's own spec with a made-up
+    /// team and registry and no DigitalOcean calls, to look at the sheet without spending anything.
+    func showDemo(workspace: Workspace) {
+        guard stage == nil, let specText, case .success(var object) = DOSpecSend.object(yaml: specText) else { return }
+        person = DOSignIn.Person(name: "Sam", email: nil, team: "Acme")
+        databaseBindings = DOSpecSend.databaseBindings(in: object)
+        needed = DOSpecSend.prepare(&object)
+        envMatches = Self.envValues(for: needed, spec: object, root: workspace.url)
+        let planned = DOPlan.make(projectName: workspace.url.lastPathComponent, files: workspace.files, read: Self.reader(workspace.url),
+                                  compose: ComposeFile.load(projectRoot: workspace.url), source: .builtHere, branch: branch, region: region).builds
+        builds = DODocker.builds(for: object, planned: planned)
+        registryInUse = "acme"
+        estimate = 12
+        stage = needed.isEmpty ? .confirming : .needsSecrets
+    }
+    #endif
+
+    /// Puts the values found in the project's env files into the secret fields, for the
+    /// person to look over before Continue.
+    func fillFromEnv() {
+        for (id, value) in envMatches {
+            typedSecrets[id] = value
+            filledFromEnv.insert(id)
+        }
+    }
+
+    /// The needed secrets' values in `.env` and `.env.local` at the project root and in each
+    /// component's folder (the component's own win), over what mise sets there. Placeholders
+    /// and values that still name other variables are left out.
+    static func envValues(for needed: [DOSpecSend.Needed], spec: [String: Any], root: URL) -> [String: String] {
+        var folders: [String: String] = [:]
+        for list in ["services", "static_sites", "workers", "jobs"] {
+            for component in spec[list] as? [[String: Any]] ?? [] {
+                guard let name = component["name"] as? String else { continue }
+                let dir = ((component["source_dir"] as? String) ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if !dir.isEmpty, !dir.contains("..") { folders[name] = dir }
+            }
+        }
+        func values(in folder: URL) -> [String: String] {
+            var found = Mise.overlay(for: folder)
+            for name in [".env", ".env.local"] {
+                guard let text = try? String(contentsOf: folder.appending(path: name), encoding: .utf8) else { continue }
+                found.merge(EnvFile.values(text)) { _, file in file }
+            }
+            return found
+        }
+        let atRoot = values(in: root)
+        var result: [String: String] = [:]
+        for item in needed {
+            var env = atRoot
+            if let dir = item.component.flatMap({ folders[$0] }) { env.merge(values(in: root.appending(path: dir))) { _, own in own } }
+            guard var value = env[item.key] else { continue }
+            value = EnvFile.interpolate(value, env: env)
+            let lower = value.lowercased()
+            let placeholder = value.isEmpty || value.contains("$") || value.hasPrefix("<") || ["changeme", "change-me", "change_me", "xxx", "todo", "secret", "password"].contains(lower) || lower.hasPrefix("your")
+            if !placeholder { result[item.id] = value }
+        }
+        return result
+    }
+
     func cancelDeploy() {
         deployTask?.cancel()
         if stage == .confirming || stage == .needsSecrets || stage == .checking {
             stage = nil
             typedSecrets = [:]
+            filledFromEnv = []
         }
     }
 

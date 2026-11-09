@@ -344,6 +344,7 @@ public enum DOSpecSend {
     @discardableResult
     public static func prepare(_ spec: inout [String: Any], tags: [String: String] = [:], secrets: [String: String] = [:], live: [String: Any]? = nil) -> [Needed] {
         var missing: [Needed] = []
+        let databases = spec["databases"] as? [[String: Any]] ?? []
 
         func fill(_ envs: [[String: Any]], component: String?, liveEnvs: [[String: Any]]) -> [[String: Any]] {
             envs.map { env in
@@ -353,6 +354,10 @@ public enum DOSpecSend {
                 let needed = Needed(component: component, key: key)
                 if let typed = secrets[needed.id], !typed.isEmpty {
                     env["value"] = typed
+                } else if let bound = binding(key: key, databases: databases) {
+                    // The app's own database hands it this; a value from this Mac would be wrong there.
+                    env["value"] = bound
+                    env["type"] = "GENERAL"
                 } else if let kept = liveEnvs.first(where: { ($0["key"] as? String) == key })?["value"] as? String, !kept.isEmpty {
                     env["value"] = kept
                 } else {
@@ -388,6 +393,57 @@ public enum DOSpecSend {
     /// The spec as JSON for the API.
     public static func json(_ spec: [String: Any]) -> Data {
         (try? JSONSerialization.data(withJSONObject: spec, options: .sortedKeys)) ?? Data("{}".utf8)
+    }
+
+    /// Which of a database's bindable values a variable names: `POSTGRES_PASSWORD` is the
+    /// password, `DB_HOST` the hostname, `DATABASE_URL` the whole address. Nil for anything else.
+    public static func databaseField(_ key: String) -> String? {
+        let key = key.uppercased()
+        let databaseWords = ["POSTGRES", "PG", "DB", "DATABASE", "MYSQL", "MARIADB"]
+        let words = key.split(separator: "_").map(String.init)
+        if ["DATABASE_URL", "DB_URL", "POSTGRES_URL", "POSTGRESQL_URL", "PG_URL", "MYSQL_URL"].contains(key) || key.hasSuffix("_DATABASE_URL") { return "DATABASE_URL" }
+        if ["PGPASSWORD", "PGUSER", "PGHOST", "PGPORT", "PGDATABASE"].contains(key) {
+            return ["PGPASSWORD": "PASSWORD", "PGUSER": "USERNAME", "PGHOST": "HOSTNAME", "PGPORT": "PORT", "PGDATABASE": "DATABASE"][key]
+        }
+        guard let first = words.first, databaseWords.contains(first), words.count >= 2 else { return nil }
+        switch words.dropFirst().joined(separator: "_") {
+        case "PASSWORD", "PASS", "PWD": return "PASSWORD"
+        case "USER", "USERNAME": return "USERNAME"
+        case "HOST", "HOSTNAME": return "HOSTNAME"
+        case "PORT": return "PORT"
+        case "DB", "NAME", "DATABASE": return "DATABASE"
+        case "CA_CERT", "SSL_CA", "CA": return "CA_CERT"
+        default: return nil
+        }
+    }
+
+    /// `${db.PASSWORD}` and friends for a variable the spec's database can answer: the
+    /// Postgres one when there are several.
+    public static func binding(key: String, databases: [[String: Any]]) -> String? {
+        guard let field = databaseField(key) else { return nil }
+        let database = databases.first { ($0["engine"] as? String)?.uppercased() == "PG" } ?? databases.first
+        guard let name = database?["name"] as? String, !name.isEmpty else { return nil }
+        return "${\(name).\(field)}"
+    }
+
+    /// The secrets the spec's database answers, with the value each gets, for the deploy sheet.
+    public static func databaseBindings(in spec: [String: Any]) -> [(needed: Needed, binding: String)] {
+        let databases = spec["databases"] as? [[String: Any]] ?? []
+        guard !databases.isEmpty else { return [] }
+        let empty = Set(secrets(in: spec).map(\.id))
+        var found: [(Needed, String)] = []
+        func scan(_ envs: Any?, component: String?) {
+            for env in envs as? [[String: Any]] ?? [] where (env["type"] as? String)?.uppercased() == "SECRET" && ((env["value"] as? String) ?? "").isEmpty {
+                guard let key = env["key"] as? String, let bound = binding(key: key, databases: databases) else { continue }
+                let needed = Needed(component: component, key: key)
+                if empty.contains(needed.id) { found.append((needed, bound)) }
+            }
+        }
+        scan(spec["envs"], component: nil)
+        for list in componentLists {
+            for component in spec[list] as? [[String: Any]] ?? [] { scan(component["envs"], component: component["name"] as? String) }
+        }
+        return found
     }
 
     /// Every secret the file asks for, for the deploy sheet.

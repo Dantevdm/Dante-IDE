@@ -376,4 +376,34 @@ struct DigitalOceanTests {
         #expect(DOClient.streamText(#"{"data":"api 12:00 GET / 200"}"#) == "api 12:00 GET / 200\n")
         #expect(DOClient.streamText("plain line\n") == "plain line\n")
     }
+
+    @Test func databaseVariablesComeFromTheDatabase() {
+        #expect(DOSpecSend.databaseField("POSTGRES_PASSWORD") == "PASSWORD")
+        #expect(DOSpecSend.databaseField("DB_HOST") == "HOSTNAME")
+        #expect(DOSpecSend.databaseField("PGUSER") == "USERNAME")
+        #expect(DOSpecSend.databaseField("POSTGRES_DB") == "DATABASE")
+        #expect(DOSpecSend.databaseField("ORDERS_DATABASE_URL") == "DATABASE_URL")
+        #expect(DOSpecSend.databaseField("SHOP_PII_ENC_KEY") == nil)
+        #expect(DOSpecSend.databaseField("REDIS_PASSWORD") == nil)
+        #expect(DOSpecSend.databaseField("DB") == nil)
+
+        var spec: [String: Any] = [
+            "name": "shop",
+            "databases": [["name": "db", "engine": "PG", "production": false]],
+            "services": [["name": "api", "envs": [
+                ["key": "POSTGRES_PASSWORD", "type": "SECRET", "scope": "RUN_TIME"],
+                ["key": "SHOP_ADMIN_KEY", "type": "SECRET", "scope": "RUN_TIME"],
+            ]]],
+        ]
+        #expect(DOSpecSend.databaseBindings(in: spec).map(\.binding) == ["${db.PASSWORD}"])
+        let missing = DOSpecSend.prepare(&spec)
+        #expect(missing.map(\.key) == ["SHOP_ADMIN_KEY"])
+        let envs = ((spec["services"] as? [[String: Any]])?.first?["envs"] as? [[String: Any]]) ?? []
+        #expect(envs.first?["value"] as? String == "${db.PASSWORD}")
+        #expect(envs.first?["type"] as? String == "GENERAL")
+
+        // Without a database in the spec, it's asked for like any other secret.
+        var plain: [String: Any] = ["name": "shop", "envs": [["key": "POSTGRES_PASSWORD", "type": "SECRET"]]]
+        #expect(DOSpecSend.prepare(&plain).map(\.key) == ["POSTGRES_PASSWORD"])
+    }
 }

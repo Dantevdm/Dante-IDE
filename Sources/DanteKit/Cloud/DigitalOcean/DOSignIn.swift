@@ -79,6 +79,12 @@ public enum DOSignIn {
         public var email: String?
         public var team: String?
 
+        public init(name: String?, email: String?, team: String?) {
+            self.name = name
+            self.email = email
+            self.team = team
+        }
+
         /// "Sam · Acme" (the team is what matters: it's whose bill a deploy goes on).
         public var label: String {
             [name ?? email, team].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")

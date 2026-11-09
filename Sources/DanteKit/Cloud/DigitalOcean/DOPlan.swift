@@ -232,6 +232,11 @@ public struct DOPlan: Equatable, Sendable {
             var envs = variables(folder: folder, files: visible, read: read)
             if spec.databases != nil {
                 envs.removeAll { $0.key == "DATABASE_URL" }
+                // The database's own password, host and so on, rather than this Mac's.
+                envs = envs.map { env in
+                    guard let field = DOSpecSend.databaseField(env.key) else { return env }
+                    return .init(key: env.key, value: "${db.\(field)}", scope: env.scope ?? "RUN_TIME")
+                }
                 envs.insert(.init(key: "DATABASE_URL", value: "${db.DATABASE_URL}", scope: "RUN_TIME"), at: 0)
             }
             if !envs.isEmpty { spec.services![index].envs = envs }
