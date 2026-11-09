@@ -385,10 +385,12 @@ private struct LiveCard: View {
                     Button("Cancel deployment") { model.cancelRunning() }.buttonStyle(DanteButtonStyle())
                 }
             }
-            if let running = app.current, running.phase.isRunning || running.phase == .error {
+            // An app that has never gone live has no current deployment; its newest one says why.
+            let latest = app.current ?? model.deployments.first
+            if let running = latest, running.phase.isRunning || running.phase == .error {
                 StepTrack(deployment: running)
             }
-            if let failed = app.current, failed.phase == .error, let failure = failed.failure {
+            if let failed = latest, failed.phase == .error, let failure = failed.failure {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "xmark.octagon.fill").foregroundStyle(theme.red.color)
                     VStack(alignment: .leading, spacing: 4) {

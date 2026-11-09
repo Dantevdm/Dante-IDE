@@ -294,6 +294,28 @@ public enum DOSpecSend {
     static let textKeys: Set<String> = ["tag", "version", "value", "branch", "repo", "name", "key", "digest", "repository", "registry",
                                         "domain", "repo_clone_url", "source_dir", "build_command", "run_command", "http_path", "region"]
 
+    /// The spec as App Platform sees the repository. `.do/app.yaml` names folders from the
+    /// project, but when the repository is a folder inside it (`GitLocation.prefix`, "Code/"),
+    /// App Platform clones that repository and finds `api`, not `Code/api`. Only
+    /// components built from a git host change; images built here keep the project's paths.
+    public static func inRepository(_ spec: [String: Any], prefix: String) -> [String: Any] {
+        guard !prefix.isEmpty else { return spec }
+        var spec = spec
+        for list in componentLists {
+            guard var components = spec[list] as? [[String: Any]] else { continue }
+            for index in components.indices where ["github", "gitlab", "bitbucket", "git"].contains(where: { components[index][$0] != nil }) {
+                for key in ["source_dir", "dockerfile_path"] {
+                    guard let path = components[index][key] as? String else { continue }
+                    let bare = path.hasPrefix("/") ? String(path.dropFirst()) : path
+                    if bare.hasPrefix(prefix) { components[index][key] = String(bare.dropFirst(prefix.count)) }
+                    else if bare + "/" == prefix { components[index][key] = "/" }
+                }
+            }
+            spec[list] = components
+        }
+        return spec
+    }
+
     public static func object(yaml: String) -> Result<[String: Any], DOAppSpec.SpecProblem> {
         do {
             guard let node = try Yams.compose(yaml: yaml), let object = json(node, key: nil) as? [String: Any] else {

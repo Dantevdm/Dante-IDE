@@ -210,7 +210,12 @@ public struct DOClient: Sendable {
         if text.isEmpty, let live = links.liveUrl.flatMap(Self.socketURL) {
             text = await Self.readStream(live)
         }
-        return text
+        return Self.plain(text)
+    }
+
+    /// Log text without the terminal colour codes App Platform's builder writes.
+    public static func plain(_ text: String) -> String {
+        text.replacing(/\x{1B}\[[0-9;?]*[A-Za-z]/, with: "")
     }
 
     /// The stream's address as a WebSocket one (doctl swaps the scheme the same way).

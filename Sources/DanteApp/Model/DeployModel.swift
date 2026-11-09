@@ -403,6 +403,10 @@ final class DeployModel {
                     return
                 }
             }
+            // From here on the spec is what App Platform sees: folders inside the repository.
+            let prefix = workspace.git.prefix
+            object = DOSpecSend.inRepository(object, prefix: prefix)
+            probe = DOSpecSend.inRepository(probe, prefix: prefix)
             preparedSpec = object
             estimate = Self.estimate(DOAppSpec.fromJSON((try? JSONSerialization.data(withJSONObject: object)) ?? Data()), sizes: sizes)
             proposal = nil

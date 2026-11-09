@@ -423,3 +423,23 @@ struct DigitalOceanTests {
     #expect(DOSource.needsRepositoryAccess("GitHub user does not have access to acme/shop"))
     #expect(DOSource.needsRepositoryAccess("unable to clone repository: authentication required"))
 }
+
+@Test func gitHostedFoldersAreGivenInsideTheRepository() {
+    let spec: [String: Any] = [
+        "name": "shop",
+        "services": [["name": "api", "bitbucket": ["repo": "acme/shop", "branch": "main"], "source_dir": "Code/api", "dockerfile_path": "Code/api/Dockerfile"],
+                     ["name": "worker", "image": ["registry_type": "DOCR", "repository": "shop"], "source_dir": "Code/worker"]],
+        "static_sites": [["name": "site", "github": ["repo": "acme/shop"], "source_dir": "/Code/site"]],
+    ]
+    let sent = DOSpecSend.inRepository(spec, prefix: "Code/")
+    let services = sent["services"] as? [[String: Any]]
+    #expect(services?[0]["source_dir"] as? String == "api")
+    #expect(services?[0]["dockerfile_path"] as? String == "api/Dockerfile")
+    #expect(services?[1]["source_dir"] as? String == "Code/worker")
+    #expect((sent["static_sites"] as? [[String: Any]])?[0]["source_dir"] as? String == "site")
+    #expect((DOSpecSend.inRepository(spec, prefix: "")["services"] as? [[String: Any]])?[0]["source_dir"] as? String == "Code/api")
+}
+
+@Test func logsLoseTheirColourCodes() {
+    #expect(DOClient.plain("\u{1B}[34m│\u{1B}[0m \u{1B}[31m✘ the directory\u{1B}[0m") == "│ ✘ the directory")
+}
