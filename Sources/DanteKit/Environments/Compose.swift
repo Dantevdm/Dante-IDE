@@ -8,6 +8,8 @@ public struct ComposeFile: Equatable, Sendable {
         public var image: String?
         /// The build context, when the service is built from the repo.
         public var build: String?
+        /// The Dockerfile `build:` names, relative to the context; nil for the default.
+        public var dockerfile: String?
         public var ports: [String]
         public var dependsOn: [String]
         public var profiles: [String]
@@ -62,11 +64,12 @@ public struct ComposeFile: Equatable, Sendable {
               let services = root["services"] as? [String: Any] else { return [] }
         return services.keys.sorted().map { name in
             let spec = services[name] as? [String: Any] ?? [:]
-            var build: String?
+            var build: String?, dockerfile: String?
             if let context = spec["build"] as? String {
                 build = context
             } else if let object = spec["build"] as? [String: Any] {
                 build = (object["context"] as? String) ?? "."
+                dockerfile = object["dockerfile"] as? String
             }
             let ports = (spec["ports"] as? [Any] ?? []).map { port -> String in
                 if let object = port as? [String: Any] {
@@ -91,7 +94,7 @@ public struct ComposeFile: Equatable, Sendable {
                     if let key = parts.first { environment[key] = parts.count > 1 ? parts[1] : "" }
                 }
             }
-            return Service(
+            var service = Service(
                 name: name,
                 image: spec["image"] as? String,
                 build: build,
@@ -100,6 +103,8 @@ public struct ComposeFile: Equatable, Sendable {
                 profiles: (spec["profiles"] as? [Any] ?? []).map { "\($0)" },
                 environment: environment
             )
+            service.dockerfile = dockerfile
+            return service
         }
     }
 }

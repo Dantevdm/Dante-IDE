@@ -136,11 +136,17 @@ public struct DOPlan: Equatable, Sendable {
         for file in dockerfiles.sorted(by: { $0.count < $1.count }) {
             let folder = (file as NSString).deletingLastPathComponent
             let text = read(file) ?? ""
+            let context = buildContext(dockerfile: file, text: text, compose: compose)
             var component = DOAppSpec.Component(name: unique(folder.isEmpty ? projectName : (folder as NSString).lastPathComponent))
             component.httpPort = exposedPort(text) ?? 8080
-            attachSource(&component, folder: folder)
+            attachSource(&component, folder: context)
+            // Folders the image copies in from a wider context are built inside it (an admin
+            // site the API embeds), so they aren't components of their own.
+            for copied in copiedFolders(text) where context != folder {
+                covered.insert(context.isEmpty ? copied : context + "/" + copied)
+            }
             if source == .builtHere {
-                builds.append(DOImageBuild(component: component.name, context: folder, dockerfilePath: file))
+                builds.append(DOImageBuild(component: component.name, context: context, dockerfilePath: file))
             } else {
                 component.dockerfilePath = file
             }
@@ -236,7 +242,10 @@ public struct DOPlan: Equatable, Sendable {
 
         // Variables from the env examples: secrets are asked for at deploy, never written here.
         for index in (spec.services ?? []).indices {
-            let folder = spec.services![index].sourceDir ?? builds.first { $0.component == spec.services![index].name }?.context ?? ""
+            let service = spec.services![index], build = builds.first { $0.component == service.name }
+            // The app's own folder, even when its image builds from a wider context.
+            let folder = (service.dockerfilePath ?? build?.dockerfilePath).map { ($0 as NSString).deletingLastPathComponent }
+                ?? service.sourceDir ?? build?.context ?? ""
             var envs = variables(folder: folder, files: visible, read: read)
             if spec.databases != nil {
                 envs.removeAll { $0.key == "DATABASE_URL" }
@@ -305,6 +314,52 @@ public struct DOPlan: Equatable, Sendable {
         var name = String(lowered).split(separator: "-").joined(separator: "-")
         if let first = name.first, !first.isLetter { name = "app-" + name }
         return name.isEmpty ? "app" : String(name.prefix(32))
+    }
+
+    /// The folder a Dockerfile builds from: what compose's `build:` gives for it, else the
+    /// folder above when its copies name the Dockerfile's own folder (`COPY api/go.mod .` in
+    /// `api/Dockerfile` means the context is the parent), else its own folder.
+    static func buildContext(dockerfile file: String, text: String, compose: ComposeFile?) -> String {
+        for service in compose?.services ?? [] {
+            guard let build = service.build else { continue }
+            let context = tidy(build)
+            if tidy((context.isEmpty ? "" : context + "/") + (service.dockerfile ?? "Dockerfile")) == file { return context }
+        }
+        let folder = (file as NSString).deletingLastPathComponent
+        if !folder.isEmpty, copiedFolders(text).contains((folder as NSString).lastPathComponent) {
+            return (folder as NSString).deletingLastPathComponent
+        }
+        return folder
+    }
+
+    /// The sources of a Dockerfile's COPY and ADD lines, leaving out copies from other stages.
+    static func copySources(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline).flatMap { raw -> [String] in
+            let words = raw.trimmingCharacters(in: .whitespaces).split(separator: " ").map(String.init)
+            guard let verb = words.first?.uppercased(), verb == "COPY" || verb == "ADD" else { return [] }
+            let rest = words.dropFirst()
+            guard !rest.contains(where: { $0.hasPrefix("--from") }) else { return [] }
+            let paths = rest.filter { !$0.hasPrefix("--") }
+            return paths.dropLast().map { tidy($0) }
+        }
+    }
+
+    /// The top folders a Dockerfile's copies name (`admin/package.json` → `admin`).
+    static func copiedFolders(_ text: String) -> [String] {
+        var seen: [String] = []
+        for source in copySources(text) {
+            guard let first = source.split(separator: "/").first.map(String.init), source.contains("/"), first != "." else { continue }
+            if !seen.contains(first) { seen.append(first) }
+        }
+        return seen
+    }
+
+    /// A path written in compose or a Dockerfile as Dante's project paths write it.
+    static func tidy(_ path: String) -> String {
+        var path = path
+        while path.hasPrefix("./") { path.removeFirst(2) }
+        while path.hasSuffix("/") { path.removeLast() }
+        return path == "." ? "" : path
     }
 
     static func exposedPort(_ dockerfile: String) -> Int? {

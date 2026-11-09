@@ -51,6 +51,7 @@ Deploy puts the project on DigitalOcean's App Platform and keeps an eye on it: s
 - An update whose spec didn't change starts a deployment of what's pushed, so Deploy again always deploys.
 - Creating or updating an app waits up to two minutes for DigitalOcean (pricing 90 seconds, everything else 30). When creating times out, the app may still have been made, so Dante looks for an app with the spec's name for a minute and links it rather than making a second; only when none appears does it say to try again.
 - Let App Platform read the repository is offered only when the failure is about reading the repository, not for every message that names git or DigitalOcean.
+- A Dockerfile builds from the context compose gives it (`build: {context: ./Code, dockerfile: api/Dockerfile}`), else from the folder above when its COPY lines name its own folder (`COPY api/go.mod ./`), else its own folder; folders such an image copies in (an admin site the API embeds) aren't made components of their own.
 - When the project's repository is a folder inside it (docs beside a `Code/` repo), `.do/app.yaml` names folders from the project (`Code/api`) and Dante sends git-hosted components' `source_dir` and `dockerfile_path` as App Platform sees the cloned repository (`api`); images built here keep the project's paths.
 - An app that has never gone live shows its newest deployment's steps and failure; logs are shown without the builder's colour codes.
 - Pricing swaps images not yet built for a stand-in, so the size is priced before anything is built.

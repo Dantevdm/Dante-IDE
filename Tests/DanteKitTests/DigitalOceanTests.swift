@@ -443,3 +443,42 @@ struct DigitalOceanTests {
 @Test func logsLoseTheirColourCodes() {
     #expect(DOClient.plain("\u{1B}[34m│\u{1B}[0m \u{1B}[31m✘ the directory\u{1B}[0m") == "│ ✘ the directory")
 }
+
+@Test func aDockerfileBuildsFromTheContextComposeGivesIt() {
+    let dockerfile = """
+    FROM node:24-alpine AS admin
+    WORKDIR /src/admin
+    COPY admin/package.json admin/package-lock.json ./
+    COPY admin/ ./
+    RUN npm run build
+    FROM golang:1.27-alpine AS build
+    COPY api/go.mod api/go.sum ./
+    COPY api/ ./
+    COPY --from=admin /src/api/web/dist ./web/dist
+    FROM alpine:3.22
+    EXPOSE 8085
+    """
+    let files = [
+        "Code/api/Dockerfile": dockerfile,
+        "Code/api/go.mod": "module shop",
+        "Code/api/main.go": "package main",
+        "Code/admin/package.json": "{\"scripts\": {\"build\": \"ng build\", \"start\": \"ng serve\"}, \"dependencies\": {\"@angular/core\": \"20\"}}",
+        "Code/admin/angular.json": "{}",
+    ]
+    let read: (String) -> String? = { files[$0] }
+    var service = ComposeFile.Service(name: "api", build: "./Code")
+    service.dockerfile = "api/Dockerfile"
+    let compose = ComposeFile(url: URL(fileURLWithPath: "/home/me/shop/compose.yaml"), services: [service])
+    let plan = DOPlan.make(projectName: "shop", files: Array(files.keys), read: read, compose: compose, source: .bitbucket(repo: "acme/shop"), branch: "main")
+    #expect(plan.spec.services?.map(\.name) == ["api"])
+    #expect(plan.spec.services?.first?.sourceDir == "Code")
+    #expect(plan.spec.services?.first?.dockerfilePath == "Code/api/Dockerfile")
+    #expect(plan.spec.staticSites == nil)
+    // Without compose, the copies naming api/ say the same.
+    #expect(DOPlan.buildContext(dockerfile: "Code/api/Dockerfile", text: dockerfile, compose: nil) == "Code")
+    #expect(DOPlan.buildContext(dockerfile: "api/Dockerfile", text: "FROM alpine\nCOPY . .\n", compose: nil) == "api")
+    // And as App Platform sees the inner repository: the root, and the Dockerfile inside it.
+    let sent = DOSpecSend.inRepository(["services": [["name": "api", "bitbucket": ["repo": "acme/shop"], "source_dir": "Code", "dockerfile_path": "Code/api/Dockerfile"]]], prefix: "Code/")
+    #expect((sent["services"] as? [[String: Any]])?.first?["source_dir"] as? String == "/")
+    #expect((sent["services"] as? [[String: Any]])?.first?["dockerfile_path"] as? String == "api/Dockerfile")
+}
