@@ -503,3 +503,21 @@ struct DigitalOceanTests {
     #expect(DOClient.explain(message).contains("Keep the old database"))
     #expect(DOClient.explain("missing database create permission: forbidden").contains("Sign out and sign in again"))
 }
+
+@Test func theConsoleSpeaksDoctlsProtocol() throws {
+    #expect(DOConsole.stdin("ls\r") == #"{"data":"ls\r","op":"stdin"}"#)
+    #expect(DOConsole.resize(width: 120, height: 40) == #"{"height":40,"op":"resize","width":120}"#)
+    #expect(DOConsole.output(#"{"data":"hello\r\n"}"#) == "hello\r\n")
+    #expect(DOConsole.output(#"{"data":""}"#) == nil)
+    #expect(DOSignIn.scopes.contains("app:access_console"))
+    #expect(DOConsole.isAllowed(URL(string: "wss://proxy.ams.digitalocean.com/exec?token=x")!))
+    #expect(!DOConsole.isAllowed(URL(string: "wss://example.com/exec")!))
+    #expect(!DOConsole.isAllowed(URL(string: "ws://proxy.digitalocean.com/exec")!))
+    let folder = URL(filePath: NSTemporaryDirectory()).appending(path: "console-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let file = try DOConsole.handOver(URL(string: "wss://proxy.digitalocean.com/exec?token=x")!, folder: folder)
+    let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+    #expect(mode == 0o600)
+    #expect(DOConsole.takeOver(file)?.host == "proxy.digitalocean.com")
+    #expect(DOConsole.takeOver(file) == nil)    // used once
+}

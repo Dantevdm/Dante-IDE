@@ -150,6 +150,17 @@ public struct DOClient: Sendable {
 
     /// A new deployment of the app as it's specified; `forceBuild` rebuilds from source even
     /// when nothing changed.
+    /// The console's WebSocket address for a component of the live deployment (`DOConsole`).
+    public func consoleURL(_ appID: String, component: String) async throws(Failure) -> URL {
+        let data = try await send("GET", "apps/\(appID)/components/\(component)/exec")
+        guard let text = object(data)["url"] as? String, var parts = URLComponents(string: text) else {
+            throw Failure(status: 0, message: "DigitalOcean didn't give a console address.")
+        }
+        if parts.scheme == "https" { parts.scheme = "wss" }
+        guard let url = parts.url, DOConsole.isAllowed(url) else { throw Failure(status: 0, message: "DigitalOcean's console address isn't one Dante opens.") }
+        return url
+    }
+
     public func deploy(_ appID: String, forceBuild: Bool = true) async throws(Failure) -> DODeployment {
         try decode(DODeployment.self, try await send("POST", "apps/\(appID)/deployments", body: ["force_build": forceBuild]), key: "deployment")
     }

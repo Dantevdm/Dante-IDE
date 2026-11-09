@@ -20,10 +20,10 @@ public enum DOSignIn {
     public static func redirect(port: UInt16) -> String { "http://127.0.0.1:\(port)\(redirectPath)" }
 
     /// What Dante asks for: App Platform, the container registry it pushes images to, the
-    /// metrics it shows, and databases: reading them for their trusted sources, and creating
+    /// metrics it shows, a console in a running component, and databases: reading them for their trusted sources, and creating
     /// the dev database a spec's `databases:` asks App Platform for. Nothing else.
     public static let scopes = [
-        "account:read", "app:read", "app:create", "app:update", "app:delete",
+        "account:read", "app:read", "app:create", "app:update", "app:delete", "app:access_console",
         "registry:read", "registry:create", "registry:update", "monitoring:read", "database:read", "database:create",
     ]
 

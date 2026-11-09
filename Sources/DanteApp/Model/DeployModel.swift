@@ -656,6 +656,37 @@ final class DeployModel {
         }
     }
 
+    // MARK: Console
+
+    /// The component whose console is being opened, for the button's spinner.
+    var openingConsole: String?
+
+    /// Opens a shell in a running component in a terminal tab of its own, through the bundled
+    /// `dante do-console` (DigitalOcean's console WebSocket; the address goes over in a one-use
+    /// file, never on the command line).
+    func openConsole(_ component: String, session: Session) {
+        guard let id = app?.id, openingConsole == nil else { return }
+        guard let command = Session.danteCommand else {
+            problem = "The console needs Dante's bundled command, which only the app has."
+            return
+        }
+        openingConsole = component
+        Task {
+            defer { openingConsole = nil }
+            do throws(DOClient.Failure) {
+                let url = try await client.consoleURL(id, component: component)
+                guard let file = try? DOConsole.handOver(url) else { problem = "Couldn’t hand the console over to the terminal."; return }
+                session.runInNewTerminal("\(Shell.quote(command)) do-console \(Shell.quote(file.path))", title: "\(component) on DigitalOcean")
+            } catch {
+                if error.status == 403 {
+                    problem = "This DigitalOcean sign-in isn’t allowed to open a console (app:access_console): it was granted before Dante asked for that. Sign out and sign in again to allow it."
+                } else {
+                    report(error)
+                }
+            }
+        }
+    }
+
     // MARK: Logs
 
     /// Shows a failure, except a request dropped because the page that asked went away.

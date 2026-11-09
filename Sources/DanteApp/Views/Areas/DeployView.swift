@@ -21,7 +21,12 @@ struct DeployView: View {
             actions
         } content: {
             if let problem = model.problem {
-                Text(problem).font(.dante(size: 12.5)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(problem).font(.dante(size: 12.5)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
+                    if problem.contains("Sign out and sign in again") {
+                        Button("Sign in again") { model.problem = nil; model.signInAgain() }.buttonStyle(DanteButtonStyle(primary: true))
+                    }
+                }
             }
             if !model.signedIn {
                 SignInCard(model: model)
@@ -32,7 +37,7 @@ struct DeployView: View {
             if let app = model.app {
                 LiveCard(session: session, app: app, rollbackTarget: $rollbackTarget)
                 if !model.health.isEmpty || app.spec?.components.isEmpty == false {
-                    ComponentsCard(model: model, app: app)
+                    ComponentsCard(session: session, model: model, app: app)
                 }
                 LogsCard(session: session, app: app)
             } else {
@@ -513,6 +518,7 @@ private struct DeploymentRow: View {
 
 private struct ComponentsCard: View {
     @Environment(\.theme) private var theme
+    let session: Session
     let model: DeployModel
     let app: DOApp
 
@@ -548,6 +554,18 @@ private struct ComponentsCard: View {
                 }
             }
             Spacer(minLength: 0)
+            // A shell inside it, for one-off commands (creating keys, a migration by hand).
+            if kind == .service || kind == .worker, app.active != nil {
+                if model.openingConsole == component.name {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button { model.openConsole(component.name, session: session) } label: {
+                        Label("Console", systemImage: "terminal")
+                    }
+                    .buttonStyle(DanteButtonStyle())
+                    .help("Opens a shell inside the running \(component.name) in a terminal tab, like DigitalOcean's own Console.")
+                }
+            }
         }
         .padding(.vertical, 8)
     }

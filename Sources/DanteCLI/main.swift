@@ -55,6 +55,16 @@ if CommandLine.arguments.dropFirst().first == "mcp" {
     runMainLoop()
 }
 
+// `dante do-console <file>`: a shell in a running App Platform component, opened by Deploy's
+// Console in a terminal tab. The file (0600, removed on reading) holds the console's address,
+// so its token never appears on a command line.
+if CommandLine.arguments.dropFirst().first == "do-console" {
+    guard CommandLine.arguments.count > 2, let url = DOConsole.takeOver(URL(filePath: CommandLine.arguments[2])) else {
+        fail("do-console: the console's address is missing or used; open it again from Deploy")
+    }
+    Console.run(url)
+}
+
 // `dante scan [folder] [--json] [--online] [--all] [--fail-on high]`: the Security area's scan,
 // for a terminal or CI. Exits 2 when a graded finding (not one in tests, docs or examples) is at
 // least as bad as --fail-on; --all lists those too.
@@ -349,4 +359,82 @@ case .version:
 case .open(var request):
     request.key = JobRequest.localKey()
     send(request.url)
+}
+
+
+/// The terminal end of `dante do-console`: raw keystrokes up, output down, the window's size on
+/// every change, and an empty keystroke every 30 seconds so the connection stays open.
+enum Console {
+    nonisolated(unsafe) static var saved = termios()
+    nonisolated(unsafe) static var socket: URLSessionWebSocketTask?
+
+    static func run(_ url: URL) -> Never {
+        let task = URLSession(configuration: .ephemeral).webSocketTask(with: url)
+        socket = task
+        task.resume()
+        rawMode()
+        atexit { Console.restore() }
+        FileHandle.standardError.write(Data("Connected. Type exit or press ⌃D to leave.\r\n".utf8))
+        sendSize()
+        signal(SIGWINCH) { _ in Console.sendSize() }
+        receive()
+        Thread.detachNewThread { readKeys() }
+        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in send(DOConsole.stdin("")) }
+        runMainLoop()
+    }
+
+    static func receive() {
+        socket?.receive { result in
+            switch result {
+            case .success(let message):
+                let text: String
+                switch message {
+                case .string(let string): text = string
+                case .data(let data): text = String(decoding: data, as: UTF8.self)
+                @unknown default: text = ""
+                }
+                if let output = DOConsole.output(text) { FileHandle.standardOutput.write(Data(output.utf8)) }
+                receive()
+            case .failure:
+                restore()
+                FileHandle.standardError.write(Data("\nThe console closed.\n".utf8))
+                exit(0)
+            }
+        }
+    }
+
+    static func readKeys() {
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while true {
+            let count = read(STDIN_FILENO, &buffer, buffer.count)
+            guard count > 0 else { break }
+            send(DOConsole.stdin(String(decoding: buffer[0..<count], as: UTF8.self)))
+        }
+        socket?.cancel(with: .normalClosure, reason: nil)
+        restore()
+        exit(0)
+    }
+
+    static func send(_ text: String) {
+        socket?.send(.string(text)) { _ in }
+    }
+
+    static func sendSize() {
+        var size = winsize()
+        guard ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0, size.ws_col > 0 else { return }
+        send(DOConsole.resize(width: Int(size.ws_col), height: Int(size.ws_row)))
+    }
+
+    static func rawMode() {
+        guard isatty(STDIN_FILENO) != 0 else { return }
+        tcgetattr(STDIN_FILENO, &saved)
+        var raw = saved
+        cfmakeraw(&raw)
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)
+    }
+
+    static func restore() {
+        guard isatty(STDIN_FILENO) != 0 else { return }
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved)
+    }
 }
