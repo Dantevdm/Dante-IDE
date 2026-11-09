@@ -27,6 +27,10 @@ cases:
     navigate: bliksem
   - say: open the services
     navigate: environments
+  - say: show me digitalocean
+    navigate: deploy
+  - say: open the deploy page
+    navigate: deploy
   - say: show me the history
     navigate: timeline
   - say: open shop portal

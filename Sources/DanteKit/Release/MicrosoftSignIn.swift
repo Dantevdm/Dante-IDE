@@ -66,13 +66,17 @@ public enum MicrosoftSignIn {
     }
 
     public enum Failure: Error, Equatable, Sendable {
-        case cancelled, mismatchedState, refused(String), failed(String)
+        case cancelled, timedOut, mismatchedState, refused(String), failed(String)
 
-        public var message: String {
+        public var message: String { message(from: "Microsoft") }
+
+        /// The same, naming whoever refused (Loopback serves DigitalOcean's sign-in too).
+        public func message(from provider: String) -> String {
             switch self {
             case .cancelled: "Sign-in was cancelled."
+            case .timedOut: "The browser didn't answer within five minutes. Sign in again when you're ready."
             case .mismatchedState: "The sign-in reply didn't match this request, so Dante ignored it."
-            case .refused(let text): "Microsoft refused the sign-in: \(text)"
+            case .refused(let text): "\(provider) refused the sign-in: \(text)"
             case .failed(let text): text
             }
         }
@@ -162,7 +166,7 @@ public enum MicrosoftSignIn {
         let reply = await listener.waitForCode(timeout: .seconds(300))
         guard case .success(let code) = reply else {
             if case .failure(let failure) = reply { return .failure(failure) }
-            return .failure(.cancelled)
+            return .failure(.timedOut)
         }
         let result = await redeem(["client_id": clientID, "grant_type": "authorization_code", "code": code,
                                    "redirect_uri": redirect.absoluteString, "code_verifier": pkce.verifier, "scope": azureDevOpsScope])
@@ -189,15 +193,19 @@ final class Loopback: @unchecked Sendable {
     private var answered = false
     private var ready = false
     private let state: String
+    private let provider: String
 
-    private init(listener: NWListener, state: String) {
+    private init(listener: NWListener, state: String, provider: String) {
         self.listener = listener
         self.state = state
+        self.provider = provider
     }
 
-    static func start(state: String) async throws -> Loopback {
-        let listener = try NWListener(using: .tcp, on: .any)
-        let loopback = Loopback(listener: listener, state: state)
+    /// Listens on `port` when given (a provider that only redirects to the exact address it
+    /// registered), otherwise on any free one.
+    static func start(state: String, provider: String = "Microsoft", port: UInt16? = nil) async throws -> Loopback {
+        let listener = try NWListener(using: .tcp, on: port.flatMap { NWEndpoint.Port(rawValue: $0) } ?? .any)
+        let loopback = Loopback(listener: listener, state: state, provider: provider)
         try await withCheckedThrowingContinuation { (started: CheckedContinuation<Void, Error>) in
             // The handler runs on the loopback's queue, so `ready` needs no lock.
             listener.stateUpdateHandler = { state in
@@ -207,8 +215,10 @@ final class Loopback: @unchecked Sendable {
                     loopback.ready = true
                     loopback.port = listener.port?.rawValue ?? 0
                     started.resume()
-                case .failed(let error):
+                case .failed(let error), .waiting(let error):
+                    // A port that's taken waits rather than failing; give it up at once.
                     loopback.ready = true
+                    listener.cancel()
                     started.resume(throwing: error)
                 default: break
                 }
@@ -272,7 +282,7 @@ final class Loopback: @unchecked Sendable {
             let result = MicrosoftSignIn.code(fromRequest: request, state: self.state)
             let body: String = switch result {
             case .success?: "Signed in. You can close this tab and go back to Dante."
-            case .failure(let failure)?: failure.message
+            case .failure(let failure)?: failure.message(from: self.provider)
             case nil: ""
             }
             let page = "<!doctype html><meta charset=utf-8><title>Dante</title><body style=\"font:15px -apple-system,sans-serif;margin:48px\"><p>\(body)</p>"

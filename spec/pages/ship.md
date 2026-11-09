@@ -1,7 +1,7 @@
 ---
 id: ship
 title: Release
-phrases: [ship, release, releases, ci, ci runs, pull requests, deploy, shipping, pipelines, pipeline, azure devops, deployments, prod, non-prod, heal the pipeline]
+phrases: [ship, release, releases, ci, ci runs, pull requests, shipping, pipelines, pipeline, azure devops, prod, non-prod, heal the pipeline]
 ---
 # Release (Ship › Release)
 

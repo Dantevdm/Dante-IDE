@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, map, code, report, tests, security, review, bliksem, environments, data, ship, run, timeline, claude, agents, jobs, docs
+    case home, map, code, report, tests, security, review, bliksem, environments, data, ship, deploy, run, timeline, claude, agents, jobs, docs
 
     var id: String { rawValue }
 
@@ -36,6 +36,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .environments: "server.rack"
         case .data: "cylinder.split.1x2"
         case .ship: "paperplane"
+        case .deploy: "icloud.and.arrow.up"
         case .run: "waveform.path.ecg"
         case .timeline: "clock.arrow.circlepath"
         case .claude: "slider.horizontal.3"
@@ -59,6 +60,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .environments: "Docker Compose services with logs, shells and restarts, and Docker files Claude can write."
         case .data: "The project's databases: create one, browse tables, run queries and see the schema as a diagram."
         case .ship: "A release checklist, a changelog drafted from commits, and the CI pipeline."
+        case .deploy: "Deploy to DigitalOcean's App Platform and watch it: deployments, health, logs, and security findings and recommendations."
         case .run: "Production metrics, errors and alarms."
         case .timeline: "Commits, releases, Claude sessions, test runs and CI in one stream, newest first."
         case .claude: "How the agents work on this project: usage, skills, memory, connectors and permissions."
@@ -273,6 +275,7 @@ final class Session {
     /// The Security area's report, scans and audits.
     let security = SecurityModel()
     let bliksem = BliksemModel()
+    let deploy = DeployModel()
     let review = ReviewModel()
     /// 1-based breakpoint lines per file path, saved per project on this Mac.
     var breakpoints: [String: Set<Int>] = [:]
