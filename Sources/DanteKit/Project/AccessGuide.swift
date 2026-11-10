@@ -101,7 +101,12 @@ public struct AccessGuide: Equatable, Sendable {
         case .none: sentence = ""
         }
         if ways.count > 1 { sentence += ", and " + ways.dropFirst().map { $0.title.lowercased() }.joined(separator: " and ") + " is used too" }
-        return sentence + (steps.isEmpty ? "." : ". The first one has to be made:")
+        if steps.isEmpty { return sentence + "." }
+        // Only scripts for the local stack: say the deployed app has no known way to make one.
+        if steps.allSatisfy({ $0.note == ScriptKind.localOnly.note }) {
+            return sentence + ". Dante only found how to make one on the local stack; ask the agent how the deployed app gets its first one."
+        }
+        return sentence + ". The first one has to be made:"
     }
 
     // MARK: Reading the file
@@ -237,16 +242,22 @@ public struct AccessGuide: Equatable, Sendable {
             let folder = (file as NSString).deletingLastPathComponent
             let runner = files.contains(joined(folder, "pnpm-lock.yaml")) ? "pnpm" : files.contains(joined(folder, "yarn.lock")) ? "yarn" : files.contains(joined(folder, "bun.lockb")) ? "bun run" : "npm run"
             for (name, command) in scripts.sorted(by: { $0.key < $1.key }) where matches(firstSteps, name) && !["auth:check", "lint", "test"].contains(name) {
-                guide.steps.append(Step(title: "Run \(name) (\(command.count > 48 ? String(command.prefix(45)) + "…" : command))", place: .local, folder: folder.isEmpty ? nil : folder, run: "\(runner) \(name)"))
-                covered.formUnion(command.split(separator: " ").map { String($0).replacingOccurrences(of: "./", with: "") })
+                // What the script runs, read through to the file it names (`node scripts/x.mjs`).
+                let parts = command.split(separator: " ").map { String($0).replacingOccurrences(of: "./", with: "") }
+                let body = parts.compactMap { part in files.contains(joined(folder, part)) ? read(joined(folder, part)) : nil }.joined(separator: "\n")
+                covered.formUnion(parts)
+                guard let kind = scriptKind(name: name, text: command + "\n" + body) else { continue }
+                guide.steps.append(Step(title: "Run \(name) (\(command.count > 48 ? String(command.prefix(45)) + "…" : command))", place: .local,
+                                        folder: folder.isEmpty ? nil : folder, run: "\(runner) \(name)", note: kind.note))
             }
         }
         for file in files where isScript(file) {
             let name = (file as NSString).lastPathComponent
             let base = ((file as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent
             let inner = String(file.dropFirst(base.isEmpty ? 0 : base.count + 1))
-            guard matches(firstSteps, name), !covered.contains(inner), !covered.contains(name) else { continue }
-            guide.steps.append(Step(title: "Run \(inner)", place: .local, folder: base.isEmpty ? nil : base, run: runCommand(inner), note: "Read it first: it may expect the local stack, or take the address as {url}."))
+            guard matches(firstSteps, name), !covered.contains(inner), !covered.contains(name),
+                  let kind = scriptKind(name: name, text: read(file) ?? "") else { continue }
+            guide.steps.append(Step(title: "Run \(inner)", place: .local, folder: base.isEmpty ? nil : base, run: runCommand(inner), note: kind.note))
         }
 
         // README sections about getting in, with their first commands.
@@ -260,6 +271,36 @@ public struct AccessGuide: Equatable, Sendable {
             }
         }
         return guide
+    }
+
+    enum ScriptKind: Equatable {
+        /// Talks to the app's address (or takes one), so it can work on the deployed app.
+        case anywhere
+        /// Talks to localhost or Docker Compose: it sets up the local stack, not the deployed app.
+        case localOnly
+
+        var note: String {
+            switch self {
+            case .anywhere: "Read it first: it may need the live address, {url}."
+            case .localOnly: "This sets up the local stack (it talks to localhost or Docker Compose), not the deployed app."
+            }
+        }
+    }
+
+    /// Whether a script named like a way in really is one, from what it does: design tokens,
+    /// themes and styles aren't, and a "token" or "key" script must mention keys, sign-in or
+    /// users. Nil when it isn't.
+    static func scriptKind(name: String, text: String) -> ScriptKind? {
+        let lower = text.lowercased()
+        let auth = ["bearer", "api key", "api_key", "apikey", "api-key", "jwt", "password", "authorization", "sign in", "signin", "login",
+                    "admin", "user", "secret", "/keys", "hash"].contains(where: lower.contains)
+        let design = [".css", "theme", "style", "figma", "palette", "colour", "color"].contains(where: lower.contains)
+        if design && !auth { return nil }
+        let loose = name.lowercased()
+        let needsAuth = ["token", "key", "access", "auth"].contains(where: loose.contains) && !["seed", "admin", "superuser", "bootstrap", "user"].contains(where: loose.contains)
+        if needsAuth && !auth { return nil }
+        let local = ["localhost", "127.0.0.1", "docker compose", "docker-compose", "0.0.0.0"].contains(where: lower.contains)
+        return local ? .localOnly : .anywhere
     }
 
     /// The header name a server reads an API key from (`X-API-Key`, `X-Api-Token`…).

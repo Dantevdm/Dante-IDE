@@ -10,10 +10,11 @@ import Testing
                 token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
         """,
         "api/internal/auth/middleware_test.go": "r.Header.Get(\"Authorization\") // Bearer",
-        "api/scripts/seed.sh": "#!/bin/sh\necho making the first admin key",
+        "api/scripts/seed.sh": "#!/bin/sh\ndocker compose exec db psql -c 'insert into admins …'\ncurl -H \"Authorization: Bearer $KEY\" http://localhost:8080/api/keys",
+        "api/scripts/make-key.sh": "#!/bin/sh\ncurl -X POST \"$API_URL/api/keys\" -H \"Authorization: Bearer $ADMIN_KEY\"",
         "api/scripts/migrate.sh": "#!/bin/sh",
         "admin/package.json": #"{"scripts": {"dev": "vite", "tokens": "node scripts/generate-tokens.mjs", "lint": "eslint ."}}"#,
-        "admin/scripts/generate-tokens.mjs": "// colour tokens",
+        "admin/scripts/generate-tokens.mjs": "// writes src/styles/tokens.css and src/theme/theme.ts from the brand's colours",
         "admin/package-lock.json": "{}",
     ]
     let guide = AccessGuide.detect(files: Array(files.keys).sorted(), read: { files[$0] }, variables: ["SHOP_ADMIN_KEY", "POSTGRES_PASSWORD", "OPENAI_API_KEY"], component: "api")
@@ -26,11 +27,17 @@ import Testing
     #expect(guide.steps.contains { $0.title == "The first key is SHOP_ADMIN_KEY" && $0.place == .note })
     #expect(!guide.steps.contains { $0.title.contains("POSTGRES") || $0.title.contains("OPENAI") })
     // A seed script runs in its folder; a package script that runs a file covers that file.
+    // A seed script that talks to localhost says it's for the local stack.
     let seed = guide.steps.first { $0.run == "./scripts/seed.sh" }
     #expect(seed?.folder == "api" && seed?.place == .local)
+    #expect(seed?.note?.contains("local stack") == true)
+    let key = guide.steps.first { $0.run == "./scripts/make-key.sh" }
+    #expect(key?.note?.contains("{url}") == true)
     #expect(!guide.steps.contains { $0.run == "./scripts/migrate.sh" })
-    #expect(guide.steps.contains { $0.run == "npm run tokens" && $0.folder == "admin" })
-    #expect(!guide.steps.contains { $0.run == "node scripts/generate-tokens.mjs" })
+    // Design tokens aren't a way in, by package script or by file.
+    #expect(!guide.steps.contains { $0.run?.contains("tokens") == true })
+    let localOnly = AccessGuide(signIn: [.apiKey], steps: [seed!])
+    #expect(localOnly.headline.contains("only found how to make one on the local stack"))
 }
 
 @Test func anAPIKeyHeaderIsNamedTheWayPeopleWriteIt() {
