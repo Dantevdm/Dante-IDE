@@ -1,32 +1,5 @@
 import Foundation
 
-/// Nightly backups of an app's dev database: when one is due, and which old ones to delete.
-/// Only backups this schedule made (`-nightly` in the name) are ever pruned.
-public enum BackupSchedule {
-    public static let note = "nightly"
-    public static let defaultKeep = 7
-    public static let defaultHour = 2
-
-    /// Due when there's no nightly backup since the last time the clock passed `hour`.
-    public static func isDue(last: Date?, now: Date, hour: Int, calendar: Calendar = .current) -> Bool {
-        guard let todays = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: now) else { return false }
-        let mark = todays <= now ? todays : calendar.date(byAdding: .day, value: -1, to: todays) ?? todays
-        guard let last else { return true }
-        return last < mark
-    }
-
-    /// Nightly backups past the newest `keep`, by name (names sort by date).
-    public static func pruned(_ names: [String], keep: Int) -> [String] {
-        let nightly = names.filter { $0.contains("-\(note).") }.sorted(by: >)
-        return Array(nightly.dropFirst(max(1, keep)))
-    }
-
-    /// The newest nightly backup's date, from the names.
-    public static func last(_ names: [String]) -> Date? {
-        names.filter { $0.contains("-\(note).") }.compactMap(PGTools.date(ofBackup:)).max()
-    }
-}
-
 /// What's wrong with a deployed app, in short lines, for notifications and the companion: a
 /// deployment that failed, a component that's unhealthy or restarting.
 public enum DeployWatch {

@@ -2,24 +2,6 @@ import Foundation
 import Testing
 @testable import DanteKit
 
-@Test func nightlyBackupsAreDueOnceANightAndKeepSeven() {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC")!
-    func at(_ day: Int, _ hour: Int) -> Date { calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour))! }
-    #expect(BackupSchedule.isDue(last: nil, now: at(10, 1), hour: 2, calendar: calendar))
-    // Last night's (after 2 am yesterday) counts until 2 am today.
-    #expect(!BackupSchedule.isDue(last: at(9, 3), now: at(10, 1), hour: 2, calendar: calendar))
-    #expect(BackupSchedule.isDue(last: at(9, 3), now: at(10, 3), hour: 2, calendar: calendar))
-    #expect(!BackupSchedule.isDue(last: at(10, 2), now: at(10, 23), hour: 2, calendar: calendar))
-
-    let nightly = (1...9).map { "db-2026110\($0)-020000-nightly.dump" }
-    let names = nightly + ["db-20261101-090000.dump", "db-20261101-090000-before-restore.dump"]
-    let pruned = BackupSchedule.pruned(names, keep: 7)
-    #expect(pruned == ["db-20261102-020000-nightly.dump", "db-20261101-020000-nightly.dump"])
-    #expect(BackupSchedule.last(names) != nil)
-    #expect(BackupSchedule.last(["db-20261101-090000.dump"]) == nil)
-}
-
 @Test func troubleIsNewOnlyOnce() {
     let calm = DeployWatch.State(app: "shop")
     let failed = DeployWatch.State(app: "shop", failedDeployment: "d2", unhealthy: ["api"], restarts: ["api": 2])

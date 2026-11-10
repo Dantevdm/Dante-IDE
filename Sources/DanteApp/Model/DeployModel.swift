@@ -891,13 +891,6 @@ final class DeployModel {
 
     // MARK: Database (DeployModel+Database.swift)
 
-    /// Backups Dante made on this Mac, by database, newest first.
-    var localBackups: [String: [URL]] = [:]
-    /// Bumped when the nightly setting changes, so views redraw.
-    var nightlyChanged = 0
-    var nightlyProblem: String?
-    /// Databases this Mac couldn't reach (their firewall lets only the app in), by name.
-    var walledOff: Set<String> = []
     /// What's wrong with the live app now, in short lines (`DeployWatch`), for the companion.
     var trouble: [String] = []
     var watched: DeployWatch.State?

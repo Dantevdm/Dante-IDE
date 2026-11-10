@@ -14,8 +14,6 @@ final class DataModel {
         case needsPassword(String)
         /// Nothing is listening; the compose service may be stopped.
         case offline(String)
-        /// A cloud database whose firewall lets only its app in (the connection timed out).
-        case walledOff(String)
         case failed(String)
     }
 
@@ -126,6 +124,7 @@ final class DataModel {
             return try? String(contentsOf: url, encoding: .utf8)
         }
         saved = store.connections(for: root)
+        forgetCloudConnections()
         if selectedID == nil || !connections.contains(where: { $0.id == selectedID }) { selectedID = connections.first?.id }
     }
 
@@ -223,8 +222,6 @@ final class DataModel {
         if lower.contains("connection refused") || lower.contains("could not connect") || lower.contains("can't connect")
             || lower.contains("is the server running") || lower.contains("service \"") && lower.contains("is not running")
             || lower.contains("no such service") || lower.contains("timeout expired") {
-            // A cloud database that doesn't answer at all is behind its firewall, not stopped.
-            if connection.cloud != nil, lower.contains("timeout") || lower.contains("timed out") { return .walledOff(error) }
             return .offline(error)
         }
         return .failed(error)
@@ -273,6 +270,15 @@ final class DataModel {
         guard let root else { return }
         DatabasePasswords.set(password, for: connection, project: root)
         Task { await connect(connection) }
+    }
+
+    /// Deploy's Explore in Data saved deployed databases as "<db> on DigitalOcean" connections;
+    /// that went (DigitalOcean's firewall only lets the app in), so they're forgotten, with their
+    /// passwords.
+    private func forgetCloudConnections() {
+        for connection in saved where connection.name.hasSuffix(" on DigitalOcean") && connection.host.hasSuffix(".ondigitalocean.com") {
+            remove(connection)
+        }
     }
 
     func remove(_ connection: DatabaseConnection) {

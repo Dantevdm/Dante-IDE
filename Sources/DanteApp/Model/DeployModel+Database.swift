@@ -1,11 +1,9 @@
-import AppKit
 import DanteKit
 import Foundation
 
-/// The live app's databases: backups made here (pg_dump over the connection the app itself is
-/// given, read through its console), restoring one, starting fresh, and for a managed cluster
-/// its daily backups, restoring one to a new cluster and resizing it. Everything that changes a
-/// database backs it up first; everything that costs money is confirmed in the view.
+/// The live app's databases. Nothing here connects to a database from this Mac: DigitalOcean's
+/// firewall lets only the app into a dev database, so the card describes them, and a managed
+/// cluster's daily backups, restoring one to a new cluster and resizing go through the API.
 extension DeployModel {
     var liveDatabases: [DOAppSpec.Database] { app?.spec?.databases ?? [] }
 
@@ -14,57 +12,15 @@ extension DeployModel {
         return clusters.first { $0.name == name }
     }
 
-    /// Clusters, their backups and the backups on this Mac.
+    /// The managed clusters and their daily backups.
     func loadDatabases() async {
-        guard let app else { return }
         let databases = liveDatabases
-        guard !databases.isEmpty else { return }
-        if databases.contains(where: { $0.clusterName != nil }), signedIn {
-            if let found = try? await client.databaseClusters() { clusters = found }
-            for database in databases {
-                guard let cluster = cluster(for: database) else { continue }
-                if let backups = try? await client.databaseBackups(cluster.id) { clusterBackups[cluster.id] = backups }
-            }
-        }
-        let folder = PGTools.backupFolder(app: app.name)
-        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        guard databases.contains(where: { $0.clusterName != nil }), signedIn, !isDemoMode else { return }
+        if let found = try? await client.databaseClusters() { clusters = found }
         for database in databases {
-            localBackups[database.name] = files.filter { $0.lastPathComponent.hasPrefix(database.name + "-") && $0.pathExtension == "dump" }
-                .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            guard let cluster = cluster(for: database) else { continue }
+            if let backups = try? await client.databaseBackups(cluster.id) { clusterBackups[cluster.id] = backups }
         }
-    }
-
-    /// Asks the running app how it reaches `database`, through its console.
-    private func connection(for database: DOAppSpec.Database) async throws -> PGConnection {
-        guard let app, let spec = app.spec else { throw DOConsoleExec.Failure(message: "The app isn’t loaded.") }
-        guard app.active != nil else { throw DOConsoleExec.Failure(message: "The app isn’t running, so Dante can’t ask it how to reach the database.") }
-        guard let plan = DODatabaseAccess.plan(spec: spec, database: database.name) else {
-            throw DOConsoleExec.Failure(message: "No running part of the app is given \(database.name)’s address. Bind DATABASE_URL to ${\(database.name).DATABASE_URL} in a service (Deploy again › Variables), deploy, and try again.")
-        }
-        let url: URL
-        do { url = try await client.consoleURL(app.id, component: plan.component) } catch {
-            throw DOConsoleExec.Failure(message: error.status == 403 ? "This sign-in can’t open the app’s console (app:access_console). Sign out and sign in again to allow it." : error.message)
-        }
-        let output = try await DOConsoleExec.run(url, line: DODatabaseAccess.script(for: plan))
-        guard let values = DODatabaseAccess.values(in: output), let connection = DODatabaseAccess.connection(values, plan: plan) else {
-            throw DOConsoleExec.Failure(message: "\(plan.component) didn’t say how it reaches \(database.name).")
-        }
-        // The app knows the address; whether this Mac may use it is the database's firewall's call.
-        guard await PGTools.answers(connection) else {
-            walledOff.insert(database.name)
-            throw DOConsoleExec.Failure(message: database.clusterName == nil
-                ? "DigitalOcean lets only \(app.name) itself into its dev database, and a dev database can't let this Mac in. To back it up, restore or explore it from here, move it to a managed cluster (Deploy again › Database)."
-                : "This Mac isn't one of \(database.clusterName ?? "the cluster")'s trusted sources, so DigitalOcean's firewall drops the connection. Add this Mac's address under the cluster's Settings › Trusted sources in DigitalOcean, then try again.")
-        }
-        walledOff.remove(database.name)
-        return connection
-    }
-
-    private func tool(_ name: String) throws -> String {
-        guard let path = PGTools.locate(name) else {
-            throw DOConsoleExec.Failure(message: "\(name) isn’t on this Mac. Install it with “\(PGTools.installCommand)” in a terminal, then try again.")
-        }
-        return path
     }
 
     /// Runs `body` as the one database job, saying what it's doing and how it went.
@@ -77,8 +33,6 @@ extension DeployModel {
             defer { databaseWork = nil }
             do {
                 databaseNotice = try await body()
-            } catch let failure as DOConsoleExec.Failure {
-                databaseProblem = failure.message
             } catch let failure as DOClient.Failure {
                 databaseProblem = DOSignIn.explain(failure.message)
             } catch {
@@ -86,126 +40,6 @@ extension DeployModel {
             }
             await loadDatabases()
         }
-    }
-
-    /// pg_dump into Application Support/Dante/backups/<app>; returns the file.
-    private func dump(_ database: DOAppSpec.Database, _ connection: PGConnection, note: String?) async throws -> URL {
-        guard let app else { throw DOConsoleExec.Failure(message: "The app isn’t loaded.") }
-        let pgDump = try tool("pg_dump")
-        let folder = PGTools.backupFolder(app: app.name)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let file = folder.appending(path: PGTools.backupName(database: database.name, date: .now, note: note))
-        let result = await Shell.run([pgDump] + PGTools.dumpArguments(connection, to: file), in: folder, extra: connection.environment, timeout: .seconds(1800), withoutMise: true)
-        guard result.succeeded else {
-            try? FileManager.default.removeItem(at: file)
-            throw DOConsoleExec.Failure(message: PGTools.explain(result.message))
-        }
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
-        return file
-    }
-
-    func backUp(_ database: DOAppSpec.Database) {
-        work("Backing up \(database.name)…") { [self] in
-            let file = try await dump(database, try await connection(for: database), note: nil)
-            let size = ByteCountFormatter.string(fromByteCount: Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0), countStyle: .file)
-            return "Backed up \(database.name) (\(size)) to this Mac."
-        }
-    }
-
-    // MARK: Nightly
-
-    static func nightlyKey(_ app: String) -> String { "deploy.nightlyBackups.\(app)" }
-
-    /// Whether this Mac backs up the app's dev databases every night (while Dante is open).
-    var backsUpNightly: Bool {
-        get {
-            _ = nightlyChanged
-            return app.map { UserDefaults.standard.bool(forKey: Self.nightlyKey($0.id)) } ?? false
-        }
-        set {
-            guard let app else { return }
-            UserDefaults.standard.set(newValue, forKey: Self.nightlyKey(app.id))
-            nightlyChanged += 1
-        }
-    }
-
-    /// Backs up every dev database whose nightly backup is due, then deletes nightly backups past
-    /// the newest seven. Backups made by hand are never deleted.
-    func nightlyBackups() async {
-        guard backsUpNightly, let app, app.active != nil, databaseWork == nil else { return }
-        let folder = PGTools.backupFolder(app: app.name)
-        for database in liveDatabases where database.clusterName == nil {
-            let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).filter { $0.hasPrefix(database.name + "-") }
-            guard BackupSchedule.isDue(last: BackupSchedule.last(names), now: .now, hour: BackupSchedule.defaultHour) else { continue }
-            databaseWork = "Nightly backup of \(database.name)…"
-            defer { databaseWork = nil }
-            do {
-                _ = try await dump(database, try await connection(for: database), note: BackupSchedule.note)
-                let now = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).filter { $0.hasPrefix(database.name + "-") }
-                for old in BackupSchedule.pruned(now, keep: BackupSchedule.defaultKeep) {
-                    try? FileManager.default.trashItem(at: folder.appending(path: old), resultingItemURL: nil)
-                }
-                nightlyProblem = nil
-            } catch let failure as DOConsoleExec.Failure {
-                nightlyProblem = "Last night’s backup of \(database.name) didn’t work: \(failure.message)"
-            } catch {
-                nightlyProblem = "Last night’s backup of \(database.name) didn’t work: \(error.localizedDescription)"
-            }
-        }
-        await loadDatabases()
-    }
-
-    /// Puts a backup back, after backing up what's there now.
-    func restore(_ database: DOAppSpec.Database, from file: URL) {
-        work("Restoring \(database.name)…") { [self] in
-            let connection = try await connection(for: database)
-            let pgRestore = try tool("pg_restore")
-            _ = try await dump(database, connection, note: "before-restore")
-            let result = await Shell.run([pgRestore] + PGTools.restoreArguments(connection, from: file), in: file.deletingLastPathComponent(),
-                                         extra: connection.environment, timeout: .seconds(1800), withoutMise: true)
-            guard result.succeeded else { throw DOConsoleExec.Failure(message: PGTools.explain(result.message) + " Nothing was changed.") }
-            return "Restored \(database.name) from \(file.lastPathComponent). What was there is backed up too."
-        }
-    }
-
-    /// Empties the database (after backing it up) so the next deploy's migrations start over.
-    func startFresh(_ database: DOAppSpec.Database) {
-        work("Emptying \(database.name)…") { [self] in
-            let connection = try await connection(for: database)
-            let psql = try tool("psql")
-            _ = try await dump(database, connection, note: "before-fresh")
-            let result = await Shell.run([psql] + PGTools.freshArguments(connection), in: PGTools.backupFolder(app: app?.name ?? "app"),
-                                         extra: connection.environment, timeout: .seconds(300), withoutMise: true)
-            guard result.succeeded else { throw DOConsoleExec.Failure(message: PGTools.explain(result.message)) }
-            return "\(database.name) is empty; a backup of what was there is on this Mac. Deploy again so the migrations make the tables."
-        }
-    }
-
-    /// Adds the database to Data (read-only, password in the Keychain) and opens it there.
-    func explore(_ database: DOAppSpec.Database, session: Session) {
-        guard let app else { return }
-        work("Connecting to \(database.name)…") { [self] in
-            let found = try await connection(for: database)
-            var connection = DatabaseConnection(name: "\(database.name) on DigitalOcean", engine: .postgres, host: found.host, port: found.port,
-                                                database: found.database, user: found.user, readOnly: true, origin: .saved)
-            connection.cloud = .init(provider: "DigitalOcean", app: app.name, appID: app.id,
-                                     kind: database.clusterName.map { "managed cluster \($0)" } ?? "dev database", region: app.region)
-            session.data.save(connection, password: found.password)
-            session.area = .data
-            return "\(database.name) is in Data, read-only."
-        }
-    }
-
-    /// The Data connection for a database, once explored.
-    func dataConnection(for database: DOAppSpec.Database, in data: DataModel) -> DatabaseConnection? {
-        data.connections.first { $0.cloud?.appID == app?.id && $0.name == "\(database.name) on DigitalOcean" }
-    }
-
-    func revealBackups() {
-        guard let app else { return }
-        let folder = PGTools.backupFolder(app: app.name)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        NSWorkspace.shared.activateFileViewerSelecting([folder])
     }
 
     /// A new cluster from a daily backup; the app keeps using the old one until it's switched.

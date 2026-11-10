@@ -308,11 +308,8 @@ private struct ConnectionRow: View {
                     if connection.readOnly {
                         Image(systemName: "lock.fill").font(.dante(size: 8.5)).foregroundStyle(theme.text3.color).help("Read-only")
                     }
-                    if connection.cloud != nil {
-                        Image(systemName: "cloud.fill").font(.dante(size: 9)).foregroundStyle(theme.accent.color).help("In the cloud, not on this Mac")
-                    }
                 }
-                Text(connection.cloud?.label(city: DeployFormat.city) ?? connection.note ?? connection.displayURL)
+                Text(connection.note ?? connection.displayURL)
                     .font(.dante(size: 11))
                     .foregroundStyle(theme.text3.color)
                     .lineLimit(1)
@@ -389,7 +386,7 @@ extension DataModel.Status {
         switch self {
         case .online: theme.green.color
         case .connecting, .unknown: theme.text3.color
-        case .needsPassword, .offline, .walledOff: theme.amber.color
+        case .needsPassword, .offline: theme.amber.color
         case .failed: theme.red.color
         }
     }
@@ -401,7 +398,6 @@ extension DataModel.Status {
         case .online: "Connected"
         case .needsPassword: "Needs a password"
         case .offline: "Not running"
-        case .walledOff: "Only its app can reach it"
         case .failed: "Couldn’t connect"
         }
     }
@@ -472,13 +468,6 @@ private struct DataMain: View {
                     Text(connection.name).font(.dante(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
                     if let version = model.schema?.version { Chip(text: version) }
                     if connection.readOnly { Chip(text: "read-only", symbol: "lock.fill") }
-                    if let cloud = connection.cloud {
-                        Button { session.area = .deploy } label: {
-                            Chip(text: "\(cloud.provider) · \(cloud.kind)", symbol: "cloud.fill")
-                        }
-                        .buttonStyle(.plain)
-                        .help("\(cloud.app)’s database on \(cloud.provider)\(cloud.region.map { " in " + DeployFormat.city($0) } ?? ""). Click to open the app on Ship › Deploy, where its backups are.")
-                    }
                 }
                 HStack(spacing: 6) {
                     StatusDot(color: status.color(theme), size: 6)
@@ -549,17 +538,6 @@ private struct DataMain: View {
                     .buttonStyle(DanteButtonStyle(primary: true))
                     .disabled(model.startingService != nil)
                 }
-            }
-        case .walledOff(let message):
-            let isDev = connection.cloud?.kind.contains("dev") == true
-            DataBanner(symbol: "lock.shield", color: theme.amber.color,
-                       title: "DigitalOcean’s firewall lets only \(connection.cloud?.app ?? "the app") into this database",
-                       detail: (isDev
-                           ? "Dev databases accept connections from their app alone, and DigitalOcean doesn’t let you add this Mac. A managed cluster can let this Mac in."
-                           : "This Mac isn’t one of the cluster’s trusted sources. Add it in DigitalOcean (Databases › the cluster › Settings › Trusted sources), then refresh.")
-                           + "\n\n" + message) {
-                Button { session.area = .deploy } label: { Label("Open Deploy", systemImage: "cloud") }
-                    .buttonStyle(DanteButtonStyle())
             }
         case .failed(let message):
             DataBanner(symbol: "exclamationmark.triangle.fill", color: theme.red.color, title: "Couldn’t connect to \(connection.name)", detail: message) {

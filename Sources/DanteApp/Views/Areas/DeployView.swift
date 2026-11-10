@@ -646,19 +646,12 @@ private struct DatabaseCard: View {
     @Environment(\.theme) private var theme
     let session: Session
     let app: DOApp
-    @State private var restoring: (database: DOAppSpec.Database, file: URL)?
-    @State private var emptying: DOAppSpec.Database?
-    @State private var typed = ""
     @State private var forking: (cluster: DODatabaseCluster, backup: DODatabaseBackup)?
     @State private var resizing: (cluster: DODatabaseCluster, size: String)?
     private var model: DeployModel { session.deploy }
 
     var body: some View {
         Card(model.liveDatabases.count == 1 ? "Database" : "Databases") {
-            Button { model.revealBackups() } label: { Label("Backups folder", systemImage: "folder") }
-                .buttonStyle(DanteButtonStyle())
-                .help("Backups Dante makes stay on this Mac, in Application Support, never in the repository.")
-        } content: {
             ForEach(Array(model.liveDatabases.enumerated()), id: \.element.name) { index, database in
                 if index > 0 { Rectangle().fill(theme.line.color).frame(height: 1) }
                 section(database)
@@ -672,22 +665,6 @@ private struct DatabaseCard: View {
             }
         }
         .task(id: app.id) { await model.loadDatabases() }
-        .confirmationDialog("Restore \(restoring?.database.name ?? "")?", isPresented: Binding(get: { restoring != nil }, set: { if !$0 { restoring = nil } })) {
-            Button("Back up and restore", role: .destructive) { if let restoring { model.restore(restoring.database, from: restoring.file) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("What’s in \(restoring?.database.name ?? "the database") now is replaced by \(restoring?.file.lastPathComponent ?? "the backup"). Dante backs it up first, and the restore runs in one transaction, so a failure changes nothing.")
-        }
-        .alert("Start \(emptying?.name ?? "") fresh?", isPresented: Binding(get: { emptying != nil }, set: { if !$0 { emptying = nil; typed = "" } })) {
-            TextField(emptying?.name ?? "", text: $typed)
-            Button("Back up and empty it", role: .destructive) {
-                if let emptying, typed == emptying.name { model.startFresh(emptying) }
-                typed = ""
-            }
-            Button("Cancel", role: .cancel) { typed = "" }
-        } message: {
-            Text("Every table, view and sequence the app made is dropped, after a backup to this Mac; the next deploy’s migrations make them again. Type \(emptying?.name ?? "its name") to go ahead.")
-        }
         .confirmationDialog("Make a new cluster from this backup?", isPresented: Binding(get: { forking != nil }, set: { if !$0 { forking = nil } })) {
             Button("Make it") { if let forking { model.restoreCluster(forking.cluster, backup: forking.backup) } }
             Button("Cancel", role: .cancel) {}
@@ -707,7 +684,6 @@ private struct DatabaseCard: View {
 
     @ViewBuilder private func section(_ database: DOAppSpec.Database) -> some View {
         let cluster = model.cluster(for: database)
-        let busy = model.databaseWork != nil || app.active == nil
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 Image(systemName: "cylinder.split.1x2").font(.dante(size: 16)).foregroundStyle(theme.accent.color).frame(width: 22)
@@ -716,25 +692,7 @@ private struct DatabaseCard: View {
                     Text(describe(database, cluster)).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
                 }
                 Spacer()
-                if let existing = model.dataConnection(for: database, in: session.data) {
-                    Button { session.data.select(existing); session.area = .data } label: { Label("Open in Data", systemImage: "tablecells") }
-                        .buttonStyle(DanteButtonStyle())
-                } else {
-                    Button { model.explore(database, session: session) } label: { Label("Explore in Data", systemImage: "tablecells") }
-                        .buttonStyle(DanteButtonStyle())
-                        .disabled(busy)
-                        .help("Asks the running app how it reaches \(database.name), then adds it to Local › Data, read-only, with the password in the Keychain.")
-                }
-                Button { model.backUp(database) } label: { Label("Back up now", systemImage: "arrow.down.doc") }
-                    .buttonStyle(DanteButtonStyle(primary: true))
-                    .disabled(busy)
-                    .help("pg_dump to this Mac, over the connection the app itself is given.")
-                if cluster == nil {
-                    Button("Start fresh…") { emptying = database }
-                        .buttonStyle(DanteButtonStyle())
-                        .disabled(busy)
-                        .help("Empties the dev database, after a backup, so the next deploy’s migrations start over.")
-                } else if let cluster {
+                if let cluster {
                     Menu {
                         ForEach(DODatabaseSizes.pg, id: \.slug) { size in
                             Button("\(size.title) · $\(Int(size.monthly * Double(cluster.numNodes ?? 1)))/mo") { resizing = (cluster, size.slug) }
@@ -743,40 +701,15 @@ private struct DatabaseCard: View {
                     } label: { Label("Resize", systemImage: "arrow.up.left.and.arrow.down.right") }
                     .menuStyle(.borderlessButton).fixedSize()
                     .disabled(model.databaseWork != nil)
+                } else if database.clusterName == nil {
+                    Button("Move to a managed cluster…") { model.openDatabaseStep() }
+                        .buttonStyle(DanteButtonStyle())
+                        .disabled(model.isDeploying || model.specText == nil)
                 }
             }
-            if cluster == nil {
-                Text("DigitalOcean doesn’t back up dev databases. Backups made here are the only ones; for real data, move to a managed cluster in Deploy again › Database.")
+            if database.clusterName == nil {
+                Text("A dev database is for trying things: DigitalOcean doesn’t back it up, and only \(app.name) can reach it, not this Mac. For real data, move to a managed cluster, which has daily backups.")
                     .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
-                if model.walledOff.contains(database.name) {
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: "lock.shield").foregroundStyle(theme.amber.color)
-                        Text("Only \(app.name) can reach this dev database: DigitalOcean doesn’t let this Mac in, so backups, restores and exploring can’t run from here. A managed cluster can let this Mac in (from $15 a month).")
-                            .font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
-                        Button("Move to a managed cluster…") { model.openDatabaseStep() }.buttonStyle(DanteButtonStyle())
-                    }
-                }
-                Toggle(isOn: Binding(get: { model.backsUpNightly }, set: { model.backsUpNightly = $0 })) {
-                    Text("Back up every night, keeping the last \(BackupSchedule.defaultKeep)").font(.dante(size: 12))
-                }
-                .toggleStyle(.switch).controlSize(.small)
-                .help("After \(BackupSchedule.defaultHour) am, the first time Dante is open with this project. Only nightly backups are deleted; ones you make stay.")
-                if let problem = model.nightlyProblem {
-                    Label(problem, systemImage: "moon.zzz").font(.dante(size: 11.5)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            if app.active == nil {
-                Text("Once the app is running, Dante can reach the database through it.").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
-            }
-            let local = model.localBackups[database.name] ?? []
-            if !local.isEmpty {
-                Eyebrow("On this Mac")
-                ForEach(local.prefix(5), id: \.self) { file in
-                    backupRow(PGTools.date(ofBackup: file.lastPathComponent), detail: note(file)) {
-                        Button("Restore…") { restoring = (database, file) }.buttonStyle(DanteButtonStyle()).disabled(busy)
-                    }
-                }
             }
             if let cluster {
                 let daily = model.clusterBackups[cluster.id] ?? []
@@ -805,13 +738,6 @@ private struct DatabaseCard: View {
         }
         if database.clusterName != nil { return "Managed cluster \(database.clusterName ?? "") · not found in this team" }
         return ["Dev database", "\(engine)\(database.version.map { " " + $0 } ?? "")", app.region.map(DeployFormat.city)].compactMap { $0 }.joined(separator: " · ")
-    }
-
-    private func note(_ file: URL) -> String? {
-        let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) }
-        let name = file.lastPathComponent
-        let why = name.contains("before-restore") ? "before a restore" : name.contains("before-fresh") ? "before starting fresh" : nil
-        return [size, why].compactMap { $0 }.joined(separator: " · ")
     }
 
     private func backupRow<Action: View>(_ date: Date?, detail: String?, @ViewBuilder action: () -> Action) -> some View {

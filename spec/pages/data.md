@@ -21,7 +21,6 @@ Data connects to the project's databases: browse tables, run queries, read query
 - Query insights: the plan in plain words with index suggestions.
 - Migration preview: what a DDL script would change, checked against the schema.
 
-- A database on DigitalOcean (added from Ship › Deploy's Explore in Data) shows a cloud mark in the sidebar with "DigitalOcean · <app>'s dev database · <city>" under its name, and a "DigitalOcean · dev database" chip in its header that opens Ship › Deploy.
 
 ## Actions
 - Connect to a database (a URL or host details); create a new local one (a compose service or a SQLite file) with the wizard.
@@ -39,16 +38,15 @@ Data connects to the project's databases: browse tables, run queries, read query
 - Unreachable: the error, with a hint (container stopped, wrong port, password).
 - A table from the Map that isn't in the database yet: a note that the migrations haven't run against it.
 
-- A cloud database that doesn't answer at all (its firewall drops the connection): "Only its app can reach it" in amber, with a banner saying DigitalOcean lets only the app in (a dev database can't let this Mac in; a managed cluster needs this Mac among its trusted sources), the error, and Open Deploy.
 
 ## Edge cases
+- A deployed app's database isn't shown here: DigitalOcean lets only the app reach a dev database. Connections an earlier version saved as "<db> on DigitalOcean" are forgotten, with their passwords.
 - SQLite files kept by tools aren't databases: anything inside a dot folder (`.angular/cache`'s `angular-compiler.db`, `.next`, `.dante`) or a cache, tmp or coverage folder is left out.
 - Remove from Dante… on a detected connection hides it in Data on this Mac (the file and the code that found it stay); a saved one is forgotten with its password.
 - A compose database that doesn't publish its port (no `ports:`) is reached with the client inside its container ("psql inside the db container"), even when psql is installed on this Mac, since nothing listens on localhost for it.
 - Statements run one per argument with a marker after each, so results line up.
 - Saved connections are per Mac, never in the repo.
 
-- A DigitalOcean database is read-only when added and keeps its password in the Keychain; if its password changes, Explore in Data on Ship › Deploy fetches it again.
 
 ## Acceptance
 - A read-only connection refuses statements that change data.

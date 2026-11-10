@@ -5,7 +5,7 @@ import UserNotifications
 
 /// Watching the deployed app from any page: every two minutes it's looked at again, and a
 /// deployment that failed, a component that went unhealthy or one that keeps restarting is
-/// posted as a notification and kept in `trouble` for the companion. Nightly backups run here too.
+/// posted as a notification and kept in `trouble` for the companion.
 extension DeployModel {
     static let watchInterval: Duration = .seconds(120)
 
@@ -17,7 +17,6 @@ extension DeployModel {
             guard signedIn, linkedAppID != nil, !isDemoMode else { continue }
             if (lastRefreshed ?? .distantPast) < .now.addingTimeInterval(-90) { await refresh() }
             checkTrouble()
-            await nightlyBackups()
         }
     }
 
