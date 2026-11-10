@@ -192,6 +192,13 @@ public struct DOClient: Sendable {
         try decode([DOInstanceSize].self, try await send("GET", "apps/tiers/instance_sizes"), key: "instance_sizes")
     }
 
+    /// The team's managed database clusters (`database:read`); a team without one gets null.
+    public func databaseClusters() async throws(Failure) -> [DODatabaseCluster] {
+        let data = try await send("GET", "databases")
+        guard object(data)["databases"] is [Any] else { return [] }
+        return try decode([DODatabaseCluster].self, data, key: "databases")
+    }
+
     public enum LogKind: String, CaseIterable, Sendable {
         case build = "BUILD", deploy = "DEPLOY", run = "RUN"
         public var title: String {

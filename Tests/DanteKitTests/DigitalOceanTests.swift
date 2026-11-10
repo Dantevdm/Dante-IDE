@@ -521,3 +521,129 @@ struct DigitalOceanTests {
     #expect(DOConsole.takeOver(file)?.host == "proxy.digitalocean.com")
     #expect(DOConsole.takeOver(file) == nil)    // used once
 }
+
+// MARK: The deploy wizard's choices
+
+private let wizardSpec = """
+# App Platform spec, written by hand.
+# Second header line.
+name: shop
+region: fra
+services:
+  - name: api
+    bitbucket:
+      repo: acme/shop
+      branch: main
+      deploy_on_push: true
+    source_dir: api
+    dockerfile_path: api/Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /health
+      timeout_seconds: 5
+    envs:
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
+      - key: SIGNING_KEY
+        type: SECRET
+        value: EV[1:abc]
+      - key: GREETING
+        value: hello
+    log_destinations:
+      - name: papertrail
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    bitbucket:
+      repo: acme/shop
+      branch: main
+    run_command: shop migrate up
+databases:
+  - name: db
+    engine: PG
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: FUNCTIONS_ERROR_COUNT
+"""
+
+@Test func theWizardReadsTheSpecsChoices() throws {
+    let spec = try DOAppSpec.read(wizardSpec).get()
+    let setup = DOSetup(spec: spec, region: "ams")
+    #expect(setup.region == "fra")
+    #expect(setup.parts.map(\.name) == ["api", "migrate"])
+    let api = setup.parts[0]
+    #expect(api.port == 8080 && api.healthPath == "/health" && api.branch == "main" && api.deploysOnPush)
+    #expect(api.variables.map(\.key) == ["DATABASE_URL", "SIGNING_KEY", "GREETING"])
+    #expect(api.variables[0].isBound && api.variables[1].isSecret && api.variables[1].value.isEmpty)
+    #expect(setup.parts[1].isSized && !setup.parts[1].runsAlways)
+    #expect(setup.databases == [.init(name: "db", engine: "PG", version: nil, cluster: nil)])
+    #expect(setup.alerts == ["DEPLOYMENT_FAILED", "FUNCTIONS_ERROR_COUNT"])
+    #expect(setup.watches.isEmpty)
+    #expect(setup.problems.isEmpty)
+}
+
+@Test func theWizardWritesItsChoicesAndKeepsTheRest() throws {
+    var setup = DOSetup(spec: try DOAppSpec.read(wizardSpec).get(), region: "ams")
+    setup.parts[0].size = "apps-d-2vcpu-4gb"
+    setup.parts[0].autoscale = .init(minimum: 2, maximum: 4, cpuPercent: 70)
+    setup.parts[0].branch = "release"
+    setup.parts[0].deploysOnPush = false
+    setup.parts[0].healthPath = "/ready"
+    setup.parts[0].variables.append(.init(key: "PORT", value: "8080"))
+    setup.parts[0].variables.append(.init(key: "API_TOKEN", isSecret: true))
+    setup.databases[0].cluster = "shop-db"
+    setup.domains = ["shop.example.com", "www.shop.example.com"]
+    setup.alerts = ["DEPLOYMENT_FAILED", "DOMAIN_FAILED"]
+    setup.watches = [.cpu, .restarts]
+    let text = try setup.written(into: wizardSpec)
+
+    #expect(text.hasPrefix("# App Platform spec, written by hand.\n# Second header line.\nname: shop\n"))
+    let spec = try DOAppSpec.read(text).get()
+    let api = try #require(spec.services?.first)
+    #expect(api.instanceSizeSlug == "apps-d-2vcpu-4gb" && api.instanceCount == nil)
+    #expect(api.autoscaling?.minInstanceCount == 2 && api.autoscaling?.maxInstanceCount == 4)
+    #expect(api.bitbucket?.branch == "release" && api.bitbucket?.deployOnPush == false)
+    #expect(api.healthCheck?.httpPath == "/ready" && api.healthCheck?.timeoutSeconds == 5)
+    // Keys the wizard doesn't know stay, and so do the encrypted secret and the binding.
+    #expect(api.logDestinations?.first?.name == "papertrail")
+    #expect(api.dockerfilePath == "api/Dockerfile")
+    let envs = Dictionary(uniqueKeysWithValues: (api.envs ?? []).map { ($0.key, $0) })
+    #expect(envs["SIGNING_KEY"]?.value == "EV[1:abc]" && envs["SIGNING_KEY"]?.isSecretType == true)
+    #expect(envs["DATABASE_URL"]?.value == "${db.DATABASE_URL}")
+    #expect(envs["API_TOKEN"]?.isSecretType == true && envs["API_TOKEN"]?.value == nil)
+    // A port typed as text stays text.
+    #expect(text.contains("value: \"8080\""))
+    #expect(Set((api.alerts ?? []).map(\.rule)) == ["CPU_UTILIZATION", "RESTART_COUNT"])
+    // The pre-deploy job has no instance count to gain.
+    #expect(spec.jobs?.first?.instanceCount == nil && spec.jobs?.first?.runCommand == "shop migrate up")
+    #expect(spec.databases?.first?.production == true && spec.databases?.first?.clusterName == "shop-db")
+    #expect(spec.domains?.map(\.domain) == ["shop.example.com", "www.shop.example.com"])
+    #expect(spec.domains?.map(\.type) == ["PRIMARY", "ALIAS"])
+    // An alert the wizard doesn't offer is kept.
+    #expect(Set((spec.alerts ?? []).map(\.rule)) == ["DEPLOYMENT_FAILED", "DOMAIN_FAILED", "FUNCTIONS_ERROR_COUNT"])
+
+    var again = DOSetup(spec: spec, region: "ams")
+    again.readTargets(from: text)
+    #expect(again.parts[0].autoscale == .init(minimum: 2, maximum: 4, cpuPercent: 70))
+    #expect(again.watches == [.cpu, .restarts])
+}
+
+@Test func theWizardSaysWhatStopsADeploy() throws {
+    var setup = DOSetup(spec: try DOAppSpec.read(wizardSpec).get(), region: "ams")
+    setup.parts[0].autoscale = .init(minimum: 2, maximum: 4)
+    setup.parts[0].healthPath = "ready"
+    setup.parts[0].variables.append(.init(key: "BAD-NAME"))
+    setup.databases[0].cluster = ""
+    setup.domains = ["not a domain"]
+    let problems = setup.problems
+    #expect(problems.count == 5)
+    #expect(problems.contains("api scales by itself only on a dedicated-CPU size."))
+    #expect(problems.contains("Pick the cluster db uses."))
+}
+
+@Test func aTeamWithoutClustersReadsAsNone() throws {
+    let cluster = try DOJSON.decoder.decode(DODatabaseCluster.self, from: Data(#"{"id":"1","name":"shop-db","engine":"pg","version":"16","region":"fra1","size":"db-s-1vcpu-1gb","status":"online","num_nodes":1}"#.utf8))
+    #expect(cluster.specEngine == "PG" && cluster.numNodes == 1)
+}

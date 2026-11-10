@@ -301,21 +301,151 @@ final class DeployModel {
     func writeSpec(session: Session, workspace: Workspace) {
         guard let plan, specText == nil else { return }
         let url = workspace.url.appending(path: DOAppSpec.path)
-        let header = [
-            "App Platform spec for DigitalOcean, written by Dante from the project. Edit it freely:",
-            "Dante deploys what's here. Secrets are type: SECRET without a value; Dante asks for them",
-            "when you deploy and DigitalOcean keeps them encrypted.",
-            "Reference: https://docs.digitalocean.com/products/app-platform/reference/app-spec/",
-        ]
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try plan.spec.yaml(header: header).write(to: url, atomically: true, encoding: .utf8)
+            try plan.spec.yaml(header: Self.specHeader).write(to: url, atomically: true, encoding: .utf8)
             specText = try String(contentsOf: url, encoding: .utf8)
             spec = plan.spec
             session.open(file: url)
         } catch {
             problem = "Couldn’t write \(DOAppSpec.path): \(error.localizedDescription)"
         }
+    }
+
+    static let specHeader = [
+        "App Platform spec for DigitalOcean, written by Dante from the project. Edit it freely:",
+        "Dante deploys what's here. Secrets are type: SECRET without a value; Dante asks for them",
+        "when you deploy and DigitalOcean keeps them encrypted.",
+        "Reference: https://docs.digitalocean.com/products/app-platform/reference/app-spec/",
+    ]
+
+    // MARK: The wizard
+
+    /// The deploy wizard's steps. The first six edit the spec; leaving them saves it and prices it.
+    enum WizardStep: Int, CaseIterable, Comparable {
+        case source, region, parts, variables, data, reach, secrets, review
+
+        static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+
+        var title: String {
+            switch self {
+            case .source: "Source"
+            case .region: "Region"
+            case .parts: "Components"
+            case .variables: "Variables"
+            case .data: "Database"
+            case .reach: "Domains & alerts"
+            case .secrets: "Secrets"
+            case .review: "Review"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .source: "arrow.triangle.branch"
+            case .region: "globe.europe.africa"
+            case .parts: "square.stack.3d.up"
+            case .variables: "list.bullet.rectangle"
+            case .data: "cylinder.split.1x2"
+            case .reach: "bell.badge"
+            case .secrets: "key"
+            case .review: "checkmark.seal"
+            }
+        }
+    }
+
+    var wizardStep: WizardStep?
+    /// The choices being made, with an estimate kept in step.
+    var setup: DOSetup? { didSet { if setup != oldValue { setupEstimate = setupPrice() } } }
+    private(set) var setupStart: DOSetup?
+    private(set) var setupEstimate: Double?
+    var clusters: [DODatabaseCluster] = []
+    var setupProblem: String?
+    private var isDemo = false
+
+    var setupChanged: Bool { setup != setupStart || specText == nil }
+
+    /// Opens the wizard on the spec (or, before there is one, on the plan Dante would write).
+    func openWizard() {
+        guard !isDeploying, let spec = spec ?? plan?.spec, !spec.components.isEmpty else { return }
+        deployProblem = nil
+        setupProblem = nil
+        var choices = DOSetup(spec: spec, region: region)
+        if let specText { choices.readTargets(from: specText) }
+        setupStart = choices
+        setup = choices
+        wizardStep = .source
+        guard signedIn, !isDemo else { return }
+        Task {
+            if sizes.isEmpty { sizes = (try? await client.instanceSizes()) ?? [] }
+            clusters = (try? await client.databaseClusters()) ?? []
+        }
+    }
+
+    func closeWizard() {
+        cancelDeploy()
+        wizardStep = nil
+        setup = nil
+        setupStart = nil
+        setupProblem = nil
+    }
+
+    /// Back to the choices from pricing: whatever was priced no longer counts.
+    func goBack(to step: WizardStep) {
+        if step < .secrets, stage == .checking || stage == .needsSecrets || stage == .confirming {
+            deployTask?.cancel()
+            stage = nil
+            proposal = nil
+            needed = []
+        }
+        wizardStep = step
+    }
+
+    /// Writes the choices into `.do/app.yaml` (only when they changed) and prices the deploy.
+    func saveSetup(workspace: Workspace) {
+        guard let setup else { return }
+        setupProblem = setup.problems.first
+        guard setupProblem == nil else { return }
+        if setupChanged {
+            let url = workspace.url.appending(path: DOAppSpec.path)
+            do {
+                let base = specText ?? plan?.spec.yaml(header: Self.specHeader) ?? ""
+                let text = try setup.written(into: base)
+                guard case .success(let read) = DOAppSpec.read(text) else {
+                    setupProblem = "The choices didn’t make a spec App Platform can read."
+                    return
+                }
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try text.write(to: url, atomically: true, encoding: .utf8)
+                specText = text
+                spec = read
+                specProblem = nil
+                setupStart = setup
+            } catch {
+                setupProblem = "Couldn’t write \(DOAppSpec.path): \(error.localizedDescription)"
+                return
+            }
+        }
+        wizardStep = .secrets
+        #if DEBUG
+        if isDemo { showDemo(workspace: workspace); return }
+        #endif
+        prepare(workspace: workspace)
+    }
+
+    private func setupPrice() -> Double? {
+        guard let setup, let base = specText ?? plan?.spec.yaml(),
+              let text = try? setup.written(into: base), case .success(let read) = DOAppSpec.read(text) else { return nil }
+        // Autoscaling bills at least the smallest count.
+        var spec = read
+        for (index, part) in setup.parts.enumerated() where part.autoscale != nil {
+            for list in [\DOAppSpec.services, \DOAppSpec.workers] {
+                if let at = spec[keyPath: list]?.firstIndex(where: { $0.name == part.name }) {
+                    spec[keyPath: list]?[at].instanceCount = setup.parts[index].autoscale?.minimum
+                }
+            }
+        }
+        return Self.estimate(spec, sizes: sizes)
     }
 
     func setRegion(_ region: String, workspace: Workspace) {
@@ -416,6 +546,7 @@ final class DeployModel {
                 proposal = try? await client.propose(DOSpecSend.json(priced), appID: app?.id)
             }
             stage = needed.isEmpty ? .confirming : .needsSecrets
+            if wizardStep == nil || wizardStep! < .secrets || needed.isEmpty { wizardStep = needed.isEmpty ? .review : .secrets }
         }
     }
 
@@ -428,8 +559,9 @@ final class DeployModel {
         stage = .checking
         Task {
             if !builds.isEmpty { probe = Self.withoutBuiltImages(probe, builds: builds) }
-            proposal = try? await client.propose(DOSpecSend.json(probe), appID: app?.id)
+            if !isDemo { proposal = try? await client.propose(DOSpecSend.json(probe), appID: app?.id) }
             stage = .confirming
+            wizardStep = .review
         }
     }
 
@@ -438,7 +570,16 @@ final class DeployModel {
     /// team and registry and no DigitalOcean calls, to look at the sheet without spending anything.
     func showDemo(workspace: Workspace) {
         guard stage == nil, let specText, case .success(var object) = DOSpecSend.object(yaml: specText) else { return }
-        person = DOSignIn.Person(name: "Sam", email: nil, team: "Acme")
+        if !isDemo {
+            // First call: made-up sizes and a cluster, then the wizard from its first step.
+            isDemo = true
+            person = DOSignIn.Person(name: "Sam", email: nil, team: "Acme")
+            sizes = Self.demoSizes
+            clusters = [DODatabaseCluster(id: "1", name: "acme-db", engine: "pg", version: "16", region: "fra1", size: "db-s-1vcpu-1gb", status: "online", numNodes: 1)]
+            openWizard()
+            return
+        }
+        stage = .checking
         databaseBindings = DOSpecSend.databaseBindings(in: object)
         needed = DOSpecSend.prepare(&object)
         envMatches = Self.envValues(for: needed, spec: object, root: workspace.url)
@@ -446,9 +587,16 @@ final class DeployModel {
                                   compose: ComposeFile.load(projectRoot: workspace.url), source: .builtHere, branch: branch, region: region).builds
         builds = DODocker.builds(for: object, planned: planned)
         registryInUse = "acme"
-        estimate = 12
+        preparedSpec = object
+        estimate = setupEstimate ?? 12
         stage = needed.isEmpty ? .confirming : .needsSecrets
+        wizardStep = needed.isEmpty ? .review : .secrets
     }
+
+    static let demoSizes: [DOInstanceSize] = [
+        ("apps-s-1vcpu-0.5gb", "1", 0.5, 5), ("apps-s-1vcpu-1gb", "1", 1, 12), ("apps-s-1vcpu-2gb", "1", 2, 25), ("apps-s-2vcpu-4gb", "2", 4, 50),
+        ("apps-d-1vcpu-0.5gb", "1", 0.5, 29), ("apps-d-1vcpu-1gb", "1", 1, 34), ("apps-d-2vcpu-4gb", "2", 4, 78), ("apps-d-4vcpu-8gb", "4", 8, 156),
+    ].map { DOInstanceSize(name: nil, slug: $0.0, cpus: $0.1, memoryBytes: String(Int($0.2 * 1_073_741_824)), usdPerMonth: String($0.3), tierSlug: nil) }
     #endif
 
     /// Puts the values found in the project's env files into the secret fields, for the
@@ -507,6 +655,13 @@ final class DeployModel {
     /// the app and watch the deployment.
     func confirm(workspace: Workspace) {
         guard stage == .confirming, let prepared = preparedSpec else { return }
+        #if DEBUG
+        // The demo stops short of anything real.
+        if isDemo { closeWizard(); return }
+        #endif
+        wizardStep = nil
+        setup = nil
+        setupStart = nil
         let root = workspace.url
         let secrets = typedSecrets
         typedSecrets = [:]

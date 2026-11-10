@@ -190,6 +190,18 @@ public struct DOInstanceSize: Decodable, Equatable, Sendable, Identifiable {
     public var tierSlug: String?
     public var id: String { slug }
 
+    public init(name: String?, slug: String, cpus: String?, memoryBytes: String?, usdPerMonth: String?, tierSlug: String?) {
+        self.name = name
+        self.slug = slug
+        self.cpus = cpus
+        self.memoryBytes = memoryBytes
+        self.usdPerMonth = usdPerMonth
+        self.tierSlug = tierSlug
+    }
+
+    /// Dedicated CPU (`apps-d-…`) rather than a share of one.
+    public var isDedicated: Bool { slug.hasPrefix("apps-d-") }
+
     public var monthly: Double? { usdPerMonth.flatMap(Double.init) }
     public var memoryGB: Double? { memoryBytes.flatMap(Double.init).map { $0 / 1_073_741_824 } }
 }

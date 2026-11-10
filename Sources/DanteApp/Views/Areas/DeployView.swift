@@ -66,7 +66,7 @@ struct DeployView: View {
         }
         .onChange(of: model.health) { model.analyse(workspace: workspace) }
         .onChange(of: model.app?.updated) { model.analyse(workspace: workspace) }
-        .sheet(isPresented: Binding(get: { model.stage == .confirming || model.stage == .needsSecrets }, set: { if !$0 { model.cancelDeploy() } })) {
+        .sheet(isPresented: Binding(get: { model.wizardStep != nil || model.stage == .confirming || model.stage == .needsSecrets }, set: { if !$0 { model.closeWizard() } })) {
             DeploySheet(session: session, workspace: workspace).environment(\.theme, theme)
         }
         .confirmationDialog("Delete \(model.app?.name ?? "the app") from DigitalOcean?", isPresented: $confirmingDelete) {
@@ -107,12 +107,12 @@ struct DeployView: View {
                 .buttonStyle(DanteButtonStyle())
                 .disabled(model.loading)
             }
-            Button { model.prepare(workspace: workspace) } label: {
+            Button { model.openWizard() } label: {
                 Label(model.app == nil ? "Deploy…" : "Deploy again…", systemImage: "icloud.and.arrow.up")
             }
             .buttonStyle(DanteButtonStyle(primary: true))
-            .disabled(model.specText == nil || model.isDeploying || model.stage == .checking)
-            .help(model.specText == nil ? "Write \(DOAppSpec.path) first" : "Checks the spec, says what it costs, and asks before anything is made")
+            .disabled((model.spec ?? model.plan?.spec)?.components.isEmpty != false || model.isDeploying || model.stage == .checking)
+            .help("Walks through the source, region, sizes, variables, database, domains and alerts, saves them to \(DOAppSpec.path), prices it and asks before anything is made")
         }
     }
 }
@@ -152,11 +152,6 @@ private struct PlanCard: View {
     let session: Session
     let workspace: Workspace
     private var model: DeployModel { session.deploy }
-
-    static let regions: [(String, String)] = [
-        ("ams", "Amsterdam"), ("fra", "Frankfurt"), ("lon", "London"), ("nyc", "New York"), ("tor", "Toronto"), ("sfo", "San Francisco"),
-        ("atl", "Atlanta"), ("sgp", "Singapore"), ("blr", "Bangalore"), ("syd", "Sydney"),
-    ]
 
     var body: some View {
         Card(model.specText == nil ? "What Dante would deploy" : "The app spec") {
@@ -205,7 +200,7 @@ private struct PlanCard: View {
                 }
                 HStack(spacing: 10) {
                     Picker("Region", selection: Binding(get: { model.region }, set: { model.setRegion($0, workspace: workspace) })) {
-                        ForEach(Self.regions, id: \.0) { Text($0.1).tag($0.0) }
+                        ForEach(DeployFormat.regions, id: \.code) { Text($0.city).tag($0.code) }
                     }
                     .fixedSize()
                     .help("Where the app runs. Pick the one nearest the people who use it")
@@ -280,7 +275,38 @@ enum DeployFormat {
 
     /// "ams" → "Amsterdam (ams)": DigitalOcean's region codes mean little on their own.
     static func region(_ code: String) -> String {
-        PlanCard.regions.first { $0.0 == code }.map { "\($0.1) (\(code))" } ?? code
+        regions.first { $0.code == code }.map { "\($0.city) (\(code))" } ?? code
+    }
+
+    static func city(_ code: String) -> String {
+        regions.first { $0.code == code }?.city ?? code
+    }
+
+    /// App Platform's regions, with a globe turned to their side of the world.
+    static let regions: [(code: String, city: String, symbol: String)] = [
+        ("ams", "Amsterdam", "globe.europe.africa"), ("fra", "Frankfurt", "globe.europe.africa"), ("lon", "London", "globe.europe.africa"),
+        ("nyc", "New York", "globe.americas"), ("tor", "Toronto", "globe.americas"), ("atl", "Atlanta", "globe.americas"),
+        ("sfo", "San Francisco", "globe.americas"), ("sgp", "Singapore", "globe.asia.australia"), ("blr", "Bangalore", "globe.asia.australia"),
+        ("syd", "Sydney", "globe.asia.australia"),
+    ]
+
+    /// The region nearest a time zone, roughly: App Platform has none in Africa or South
+    /// America, so those go to Europe and the US east coast.
+    static func suggestedRegion(for timeZone: String) -> String {
+        let area = timeZone.split(separator: "/").first.map(String.init) ?? ""
+        switch area {
+        case "Europe":
+            return ["London", "Dublin", "Lisbon"].contains { timeZone.hasSuffix($0) } ? "lon" : (["Amsterdam", "Brussels", "Paris"].contains { timeZone.hasSuffix($0) } ? "ams" : "fra")
+        case "Africa": return "ams"
+        case "America":
+            if ["Los_Angeles", "Vancouver", "Phoenix", "Denver", "Tijuana"].contains(where: { timeZone.hasSuffix($0) }) { return "sfo" }
+            if ["Toronto", "Montreal", "Halifax"].contains(where: { timeZone.hasSuffix($0) }) { return "tor" }
+            return "nyc"
+        case "Asia":
+            return ["Kolkata", "Calcutta", "Colombo", "Karachi", "Dhaka", "Dubai"].contains { timeZone.hasSuffix($0) } ? "blr" : "sgp"
+        case "Australia", "Pacific": return "syd"
+        default: return "fra"
+        }
     }
 
     /// "apps-s-1vcpu-0.5gb" → "1 vCPU · 0.5 GB".
