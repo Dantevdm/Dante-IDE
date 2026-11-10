@@ -24,20 +24,24 @@ public enum DOConsole {
     }
 
     /// A one-use file holding the address for `dante do-console`, readable only by this user,
-    /// so the token never sits on a command line or in the terminal's history.
-    public static func handOver(_ url: URL, folder: URL = FileManager.default.temporaryDirectory) throws -> URL {
+    /// so the token never sits on a command line or in the terminal's history. `run`, when
+    /// given, is typed into the shell once it answers (Deploy's Getting in steps).
+    public static func handOver(_ url: URL, run: String? = nil, folder: URL = FileManager.default.temporaryDirectory) throws -> URL {
         let file = folder.appending(path: "dante-console-\(UUID().uuidString)")
         FileManager.default.createFile(atPath: file.path, contents: nil, attributes: [.posixPermissions: 0o600])
-        try Data(url.absoluteString.utf8).write(to: file)
+        let command = run?.replacingOccurrences(of: "\n", with: " ") ?? ""
+        try Data((url.absoluteString + (command.isEmpty ? "" : "\n" + command)).utf8).write(to: file)
         return file
     }
 
-    /// Reads the address `handOver` wrote, and removes the file.
-    public static func takeOver(_ file: URL) -> URL? {
+    /// Reads the address (and the command to type) `handOver` wrote, and removes the file.
+    public static func takeOver(_ file: URL) -> (url: URL, run: String?)? {
         defer { try? FileManager.default.removeItem(at: file) }
-        guard let text = try? String(contentsOf: file, encoding: .utf8),
-              let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)), isAllowed(url) else { return nil }
-        return url
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        let lines = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let first = lines.first, let url = URL(string: first.trimmingCharacters(in: .whitespacesAndNewlines)), isAllowed(url) else { return nil }
+        let run = lines.count > 1 ? lines[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        return (url, run.isEmpty ? nil : run)
     }
 
     static func encode(_ object: [String: Any]) -> String {

@@ -819,9 +819,9 @@ final class DeployModel {
     /// Opens a shell in a running component in a terminal tab of its own, through the bundled
     /// `dante do-console` (DigitalOcean's console WebSocket; the address goes over in a one-use
     /// file, never on the command line).
-    func openConsole(_ component: String, session: Session) {
+    func openConsole(_ component: String, run command: String? = nil, session: Session) {
         guard let id = app?.id, openingConsole == nil else { return }
-        guard let command = Session.danteCommand else {
+        guard let dante = Session.danteCommand else {
             problem = "The console needs Dante's bundled command, which only the app has."
             return
         }
@@ -830,8 +830,8 @@ final class DeployModel {
             defer { openingConsole = nil }
             do throws(DOClient.Failure) {
                 let url = try await client.consoleURL(id, component: component)
-                guard let file = try? DOConsole.handOver(url) else { problem = "Couldn’t hand the console over to the terminal."; return }
-                session.runInNewTerminal("\(Shell.quote(command)) do-console \(Shell.quote(file.path))", title: "\(component) on DigitalOcean")
+                guard let file = try? DOConsole.handOver(url, run: command) else { problem = "Couldn’t hand the console over to the terminal."; return }
+                session.runInNewTerminal("\(Shell.quote(dante)) do-console \(Shell.quote(file.path))", title: "\(component) on DigitalOcean")
             } catch {
                 if error.status == 403 {
                     problem = "This DigitalOcean sign-in isn’t allowed to open a console (app:access_console): it was granted before Dante asked for that. Sign out and sign in again to allow it."
@@ -839,6 +839,64 @@ final class DeployModel {
                     report(error)
                 }
             }
+        }
+    }
+
+    // MARK: Getting in
+
+    /// How someone gets into the app: `.dante/access.yaml`, or Dante's guess from the code.
+    var access: AccessGuide?
+    private var accessRevision: Int?
+
+    /// Reads the file, or drafts a guide off the main thread (it reads the code that checks
+    /// requests, scripts and the README).
+    func loadAccess(workspace: Workspace) async {
+        guard accessRevision != workspace.revision else { return }
+        accessRevision = workspace.revision
+        let root = workspace.url
+        if let text = try? String(contentsOf: root.appending(path: AccessGuide.path), encoding: .utf8), let guide = AccessGuide.read(yaml: text) {
+            access = guide
+            return
+        }
+        let files = workspace.files
+        let spec = spec ?? plan?.spec
+        let variables = (spec?.envs ?? []).map(\.key) + (spec?.components ?? []).flatMap { ($0.component.envs ?? []).map(\.key) }
+        let component = consoleComponent
+        access = await Task.detached(priority: .utility) {
+            AccessGuide.detect(files: files, read: Self.reader(root), variables: variables, component: component)
+        }.value
+    }
+
+    /// The service a console step opens in when the guide doesn't name one.
+    var consoleComponent: String? {
+        let components = (app?.spec ?? spec ?? plan?.spec)?.components ?? []
+        return (components.first { $0.kind == .service } ?? components.first { $0.kind == .worker })?.component.name
+    }
+
+    /// Saves the draft as `.dante/access.yaml`, so it can be corrected and travels with the repo.
+    func saveAccess(workspace: Workspace) {
+        guard let access, !access.isWritten else { return }
+        let file = workspace.url.appending(path: AccessGuide.path)
+        do {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try access.yaml.write(to: file, atomically: true, encoding: .utf8)
+            self.access?.isWritten = true
+        } catch {
+            problem = "Couldn’t write \(AccessGuide.path): \(error.localizedDescription)"
+        }
+    }
+
+    /// Runs a step where it belongs: in the running component's console, or here in a terminal tab.
+    func run(_ step: AccessGuide.Step, session: Session) {
+        guard let command = step.command(url: app?.liveURL) else { return }
+        switch step.place {
+        case .console:
+            if let component = step.component ?? consoleComponent { openConsole(component, run: command, session: session) }
+        case .local:
+            let line = step.folder.map { "cd \(Shell.quote($0)) && \(command)" } ?? command
+            session.runInNewTerminal(line, title: step.title)
+        case .note:
+            break
         }
     }
 

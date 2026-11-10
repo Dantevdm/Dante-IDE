@@ -518,8 +518,10 @@ struct DigitalOceanTests {
     let file = try DOConsole.handOver(URL(string: "wss://proxy.digitalocean.com/exec?token=x")!, folder: folder)
     let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
     #expect(mode == 0o600)
-    #expect(DOConsole.takeOver(file)?.host == "proxy.digitalocean.com")
+    #expect(DOConsole.takeOver(file)?.url.host == "proxy.digitalocean.com")
     #expect(DOConsole.takeOver(file) == nil)    // used once
+    let typing = try DOConsole.handOver(URL(string: "wss://proxy.digitalocean.com/exec?token=x")!, run: "./make-key admin", folder: folder)
+    #expect(DOConsole.takeOver(typing)?.run == "./make-key admin")
 }
 
 // MARK: The deploy wizard's choices

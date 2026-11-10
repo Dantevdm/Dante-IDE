@@ -36,12 +36,14 @@ struct DeployView: View {
             }
             if let app = model.app {
                 LiveCard(session: session, app: app, rollbackTarget: $rollbackTarget)
+                GettingInCard(session: session, workspace: workspace)
                 if !model.health.isEmpty || app.spec?.components.isEmpty == false {
                     ComponentsCard(session: session, model: model, app: app)
                 }
                 LogsCard(session: session, app: app)
             } else {
                 PlanCard(session: session, workspace: workspace)
+                GettingInCard(session: session, workspace: workspace)
             }
             AdviceCard(session: session, workspace: workspace)
         }
@@ -54,6 +56,7 @@ struct DeployView: View {
         #endif
         .task(id: workspace.revision) {
             await model.load(workspace: workspace)
+            await model.loadAccess(workspace: workspace)
         }
         .task(id: model.app?.id) {
             // While the page is open, look again every minute (every five seconds while deploying is `watch`).
@@ -594,6 +597,142 @@ private struct ComponentsCard: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: Getting in
+
+/// How a first-time person gets into the app: the way it signs people in (an API key, a
+/// password, single sign-on) and the steps that make the first key or admin, each run where it
+/// belongs (inside the live app through its console, or here in a terminal tab).
+private struct GettingInCard: View {
+    @Environment(\.theme) private var theme
+    let session: Session
+    let workspace: Workspace
+    private var model: DeployModel { session.deploy }
+
+    var body: some View {
+        if let guide = model.access, !guide.isEmpty || model.app != nil {
+            Card("Getting in", accent: model.app?.active != nil && !guide.steps.isEmpty) {
+                if !guide.isWritten && !guide.isEmpty {
+                    Button("Save as \(AccessGuide.path)") { model.saveAccess(workspace: workspace) }
+                        .buttonStyle(DanteButtonStyle())
+                        .help("Writes Dante's guess to the repo so you can correct it; it travels with the code, and Dante shows the file from then on.")
+                }
+                Button {
+                    session.askClaude(guide.brief(appName: model.app?.name ?? workspace.url.lastPathComponent, url: model.app?.liveURL))
+                } label: { Label(guide.isWritten ? "Ask \(session.agentName) to check it" : "Ask \(session.agentName) to write it", systemImage: "wand.and.stars") }
+                .buttonStyle(DanteButtonStyle())
+                .help("The agent reads the code that checks requests, the scripts and docs, and writes \(AccessGuide.path). It never puts a key in the file.")
+            } content: {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: guide.signIn.first?.symbol ?? "questionmark.key.filled")
+                        .font(.dante(size: 15)).foregroundStyle(theme.accent.color).frame(width: 22)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(guide.headline).font(.dante(size: 13.5, weight: .medium)).foregroundStyle(theme.text.color).fixedSize(horizontal: false, vertical: true)
+                        if let header = guide.header {
+                            CopyableLine(text: header, help: "What every request carries. Put your own key in place of <key>.")
+                        }
+                    }
+                }
+                if !guide.steps.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(guide.steps.enumerated()), id: \.element.id) { index, step in
+                            if index > 0 { Rectangle().fill(theme.line.color).frame(height: 1) }
+                            StepRow(number: index + 1, step: step, session: session)
+                        }
+                    }
+                }
+                Text(footnote(guide)).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func footnote(_ guide: AccessGuide) -> String {
+        if guide.isWritten { return "From \(AccessGuide.path)." }
+        if guide.isEmpty { return "Nothing in the code says how people get in. Ask \(session.agentName) to work it out, or write \(AccessGuide.path) yourself." }
+        let clues = guide.evidence.prefix(3).joined(separator: "; ")
+        return "Dante’s guess from the code\(clues.isEmpty ? "" : ": " + clues). Save it to correct it, or ask \(session.agentName) to write it properly."
+    }
+}
+
+private struct StepRow: View {
+    @Environment(\.theme) private var theme
+    let number: Int
+    let step: AccessGuide.Step
+    let session: Session
+    private var model: DeployModel { session.deploy }
+
+    var body: some View {
+        let url = model.app?.liveURL
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)").font(.dante(size: 11, weight: .semibold)).foregroundStyle(theme.accent.color)
+                .frame(width: 20, height: 20).background(Circle().fill(theme.accent.color.opacity(0.12)))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(step.title).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).fixedSize(horizontal: false, vertical: true)
+                Text(place).font(.dante(size: 11)).foregroundStyle(theme.text3.color)
+                if let command = step.command(url: url) {
+                    CopyableLine(text: command, help: "Copy the command")
+                }
+                if let note = step.note {
+                    Text(AccessGuide.Step(title: "", place: .note, run: note).command(url: url) ?? note)
+                        .font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+            action
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var place: String {
+        switch step.place {
+        case .console: "Inside \(step.component ?? model.consoleComponent ?? "the app") on DigitalOcean"
+        case .local: "On this Mac" + (step.folder.map { ", in \($0)" } ?? "")
+        case .note: "Good to know"
+        }
+    }
+
+    @ViewBuilder private var action: some View {
+        switch step.place {
+        case .console:
+            let component = step.component ?? model.consoleComponent
+            if model.openingConsole != nil && model.openingConsole == component {
+                ProgressView().controlSize(.small)
+            } else {
+                Button { model.run(step, session: session) } label: { Label("Run in Console", systemImage: "terminal") }
+                    .buttonStyle(DanteButtonStyle())
+                    .disabled(model.app?.active == nil || component == nil || step.run == nil)
+                    .help(model.app?.active == nil ? "Once the app is live, this opens its console and types the command." : "Opens a shell in the running \(component ?? "app") and types the command; you press Return.")
+            }
+        case .local:
+            Button { model.run(step, session: session) } label: { Label("Run here", systemImage: "play") }
+                .buttonStyle(DanteButtonStyle())
+                .disabled(step.run == nil || (step.run?.contains("{url}") == true && model.app?.liveURL == nil))
+                .help(step.run?.contains("{url}") == true && model.app?.liveURL == nil ? "It needs the live address; deploy first." : "Runs it in a terminal tab of its own" + (model.app?.liveURL == nil ? "." : ", with {url} as the live address."))
+        case .note:
+            EmptyView()
+        }
+    }
+}
+
+/// A command or header in mono, selectable, with a copy button.
+private struct CopyableLine: View {
+    @Environment(\.theme) private var theme
+    let text: String
+    let help: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(text).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text.color).textSelection(.enabled).lineLimit(2)
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            } label: { Image(systemName: "doc.on.doc").font(.dante(size: 10.5)) }
+            .buttonStyle(.plain).foregroundStyle(theme.text3.color).help(help)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 6).fill(theme.text.color.opacity(0.05)))
     }
 }
 

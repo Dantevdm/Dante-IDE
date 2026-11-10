@@ -59,10 +59,10 @@ if CommandLine.arguments.dropFirst().first == "mcp" {
 // Console in a terminal tab. The file (0600, removed on reading) holds the console's address,
 // so its token never appears on a command line.
 if CommandLine.arguments.dropFirst().first == "do-console" {
-    guard CommandLine.arguments.count > 2, let url = DOConsole.takeOver(URL(filePath: CommandLine.arguments[2])) else {
+    guard CommandLine.arguments.count > 2, let handover = DOConsole.takeOver(URL(filePath: CommandLine.arguments[2])) else {
         fail("do-console: the console's address is missing or used; open it again from Deploy")
     }
-    Console.run(url)
+    Console.run(handover.url, typing: handover.run)
 }
 
 // `dante scan [folder] [--json] [--online] [--all] [--fail-on high]`: the Security area's scan,
@@ -367,8 +367,11 @@ case .open(var request):
 enum Console {
     nonisolated(unsafe) static var saved = termios()
     nonisolated(unsafe) static var socket: URLSessionWebSocketTask?
+    /// A command to type once the shell has printed something (its prompt).
+    nonisolated(unsafe) static var pending: String?
 
-    static func run(_ url: URL) -> Never {
+    static func run(_ url: URL, typing command: String? = nil) -> Never {
+        pending = command
         let task = URLSession(configuration: .ephemeral).webSocketTask(with: url)
         socket = task
         task.resume()
@@ -393,7 +396,13 @@ enum Console {
                 case .data(let data): text = String(decoding: data, as: UTF8.self)
                 @unknown default: text = ""
                 }
-                if let output = DOConsole.output(text) { FileHandle.standardOutput.write(Data(output.utf8)) }
+                if let output = DOConsole.output(text) {
+                    FileHandle.standardOutput.write(Data(output.utf8))
+                    if let command = pending {
+                        pending = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { send(DOConsole.stdin(command + "\r")) }
+                    }
+                }
                 receive()
             case .failure:
                 restore()
