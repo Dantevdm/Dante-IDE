@@ -94,6 +94,33 @@ public struct DatabaseConnection: Codable, Equatable, Hashable, Sendable, Identi
     /// A compose service that doesn't publish its port: only the client inside its container
     /// reaches it. Found afresh each time, so not saved.
     public var insideDocker = false
+    /// A database in the cloud (the app's database on DigitalOcean), reached from Ship › Deploy.
+    public var cloud: CloudPlace?
+
+    /// Where a cloud database lives, for the sidebar's label and the way back to its page.
+    public struct CloudPlace: Codable, Equatable, Hashable, Sendable {
+        /// "DigitalOcean".
+        public var provider: String
+        /// The app it belongs to, and its id there.
+        public var app: String
+        public var appID: String
+        /// "Dev database" or "Managed cluster <name>".
+        public var kind: String
+        public var region: String?
+
+        public init(provider: String, app: String, appID: String, kind: String, region: String?) {
+            self.provider = provider
+            self.app = app
+            self.appID = appID
+            self.kind = kind
+            self.region = region
+        }
+
+        /// One line for the sidebar: "DigitalOcean · shop's dev database · Frankfurt".
+        public func label(city: (String) -> String) -> String {
+            ([provider, "\(app)’s \(kind.prefix(1).lowercased() + kind.dropFirst())"] + (region.map { [city($0)] } ?? [])).joined(separator: " · ")
+        }
+    }
 
     public init(id: String? = nil, name: String, engine: DatabaseEngine, host: String = "localhost", port: Int? = nil,
                 database: String, user: String = "", file: String? = nil, service: String? = nil, readOnly: Bool? = nil,
@@ -114,7 +141,7 @@ public struct DatabaseConnection: Codable, Equatable, Hashable, Sendable, Identi
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, engine, host, port, database, user, file, service, readOnly, origin, note
+        case id, name, engine, host, port, database, user, file, service, readOnly, origin, note, cloud
     }
 
     static func makeID(engine: DatabaseEngine, host: String, port: Int?, database: String, file: String?) -> String {

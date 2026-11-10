@@ -24,7 +24,7 @@ public enum DOSignIn {
     /// the dev database a spec's `databases:` asks App Platform for. Nothing else.
     public static let scopes = [
         "account:read", "app:read", "app:create", "app:update", "app:delete", "app:access_console",
-        "registry:read", "registry:create", "registry:update", "monitoring:read", "database:read", "database:create",
+        "registry:read", "registry:create", "registry:update", "monitoring:read", "database:read", "database:create", "database:update",
     ]
 
     /// The scope an error says the sign-in lacks: DigitalOcean answers "missing database create

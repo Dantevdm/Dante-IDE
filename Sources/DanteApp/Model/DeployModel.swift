@@ -385,6 +385,7 @@ final class DeployModel {
     func closeWizard() {
         cancelDeploy()
         wizardStep = nil
+        resizing = nil
         setup = nil
         setupStart = nil
         setupProblem = nil
@@ -591,6 +592,28 @@ final class DeployModel {
         estimate = setupEstimate ?? 12
         stage = needed.isEmpty ? .confirming : .needsSecrets
         wizardStep = needed.isEmpty ? .review : .secrets
+    }
+
+    /// `DANTE_DEPLOY_DEMO=live`: the page as for a running app (made up, no network), for
+    /// checking the Components, Database and Getting in cards.
+    func showLiveDemo() {
+        guard let specText, case .success(var object) = DOSpecSend.object(yaml: specText) else { return }
+        isDemo = true
+        person = DOSignIn.Person(name: "Sam", email: nil, team: "Acme")
+        sizes = Self.demoSizes
+        object["databases"] = [["name": "db", "engine": "PG", "version": "16"], ["name": "orders", "engine": "PG", "cluster_name": "acme-db"]]
+        var services = object["services"] as? [[String: Any]] ?? []
+        if !services.isEmpty {
+            var envs = services[0]["envs"] as? [[String: Any]] ?? []
+            envs.append(["key": "DATABASE_URL", "value": "${db.DATABASE_URL}", "scope": "RUN_TIME"])
+            services[0]["envs"] = envs
+            object["services"] = services
+        }
+        let wire: [String: Any] = ["id": "demo", "live_url": "https://shop-demo.ondigitalocean.app", "region": ["slug": "fra"],
+                                   "active_deployment": ["id": "d1", "phase": "ACTIVE"], "spec": object]
+        app = DOApp.parse(wire)
+        clusters = [DODatabaseCluster(id: "1", name: "acme-db", engine: "pg", version: "16", region: "fra1", size: "db-s-1vcpu-2gb", status: "online", numNodes: 1)]
+        clusterBackups["1"] = [DODatabaseBackup(createdAt: "2026-11-10T03:12:00Z", sizeGigabytes: 0.42), DODatabaseBackup(createdAt: "2026-11-09T03:11:00Z", sizeGigabytes: 0.41)]
     }
 
     static let demoSizes: [DOInstanceSize] = [
@@ -841,6 +864,19 @@ final class DeployModel {
             }
         }
     }
+
+    // MARK: Database (DeployModel+Database.swift)
+
+    /// Backups Dante made on this Mac, by database, newest first.
+    var localBackups: [String: [URL]] = [:]
+    /// A managed cluster's daily backups, by cluster id.
+    var clusterBackups: [String: [DODatabaseBackup]] = [:]
+    /// What's being done to a database ("Backing up db…"), one thing at a time.
+    var databaseWork: String?
+    var databaseNotice: String?
+    var databaseProblem: String?
+    /// The component whose size the wizard opened on (Resize…), showing only that one.
+    var resizing: String?
 
     // MARK: Getting in
 

@@ -162,7 +162,7 @@ struct DeploySheet: View {
 
     private var stepHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("STEP \(step.rawValue + 1) OF \(Step.allCases.count)").font(.dante(size: 10.5, weight: .semibold)).tracking(0.7).foregroundStyle(theme.accent.color)
+            Text(model.resizing != nil && step == .parts ? "RESIZE" : "STEP \(step.rawValue + 1) OF \(Step.allCases.count)").font(.dante(size: 10.5, weight: .semibold)).tracking(0.7).foregroundStyle(theme.accent.color)
             Text(headline).font(.dante(size: 19, weight: .semibold)).foregroundStyle(theme.text.color)
             Text(explanation).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
         }
@@ -173,7 +173,7 @@ struct DeploySheet: View {
         switch step {
         case .source: "Where the code comes from"
         case .region: "Where it runs"
-        case .parts: "How big each part is"
+        case .parts: model.resizing.map { "How big \($0) is" } ?? "How big each part is"
         case .variables: "What each part is told"
         case .data: "Where the data lives"
         case .reach: "Domains and alerts"
@@ -186,7 +186,7 @@ struct DeploySheet: View {
         switch step {
         case .source: "App Platform builds from a branch on your git host, or runs images Dante builds here and pushes to the registry."
         case .region: "Pick the region nearest the people who use the app: every request travels there and back."
-        case .parts: "Sizes, how many copies run, and how App Platform checks each part is healthy."
+        case .parts: model.resizing == nil ? "Sizes, how many copies run, and how App Platform checks each part is healthy." : "The app is updated in place: the database and its data stay, and the other parts keep their sizes. You see the new price before anything changes."
         case .variables: "Environment variables per part. Secrets get their values when you deploy; DigitalOcean keeps them encrypted."
         case .data: "A dev database to try things, or a managed cluster with backups for real data."
         case .reach: "Your own address for the app, and what DigitalOcean emails the team about."
@@ -330,7 +330,8 @@ struct DeploySheet: View {
 
     private func partsStep(_ setup: Binding<DOSetup>) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(setup.wrappedValue.parts.indices, id: \.self) { index in
+            // Resize… shows only the component it was opened on.
+            ForEach(setup.wrappedValue.parts.indices.filter { model.resizing == nil || setup.wrappedValue.parts[$0].name == model.resizing }, id: \.self) { index in
                 partCard(setup.parts[index])
             }
         }
@@ -856,7 +857,7 @@ struct DeploySheet: View {
         HStack(alignment: .center, spacing: 10) {
             if let problem = model.setupProblem, step < .secrets {
                 Label(problem, systemImage: "exclamationmark.triangle").font(.dante(size: 12)).foregroundStyle(theme.red.color).lineLimit(2)
-            } else if step == .reach || (step < .reach && model.setupChanged && model.specText != nil) {
+            } else if step == .reach || (model.resizing != nil && step == .parts) || (step < .reach && model.setupChanged && model.specText != nil) {
                 Text(model.setupChanged ? "Your choices are saved to \(DOAppSpec.path) when you go on." : "\(DOAppSpec.path) is unchanged.")
                     .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             } else if step == .secrets, !model.needed.isEmpty {
@@ -871,13 +872,13 @@ struct DeploySheet: View {
             }
             Spacer()
             Button("Cancel") { model.closeWizard() }.buttonStyle(DanteButtonStyle()).keyboardShortcut(.cancelAction)
-            if step > .source, model.setup != nil || step == .review {
-                Button("Back") { go(to: Step(rawValue: step.rawValue - 1) ?? .source) }
+            if step > .source, model.setup != nil || step == .review, !(model.resizing != nil && step == .parts) {
+                Button("Back") { go(to: model.resizing != nil && step == .secrets ? .parts : Step(rawValue: step.rawValue - 1) ?? .source) }
                     .buttonStyle(DanteButtonStyle())
                     .disabled(model.stage == .checking || (step == .secrets && model.setup == nil))
             }
             switch step {
-            case .reach:
+            case .reach, .parts where model.resizing != nil:
                 Button(model.setupChanged ? "Save and price" : "Price it") {
                     forward = true
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.32)) { model.saveSetup(workspace: workspace) }

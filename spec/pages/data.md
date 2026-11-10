@@ -21,6 +21,8 @@ Data connects to the project's databases: browse tables, run queries, read query
 - Query insights: the plan in plain words with index suggestions.
 - Migration preview: what a DDL script would change, checked against the schema.
 
+- A database on DigitalOcean (added from Ship › Deploy's Explore in Data) shows a cloud mark in the sidebar with "DigitalOcean · <app>'s dev database · <city>" under its name, and a "DigitalOcean · dev database" chip in its header that opens Ship › Deploy.
+
 ## Actions
 - Connect to a database (a URL or host details); create a new local one (a compose service or a SQLite file) with the wizard.
 - Run queries; explain a query; preview a migration before running it.
@@ -41,6 +43,8 @@ Data connects to the project's databases: browse tables, run queries, read query
 - A compose database that doesn't publish its port (no `ports:`) is reached with the client inside its container ("psql inside the db container"), even when psql is installed on this Mac, since nothing listens on localhost for it.
 - Statements run one per argument with a marker after each, so results line up.
 - Saved connections are per Mac, never in the repo.
+
+- A DigitalOcean database is read-only when added and keeps its password in the Keychain; if its password changes, Explore in Data on Ship › Deploy fetches it again.
 
 ## Acceptance
 - A read-only connection refuses statements that change data.

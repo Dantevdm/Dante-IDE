@@ -306,8 +306,11 @@ private struct ConnectionRow: View {
                     if connection.readOnly {
                         Image(systemName: "lock.fill").font(.dante(size: 8.5)).foregroundStyle(theme.text3.color).help("Read-only")
                     }
+                    if connection.cloud != nil {
+                        Image(systemName: "cloud.fill").font(.dante(size: 9)).foregroundStyle(theme.accent.color).help("In the cloud, not on this Mac")
+                    }
                 }
-                Text(connection.note ?? connection.displayURL)
+                Text(connection.cloud?.label(city: DeployFormat.city) ?? connection.note ?? connection.displayURL)
                     .font(.dante(size: 11))
                     .foregroundStyle(theme.text3.color)
                     .lineLimit(1)
@@ -466,6 +469,13 @@ private struct DataMain: View {
                     Text(connection.name).font(.dante(size: 16, weight: .semibold)).foregroundStyle(theme.text.color)
                     if let version = model.schema?.version { Chip(text: version) }
                     if connection.readOnly { Chip(text: "read-only", symbol: "lock.fill") }
+                    if let cloud = connection.cloud {
+                        Button { session.area = .deploy } label: {
+                            Chip(text: "\(cloud.provider) · \(cloud.kind)", symbol: "cloud.fill")
+                        }
+                        .buttonStyle(.plain)
+                        .help("\(cloud.app)’s database on \(cloud.provider)\(cloud.region.map { " in " + DeployFormat.city($0) } ?? ""). Click to open the app on Ship › Deploy, where its backups are.")
+                    }
                 }
                 HStack(spacing: 6) {
                     StatusDot(color: status.color(theme), size: 6)

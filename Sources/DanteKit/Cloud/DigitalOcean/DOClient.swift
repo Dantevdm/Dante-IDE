@@ -199,6 +199,31 @@ public struct DOClient: Sendable {
         return try decode([DODatabaseCluster].self, data, key: "databases")
     }
 
+    /// A managed cluster's daily backups (kept seven days), newest first.
+    public func databaseBackups(_ clusterID: String) async throws(Failure) -> [DODatabaseBackup] {
+        let data = try await send("GET", "databases/\(clusterID)/backups")
+        guard object(data)["backups"] is [Any] else { return [] }
+        return try decode([DODatabaseBackup].self, data, key: "backups").sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// Makes a new cluster from one of `cluster`'s backups; the original is left alone.
+    public func restoreDatabase(_ cluster: DODatabaseCluster, backup: DODatabaseBackup, name: String) async throws(Failure) -> DODatabaseCluster {
+        var body: [String: any Sendable] = [
+            "name": name, "engine": cluster.engine ?? "pg", "num_nodes": cluster.numNodes ?? 1,
+            "backup_restore": ["database_name": cluster.name, "backup_created_at": backup.createdAt] as [String: any Sendable],
+        ]
+        if let version = cluster.version { body["version"] = version }
+        if let region = cluster.region { body["region"] = region }
+        if let size = cluster.size { body["size"] = size }
+        let data = try await send("POST", "databases", body: body)
+        return try decode(DODatabaseCluster.self, data, key: "database")
+    }
+
+    /// Changes a cluster's size in place; DigitalOcean moves it with a short interruption.
+    public func resizeDatabase(_ clusterID: String, size: String, nodes: Int) async throws(Failure) {
+        _ = try await send("PUT", "databases/\(clusterID)/resize", body: ["size": size, "num_nodes": nodes])
+    }
+
     public enum LogKind: String, CaseIterable, Sendable {
         case build = "BUILD", deploy = "DEPLOY", run = "RUN"
         public var title: String {
