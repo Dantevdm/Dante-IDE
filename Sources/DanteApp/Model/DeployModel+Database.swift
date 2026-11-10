@@ -49,6 +49,14 @@ extension DeployModel {
         guard let values = DODatabaseAccess.values(in: output), let connection = DODatabaseAccess.connection(values, plan: plan) else {
             throw DOConsoleExec.Failure(message: "\(plan.component) didn’t say how it reaches \(database.name).")
         }
+        // The app knows the address; whether this Mac may use it is the database's firewall's call.
+        guard await PGTools.answers(connection) else {
+            walledOff.insert(database.name)
+            throw DOConsoleExec.Failure(message: database.clusterName == nil
+                ? "DigitalOcean lets only \(app.name) itself into its dev database, and a dev database can't let this Mac in. To back it up, restore or explore it from here, move it to a managed cluster (Deploy again › Database)."
+                : "This Mac isn't one of \(database.clusterName ?? "the cluster")'s trusted sources, so DigitalOcean's firewall drops the connection. Add this Mac's address under the cluster's Settings › Trusted sources in DigitalOcean, then try again.")
+        }
+        walledOff.remove(database.name)
         return connection
     }
 

@@ -100,7 +100,9 @@ struct DataView: View {
             if let removal = model.removal(for: connection) {
                 Text(Self.describe(removal))
             } else {
-                Text("Dante forgets the connection and its saved password on this Mac. The database itself and its data stay as they are.")
+                Text(connection.origin == .saved
+                     ? "Dante forgets the connection and its saved password on this Mac. The database itself and its data stay as they are."
+                     : "Dante stops showing it in Data on this Mac. The file and the code that found it stay as they are.")
             }
         }
         .sheet(isPresented: Binding(get: { model.showsNewDatabase }, set: { model.showsNewDatabase = $0 })) {
@@ -387,7 +389,7 @@ extension DataModel.Status {
         switch self {
         case .online: theme.green.color
         case .connecting, .unknown: theme.text3.color
-        case .needsPassword, .offline: theme.amber.color
+        case .needsPassword, .offline, .walledOff: theme.amber.color
         case .failed: theme.red.color
         }
     }
@@ -399,6 +401,7 @@ extension DataModel.Status {
         case .online: "Connected"
         case .needsPassword: "Needs a password"
         case .offline: "Not running"
+        case .walledOff: "Only its app can reach it"
         case .failed: "Couldn’t connect"
         }
     }
@@ -546,6 +549,17 @@ private struct DataMain: View {
                     .buttonStyle(DanteButtonStyle(primary: true))
                     .disabled(model.startingService != nil)
                 }
+            }
+        case .walledOff(let message):
+            let isDev = connection.cloud?.kind.contains("dev") == true
+            DataBanner(symbol: "lock.shield", color: theme.amber.color,
+                       title: "DigitalOcean’s firewall lets only \(connection.cloud?.app ?? "the app") into this database",
+                       detail: (isDev
+                           ? "Dev databases accept connections from their app alone, and DigitalOcean doesn’t let you add this Mac. A managed cluster can let this Mac in."
+                           : "This Mac isn’t one of the cluster’s trusted sources. Add it in DigitalOcean (Databases › the cluster › Settings › Trusted sources), then refresh.")
+                           + "\n\n" + message) {
+                Button { session.area = .deploy } label: { Label("Open Deploy", systemImage: "cloud") }
+                    .buttonStyle(DanteButtonStyle())
             }
         case .failed(let message):
             DataBanner(symbol: "exclamationmark.triangle.fill", color: theme.red.color, title: "Couldn’t connect to \(connection.name)", detail: message) {

@@ -748,6 +748,15 @@ private struct DatabaseCard: View {
             if cluster == nil {
                 Text("DigitalOcean doesn’t back up dev databases. Backups made here are the only ones; for real data, move to a managed cluster in Deploy again › Database.")
                     .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                if model.walledOff.contains(database.name) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "lock.shield").foregroundStyle(theme.amber.color)
+                        Text("Only \(app.name) can reach this dev database: DigitalOcean doesn’t let this Mac in, so backups, restores and exploring can’t run from here. A managed cluster can let this Mac in (from $15 a month).")
+                            .font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button("Move to a managed cluster…") { model.openDatabaseStep() }.buttonStyle(DanteButtonStyle())
+                    }
+                }
                 Toggle(isOn: Binding(get: { model.backsUpNightly }, set: { model.backsUpNightly = $0 })) {
                     Text("Back up every night, keeping the last \(BackupSchedule.defaultKeep)").font(.dante(size: 12))
                 }

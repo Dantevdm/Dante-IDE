@@ -551,7 +551,7 @@ struct DeploySheet: View {
             sectionTitle(value.name, trailing: value.engine == "PG" ? "Postgres" : value.engine)
             HStack(alignment: .top, spacing: 10) {
                 choiceCard(chosen: !value.isManaged, symbol: "flask", title: "Dev database", price: "$7 a month",
-                           lines: ["512 MB, made with the app", "No backups or standby", "Reached with its password from anywhere", "Few connections"]) {
+                           lines: ["512 MB, made with the app", "No backups or standby", "Only the app can reach it: no backups or browsing from your Mac", "Few connections"]) {
                     withAnimation(.snappy) { store.wrappedValue.cluster = nil }
                 }
                 choiceCard(chosen: value.isManaged, symbol: "externaldrive.badge.checkmark", title: "Managed cluster", price: "billed with the cluster",

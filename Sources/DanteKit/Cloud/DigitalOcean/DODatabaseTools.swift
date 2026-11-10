@@ -103,6 +103,14 @@ public struct PGConnection: Equatable, Sendable, CustomStringConvertible {
 
 /// pg_dump, pg_restore and psql on this Mac, and what Dante runs with them.
 public enum PGTools {
+    /// Whether the database's port takes a connection from this Mac at all. A cloud
+    /// database's firewall drops packets rather than refusing them, so without this every tool
+    /// waits out its own timeout and reports "timeout expired".
+    public static func answers(_ connection: PGConnection, timeout: Int = 6) async -> Bool {
+        await Shell.run(["/usr/bin/nc", "-z", "-G", String(timeout), "-w", String(timeout), connection.host, String(connection.port)],
+                        in: FileManager.default.temporaryDirectory, timeout: .seconds(timeout + 4), withoutMise: true).succeeded
+    }
+
     /// Where the tools usually are: PATH first, then Homebrew's keg-only libpq and Postgres.app.
     public static let folders = ["/opt/homebrew/opt/libpq/bin", "/usr/local/opt/libpq/bin", "/opt/homebrew/bin", "/usr/local/bin",
                                  "/Applications/Postgres.app/Contents/Versions/latest/bin"]

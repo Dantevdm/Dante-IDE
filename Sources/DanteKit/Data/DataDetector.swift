@@ -51,6 +51,15 @@ public enum DataDetector {
         return folder.isEmpty ? "file at the project root" : "in \(folder)/"
     }
 
+    /// A file kept by a tool rather than the app: inside a dot folder (`.angular/cache`,
+    /// `.next`, `.dante`) or a cache or temp folder. Angular's build cache, for one, is a SQLite
+    /// file named `angular-compiler.db`.
+    static func isToolFile(_ path: String) -> Bool {
+        path.split(separator: "/").dropLast().contains { folder in
+            folder.hasPrefix(".") || ["cache", "caches", ".cache", "tmp", "temp", "coverage", "out"].contains(folder.lowercased())
+        }
+    }
+
     static let ignoredFolders = ["node_modules/", ".git/", "build/", "dist/", ".build/", "vendor/", "target/", "Pods/", ".venv/", "venv/"]
 
     public static func detect(paths: [String], compose: ComposeFile? = nil, read: (String) -> String? = { _ in nil }) -> DataProfile {
@@ -135,7 +144,7 @@ public enum DataDetector {
         // SQLite files in the repo.
         for path in files {
             let ext = (path as NSString).pathExtension.lowercased()
-            guard ["sqlite", "sqlite3", "db", "db3"].contains(ext), !path.contains("/.dante/"), !path.hasPrefix(".dante/") else { continue }
+            guard ["sqlite", "sqlite3", "db", "db3"].contains(ext), !Self.isToolFile(path) else { continue }
             signal(.sqlite, "\((path as NSString).lastPathComponent)", path)
             add(DatabaseConnection(name: (path as NSString).lastPathComponent, engine: .sqlite, database: (path as NSString).lastPathComponent,
                                    file: path, origin: .detected, note: Self.folderNote(path)))

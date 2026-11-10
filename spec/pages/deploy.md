@@ -94,6 +94,7 @@ Deploy puts the project on DigitalOcean's App Platform and keeps an eye on it: s
 - A step whose command needs `{url}` can't run before the app has an address; Run in Console is off until the app is live.
 - Nothing in the code about getting in: the card shows only on a live app, saying so, with Ask the agent to write it.
 
+- A database whose firewall drops this Mac's connection (every dev database, which only its app may reach, or a managed cluster without this Mac among its trusted sources): Dante checks the port before Explore, backups, restores and Start fresh, and says why in words instead of waiting out a timeout. A dev database then shows "Only <app> can reach this dev database" with Move to a managed cluster…, which opens the wizard's Database step. The wizard's dev database card says it can't be reached from your Mac.
 - Database work needs the app running (Dante reaches the database through it) and pg_dump, pg_restore or psql on this Mac (found on PATH, Homebrew's libpq or Postgres.app); when missing, the card says to install with `brew install libpq`, typed by you. An older pg_dump than the server, or a managed cluster whose trusted sources leave this Mac out, is explained in words.
 - No running part of the app has the database's address: the card says to bind DATABASE_URL to `${db.DATABASE_URL}` in a service and deploy again. An image without a shell can't be asked, and says so.
 - The connection's password is used for one command (in PGPASSWORD, never on a command line) and, for Explore in Data, kept in the Keychain; it's never shown.

@@ -91,3 +91,10 @@ import Testing
     #expect(app.map { LiveLoadTest.isAppAddress("other.ondigitalocean.app", app: $0) } == false)
     #expect(DOSignIn.scopes.contains("billing:read"))
 }
+
+@Test func toolCachesAreNotDatabases() {
+    let profile = DataDetector.detect(paths: ["admin/.angular/cache/21.0.0/angular-compiler.db", "web/.next/cache/x.db",
+                                              "tmp/scratch.sqlite", "data/app.db"])
+    #expect(profile.connections.map(\.file) == ["data/app.db"])
+    #expect(DataDetector.isToolFile(".dante/state.db"))
+}

@@ -39,7 +39,11 @@ Data connects to the project's databases: browse tables, run queries, read query
 - Unreachable: the error, with a hint (container stopped, wrong port, password).
 - A table from the Map that isn't in the database yet: a note that the migrations haven't run against it.
 
+- A cloud database that doesn't answer at all (its firewall drops the connection): "Only its app can reach it" in amber, with a banner saying DigitalOcean lets only the app in (a dev database can't let this Mac in; a managed cluster needs this Mac among its trusted sources), the error, and Open Deploy.
+
 ## Edge cases
+- SQLite files kept by tools aren't databases: anything inside a dot folder (`.angular/cache`'s `angular-compiler.db`, `.next`, `.dante`) or a cache, tmp or coverage folder is left out.
+- Remove from Dante… on a detected connection hides it in Data on this Mac (the file and the code that found it stay); a saved one is forgotten with its password.
 - A compose database that doesn't publish its port (no `ports:`) is reached with the client inside its container ("psql inside the db container"), even when psql is installed on this Mac, since nothing listens on localhost for it.
 - Statements run one per argument with a marker after each, so results line up.
 - Saved connections are per Mac, never in the repo.

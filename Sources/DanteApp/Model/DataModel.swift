@@ -14,6 +14,8 @@ final class DataModel {
         case needsPassword(String)
         /// Nothing is listening; the compose service may be stopped.
         case offline(String)
+        /// A cloud database whose firewall lets only its app in (the connection timed out).
+        case walledOff(String)
         case failed(String)
     }
 
@@ -89,10 +91,20 @@ final class DataModel {
     /// Detected and saved connections; a saved one replaces the detected one it came from.
     var connections: [DatabaseConnection] {
         let savedIDs = Set(saved.map(\.id))
-        let found = profile.connections.filter { !savedIDs.contains($0.id) }
+        let hidden = hiddenIDs
+        let found = profile.connections.filter { !savedIDs.contains($0.id) && !hidden.contains($0.id) }
         let known = savedIDs.union(found.map(\.id))
-        return saved + found + containers.filter { !known.contains($0.id) }
+        return saved + found + containers.filter { !known.contains($0.id) && !hidden.contains($0.id) }
     }
+
+    /// Detected connections the person removed: found again on every load, so remembered per
+    /// project on this Mac and left out.
+    private var hiddenIDs: Set<String> {
+        _ = hiddenChanged
+        return root.map { Set(UserDefaults.standard.stringArray(forKey: Self.hiddenKey($0)) ?? []) } ?? []
+    }
+    private var hiddenChanged = 0
+    private static func hiddenKey(_ root: URL) -> String { "data.hidden." + root.path }
 
     var selected: DatabaseConnection? {
         connections.first { $0.id == selectedID } ?? connections.first
@@ -211,6 +223,8 @@ final class DataModel {
         if lower.contains("connection refused") || lower.contains("could not connect") || lower.contains("can't connect")
             || lower.contains("is the server running") || lower.contains("service \"") && lower.contains("is not running")
             || lower.contains("no such service") || lower.contains("timeout expired") {
+            // A cloud database that doesn't answer at all is behind its firewall, not stopped.
+            if connection.cloud != nil, lower.contains("timeout") || lower.contains("timed out") { return .walledOff(error) }
             return .offline(error)
         }
         return .failed(error)
@@ -265,6 +279,10 @@ final class DataModel {
         guard let root else { return }
         try? store.remove(connection.id, for: root)
         DatabasePasswords.set(nil, for: connection, project: root)
+        if connection.origin != .saved {
+            UserDefaults.standard.set(Array(hiddenIDs.union([connection.id])).sorted(), forKey: Self.hiddenKey(root))
+            hiddenChanged += 1
+        }
         saved = store.connections(for: root)
         if selectedID == connection.id { selectedID = connections.first?.id }
     }
