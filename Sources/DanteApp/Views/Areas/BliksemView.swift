@@ -107,6 +107,15 @@ struct BliksemView: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.dante(size: 13, design: .monospaced))
                 .disabled(model.running != nil)
+            if model.targetsLive {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "cloud.fill").foregroundStyle(theme.amber.color)
+                    Text("The live app on DigitalOcean: real traffic, at most \(LiveLoadTest.maxUsers) users at once, load tests only. Autoscaling may add copies (and cost) while it runs, and people using the app feel it.")
+                        .font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button("Stop allowing") { model.forgetLive(root: workspace.url) }.buttonStyle(DanteButtonStyle()).disabled(model.running != nil)
+                }
+            }
             if model.suggestions.isEmpty, model.findingTargets {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.mini)
@@ -137,7 +146,7 @@ struct BliksemView: View {
         switch model.mode {
         case .load:
             Card("Load") {
-                Stepper(value: $model.peakUsers, in: 1...(Bliksem.maxUsers / 2), step: model.peakUsers < 10 ? 1 : 5) {
+                Stepper(value: $model.peakUsers, in: 1...((model.targetsLive ? LiveLoadTest.maxUsers : Bliksem.maxUsers) / 2), step: model.peakUsers < 10 ? 1 : 5) {
                     settingRow("Users at peak", "\(model.peakUsers), spiking to \(min(model.peakUsers * 2, Bliksem.maxUsers))")
                 }
                 .disabled(model.running != nil)

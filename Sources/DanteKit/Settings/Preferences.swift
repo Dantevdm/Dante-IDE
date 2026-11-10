@@ -151,6 +151,9 @@ public final class Preferences {
     public var usesGeist: Bool { didSet { defaults.set(usesGeist, forKey: Keys.usesGeist) } }
     /// A macOS notification when a monitoring alarm starts firing. Off until asked for.
     public var notifiesOnAlarms: Bool { didSet { defaults.set(notifiesOnAlarms, forKey: Keys.notifiesOnAlarms) } }
+    /// A notification when a deployed app's deployment fails, it keeps restarting or a health
+    /// check goes red, on any page; the companion hears it too.
+    public var notifiesOnDeploy: Bool { didSet { defaults.set(notifiesOnDeploy, forKey: Keys.notifiesOnDeploy) } }
     /// A notification when a pipeline run starts or finishes. Off until asked for.
     public var notifiesOnPipelines: Bool { didSet { defaults.set(notifiesOnPipelines, forKey: Keys.notifiesOnPipelines) } }
     /// Hands: the agent in charge may open apps, find folders and use the keyboard and mouse.
@@ -214,6 +217,7 @@ public final class Preferences {
         usesGeist = bool(Keys.usesGeist, true)
         notifiesOnAlarms = bool(Keys.notifiesOnAlarms, false)
         notifiesOnClaude = bool(Keys.notifiesOnClaude, false)
+        notifiesOnDeploy = bool(Keys.notifiesOnDeploy, true)
         notifiesOnPipelines = bool(Keys.notifiesOnPipelines, false)
         companionEnabled = bool(Keys.companionEnabled, false)
         handsEnabled = bool(Keys.handsEnabled, false)
@@ -283,6 +287,7 @@ public final class Preferences {
         static let usesGeist = "usesGeist"
         static let notifiesOnAlarms = "notifiesOnAlarms"
         static let notifiesOnClaude = "notifiesOnClaude"
+        static let notifiesOnDeploy = "notifiesOnDeploy"
         static let notifiesOnPipelines = "notifiesOnPipelines"
         static let companionEnabled = "companionEnabled"
         static let handsEnabled = "handsEnabled"

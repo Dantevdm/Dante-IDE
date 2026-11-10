@@ -370,6 +370,11 @@ public enum DOSpecSend {
         public var component: String?
         public var key: String
         public var id: String { (component.map { $0 + "/" } ?? "") + key }
+
+        public init(component: String?, key: String) {
+            self.component = component
+            self.key = key
+        }
     }
 
     /// Fills `spec` for sending. `tags` maps a component to the image tag just pushed;

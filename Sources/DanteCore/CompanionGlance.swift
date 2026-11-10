@@ -56,6 +56,9 @@ public struct CompanionNotice: Equatable, Sendable {
             let detail = job.state == .failed ? job.label : firstLine(of: job.lastReply) ?? job.label
             return CompanionNotice(kind: .open, title: title, body: job.title + (detail.isEmpty ? "" : "\n" + detail),
                                    project: id, approval: nil, identifier: "job." + job.id, sounds: true)
+        case .trouble(let id, let text):
+            return CompanionNotice(kind: .open, title: "Trouble · \(project(id)?.name ?? "Dante")", body: text,
+                                   project: id, approval: nil, identifier: "trouble." + id + "." + text, sounds: true)
         case .replied(let id, let job, let text):
             let lead = project(id)?.lead ?? "Dante"
             let name = project(id)?.name ?? "Dante"

@@ -72,6 +72,7 @@ final class BliksemModel {
         if self.root != root {
             self.root = root
             target = UserDefaults.standard.string(forKey: Self.targetKey(root)) ?? ""
+            liveHosts = UserDefaults.standard.stringArray(forKey: Self.liveKey(root)) ?? []
             routesLoaded = false
             routes = []
         }
@@ -168,9 +169,22 @@ final class BliksemModel {
 
     // MARK: Running
 
+    /// The project's allowed hosts plus the live app's address once the person confirmed it.
+    private func hosts(root: URL) -> BrowserHosts {
+        let local = BrowserHosts.load(projectRoot: root)
+        return BrowserHosts(extra: local.extra + liveHosts)
+    }
+
     private func checkedTarget(root: URL) -> URL? {
-        switch BliksemTarget.check(target, hosts: BrowserHosts.load(projectRoot: root)) {
+        switch BliksemTarget.check(target, hosts: hosts(root: root)) {
         case .success(let url):
+            if targetsLive {
+                guard mode == .load else {
+                    problem = "On the live app only load tests run. Fuzz and chaos stay on this Mac's servers."
+                    return nil
+                }
+                peakUsers = min(peakUsers, LiveLoadTest.maxUsers / 2)
+            }
             problem = nil
             UserDefaults.standard.set(target, forKey: Self.targetKey(root))
             return url
@@ -187,7 +201,7 @@ final class BliksemModel {
             problem = "Choose at least one route to send to."
             return
         }
-        let hosts = BrowserHosts.load(projectRoot: root)
+        let hosts = hosts(root: root)
         running = mode
         switch mode {
         case .load:
@@ -273,6 +287,37 @@ final class BliksemModel {
     /// quit or a crash is put right the next time the page opens.
     private static func restoreKey(_ root: URL) -> String { "bliksem.restore." + root.path }
     private static func targetKey(_ root: URL) -> String { "bliksem.target." + root.path }
+    private static func liveKey(_ root: URL) -> String { "bliksem.liveHosts." + root.path }
+
+    // MARK: The live app
+
+    /// The deployed app's own addresses the person allowed load tests on, for this project.
+    var liveHosts: [String] = []
+
+    /// Whether the target is one of them.
+    var targetsLive: Bool {
+        guard let host = URL(string: target.contains("://") ? target : "https://" + target)?.host(percentEncoded: false)?.lowercased() else { return false }
+        return liveHosts.contains(host)
+    }
+
+    /// Allows load tests on the live app's address (confirmed in Deploy) and points Load at it.
+    func allowLive(_ url: URL, root: URL) {
+        guard let host = url.host(percentEncoded: false)?.lowercased() else { return }
+        if !liveHosts.contains(host) { liveHosts.append(host) }
+        UserDefaults.standard.set(liveHosts, forKey: Self.liveKey(root))
+        target = url.absoluteString
+        mode = .load
+        peakUsers = min(peakUsers, LiveLoadTest.maxUsers / 2)
+        problem = nil
+    }
+
+    /// Takes the live address off the list again.
+    func forgetLive(root: URL) {
+        let host = URL(string: target)?.host(percentEncoded: false)?.lowercased()
+        liveHosts.removeAll { $0 == host }
+        UserDefaults.standard.set(liveHosts, forKey: Self.liveKey(root))
+        target = ""
+    }
 
     private static func remember(restore plan: ChaosPlan, root: URL) {
         guard let command = plan.fault.restoring(plan.service) else { return }

@@ -11,6 +11,8 @@ public enum CompanionForeman {
         case waiting(project: String, CompanionSnapshot.Approval)
         /// A job stopped working: ready to review, stopped, or asking.
         case jobChanged(project: String, CompanionSnapshot.Job)
+        /// Something went wrong with the deployed app: a failed deploy, restarts, a red health check.
+        case trouble(project: String, text: String)
     }
 
     /// What changed between two snapshots that's worth saying, in order.
@@ -27,6 +29,10 @@ public enum CompanionForeman {
             for job in project.jobs {
                 guard let was = jobs[job.id], was.state != job.state else { continue }
                 if [.ready, .failed, .asking].contains(job.state) { events.append(.jobChanged(project: project.id, job)) }
+            }
+            let seen = Set(previous.trouble ?? [])
+            for text in project.trouble ?? [] where !seen.contains(text) {
+                events.append(.trouble(project: project.id, text: text))
             }
             let known = Set(previous.approvals.map(\.id))
             for approval in project.approvals where !known.contains(approval.id) {
@@ -50,6 +56,8 @@ public enum CompanionForeman {
             case .failed: return "The job \(job.title) in \(name(project)) stopped. \(job.label)."
             default: return "The job \(job.title) in \(name(project)) has a question."
             }
+        case .trouble(let project, let text):
+            return "Trouble with \(name(project)): \(text)"
         }
     }
 

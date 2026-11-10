@@ -112,8 +112,13 @@ final class DeployModel {
         person = DOAccount.person
         await readProject(workspace: workspace)
         if signedIn { await refresh() }
+        let files = workspace.files, read = Self.reader(root)
+        pools = await Task.detached { ConnectionPool.detect(files: files, read: read) }.value
         analyse(workspace: workspace)
     }
+
+    /// Database connection pools in the code, for the advice.
+    var pools: [ConnectionPool]?
 
     /// The file, git's view of the branch, and the plan Dante would write.
     func readProject(workspace: Workspace) async {
@@ -166,7 +171,7 @@ final class DeployModel {
     func refresh() async {
         guard signedIn else { return }
         loading = true
-        defer { loading = false }
+        defer { loading = false; lastRefreshed = .now }
         do throws(DOClient.Failure) {
             if sizes.isEmpty { sizes = (try? await client.instanceSizes()) ?? [] }
             if let id = linkedAppID {
@@ -246,8 +251,10 @@ final class DeployModel {
             ignores[folder] = ignore.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
                 .contains { [".env", ".env*", "**/.env", "*.env", "**/.env*", "*"].contains($0) }
         }
-        let inputs = DOAdvice.Inputs(file: spec, fileText: specText, live: app, dockerfiles: dockerfiles, ignoresEnv: ignores, envFiles: envFiles,
+        var inputs = DOAdvice.Inputs(file: spec, fileText: specText, live: app, dockerfiles: dockerfiles, ignoresEnv: ignores, envFiles: envFiles,
                                      headers: headers, health: health, alerts: alerts, restarts: restarts, sizes: sizes)
+        inputs.pools = pools ?? []
+        inputs.clusterSizes = Dictionary(clusters.compactMap { cluster in cluster.size.map { (cluster.name, $0) } }, uniquingKeysWith: { first, _ in first })
         advice = DOAdvice.analyse(inputs)
     }
 
@@ -362,6 +369,7 @@ final class DeployModel {
     var clusters: [DODatabaseCluster] = []
     var setupProblem: String?
     private var isDemo = false
+    var isDemoMode: Bool { isDemo }
 
     var setupChanged: Bool { setup != setupStart || specText == nil }
 
@@ -386,6 +394,9 @@ final class DeployModel {
         cancelDeploy()
         wizardStep = nil
         resizing = nil
+        editingVariables = false
+        rotating = []
+        costAcknowledged = false
         setup = nil
         setupStart = nil
         setupProblem = nil
@@ -491,6 +502,7 @@ final class DeployModel {
     func prepare(workspace: Workspace) {
         guard stage == nil || stage == .needsSecrets || deployProblem != nil else { return }
         deployProblem = nil
+        costAcknowledged = false
         guard let specText else {
             deployProblem = "Write \(DOAppSpec.path) first."
             return
@@ -507,6 +519,7 @@ final class DeployModel {
             var probe = object
             databaseBindings = DOSpecSend.databaseBindings(in: object)
             needed = DOSpecSend.prepare(&probe, secrets: typedSecrets, live: live)
+            addRotating()
             envMatches = Self.envValues(for: needed, spec: object, root: workspace.url)
             filledFromEnv = []
             let planned = DOPlan.make(projectName: workspace.url.lastPathComponent, files: workspace.files, read: Self.reader(workspace.url),
@@ -551,6 +564,14 @@ final class DeployModel {
         }
     }
 
+    /// Secrets being changed are asked for too; the typed value wins over the kept one.
+    private func addRotating() {
+        for id in rotating.sorted() where !needed.contains(where: { $0.id == id }) && (typedSecrets[id] ?? "").isEmpty {
+            let parts = id.split(separator: "/", maxSplits: 1).map(String.init)
+            needed.append(parts.count == 2 ? .init(component: parts[0], key: parts[1]) : .init(component: nil, key: id))
+        }
+    }
+
     /// Typed secrets are in; price it and ask.
     func secretsEntered() {
         needed = needed.filter { (typedSecrets[$0.id] ?? "").isEmpty }
@@ -583,6 +604,7 @@ final class DeployModel {
         stage = .checking
         databaseBindings = DOSpecSend.databaseBindings(in: object)
         needed = DOSpecSend.prepare(&object)
+        addRotating()
         envMatches = Self.envValues(for: needed, spec: object, root: workspace.url)
         let planned = DOPlan.make(projectName: workspace.url.lastPathComponent, files: workspace.files, read: Self.reader(workspace.url),
                                   compose: ComposeFile.load(projectRoot: workspace.url), source: .builtHere, branch: branch, region: region).builds
@@ -614,6 +636,8 @@ final class DeployModel {
         app = DOApp.parse(wire)
         clusters = [DODatabaseCluster(id: "1", name: "acme-db", engine: "pg", version: "16", region: "fra1", size: "db-s-1vcpu-2gb", status: "online", numNodes: 1)]
         clusterBackups["1"] = [DODatabaseBackup(createdAt: "2026-11-10T03:12:00Z", sizeGigabytes: 0.42), DODatabaseBackup(createdAt: "2026-11-09T03:11:00Z", sizeGigabytes: 0.41)]
+        monthToDate = 23.41
+        trouble = ["api restarted 4 times today."]
     }
 
     static let demoSizes: [DOInstanceSize] = [
@@ -869,6 +893,20 @@ final class DeployModel {
 
     /// Backups Dante made on this Mac, by database, newest first.
     var localBackups: [String: [URL]] = [:]
+    /// Bumped when the nightly setting changes, so views redraw.
+    var nightlyChanged = 0
+    var nightlyProblem: String?
+    /// What's wrong with the live app now, in short lines (`DeployWatch`), for the companion.
+    var trouble: [String] = []
+    var watched: DeployWatch.State?
+    var lastRefreshed: Date?
+    /// The team's bill this month so far, and when it was read.
+    var monthToDate: Double?
+    var spendingLoaded: Date?
+    var spendingProblem: String?
+    var spendingChanged = 0
+    /// The person read the cost warning on the review step and still wants to deploy.
+    var costAcknowledged = false
     /// A managed cluster's daily backups, by cluster id.
     var clusterBackups: [String: [DODatabaseBackup]] = [:]
     /// What's being done to a database ("Backing up db…"), one thing at a time.
@@ -877,6 +915,10 @@ final class DeployModel {
     var databaseProblem: String?
     /// The component whose size the wizard opened on (Resize…), showing only that one.
     var resizing: String?
+    /// The wizard opened on the variables alone (Edit variables…).
+    var editingVariables = false
+    /// Secrets the person wants to give a new value (`Needed.id`), asked for like missing ones.
+    var rotating: Set<String> = []
 
     // MARK: Getting in
 

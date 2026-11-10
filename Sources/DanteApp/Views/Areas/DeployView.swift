@@ -49,6 +49,9 @@ struct DeployView: View {
                 GettingInCard(session: session, workspace: workspace)
             }
             AdviceCard(session: session, workspace: workspace)
+            if model.signedIn || model.isDemoMode {
+                SpendingCard(model: model)
+            }
         }
         #if DEBUG
         .task {
@@ -100,6 +103,8 @@ struct DeployView: View {
             if let app = model.app {
                 Menu {
                     Button("Open in DigitalOcean") { NSWorkspace.shared.open(URL(string: "https://cloud.digitalocean.com/apps/\(app.id)")!) }
+                    Toggle("Notify me when something goes wrong", isOn: Bindable(Preferences.shared).notifiesOnDeploy)
+                    Divider()
                     Button("Unlink from this project") { model.unlink() }
                     Button("Sign out of DigitalOcean") { model.signOut() }
                     Divider()
@@ -555,9 +560,22 @@ private struct ComponentsCard: View {
     let model: DeployModel
     let app: DOApp
 
+    @State private var confirmingLoad = false
+
     var body: some View {
         Card("Components") {
-            Text("Last hour").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+            HStack(spacing: 8) {
+                Text("Last hour").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                Button { model.openVariables() } label: { Label("Variables…", systemImage: "list.bullet.rectangle") }
+                    .buttonStyle(DanteButtonStyle())
+                    .disabled(model.isDeploying || model.specText == nil)
+                    .help(model.specText == nil ? "Needs \(DOAppSpec.path) in the project." : "Change a variable or give a secret a new value, and redeploy, without the other steps.")
+                if app.liveURL != nil, app.active != nil {
+                    Button { confirmingLoad = true } label: { Label("Load-test…", systemImage: "bolt.fill") }
+                        .buttonStyle(DanteButtonStyle())
+                        .help("Bliksem's load test against the live app, to see how much it handles, say after a resize.")
+                }
+            }
         } content: {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array((app.spec?.components ?? []).enumerated()), id: \.offset) { index, item in
@@ -565,6 +583,16 @@ private struct ComponentsCard: View {
                     row(item.kind, item.component)
                 }
             }
+        }
+        .confirmationDialog("Load-test the live app?", isPresented: $confirmingLoad) {
+            Button("Allow and open Bliksem") {
+                guard let url = app.liveURL, let root = session.workspace?.url else { return }
+                session.bliksem.allowLive(url, root: root)
+                session.area = .bliksem
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Bliksem sends real requests to \(app.liveURL?.host ?? "the app"): a warm-up, a ramp and a spike, at most \(LiveLoadTest.maxUsers) users at once, reads unless you choose writes. People using it feel it, autoscaling may add copies and cost while it runs, and DigitalOcean or the app may rate-limit you. Fuzz and chaos stay on this Mac.")
         }
     }
 
@@ -720,6 +748,14 @@ private struct DatabaseCard: View {
             if cluster == nil {
                 Text("DigitalOcean doesn’t back up dev databases. Backups made here are the only ones; for real data, move to a managed cluster in Deploy again › Database.")
                     .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                Toggle(isOn: Binding(get: { model.backsUpNightly }, set: { model.backsUpNightly = $0 })) {
+                    Text("Back up every night, keeping the last \(BackupSchedule.defaultKeep)").font(.dante(size: 12))
+                }
+                .toggleStyle(.switch).controlSize(.small)
+                .help("After \(BackupSchedule.defaultHour) am, the first time Dante is open with this project. Only nightly backups are deleted; ones you make stay.")
+                if let problem = model.nightlyProblem {
+                    Label(problem, systemImage: "moon.zzz").font(.dante(size: 11.5)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
+                }
             }
             if app.active == nil {
                 Text("Once the app is running, Dante can reach the database through it.").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
@@ -1102,5 +1138,86 @@ private struct AdviceRow: View {
         case .low: theme.accent.color
         case .info: theme.text3.color
         }
+    }
+}
+
+// MARK: Spending
+
+/// The team's bill this month, a budget, and how much one deploy may add before Dante asks.
+private struct SpendingCard: View {
+    @Environment(\.theme) private var theme
+    let model: DeployModel
+
+    var body: some View {
+        Card("Spending") {
+            if let loaded = model.spendingLoaded {
+                Text("Read \(loaded.formatted(.relative(presentation: .named)))").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+            }
+        } content: {
+            if let problem = model.spendingProblem {
+                HStack(spacing: 10) {
+                    Text(problem).font(.dante(size: 12)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    if problem.contains("Sign in again") { Button("Sign in again") { model.signInAgain() }.buttonStyle(DanteButtonStyle()) }
+                }
+            }
+            HStack(alignment: .top, spacing: 26) {
+                figure("This month so far", model.monthToDate.map(money), detail: model.person?.team.map { "\($0) team, every app and service" })
+                if let spent = model.monthToDate {
+                    figure("On track for", money(CostGuard.projected(monthToDate: spent, now: .now)), detail: "at this month’s pace")
+                }
+                if let app = model.app, let monthly = model.liveMonthly {
+                    figure(app.name, money(monthly) + " a month", detail: "from its sizes")
+                }
+                Spacer(minLength: 0)
+            }
+            if let budget = model.budget, let spent = model.monthToDate {
+                let used = CostGuard.used(monthToDate: spent, budget: budget)
+                let projected = CostGuard.used(monthToDate: CostGuard.projected(monthToDate: spent, now: .now), budget: budget)
+                VStack(alignment: .leading, spacing: 5) {
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 4).fill(theme.line.color)
+                            RoundedRectangle(cornerRadius: 4).fill((projected > 1 ? theme.amber : theme.accent).color.opacity(0.35))
+                                .frame(width: proxy.size.width * min(1, projected))
+                            RoundedRectangle(cornerRadius: 4).fill((used > 1 ? theme.red : theme.accent).color)
+                                .frame(width: proxy.size.width * min(1, used))
+                        }
+                    }
+                    .frame(height: 8)
+                    Text(used > 1 ? "Over the \(money(budget)) budget." : projected > 1 ? "\(Int(used * 100))% of the \(money(budget)) budget, and on track to go over it."
+                         : "\(Int(used * 100))% of the \(money(budget)) budget.")
+                        .font(.dante(size: 11.5)).foregroundStyle((used > 1 || projected > 1 ? theme.amber : theme.text3).color)
+                }
+            }
+            HStack(spacing: 18) {
+                limitField("Monthly budget", value: Binding(get: { model.budget }, set: { model.budget = $0 }),
+                           help: "The whole team's bill; the bar above fills against it. This Mac only.")
+                limitField("Ask when a deploy adds more than", value: Binding(get: { model.maxRaise }, set: { model.maxRaise = $0 }),
+                           help: "A deploy that raises this app's monthly price by more than this needs a tick on the review step before it goes. Empty for no limit.")
+                Spacer(minLength: 0)
+            }
+        }
+        .task(id: model.signedIn) { await model.loadSpending() }
+    }
+
+    private func money(_ value: Double) -> String { value.formatted(.currency(code: "USD").precision(.fractionLength(value < 100 ? 2 : 0))) }
+
+    private func figure(_ title: String, _ value: String?, detail: String?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+            Text(value ?? "–").font(.dante(size: 19, weight: .semibold)).foregroundStyle(theme.text.color).monospacedDigit()
+            if let detail { Text(detail).font(.dante(size: 11)).foregroundStyle(theme.text3.color) }
+        }
+    }
+
+    private func limitField(_ title: String, value: Binding<Double?>, help: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title).font(.dante(size: 12)).foregroundStyle(theme.text2.color)
+            TextField("none", value: value, format: .number.precision(.fractionLength(0...2)))
+                .textFieldStyle(.roundedBorder).font(.dante(size: 12)).frame(width: 70)
+            Text("$").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+        }
+        .help(help)
     }
 }

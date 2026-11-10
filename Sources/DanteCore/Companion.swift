@@ -259,8 +259,11 @@ public struct CompanionSnapshot: Codable, Equatable, Sendable {
         public var jobs: [Job]
         public var approvals: [Approval]
         public var approvalMode: CompanionApprovalMode?
+        /// What's wrong with the deployed app right now ("The deploy failed"), one line each.
+        public var trouble: [String]?
 
-        public init(id: String, name: String, lead: String, working: Bool, lastReply: String, jobs: [Job], approvals: [Approval], approvalMode: CompanionApprovalMode? = nil) {
+        public init(id: String, name: String, lead: String, working: Bool, lastReply: String, jobs: [Job], approvals: [Approval], approvalMode: CompanionApprovalMode? = nil,
+                    trouble: [String]? = nil) {
             self.id = id
             self.name = name
             self.lead = lead
@@ -269,6 +272,7 @@ public struct CompanionSnapshot: Codable, Equatable, Sendable {
             self.jobs = jobs
             self.approvals = approvals
             self.approvalMode = approvalMode
+            self.trouble = trouble
         }
     }
 

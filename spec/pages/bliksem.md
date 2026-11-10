@@ -32,6 +32,7 @@ Bliksem puts the running system under strain in three ways: Hammer it (load: ram
 - Nothing this project runs is listening: says to start the app or type its address.
 - No compose service running (Break things): says so, with Open Services.
 - An address that isn't local or a test host: refused with a sentence saying how to allow a test host.
+- The live app (allowed from Deploy › Components › Load-test…): an amber cloud line under the target says it's real traffic, at most 100 users, load tests only, that autoscaling may add copies and cost and people using it feel it, with Stop allowing.
 - Nothing answered during a load run: the verdict asks whether the app is running at that address.
 
 ## Edge cases
@@ -41,6 +42,7 @@ Bliksem puts the running system under strain in three ways: Hammer it (load: ram
 - A fuzz response is judged against the route's normal answer, so a route that already fails isn't blamed on the garbage. Stack traces count only on error answers.
 - Chaos only touches services declared in this project's compose file and running; Keep running is told to leave the service alone during the run.
 - Fuzz with writes on sends bodies to write routes; without, writes are skipped.
+- The deployed app's own address is allowed only after Load-test… is confirmed on the Deploy page, kept per project on this Mac until Stop allowing; on it only Hammer it runs (fuzz and chaos are refused with a sentence) and users at peak go to 50 at most.
 
 ## Acceptance
 - Against an app on localhost, Hammer it draws bars each second and ends with a verdict and per-route figures.

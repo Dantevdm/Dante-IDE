@@ -382,6 +382,22 @@ private final class SilentPhone: @unchecked Sendable {
         #expect(CompanionForeman.events(from: nil, to: after).isEmpty)
     }
 
+    @Test func troubleWithADeployedAppIsSaidOnceAndNotified() {
+        func with(_ trouble: [String]?) -> CompanionSnapshot {
+            CompanionSnapshot(server: "Mac", projects: [.init(id: "p", name: "shop", lead: "Claude", working: false, lastReply: "", jobs: [], approvals: [], trouble: trouble)])
+        }
+        let after = with(["api isn’t healthy."])
+        let events = CompanionForeman.events(from: with(nil), to: after)
+        #expect(events == [.trouble(project: "p", text: "api isn’t healthy.")])
+        #expect(CompanionForeman.spoken(events[0], in: after) == "Trouble with shop: api isn’t healthy.")
+        #expect(CompanionForeman.events(from: after, to: after).isEmpty)
+        let notice = CompanionNotice.make(events[0], in: after)
+        #expect(notice.title == "Trouble · shop" && notice.sounds)
+        // Older Macs send no trouble field; the snapshot still reads.
+        let decoded = try? JSONDecoder().decode(CompanionSnapshot.self, from: JSONEncoder().encode(with(nil)))
+        #expect(decoded?.projects.first?.trouble == nil)
+    }
+
     @Test func newApprovalsAndFinishedJobsAreSaid() {
         let run = CompanionSnapshot.Approval(id: "main/t", job: nil, from: "Main conversation", title: "Run go test ./...", detail: "go test ./...")
         let after = snapshot(jobState: .ready, approvals: [run])

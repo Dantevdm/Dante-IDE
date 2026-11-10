@@ -62,6 +62,11 @@ public struct CompanionTicker: Equatable, Sendable {
             now.append(Line(id: "ready", kind: .done, title: ready.count == 1 ? "1 job ready to review" : "\(ready.count) jobs ready to review",
                             detail: ready.prefix(2).map(\.1.title).joined(separator: " · ")))
         }
+        for project in snapshot.projects {
+            for (index, text) in (project.trouble ?? []).prefix(2).enumerated() {
+                now.append(Line(id: "trouble:\(project.id):\(index)", kind: .trouble, title: "Trouble in \(project.name)", detail: text))
+            }
+        }
         if now.isEmpty {
             now.append(Line(id: "quiet", kind: .quiet, title: "All quiet on \(snapshot.server)"))
         }
@@ -84,6 +89,8 @@ public struct CompanionTicker: Equatable, Sendable {
                 default: "A job in \(name(project)) has a question"
                 }
                 return Line(id: "n\(index)", kind: job.state == .failed ? .trouble : job.state == .ready ? .done : .waiting, title: title, detail: job.title, at: note.at)
+            case .trouble(let project, let text):
+                return Line(id: "n\(index)", kind: .trouble, title: "Trouble in \(name(project))", detail: text, at: note.at)
             }
         }
     }

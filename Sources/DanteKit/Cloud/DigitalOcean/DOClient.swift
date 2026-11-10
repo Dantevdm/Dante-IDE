@@ -199,6 +199,13 @@ public struct DOClient: Sendable {
         return try decode([DODatabaseCluster].self, data, key: "databases")
     }
 
+    /// The team's usage so far this month in dollars (`billing:read`).
+    public func monthToDate() async throws(Failure) -> Double? {
+        let data = try await send("GET", "customers/my/balance")
+        let value = object(data)["month_to_date_usage"]
+        return (value as? String).flatMap(Double.init) ?? (value as? Double)
+    }
+
     /// A managed cluster's daily backups (kept seven days), newest first.
     public func databaseBackups(_ clusterID: String) async throws(Failure) -> [DODatabaseBackup] {
         let data = try await send("GET", "databases/\(clusterID)/backups")

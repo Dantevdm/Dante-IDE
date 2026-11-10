@@ -162,7 +162,7 @@ struct DeploySheet: View {
 
     private var stepHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(model.resizing != nil && step == .parts ? "RESIZE" : "STEP \(step.rawValue + 1) OF \(Step.allCases.count)").font(.dante(size: 10.5, weight: .semibold)).tracking(0.7).foregroundStyle(theme.accent.color)
+            Text(model.resizing != nil && step == .parts ? "RESIZE" : model.editingVariables && step == .variables ? "VARIABLES" : "STEP \(step.rawValue + 1) OF \(Step.allCases.count)").font(.dante(size: 10.5, weight: .semibold)).tracking(0.7).foregroundStyle(theme.accent.color)
             Text(headline).font(.dante(size: 19, weight: .semibold)).foregroundStyle(theme.text.color)
             Text(explanation).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
         }
@@ -187,7 +187,9 @@ struct DeploySheet: View {
         case .source: "App Platform builds from a branch on your git host, or runs images Dante builds here and pushes to the registry."
         case .region: "Pick the region nearest the people who use the app: every request travels there and back."
         case .parts: model.resizing == nil ? "Sizes, how many copies run, and how App Platform checks each part is healthy." : "The app is updated in place: the database and its data stay, and the other parts keep their sizes. You see the new price before anything changes."
-        case .variables: "Environment variables per part. Secrets get their values when you deploy; DigitalOcean keeps them encrypted."
+        case .variables: model.editingVariables
+            ? "Change a value, or turn on New value beside a secret to replace it: you type the new one next, and the app redeploys with it. Nothing else changes."
+            : "Environment variables per part. Secrets get their values when you deploy; DigitalOcean keeps them encrypted."
         case .data: "A dev database to try things, or a managed cluster with backups for real data."
         case .reach: "Your own address for the app, and what DigitalOcean emails the team about."
         case .secrets: "Values the spec leaves out. They go once to DigitalOcean and Dante doesn’t keep them."
@@ -467,7 +469,7 @@ struct DeploySheet: View {
                     }
                     ForEach(part.wrappedValue.variables.indices, id: \.self) { at in
                         divider
-                        variableRow(part.variables[at], database: boundDatabase(part.wrappedValue.variables[at], in: setup.wrappedValue)) {
+                        variableRow(part.variables[at], part: part.wrappedValue.name, database: boundDatabase(part.wrappedValue.variables[at], in: setup.wrappedValue)) {
                             withAnimation(.snappy) { _ = part.wrappedValue.variables.remove(at: at) }
                         }
                     }
@@ -483,7 +485,7 @@ struct DeploySheet: View {
         return (setup.databases.first { $0.engine == "PG" } ?? setup.databases.first)?.name
     }
 
-    private func variableRow(_ variable: Binding<DOSetup.Variable>, database: String?, remove: @escaping () -> Void) -> some View {
+    private func variableRow(_ variable: Binding<DOSetup.Variable>, part: String, database: String?, remove: @escaping () -> Void) -> some View {
         let value = variable.wrappedValue
         return HStack(spacing: 8) {
             TextField("NAME", text: variable.key).textFieldStyle(.roundedBorder).font(.dante(size: 12, design: .monospaced)).frame(width: 200)
@@ -497,8 +499,20 @@ struct DeploySheet: View {
                 .background(RoundedRectangle(cornerRadius: 6).fill(theme.greenTint.color))
                 Spacer()
             } else if value.isSecret {
-                Text("asked for when you deploy").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-                Spacer()
+                let id = DOSpecSend.Needed(component: part, key: value.key).id
+                let live = model.app?.spec?.components.first { $0.component.name == part }?.component.envs?.contains { $0.key == value.key } ?? false
+                if live {
+                    Text(model.rotating.contains(id) ? "a new value, asked for next" : "kept as it is on DigitalOcean").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                    Spacer()
+                    Toggle("New value", isOn: Binding(get: { model.rotating.contains(id) }, set: { on in
+                        if on { model.rotating.insert(id) } else { model.rotating.remove(id); model.typedSecrets[id] = nil }
+                    }))
+                    .toggleStyle(.switch).controlSize(.mini).font(.dante(size: 11.5))
+                    .help("Replace the secret's value: you type the new one before deploying. Nothing is shown of the old one.")
+                } else {
+                    Text("asked for when you deploy").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
+                    Spacer()
+                }
             } else {
                 TextField("value", text: variable.value).textFieldStyle(.roundedBorder).font(.dante(size: 12, design: .monospaced))
             }
@@ -713,6 +727,18 @@ struct DeploySheet: View {
             }
             DeployRoute(nodes: routeSources, region: model.spec?.region ?? model.region, isNew: model.app == nil)
                 .modifier(Arrival(shown: shown, index: 0))
+            if let warning = model.costWarning {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(warning, systemImage: "dollarsign.circle").font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.amber.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Toggle("I know; deploy it anyway", isOn: Binding(get: { model.costAcknowledged }, set: { model.costAcknowledged = $0 }))
+                        .toggleStyle(.checkbox).font(.dante(size: 12))
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10).fill(theme.card.color))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.amber.color.opacity(0.6)))
+            }
             components.modifier(Arrival(shown: shown, index: 1))
             notes.modifier(Arrival(shown: shown, index: 2))
         }
@@ -857,7 +883,7 @@ struct DeploySheet: View {
         HStack(alignment: .center, spacing: 10) {
             if let problem = model.setupProblem, step < .secrets {
                 Label(problem, systemImage: "exclamationmark.triangle").font(.dante(size: 12)).foregroundStyle(theme.red.color).lineLimit(2)
-            } else if step == .reach || (model.resizing != nil && step == .parts) || (step < .reach && model.setupChanged && model.specText != nil) {
+            } else if step == .reach || (model.resizing != nil && step == .parts) || (model.editingVariables && step == .variables) || (step < .reach && model.setupChanged && model.specText != nil) {
                 Text(model.setupChanged ? "Your choices are saved to \(DOAppSpec.path) when you go on." : "\(DOAppSpec.path) is unchanged.")
                     .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             } else if step == .secrets, !model.needed.isEmpty {
@@ -872,13 +898,13 @@ struct DeploySheet: View {
             }
             Spacer()
             Button("Cancel") { model.closeWizard() }.buttonStyle(DanteButtonStyle()).keyboardShortcut(.cancelAction)
-            if step > .source, model.setup != nil || step == .review, !(model.resizing != nil && step == .parts) {
-                Button("Back") { go(to: model.resizing != nil && step == .secrets ? .parts : Step(rawValue: step.rawValue - 1) ?? .source) }
+            if step > .source, model.setup != nil || step == .review, !(model.resizing != nil && step == .parts), !(model.editingVariables && step == .variables) {
+                Button("Back") { go(to: model.resizing != nil && step == .secrets ? .parts : model.editingVariables && step == .secrets ? .variables : Step(rawValue: step.rawValue - 1) ?? .source) }
                     .buttonStyle(DanteButtonStyle())
                     .disabled(model.stage == .checking || (step == .secrets && model.setup == nil))
             }
             switch step {
-            case .reach, .parts where model.resizing != nil:
+            case .reach, .parts where model.resizing != nil, .variables where model.editingVariables:
                 Button(model.setupChanged ? "Save and price" : "Price it") {
                     forward = true
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.32)) { model.saveSetup(workspace: workspace) }
@@ -902,7 +928,7 @@ struct DeploySheet: View {
                     Label(model.app == nil ? "Deploy" : "Deploy again", systemImage: "icloud.and.arrow.up")
                 }
                 .buttonStyle(DanteButtonStyle(primary: true))
-                .disabled(model.stage != .confirming || model.registryFull != nil)
+                .disabled(model.stage != .confirming || model.registryFull != nil || (model.costWarning != nil && !model.costAcknowledged))
             default:
                 Button("Next") { go(to: Step(rawValue: step.rawValue + 1) ?? .review) }
                     .buttonStyle(DanteButtonStyle(primary: true)).keyboardShortcut(.defaultAction)

@@ -136,7 +136,8 @@ final class CompanionHub {
                                              lead: session.agentName, working: working,
                                              lastReply: CompanionSnapshot.Job.trimmed(TranscriptItem.lastReply(in: session.claude?.items ?? [])),
                                              jobs: jobs, approvals: session.inbox.map(CompanionSnapshot.Approval.init),
-                                             approvalMode: session.claude.flatMap { CompanionApprovalMode(rawValue: $0.approvalLevel.rawValue) })
+                                             approvalMode: session.claude.flatMap { CompanionApprovalMode(rawValue: $0.approvalLevel.rawValue) },
+                                             trouble: session.deploy.trouble.isEmpty ? nil : session.deploy.trouble)
         }
         let open = Set(projects.map(\.id))
         let recent = recentProjects().filter { !open.contains($0.id) }.map { CompanionSnapshot.Recent(id: $0.id, name: $0.url.lastPathComponent) }

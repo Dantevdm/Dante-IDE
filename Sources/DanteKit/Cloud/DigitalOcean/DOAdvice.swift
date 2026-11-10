@@ -71,6 +71,10 @@ public struct DOAdvice: Equatable, Sendable, Identifiable {
         public var sizes: [DOInstanceSize]
         /// Trusted sources per managed database cluster the spec names.
         public var trustedSources: [String: [DOClient.FirewallRule]]
+        /// Database connection pools found in the code.
+        public var pools: [ConnectionPool] = []
+        /// Managed clusters' sizes by name, for their connection limits.
+        public var clusterSizes: [String: String] = [:]
 
         public init(file: DOAppSpec? = nil, fileText: String? = nil, live: DOApp? = nil, dockerfiles: [String: String] = [:], ignoresEnv: [String: Bool] = [:],
                     envFiles: Set<String> = [], headers: [String: String]? = nil, health: [DOComponentHealth] = [], alerts: [DOAlert] = [],
@@ -298,6 +302,37 @@ public struct DOAdvice: Equatable, Sendable, Identifiable {
                 add("size-down", .info, .cost, "\(health.name) is mostly idle",
                     "It uses \(Int(cpu))% CPU and \(Int(memory))% memory on \(size.name ?? slug) ($\(Int(size.monthly ?? 0)) a month).",
                     fix: "A smaller size would likely do.", place: health.name)
+            }
+        }
+
+        // Connection pools against the database's connections and the copies that share them.
+        if let spec, let database = (spec.databases ?? []).first(where: { ($0.engine ?? "PG").uppercased() == "PG" }), !inputs.pools.isEmpty {
+            let limit = ConnectionPool.databaseLimit(clusterSize: database.clusterName.flatMap { inputs.clusterSizes[$0] })
+            let copies = spec.components.filter { $0.kind == .service || $0.kind == .worker }
+                .reduce(0) { $0 + ($1.component.autoscaling?.maxInstanceCount ?? $1.component.instanceCount ?? 1) }
+            let fits = ConnectionPool.suggested(limit: limit, copies: copies)
+            let shared = "\(database.clusterName == nil ? "The dev database" : "The cluster") takes about \(limit) connections, shared by \(copies) cop\(copies == 1 ? "y" : "ies") of the app\(copies > 1 ? " at most" : "")."
+            for pool in inputs.pools {
+                let place = "\(pool.file):\(pool.line)"
+                if let maximum = pool.maximum {
+                    if maximum * copies > limit - 3 {
+                        add("pool-too-big", .high, .reliability, "The \(pool.library) pool can open more connections than the database allows",
+                            "\(maximum) per copy × \(copies) is \(maximum * copies). \(shared) Past that, new connections fail with “too many clients”.",
+                            fix: "Set the pool's maximum to \(fits), or put a connection pool in front of the database (managed clusters have them).", place: place)
+                    } else if maximum < 5, fits >= maximum * 2 {
+                        add("pool-too-small", .low, .reliability, "The \(pool.library) pool is small for what the database takes",
+                            "\(maximum) connections per copy; under load, requests wait for one. \(shared)",
+                            fix: "Raise the maximum to about \(fits).", place: place)
+                    }
+                } else if pool.library == "pgx" || pool.library == "database/sql" || pool.library == "Prisma" {
+                    let why = pool.library == "database/sql"
+                        ? "database/sql opens as many connections as requests ask for, so a burst can use up the database."
+                        : "Without a maximum it's \(pool.defaultMaximum), and on App Platform that counts the host's CPUs, not the app's share, so the size is set by chance: under load, requests queue for a connection."
+                    add("pool-unset", .medium, .reliability, "The \(pool.library) pool's size isn't set", why + " " + shared,
+                        fix: pool.library == "pgx" ? "Set pool_max_conns=\(fits) in the connection string (or MaxConns), and keep it there as copies change."
+                            : pool.library == "Prisma" ? "Add connection_limit=\(fits) to DATABASE_URL." : "Call db.SetMaxOpenConns(\(fits)) and SetMaxIdleConns to match.",
+                        place: place)
+                }
             }
         }
 

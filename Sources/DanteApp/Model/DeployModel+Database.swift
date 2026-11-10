@@ -104,6 +104,49 @@ extension DeployModel {
         }
     }
 
+    // MARK: Nightly
+
+    static func nightlyKey(_ app: String) -> String { "deploy.nightlyBackups.\(app)" }
+
+    /// Whether this Mac backs up the app's dev databases every night (while Dante is open).
+    var backsUpNightly: Bool {
+        get {
+            _ = nightlyChanged
+            return app.map { UserDefaults.standard.bool(forKey: Self.nightlyKey($0.id)) } ?? false
+        }
+        set {
+            guard let app else { return }
+            UserDefaults.standard.set(newValue, forKey: Self.nightlyKey(app.id))
+            nightlyChanged += 1
+        }
+    }
+
+    /// Backs up every dev database whose nightly backup is due, then deletes nightly backups past
+    /// the newest seven. Backups made by hand are never deleted.
+    func nightlyBackups() async {
+        guard backsUpNightly, let app, app.active != nil, databaseWork == nil else { return }
+        let folder = PGTools.backupFolder(app: app.name)
+        for database in liveDatabases where database.clusterName == nil {
+            let names = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).filter { $0.hasPrefix(database.name + "-") }
+            guard BackupSchedule.isDue(last: BackupSchedule.last(names), now: .now, hour: BackupSchedule.defaultHour) else { continue }
+            databaseWork = "Nightly backup of \(database.name)…"
+            defer { databaseWork = nil }
+            do {
+                _ = try await dump(database, try await connection(for: database), note: BackupSchedule.note)
+                let now = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).filter { $0.hasPrefix(database.name + "-") }
+                for old in BackupSchedule.pruned(now, keep: BackupSchedule.defaultKeep) {
+                    try? FileManager.default.trashItem(at: folder.appending(path: old), resultingItemURL: nil)
+                }
+                nightlyProblem = nil
+            } catch let failure as DOConsoleExec.Failure {
+                nightlyProblem = "Last night’s backup of \(database.name) didn’t work: \(failure.message)"
+            } catch {
+                nightlyProblem = "Last night’s backup of \(database.name) didn’t work: \(error.localizedDescription)"
+            }
+        }
+        await loadDatabases()
+    }
+
     /// Puts a backup back, after backing up what's there now.
     func restore(_ database: DOAppSpec.Database, from file: URL) {
         work("Restoring \(database.name)…") { [self] in
@@ -180,6 +223,15 @@ extension DeployModel {
         guard wizardStep != nil else { return }
         resizing = component
         wizardStep = .parts
+    }
+
+    /// Opens the wizard on the variables alone: change a value, or give a secret a new one, and
+    /// deploy without going through the other steps.
+    func openVariables() {
+        openWizard()
+        guard wizardStep != nil else { return }
+        editingVariables = true
+        wizardStep = .variables
     }
 
     /// Opens the wizard on the database step, to move the app to another cluster.
