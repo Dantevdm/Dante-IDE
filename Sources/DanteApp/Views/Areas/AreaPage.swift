@@ -77,22 +77,69 @@ struct Card<Trailing: View, Content: View>: View {
     var spacing: CGFloat = 12
     @ViewBuilder let trailing: Trailing
     @ViewBuilder let content: Content
+    /// Set by `folds(_:)`: the title folds the card away, remembered on this Mac under this id.
+    var foldID: String? = nil
 
     var body: some View {
+        let folded = foldID.map { CardFolds.shared.isFolded($0) } ?? false
         VStack(alignment: .leading, spacing: spacing) {
             if let title {
                 HStack(spacing: 8) {
-                    Text(title).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                    if let foldID {
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) { CardFolds.shared.toggle(foldID) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.right")
+                                    .font(.dante(size: 10, weight: .semibold)).foregroundStyle(theme.text3.color)
+                                    .rotationEffect(.degrees(folded ? 0 : 90))
+                                Text(title).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(folded ? "Show \(title)" : "Fold \(title) away")
+                    } else {
+                        Text(title).font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                    }
                     Spacer(minLength: 8)
-                    trailing
+                    if !folded { trailing }
                 }
             }
-            content
+            if !folded { content }
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: fillsRow ? .infinity : nil, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.card.color))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(accent ? theme.accentLine.color : theme.line.color))
+    }
+}
+
+extension Card {
+    /// Lets the card fold to its title row; the choice is kept per Mac under `id`.
+    func folds(_ id: String) -> Card {
+        var card = self
+        card.foldID = id
+        return card
+    }
+}
+
+/// Which foldable cards are folded, kept in user defaults.
+@MainActor @Observable
+final class CardFolds {
+    static let shared = CardFolds()
+    private static let key = "cards.folded"
+    private var folded: Set<String>
+
+    private init() {
+        folded = Set(UserDefaults.standard.stringArray(forKey: Self.key) ?? [])
+    }
+
+    func isFolded(_ id: String) -> Bool { folded.contains(id) }
+
+    func toggle(_ id: String) {
+        if folded.contains(id) { folded.remove(id) } else { folded.insert(id) }
+        UserDefaults.standard.set(folded.sorted(), forKey: Self.key)
     }
 }
 

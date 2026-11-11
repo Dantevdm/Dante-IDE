@@ -242,6 +242,7 @@ private struct PlanCard: View {
                 }
             }
         }
+        .folds("deploy.spec")
     }
 }
 
@@ -584,6 +585,7 @@ private struct ComponentsCard: View {
                 }
             }
         }
+        .folds("deploy.components")
         .confirmationDialog("Load-test the live app?", isPresented: $confirmingLoad) {
             Button("Allow and open Bliksem") {
                 guard let url = app.liveURL, let root = session.workspace?.url else { return }
@@ -664,6 +666,7 @@ private struct DatabaseCard: View {
                 Label(notice, systemImage: "checkmark.circle").font(.dante(size: 12)).foregroundStyle(theme.green.color).fixedSize(horizontal: false, vertical: true)
             }
         }
+        .folds("deploy.database")
         .task(id: app.id) { await model.loadDatabases() }
         .confirmationDialog("Make a new cluster from this backup?", isPresented: Binding(get: { forking != nil }, set: { if !$0 { forking = nil } })) {
             Button("Make it") { if let forking { model.restoreCluster(forking.cluster, backup: forking.backup) } }
@@ -780,7 +783,7 @@ private struct GettingInCard: View {
                     Image(systemName: guide.signIn.first?.symbol ?? "questionmark.key.filled")
                         .font(.dante(size: 15)).foregroundStyle(theme.accent.color).frame(width: 22)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(guide.headline).font(.dante(size: 13.5, weight: .medium)).foregroundStyle(theme.text.color).fixedSize(horizontal: false, vertical: true)
+                        Text(guide.headline.replacingOccurrences(of: "{url}", with: model.app?.liveURL.map { $0.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) } ?? "the live address")).font(.dante(size: 13.5, weight: .medium)).foregroundStyle(theme.text.color).fixedSize(horizontal: false, vertical: true)
                         if let header = guide.header {
                             CopyableLine(text: header, help: "What every request carries. Put your own key in place of <key>.")
                         }
@@ -796,6 +799,7 @@ private struct GettingInCard: View {
                 }
                 Text(footnote(guide)).font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
             }
+        .folds("deploy.gettingIn")
         }
     }
 
@@ -952,6 +956,7 @@ private struct LogsCard: View {
                 PlainLog(text: model.logText).frame(height: 260)
             }
         }
+        .folds("deploy.logs")
         .onChange(of: model.logKind) { if !model.logText.isEmpty || model.logsLoadedFor != nil { model.loadLogs() } }
         .onChange(of: model.logComponent) { if !model.logText.isEmpty || model.logsLoadedFor != nil { model.loadLogs() } }
     }
@@ -1018,6 +1023,7 @@ private struct AdviceCard: View {
                 Text("Checked: \(DOAppSpec.path), the Dockerfiles\(model.app == nil ? "" : ", the app as it runs, its health and alerts\(model.headers == nil ? "" : ", and the live site’s headers")").")
                     .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
             }
+        .folds("deploy.advice")
         }
     }
 
@@ -1133,6 +1139,7 @@ private struct SpendingCard: View {
                 Spacer(minLength: 0)
             }
         }
+        .folds("deploy.spending")
         .task(id: model.signedIn) { await model.loadSpending() }
     }
 
