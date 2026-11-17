@@ -18,7 +18,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Selecting a box glides it into view; links draw themselves and pulse along the busiest paths.
 
 ## Shows
-- Five lanes, left to right: Clients (web and mobile apps and their screens), API (route groups), Backend (services and packages), Data (databases, tables, queues, caches) and Outside (third-party services).
+- Five lanes, left to right: Clients (web and mobile apps and their screens, and a command-line tool with its commands), API (route groups), Backend (services and packages), Data (databases, tables, queues, caches) and Outside (third-party services, and each AWS service the code's SDK clients name).
 - The Backend lane in the order the code runs, when its parts use each other: Starts here (what nothing else in the lane uses, like the app's main), Uses (the parts it calls, and parts linked to nothing else in the lane), Shared (what the rest lean on, like core), each a column of its own under the lane's name.
 - Links between boxes along real code paths: fetch calls to routes, routes to their handlers, imports, queries naming tables, hosts called.
 - A box's detail line: its kind, how many routes, screens or methods it has, its test coverage when a coverage report exists.
@@ -60,6 +60,8 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Opening a backend folder retains project-wide security rules, including configuration and build files outside that folder; route access stays the same as in the whole-system map.
 - A hash router's screens open at /#/path; a Vite base path is put in front.
 - Dynamic route segments end the path, since there's no id to fill in.
+
+- A command-line tool with no web side (a Python CLI over boto3) still draws a picture: the tool and its commands in Clients, its package in Backend, and the AWS services it calls in Outside. The commands open where they're declared; tests' commands don't count. Python `client("…")` calls count only for known AWS service names in a project that imports boto3.
 
 ## Acceptance
 - A frontend that compose runs starts through `docker compose up -d <service>` and opens on its published port, never `npm install`.

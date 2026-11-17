@@ -287,8 +287,8 @@ struct PartBox: View {
                             .help("Open \(part.name) to see what's inside (double-click)")
                     }
                 }
-                if part.lane == .clients, part.id.hasPrefix("client:"), !part.items.isEmpty {
-                    // Screens as one wrapped line; the inspector lists them all.
+                if part.lane == .clients, part.id.hasPrefix("client:") || part.kind == .cli, !part.items.isEmpty {
+                    // Screens (or commands) as one wrapped line; the inspector lists them all.
                     let names = part.items.prefix(shown).map(\.text).joined(separator: " · ")
                     Text(names + (part.items.count > shown ? " +\(part.items.count - shown)" : ""))
                         .font(.dante(size: 10.5))
@@ -420,14 +420,15 @@ struct SystemSummary: View {
 
     var body: some View {
         let clients = map.parts.filter { $0.lane == .clients && !$0.id.hasPrefix("screen:") }
-        let screens = clients.reduce(0) { $0 + $1.items.count }
+        let screens = clients.filter { $0.kind != .cli }.reduce(0) { $0 + $1.items.count }
+        let commands = clients.filter { $0.kind == .cli }.reduce(0) { $0 + $1.items.count }
         let stores = map.parts.filter { $0.lane == .data && $0.kind != .table }
         let tables = map.parts.filter { $0.kind == .table }.count
         let routeGroups = map.parts.filter { $0.lane == .api }.count
         let backend = map.parts.filter { $0.lane == .backend }.count
         let outside = map.parts.filter { $0.lane == .outside }
         let stats: [(String, String, String)] = [
-            ("\(clients.count)", clients.count == 1 ? "client" : "clients", screens > 0 ? Self.counted(screens, "screen", "screens") : ""),
+            ("\(clients.count)", clients.count == 1 ? "client" : "clients", [screens > 0 ? Self.counted(screens, "screen", "screens") : nil, commands > 0 ? Self.counted(commands, "command", "commands") : nil].compactMap { $0 }.joined(separator: " · ")),
             ("\(map.routeCount)", map.routeCount == 1 ? "API route" : "API routes", Self.counted(routeGroups, "group", "groups")),
             ("\(backend)", compact ? (backend == 1 ? "piece" : "pieces") : backend == 1 ? "backend part" : "backend parts", ""),
             stores.isEmpty && tables > 0 ? ("\(tables)", tables == 1 ? "table" : "tables", map.parts.filter { $0.kind == .table }.map(\.name).prefix(3).joined(separator: ", "))
@@ -541,7 +542,7 @@ struct SystemInspector: View {
                 }
                 if !part.items.isEmpty, !(part.kind == .table && table != nil) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Eyebrow(part.lane == .api ? "Routes" : part.lane == .clients ? "Screens" : part.kind == .database ? "Tables"
+                        Eyebrow(part.lane == .api ? "Routes" : part.kind == .cli ? "Commands" : part.lane == .clients ? "Screens" : part.kind == .database ? "Tables"
                                 : part.kind == .table ? "Columns" : part.kind == .function || part.kind == .structure && part.path == nil ? "Declared" : "Inside")
                         ForEach(part.items, id: \.self) { item in
                             HStack(spacing: 6) {

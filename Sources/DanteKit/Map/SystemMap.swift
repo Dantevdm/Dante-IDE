@@ -22,7 +22,7 @@ public struct SystemMap: Equatable, Sendable {
     }
 
     public enum Kind: String, Sendable {
-        case web, mobile, routes, app, package, structure, function, database, table, cache, container, email, messaging, ai, payments, storage, monitoring, service
+        case web, mobile, cli, routes, app, package, structure, function, database, table, cache, container, email, messaging, ai, payments, storage, monitoring, service, cloud
     }
 
     /// A line inside a part: a screen, a route, a table. Routes keep where they're declared.
@@ -503,6 +503,40 @@ public struct SystemMap: Equatable, Sendable {
             parts.append(Part(id: "ext:" + service.id, name: name, lane: .outside, kind: service.kind, detail: service.detail))
             for (user, count) in users { link(user, "ext:" + service.id, count) }
         }
+        // AWS, a part per service its SDK clients name.
+        let usesBoto = code.contains { $0.hasSuffix(".py") && (has(text($0), "import boto3") || has(text($0), "from boto3")) }
+        var aws: [String: [String: Int]] = [:]
+        for file in code where !isTest(file) {
+            let services = awsServices(in: text(file), isPython: file.hasSuffix(".py"), usesBoto: usesBoto)
+            guard !services.isEmpty, services.count < 12 else { continue }
+            let user = clientOwning(file)?.id ?? owner(file)?.id
+            guard let user else { continue }
+            for service in services {
+                let id = service == "s3" && parts.contains(where: { $0.id == "ext:s3" }) ? "ext:s3" : awsPartID(service)
+                aws[id, default: [:]][user, default: 0] += 1
+                if !parts.contains(where: { $0.id == id }) {
+                    let title = awsTitle(service)
+                    parts.append(Part(id: id, name: title.name, lane: .outside, kind: .cloud, detail: title.detail))
+                }
+            }
+        }
+        for (id, users) in aws { for (user, count) in users { link(user, id, count) } }
+
+        // A command-line tool: people run its commands, so it sits with the clients.
+        let commandList = commands(files: code, text: text)
+        let scripts = scriptNames(files: files, text: text)
+        if !commandList.isEmpty || !scripts.isEmpty {
+            var seen = Set<String>()
+            let items = commandList.filter { seen.insert($0.name).inserted }.map { Item($0.name, file: $0.file, line: $0.line) }
+            let name = scripts.first ?? "Command line"
+            let count = items.isEmpty ? "" : " · \(items.count) command\(items.count == 1 ? "" : "s")"
+            parts.append(Part(id: "cli", name: name, lane: .clients, kind: .cli, detail: "command line" + count, items: items))
+            var targets: [String: Int] = [:]
+            for command in commandList { if let target = owner(command.file) { targets[target.id, default: 0] += 1 } }
+            if targets.isEmpty, backend.count == 1, let only = backend.first { targets[only.id] = 1 }
+            for (target, count) in targets { link("cli", target, count) }
+        }
+
         // Incoming webhooks: the service whose name or host the handler mentions calls the route.
         for (group, file) in webhookFiles {
             let body = lower(file)

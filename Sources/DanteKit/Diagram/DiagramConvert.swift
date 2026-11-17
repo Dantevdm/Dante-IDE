@@ -31,6 +31,7 @@ extension SystemMap.Kind {
         switch self {
         case .web: "macwindow"
         case .mobile: "iphone"
+        case .cli: "apple.terminal"
         case .routes: "arrow.left.arrow.right"
         case .app: "terminal"
         case .package: "shippingbox"
@@ -47,6 +48,7 @@ extension SystemMap.Kind {
         case .storage: "externaldrive"
         case .monitoring: "waveform.path.ecg"
         case .service: "globe"
+        case .cloud: "cloud"
         }
     }
 }
@@ -183,7 +185,7 @@ extension Diagram {
             }
             diagram.nodes.append(group)
             for part in parts {
-                let screens = part.lane == .clients && part.id.hasPrefix("client:") ? part.items.prefix(8).map(\.text).joined(separator: " · ") : ""
+                let screens = part.lane == .clients && (part.id.hasPrefix("client:") || part.kind == .cli) ? part.items.prefix(8).map(\.text).joined(separator: " · ") : ""
                 var node = Node(id: diagram.uniqueID(for: part.name), kind: .box, title: part.name, subtitle: part.detail, text: screens,
                                 icon: part.kind.symbol, hue: Hue(lane: lane), parent: groupID, dashed: lane == .outside,
                                 chips: part.container.map { [$0] } ?? [])
