@@ -5,7 +5,7 @@ phrases: [services, env, environment, environments, local, docker, compose, cont
 ---
 # Services (Local › Services)
 
-Services is the local environment: the docker compose services and their logs, the project's apps you can run, its other containers, and the ports in use.
+Services is the local environment: the docker compose services and their logs, the project's apps you can run, and its other containers.
 
 ## Highlights
 - It says why a service isn't up and can move a port that's taken.
@@ -14,16 +14,14 @@ Services is the local environment: the docker compose services and their logs, t
 - Values compose needs that .env doesn't set (`${POSTGRES_PASSWORD:?…}`) are caught before a start and filled in with one button: a new password for a secret.
 
 ## Shows
-- The compose file and each service: image, ports, state and health.
+- Each compose service: image, ports, state and health (the compose file's name, a ports card and a Docker files card were taken out at the user's request).
 - How they connect: services in columns by what they depend on, each link moving while both ends run, red where a service runs but its dependency doesn't, faint while stopped (shown with two or more services and a depends_on).
 - Apps in this project: the runnable apps found in the code (React, Spring Boot, Go and others) with their run commands.
 - This project's containers started outside compose.
-- Ports: what's listening on the project's ports, with the process, folder and uptime.
 - Logs: every service's log lines, filterable by service, level and text, with health checks hidden by default.
 - A start, stop or rebuild as one line per service (building step 4 of 7 with the step, started, healthy, failed; how many build steps ran and came from cache) and its errors, with Docker's raw output behind Raw output.
 - What Keep running did lately: the last three services brought back, left down or updated, with the time, and under a crash the line from its logs that names the error (`KeyError: 'QUEUE_URL'`).
 - Missing values: a card listing each variable the compose file needs that neither .env nor the environment compose runs in sets: required ones (`${VAR:?…}`, `${VAR?…}`, empty counts for the `:` form) and secrets used with no default (`${DB_PASSWORD}`), which would start blank ("would start blank"). Each shows how it'll be filled: "a new random password" for a secret (a name ending in PASSWORD, SECRET, TOKEN, API_KEY, SALT…), the value from .env.example (or .sample, .template, .dist) in an editable field when it isn't a placeholder, or an empty field to type. Names in compose's own error ("required variable X is missing a value") are added too, and that error's banner is then left out.
-- Docker files: whether a Dockerfile or compose file exists, with an offer to have the agent write it.
 - mise, first among the project cards when the project has a mise config (mise.toml, .mise.toml, .tool-versions and friends): the tools it pins with a tick when installed, the environment variable names it sets (never their values), and its tasks with Run (`mise run <task>` in a terminal tab of its own). Dante reads `mise env` once per config change and lays it over every command it runs in the project (tests, runs, language servers, the debugger, the agents), so they get the pinned versions without a shell prompt.
 
 ## Actions

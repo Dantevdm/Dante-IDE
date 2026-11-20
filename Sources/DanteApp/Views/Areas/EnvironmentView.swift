@@ -160,12 +160,6 @@ struct EnvironmentView: View {
                 if dockerReady {
                     ComposeLogsPanel(root: workspace.url, services: compose.services.map(\.name), service: $logService, waiting: waiting)
                 }
-                HStack(alignment: .top, spacing: 12) {
-                    PortsCard(ports: projectPorts(compose), remote: session.remoteSync, stop: stop)
-                        .frame(maxWidth: .infinity)
-                    DockerfilesCard(session: session, compose: compose, dockerfiles: dockerfiles)
-                        .frame(maxWidth: .infinity)
-                }
             } else {
                 EmptyState(
                     symbol: "shippingbox",
@@ -249,24 +243,6 @@ struct EnvironmentView: View {
         return prompt.conflicts.count == 1 ? "Port \(prompt.conflicts[0].port) is in use" : "\(prompt.conflicts.count) ports are in use"
     }
 
-    /// Every port the compose file publishes, and anything else started from this project.
-    private func projectPorts(_ compose: ComposeFile) -> [PortsCard.Row] {
-        var rows: [PortsCard.Row] = []
-        for service in compose.services {
-            for port in service.publishedPorts where !rows.contains(where: { $0.port == port }) {
-                let container = running.first { $0.service == service.name }
-                let holder = holders.first { $0.port == port }
-                rows.append(PortsCard.Row(port: port, service: service.name, holder: holder,
-                                          isContainer: holder == nil && container?.state == "running",
-                                          inProject: holder?.belongs(to: workspace.url) ?? false))
-            }
-        }
-        for holder in holders where holder.belongs(to: workspace.url) && !rows.contains(where: { $0.port == holder.port }) {
-            rows.append(PortsCard.Row(port: holder.port, service: nil, holder: holder, isContainer: false, inProject: true))
-        }
-        return rows.sorted { $0.port < $1.port }
-    }
-
     private func freePort(after port: Int) -> Int {
         PortProbe.firstFree(from: port + 1, skipping: Set(holders.map(\.port)))
     }
@@ -294,13 +270,6 @@ struct EnvironmentView: View {
         }
     }
 
-    private func stop(_ holder: PortHolder) {
-        Task {
-            if let error = await PortCheck.stop(holder) { session.errorMessage = error }
-            await refresh()
-        }
-    }
-
     /// Docker answers; a compose file missing values counts, since Start then asks for them.
     private var dockerReady: Bool {
         guard case .failure(let reason) = containers else { return true }
@@ -310,7 +279,6 @@ struct EnvironmentView: View {
     private func facts(_ compose: ComposeFile) -> some View {
         let up = running.filter(\.isUp).count
         return HStack(spacing: 8) {
-            Chip(text: "compose: \(compose.url.lastPathComponent)", symbol: "shippingbox", mono: true)
             let profiles = Set(compose.services.flatMap(\.profiles)).sorted()
             if !profiles.isEmpty { Chip(text: "profiles: \(profiles.joined(separator: ", "))") }
             Spacer()
@@ -674,67 +642,6 @@ private struct DiagnoseCard: View {
     }
 }
 
-private struct DockerfilesCard: View {
-    @Environment(\.theme) private var theme
-    let session: Session
-    let compose: ComposeFile
-    let dockerfiles: [String]
-
-    private struct Row: Identifiable {
-        let path: String
-        let note: String
-        let missing: Bool
-        var id: String { path }
-    }
-
-    var body: some View {
-        let rows = self.rows
-        Card("Docker files") {
-            Text("Claude writes, you review").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-        } content: {
-            RowList(data: rows, padding: 6) { row in
-                HStack(spacing: 8) {
-                    Image(systemName: row.missing ? "exclamationmark.triangle.fill" : "checkmark")
-                        .font(.dante(size: 11, weight: .semibold))
-                        .foregroundStyle(row.missing ? theme.amber.color : theme.green.color)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.path).font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text.color).lineLimit(1).truncationMode(.head)
-                        if !row.note.isEmpty {
-                            Text(row.note).font(.dante(size: 11.5)).foregroundStyle(row.missing ? theme.amber.color : theme.text3.color).lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: 4)
-                    if row.missing {
-                        Button("Generate") {
-                            session.askClaude("docker-compose.yml builds a service from \(row.path.replacingOccurrences(of: "/Dockerfile", with: "")), but there's no Dockerfile there. Write one: multi-stage, small runtime image, non-root user.")
-                        }
-                        .buttonStyle(DanteButtonStyle())
-                    }
-                }
-            }
-        }
-    }
-
-    private var rows: [Row] {
-        var rows = [Row(path: compose.url.lastPathComponent, note: "\(compose.services.count) services", missing: false)]
-        for service in compose.services {
-            guard let context = service.build else { continue }
-            var folder = context.hasPrefix("./") ? String(context.dropFirst(2)) : context
-            if folder == "." { folder = "" }
-            let path = folder.isEmpty ? "Dockerfile" : "\(folder)/Dockerfile"
-            if dockerfiles.contains(path) {
-                if !rows.contains(where: { $0.path == path }) { rows.append(Row(path: path, note: "builds \(service.name)", missing: false)) }
-            } else {
-                rows.append(Row(path: path, note: "missing for \(service.name)", missing: true))
-            }
-        }
-        for file in dockerfiles where !rows.contains(where: { $0.path == file }) {
-            rows.append(Row(path: file, note: "", missing: false))
-        }
-        return rows
-    }
-}
-
 /// What Keep running did lately: services brought back, ones left down, compose changes applied.
 private struct KeeperEvents: View {
     @Environment(\.theme) private var theme
@@ -884,90 +791,6 @@ private struct CommandOutputCard: View {
         case .stopped: Image(systemName: "stop.fill").font(.dante(size: 9)).foregroundStyle(theme.text3.color)
         case .failed: Image(systemName: "xmark").font(.dante(size: 10, weight: .bold)).foregroundStyle(theme.red.color)
         }
-    }
-}
-
-/// The ports the project publishes or listens on, and who has each one.
-private struct PortsCard: View {
-    @Environment(\.theme) private var theme
-    struct Row: Identifiable {
-        var port: Int
-        var service: String?
-        var holder: PortHolder?
-        var isContainer: Bool
-        var inProject: Bool
-        var id: Int { port }
-    }
-
-    let ports: [Row]
-    /// For a remote project: which ports reach the host from here.
-    let remote: RemoteSync?
-    let stop: (PortHolder) -> Void
-    @State private var confirming: PortHolder?
-
-    var body: some View {
-        if !ports.isEmpty {
-            Card("Ports") {
-                Text(remote.map { "Forwarded from \($0.project.host) to this Mac" } ?? "Checked before every start")
-                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color)
-            } content: {
-                RowList(data: ports, padding: 6) { row in
-                    HStack(spacing: 10) {
-                        StatusDot(color: color(row), size: 7)
-                        Text(":\(row.port)")
-                            .font(.dante(size: 12.5, weight: .medium, design: .monospaced))
-                            .foregroundStyle(theme.text.color)
-                            .frame(width: 64, alignment: .leading)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(title(row)).font(.dante(size: 12.5)).foregroundStyle(theme.text.color).lineLimit(1)
-                            if let holder = row.holder {
-                                Text(holder.commandLine)
-                                    .font(.dante(size: 11, design: .monospaced))
-                                    .foregroundStyle(theme.text3.color)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .help([holder.commandLine, holder.directory.map { "in \($0)" }].compactMap { $0 }.joined(separator: "\n"))
-                            }
-                        }
-                        Spacer(minLength: 6)
-                        if let url = URL(string: "http://localhost:\(row.port)"), row.holder != nil || row.isContainer {
-                            IconButton(symbol: "safari", label: "Open localhost:\(row.port)", size: 11) { NSWorkspace.shared.open(url) }
-                        }
-                        if let holder = row.holder {
-                            Button("Stop") { row.inProject ? stop(holder) : (confirming = holder) }
-                                .buttonStyle(DanteButtonStyle())
-                                .help("Ask \(holder.listening.command) to quit (pid \(holder.pid))")
-                        }
-                    }
-                }
-            }
-            .alert("Stop \(confirming?.listening.command ?? "")?", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), presenting: confirming) { holder in
-                Button("Stop") { stop(holder) }
-                Button("Cancel", role: .cancel) {}
-            } message: { holder in
-                Text("\(holder.summary) wasn’t started from this project.\(holder.directory.map { " It runs in \($0)." } ?? "") Dante will ask it to quit.")
-            }
-        }
-    }
-
-    private func title(_ row: Row) -> String {
-        if let holder = row.holder {
-            let owner = row.service.map { "Taken: \($0) needs it. " } ?? ""
-            return owner + "\(holder.listening.command), pid \(holder.pid)\(holder.elapsed.map { ", up \($0)" } ?? "")\(row.inProject ? " · from this project" : "")"
-        }
-        if let remote {
-            if remote.unforwarded[row.port] != nil { return "\(row.service ?? "") · taken on this Mac, not forwarded" }
-            if row.isContainer { return "\(row.service ?? "") · Docker on \(remote.project.host)\(remote.forwarded.contains(row.port) ? ", forwarded" : "")" }
-            return "\(row.service ?? "") · not running"
-        }
-        if row.isContainer { return "\(row.service ?? "") · Docker" }
-        return "\(row.service ?? "") · free"
-    }
-
-    private func color(_ row: Row) -> Color {
-        if let remote, remote.unforwarded[row.port] != nil { return theme.amber.color }
-        if row.holder != nil { return row.service == nil ? theme.accent.color : theme.amber.color }
-        return row.isContainer ? theme.green.color : theme.text3.color
     }
 }
 
