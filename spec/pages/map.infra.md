@@ -9,13 +9,12 @@ The Infra view on the Map shows how a change is delivered and where it runs: the
 
 ## Highlights
 - It reads CloudFormation, Terraform and ARM templates and Azure DevOps, GitHub Actions and GitLab pipelines.
-- How it works says in sentences how a change ships and how a request travels.
 - Select a stage or resource to see its steps or settings and open its file.
 - The agent in charge can explain it, review it, write an architecture document, or write a missing pipeline or templates.
 
 ## Shows
 - A summary: how many pipelines, stacks and resources, and the clouds they're on.
-- How it works: a short story in sentences, from a push to running code and from a user's request to the data.
+- Under the summary, at the right: Ask the agent (and Write a pipeline or Write the infrastructure when one is missing). There's no How it works card on the Mac; the picture tells it.
 - Delivery band: each pipeline in a lane of its own, non-prod first, then prod, then any other: the lane has a coloured edge and a label (NON-PROD in the accent colour, PROD in red, as on Ship's Pipelines card) with the branches it deploys from and, at the right, a Runs button (the state and age of that pipeline's newest run, else of the environment's, when Dante has seen one) that opens Ship › Release, or "Not set up in Azure DevOps yet" when Azure DevOps has answered and no pipeline there runs the lane's YAML (not said for pipelines picked by link); then the pipeline's source and its stages in order. Each stage shows its state in that pipeline's newest run: an edge and a corner badge in green (succeeded), red (failed), amber (partly), the accent colour pulsing while it runs, faint when queued or skipped; stages are matched by the YAML identifier, else the display name. A stage the run didn't have stays plain. Azure template conditions (`${{ if … }}:` around stages, jobs, steps or dependsOn) are opened up, so stages switched on by a parameter's default show.
 - Cloud band: users, then tiers (edge, compute, data), with images, security and observability resources beside them; animated links show traffic between tiers.
 - An inspector for the selected stage or resource: steps or properties, the template file and line.

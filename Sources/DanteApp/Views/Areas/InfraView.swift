@@ -23,7 +23,7 @@ struct InfraView: View {
             }
         } else {
             InfraSummary(infra: infra)
-            StoryCard(session: session, infra: infra)
+            InfraActions(session: session, infra: infra)
             InfraCanvas(infra: infra, selected: $selected, recorder: recorder, session: session)
         }
     }
@@ -36,7 +36,7 @@ extension Infrastructure.Tier {
     func hue(_ theme: Theme) -> Color { Diagram.Hue(tier: self).rgba(theme).color }
 }
 
-// MARK: Summary and story
+// MARK: Summary and actions
 
 private struct InfraSummary: View {
     @Environment(\.theme) private var theme
@@ -70,45 +70,26 @@ private struct InfraSummary: View {
     }
 }
 
-private struct StoryCard: View {
-    @Environment(\.theme) private var theme
+/// The agent's offers for the setup, in a row of their own above the picture.
+private struct InfraActions: View {
     let session: Session
     let infra: Infrastructure
 
     var body: some View {
-        let story = InfraStory(infra)
-        Card("How it works") {
-            HStack(spacing: 8) {
-                if infra.pipelines.isEmpty { GenerateMenu(session: session, infra: infra, kind: .pipeline) }
-                if infra.stacks.isEmpty { GenerateMenu(session: session, infra: infra, kind: .infrastructure) }
-                Menu {
-                    Button("Explain how a change reaches production") { session.askClaude(InfraPrompt.explain(infra)) }
-                    Button("Review it: security, tagging, cost and reliability") { session.askClaude(InfraPrompt.review(infra)) }
-                    Divider()
-                    Button("Write an architecture document with a diagram") { session.askClaude(InfraPrompt.document(infra)) }
-                } label: {
-                    ClaudeLabel("Ask \(session.agentName)")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+            if infra.pipelines.isEmpty { GenerateMenu(session: session, infra: infra, kind: .pipeline) }
+            if infra.stacks.isEmpty { GenerateMenu(session: session, infra: infra, kind: .infrastructure) }
+            Menu {
+                Button("Explain how a change reaches production") { session.askClaude(InfraPrompt.explain(infra)) }
+                Button("Review it: security, tagging, cost and reliability") { session.askClaude(InfraPrompt.review(infra)) }
+                Divider()
+                Button("Write an architecture document with a diagram") { session.askClaude(InfraPrompt.document(infra)) }
+            } label: {
+                ClaudeLabel("Ask \(session.agentName)")
             }
-        } content: {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(story.lines, id: \.self) { line in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Image(systemName: line.symbol)
-                            .font(.dante(size: 11, weight: .semibold))
-                            .foregroundStyle(theme.accent.color)
-                            .frame(width: 22, height: 22)
-                            .background(theme.accentTint.color, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(line.title).font(.dante(size: 12, weight: .semibold)).foregroundStyle(theme.text.color)
-                            Text(line.text).font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
         }
     }
 }
