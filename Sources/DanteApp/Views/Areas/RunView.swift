@@ -1,16 +1,38 @@
 import DanteKit
 import SwiftUI
 
-/// Run: how the deployed project is doing. Health checks and a log stream configured in
-/// `operate:` in project.yaml, with errors grouped so each can become a task.
+/// Health: how the project is doing, live (health checks, a log stream and alarms from
+/// `operate:` in project.yaml) or on this Mac (the compose services' health routes and
+/// `docker compose logs`), with errors grouped so each can be asked about.
 struct RunView: View {
     @Environment(\.theme) private var theme
     let session: Session
     let workspace: Workspace
 
+    /// Live is the deployed app (`operate:` in project.yaml); This Mac is the compose services.
+    enum Place: String { case live, local }
+
     @State private var latestTag: String?
+    @State private var compose: ComposeFile?
+    @State private var localChecks: [ProjectInfo.HealthCheck] = []
+    @State private var chosen: Place?
 
     private var info: ProjectInfo { workspace.info }
+    private var hasLive: Bool { !info.checks.isEmpty || info.logsCommand != nil || !info.alarms.isEmpty }
+    private var hasLocal: Bool { compose != nil && !(compose?.services.isEmpty ?? true) }
+    private var placeKey: String { "health.place." + workspace.url.path }
+
+    /// The chosen place when it has something, else whichever does; This Mac first when the
+    /// project has nothing live set up.
+    private var place: Place {
+        if let chosen, chosen == .live ? hasLive : hasLocal { return chosen }
+        return hasLive ? .live : .local
+    }
+
+    private var checks: [ProjectInfo.HealthCheck] { place == .live ? info.checks : localChecks }
+    private var logsCommand: String? {
+        place == .live ? info.logsCommand : compose.map { LocalHealth.logsCommand(compose: $0) }
+    }
 
     var body: some View {
         AreaPage(
@@ -18,38 +40,80 @@ struct RunView: View {
             title: "Health",
             subtitle: nil
         ) {
-            if let latestTag { Chip(text: "\(latestTag) is the latest tag", symbol: "tag") }
-            if !info.checks.isEmpty {
+            if let latestTag, place == .live { Chip(text: "\(latestTag) is the latest tag", symbol: "tag") }
+            if hasLive && hasLocal {
+                Picker("", selection: Binding(get: { place }, set: { choose($0) })) {
+                    Text("Live").tag(Place.live)
+                    Text("This Mac").tag(Place.local)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Live is the deployed app, from operate: in .dante/project.yaml. This Mac is the compose services running here.")
+            }
+            if !checks.isEmpty {
                 IconButton(symbol: "arrow.clockwise", label: "Check now") { Task { await session.health.poll() } }
             }
         } content: {
-            if info.checks.isEmpty, info.logsCommand == nil, info.alarms.isEmpty {
+            if !hasLive && !hasLocal {
                 SetupCard(session: session)
             } else {
-                if !info.alarms.isEmpty {
+                if place == .live, !info.alarms.isEmpty {
                     AlarmsCard(session: session, workspace: workspace, monitor: session.alarms)
                 }
-                if !info.checks.isEmpty {
+                if place == .local, localChecks.isEmpty {
+                    Card {
+                        Text("No compose service here builds from the repo and publishes a port, so there's nothing to check over HTTP. Docker's own health checks are on Services.")
+                            .font(.dante(size: 12.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if !checks.isEmpty {
                     CardGrid(minimum: 260) {
-                        ForEach(info.checks) { check in
+                        ForEach(checks) { check in
                             CheckCard(check: check, samples: session.health.samples[check.id] ?? [])
                         }
                     }
-                    if let down = info.checks.first(where: { session.health.samples[$0.id]?.last?.isUp == false }) {
-                        DownCard(session: session, check: down, sample: session.health.samples[down.id]?.last)
+                    if let down = checks.first(where: { session.health.samples[$0.id]?.last?.isUp == false }) {
+                        DownCard(session: session, check: down, sample: session.health.samples[down.id]?.last, local: place == .local)
                     }
                 }
-                ErrorsCard(session: session, workspace: workspace)
+                ErrorsCard(session: session, workspace: workspace, local: place == .local)
             }
         }
-        .task(id: info) {
-            session.health.watch(info.checks)
-            if let command = info.logsCommand, session.logWatch?.command != command {
-                session.logWatch?.stop()
-                session.logWatch = LogWatch(command: command, projectRoot: workspace.url)
-            }
+        .task(id: workspace.revision) {
+            chosen = (UserDefaults.standard.string(forKey: placeKey)).flatMap(Place.init(rawValue:))
+            let root = workspace.url
+            let files = workspace.files
+            let loaded = ComposeFile.load(projectRoot: root)
+            compose = loaded
+            localChecks = await Task.detached(priority: .utility) {
+                guard let loaded else { return [ProjectInfo.HealthCheck]() }
+                return LocalHealth.checks(compose: loaded, files: files) { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
+            }.value
             latestTag = await GitSnapshot.load(in: workspace.git.root, recentLimit: 1, sinceTagLimit: 1).latestTag
         }
+        .task(id: Watched(checks: checks, logs: logsCommand)) {
+            session.health.watch(checks)
+            if let command = logsCommand {
+                if session.logWatch?.command != command {
+                    session.logWatch?.stop()
+                    session.logWatch = LogWatch(command: command, projectRoot: workspace.url)
+                }
+            } else {
+                session.logWatch?.stop()
+                session.logWatch = nil
+            }
+        }
+    }
+
+    private struct Watched: Equatable {
+        var checks: [ProjectInfo.HealthCheck]
+        var logs: String?
+    }
+
+    private func choose(_ next: Place) {
+        chosen = next
+        UserDefaults.standard.set(next.rawValue, forKey: placeKey)
     }
 }
 
@@ -146,6 +210,7 @@ private struct DownCard: View {
     let session: Session
     let check: ProjectInfo.HealthCheck
     let sample: HealthMonitor.Sample?
+    var local = false
 
     var body: some View {
         Card(accent: true) {
@@ -156,8 +221,11 @@ private struct DownCard: View {
             Text(sample?.error ?? sample?.status.map { "Last response: HTTP \($0)" } ?? "No response")
                 .font(.dante(size: 12, design: .monospaced))
                 .foregroundStyle(theme.text3.color)
-            Button("Ask Claude what changed") {
-                session.askClaude("The \(check.name) health check (\(check.url.absoluteString)) is failing: \(sample?.error ?? sample?.status.map { "HTTP \($0)" } ?? "no response"). Look at recent commits, the health endpoint's code and any deploy config, and suggest what to check first.")
+            Button("Ask \(session.agentName) what changed") {
+                let failure = sample?.error ?? sample?.status.map { "HTTP \($0)" } ?? "no response"
+                session.askClaude(local
+                    ? "The \(check.name) compose service's health check on this Mac (\(check.url.absoluteString)) is failing: \(failure). Check whether it's running (docker compose ps), read its recent logs (docker compose logs --tail 100 \(check.name)), and look at the health endpoint's code and the compose file. Say what's wrong before changing anything."
+                    : "The \(check.name) health check (\(check.url.absoluteString)) is failing: \(failure). Look at recent commits, the health endpoint's code and any deploy config, and suggest what to check first.")
             }
             .buttonStyle(DanteButtonStyle(primary: true))
         }
@@ -168,12 +236,13 @@ private struct ErrorsCard: View {
     @Environment(\.theme) private var theme
     let session: Session
     let workspace: Workspace
+    var local = false
 
     var body: some View {
         if let watch = session.logWatch {
             Card("Errors · since this window opened") {
                 HStack(spacing: 8) {
-                    Text(watch.isRunning ? "following operate.logs" : (watch.exitMessage ?? ""))
+                    Text(watch.isRunning ? (local ? "following docker compose logs" : "following operate.logs") : (watch.exitMessage ?? ""))
                         .font(.dante(size: 12))
                         .foregroundStyle(theme.text3.color)
                         .lineLimit(1)
@@ -186,7 +255,13 @@ private struct ErrorsCard: View {
                     }
                 }
             } content: {
-                if watch.digest.issues.isEmpty {
+                if local, !watch.isRunning, watch.digest.linesSeen == 0 {
+                    // `docker compose logs -f` ends at once when nothing has been started.
+                    Text("No compose service has run yet, so there are no logs to follow. Start them on Services, then press Restart.")
+                        .font(.dante(size: 12.5))
+                        .foregroundStyle(theme.text3.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if watch.digest.issues.isEmpty {
                     Text(watch.digest.linesSeen == 0 ? "Waiting for log lines…" : "No errors in \(watch.digest.linesSeen) lines.")
                         .font(.dante(size: 12.5))
                         .foregroundStyle(theme.text3.color)
@@ -211,7 +286,7 @@ private struct ErrorsCard: View {
                         Spacer(minLength: 8)
                         Text("×\(issue.count)").font(.dante(size: 12, design: .monospaced)).foregroundStyle(theme.text2.color)
                         Button("Ask \(session.agentName)") {
-                            session.askClaude("This error shows up \(issue.count) times in production logs:\n\n\(issue.example)\n\nFind where it comes from in the code and propose a fix.")
+                            session.askClaude("This error shows up \(issue.count) times in \(local ? "the compose services' logs on this Mac" : "production logs"):\n\n\(issue.example)\n\nFind where it comes from in the code and propose a fix.")
                         }
                         .buttonStyle(DanteButtonStyle())
                     }
@@ -219,7 +294,7 @@ private struct ErrorsCard: View {
             }
         } else {
             Card("Errors") {
-                Text("No production logs set up")
+                Text(local ? "No compose file" : "No production logs set up")
                     .font(.dante(size: 12.5))
                     .foregroundStyle(theme.text3.color)
                     .fixedSize(horizontal: false, vertical: true)
