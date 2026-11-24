@@ -25,6 +25,10 @@ cases:
     navigate: bliksem
   - say: open chaos testing
     navigate: bliksem
+  - say: show me the front-end stories
+    navigate: stories
+  - say: open stories
+    navigate: stories
   - say: open the services
     navigate: environments
   - say: show me digitalocean

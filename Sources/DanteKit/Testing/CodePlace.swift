@@ -28,7 +28,7 @@ public enum CodePlace: String, Codable, Sendable, CaseIterable {
 
     static let testFolders: Set<String> = [
         "test", "tests", "__tests__", "__mocks__", "__fixtures__", "spec", "specs", "testdata", "fixtures", "mocks",
-        "e2e", "cypress", "playwright", "testutil", "testutils", "testhelpers", "androidtest", "integrationtest", "testfixtures",
+        "e2e", "cypress", "playwright", "stories", "testutil", "testutils", "testhelpers", "androidtest", "integrationtest", "testfixtures",
     ]
     static let docFolders: Set<String> = ["docs", "doc", "documentation", "examples", "example", "samples", "sample"]
     static let docExtensions: Set<String> = ["md", "mdx", "markdown", "rst", "adoc"]

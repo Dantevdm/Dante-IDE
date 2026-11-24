@@ -218,7 +218,7 @@ public enum TestSuites {
     public static func suite(for path: String, in suites: [TestSuite]) -> TestSuite? {
         // The deepest scope wins; Playwright's testDir is deeper than its folder's unit tests.
         // With no testDir of its own, a Playwright suite takes only files in e2e-looking folders.
-        let looksEndToEnd = path.lowercased().split(separator: "/").contains { ["e2e", "playwright", "end-to-end"].contains($0) }
+        let looksEndToEnd = path.lowercased().split(separator: "/").contains { ["e2e", "playwright", "end-to-end", "stories"].contains($0) }
         return suites.filter { $0.contains(path) && ($0.tool != .playwright || $0.scope != $0.folder || looksEndToEnd) }
             .max { ($0.scope.count, $0.tool == .playwright ? 1 : 0) < ($1.scope.count, $1.tool == .playwright ? 1 : 0) }
     }

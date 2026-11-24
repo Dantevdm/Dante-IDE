@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 
 /// The areas in the workspace rail, one per screen in the design canvas.
 enum Area: String, CaseIterable, Identifiable {
-    case home, map, code, report, tests, security, review, bliksem, environments, data, ship, deploy, run, timeline, claude, agents, jobs, docs
+    case home, map, code, report, tests, stories, security, review, bliksem, environments, data, ship, deploy, run, timeline, claude, agents, jobs, docs
 
     var id: String { rawValue }
 
@@ -30,6 +30,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .code: "chevron.left.forwardslash.chevron.right"
         case .report: "chart.bar.doc.horizontal.fill"
         case .tests: "testtube.2"
+        case .stories: "film.stack"
         case .security: "shield.lefthalf.filled"
         case .review: "eye"
         case .bliksem: "bolt.fill"
@@ -56,6 +57,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .tests: "Tests traced to specs and code paths, coverage by component, and tests Claude can draft."
         case .security: "Secrets, personal information, encryption, injection, dependencies and config: scanned, explained and fixed by Claude or Codex."
         case .review: "Which code files people have read and understood as they are now, who read them, and asking someone to look."
+        case .stories: "How each feature of the web app works, told step by step in a real browser, checked every run, and why one broke."
         case .bliksem: "Hammer the running app with load, throw garbage at its routes, or break one of its services and time the recovery."
         case .environments: "Docker Compose services with logs, shells and restarts, and Docker files Claude can write."
         case .data: "The project's databases: create one, browse tables, run queries and see the schema as a diagram."
@@ -275,6 +277,7 @@ final class Session {
     /// The Security area's report, scans and audits.
     let security = SecurityModel()
     let bliksem = BliksemModel()
+    let stories = StoriesModel()
     let deploy = DeployModel()
     let review = ReviewModel()
     /// 1-based breakpoint lines per file path, saved per project on this Mac.

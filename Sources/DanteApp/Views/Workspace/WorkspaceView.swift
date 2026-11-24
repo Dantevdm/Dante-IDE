@@ -30,6 +30,7 @@ struct WorkspaceView: View {
                         case .docs: DocsView(session: session, workspace: workspace)
                         case .report: QualityReportView(session: session, workspace: workspace)
                         case .tests: TestsView(session: session, workspace: workspace)
+                        case .stories: StoriesView(session: session, workspace: workspace)
                         case .ship: ShipView(session: session, workspace: workspace)
                         case .environments: EnvironmentView(session: session, workspace: workspace)
                         case .data: DataView(session: session, workspace: workspace)

@@ -120,7 +120,7 @@ public struct TestInventory: Equatable, Sendable {
         if lower.hasSuffix(".swift") { return lower.hasSuffix("tests.swift") || lower.hasSuffix("test.swift") || folders.contains { $0.hasSuffix("tests") } }
         if lower.hasSuffix(".py") { return lower.hasPrefix("test_") || lower.hasSuffix("_test.py") }
         if [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"].contains(where: { lower.hasSuffix($0) }) {
-            return lower.contains(".test.") || lower.contains(".spec.") || folders.contains("__tests__") || folders.contains("e2e") || folders.contains("cypress")
+            return lower.contains(".test.") || lower.contains(".spec.") || lower.hasSuffix(".story.ts") || folders.contains("__tests__") || folders.contains("e2e") || folders.contains("cypress")
         }
         if lower.hasSuffix(".java") || lower.hasSuffix(".kt") { return lower.contains("test") && folders.contains("test") }
         if lower.hasSuffix(".rb") { return lower.hasSuffix("_spec.rb") || lower.hasSuffix("_test.rb") }
@@ -236,7 +236,7 @@ public struct TestInventory: Equatable, Sendable {
         if let rule = ruleCategory(path, rules) { return rule }
         let lower = path.lowercased()
         let parts = lower.split(separator: "/").map(String.init)
-        if parts.contains(where: { ["e2e", "cypress", "playwright", "acceptance"].contains($0) }) || lower.contains(".e2e.") { return endToEnd }
+        if parts.contains(where: { ["e2e", "cypress", "playwright", "acceptance", "stories"].contains($0) }) || lower.contains(".e2e.") || lower.hasSuffix(".story.ts") { return endToEnd }
         if parts.contains(where: { $0.hasSuffix("uitests") || $0 == "ui-tests" || $0 == "ui" }) { return ui }
         let name = (lower as NSString).lastPathComponent
         if parts.dropLast().contains(where: { $0 == "security" || $0 == "auth" }) || name.contains("security") || name.hasPrefix("auth") { return security }

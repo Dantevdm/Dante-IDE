@@ -184,7 +184,7 @@ public struct SemanticIndex: Codable, Sendable, Equatable {
     }
 
     /// FNV-1a over the UTF-8 bytes: stable across launches, unlike `hashValue`.
-    static func hash(_ text: String) -> UInt64 {
+    public static func hash(_ text: String) -> UInt64 {
         var value: UInt64 = 0xcbf2_9ce4_8422_2325
         for byte in text.utf8 {
             value ^= UInt64(byte)
