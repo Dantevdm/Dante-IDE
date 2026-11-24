@@ -7,10 +7,13 @@ public final class BliksemRunner: Sendable {
     public let base: URL
     let hosts: BrowserHosts
     let session: URLSession
+    /// Sent with every request (from `.dante/bliksem.yaml`, already filled in).
+    let headers: [String: String]
 
-    public init(base: URL, hosts: BrowserHosts, timeout: TimeInterval = 10, connections: Int = Bliksem.maxUsers) {
+    public init(base: URL, hosts: BrowserHosts, timeout: TimeInterval = 10, connections: Int = Bliksem.maxUsers, headers: [String: String] = [:]) {
         self.base = base
         self.hosts = hosts
+        self.headers = headers
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = timeout
         configuration.timeoutIntervalForResource = timeout * 2
@@ -63,17 +66,35 @@ public final class BliksemRunner: Sendable {
         }
     }
 
-    /// The plain request for a route under load: its sample path, and `{}` for a body.
+    /// The request for a route under load: its sample path and `{}` for a body, or a task's
+    /// own path, headers and body.
     public func request(_ route: BliksemRoute) -> URLRequest? {
-        guard let url = BliksemTarget.url(base, path: route.samplePath) else { return nil }
+        let path = route.isTask ? route.path : route.samplePath
+        var query: String?
+        var bare = path
+        if let mark = path.firstIndex(of: "?") {
+            bare = String(path[..<mark])
+            query = String(path[path.index(after: mark)...])
+        }
+        guard let url = BliksemTarget.url(base, path: bare, query: query) else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = route.method
         request.setValue("Dante Bliksem", forHTTPHeaderField: "User-Agent")
-        if route.takesBody {
+        if let body = route.body {
+            request.setValue(body.hasPrefix("{") || body.hasPrefix("[") ? "application/json" : "text/plain", forHTTPHeaderField: "Content-Type")
+            request.httpBody = Data(body.utf8)
+        } else if route.takesBody {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = Data("{}".utf8)
         }
+        signed(&request)
+        for (name, value) in route.headers ?? [:] { request.setValue(value, forHTTPHeaderField: name) }
         return request
+    }
+
+    /// Adds the headers every request carries.
+    func signed(_ request: inout URLRequest) {
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
     }
 
     // MARK: Load
@@ -95,8 +116,12 @@ public final class BliksemRunner: Sendable {
     }
 
     /// Runs the plan, calling `tick` every second, until it ends or the task is cancelled.
-    public func load(plan: LoadPlan, routes: [BliksemRoute], tick: @escaping @Sendable (Tick) -> Void) async -> [BliksemSample] {
-        let requests = routes.compactMap { route in request(route).map { (route.id, $0) } }
+    /// With `stopsWhenBroken`, it ends a few seconds after the breaking point.
+    public func load(plan: LoadPlan, routes: [BliksemRoute], stopsWhenBroken: Bool = false, tick: @escaping @Sendable (Tick) -> Void) async -> [BliksemSample] {
+        // A task's weight repeats it in the rotation.
+        let requests = routes.flatMap { route in
+            request(route).map { Array(repeating: (route.id, $0), count: route.weight ?? 1) } ?? []
+        }
         guard !requests.isEmpty else { return [] }
         let sink = SampleSink()
         let start = ContinuousClock.now
@@ -108,6 +133,7 @@ public final class BliksemRunner: Sendable {
                     while !Task.isCancelled {
                         let t = (ContinuousClock.now - start).seconds
                         if t >= plan.duration { return }
+                        if await sink.ended { return }
                         if user >= plan.users(at: t) {
                             try? await Task.sleep(for: .milliseconds(100))
                             continue
@@ -125,9 +151,14 @@ public final class BliksemRunner: Sendable {
                     // Whole seconds only, so the one still filling doesn't look like a dip.
                     let samples = await sink.samples.filter { $0.start < t.rounded(.down) }
                     let stage = plan.stage(at: t)
+                    let timeline = BliksemStats.seconds(samples) { plan.users(at: Double($0)) }
                     tick(Tick(elapsed: min(t, plan.duration), users: stage.users, stage: stage.name,
-                              timeline: BliksemStats.seconds(samples) { plan.users(at: Double($0)) }, routes: BliksemStats.routes(samples)))
+                              timeline: timeline, routes: BliksemStats.routes(samples)))
                     if t >= plan.duration { return }
+                    if stopsWhenBroken, let point = BliksemStats.breakingPoint(timeline), t > Double(point.second) + 4 {
+                        await sink.end()
+                        return
+                    }
                 }
             }
         }
@@ -165,8 +196,9 @@ public final class BliksemRunner: Sendable {
             func addNext() -> Bool {
                 guard let fuzz = pending.next() else { return false }
                 group.addTask {
-                    guard let request = Fuzz.request(fuzz, base: self.base, timeout: timeout),
-                          let answer = await self.send(request, route: fuzz.route.id, since: start, keepsBody: true) else { return nil }
+                    guard var request = Fuzz.request(fuzz, base: self.base, timeout: timeout) else { return nil }
+                    self.signed(&request)
+                    guard let answer = await self.send(request, route: fuzz.route.id, since: start, keepsBody: true) else { return nil }
                     return Fuzz.classify(fuzz, status: answer.sample.status, error: answer.sample.error, contentType: answer.contentType,
                                          body: answer.body, duration: answer.sample.duration, timeout: timeout, baselineStatus: known[fuzz.route.id])
                 }
@@ -299,7 +331,9 @@ public final class BliksemRunner: Sendable {
 
 actor SampleSink {
     private(set) var samples: [BliksemSample] = []
+    private(set) var ended = false
     func add(_ sample: BliksemSample) { samples.append(sample) }
+    func end() { ended = true }
 }
 
 private actor PhaseBox {

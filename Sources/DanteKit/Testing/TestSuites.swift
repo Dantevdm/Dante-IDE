@@ -4,11 +4,11 @@ import Foundation
 /// A repo can hold several, at any depth; each runs in its own folder.
 public struct TestSuite: Equatable, Sendable, Identifiable {
     public enum Tool: String, Equatable, Sendable {
-        case swift, cargo, go, maven, gradle, node, pytest, playwright
+        case swift, cargo, go, maven, gradle, amper, node, pytest, playwright
 
         /// Tools that cover the folders below them (Maven modules, Gradle subprojects, npm
         /// workspaces), so a nested folder with the same tool isn't a suite of its own.
-        var family: String { self == .maven || self == .gradle ? "jvm" : rawValue }
+        var family: String { [.maven, .gradle, .amper].contains(self) ? "jvm" : rawValue }
     }
 
     /// What the code under test is, for sorting unit tests into front-end and back-end.
@@ -49,7 +49,7 @@ public struct TestSuite: Equatable, Sendable, Identifiable {
         case .swift: "swift test"
         case .cargo: "cargo test"
         case .go: "go test ./..."
-        case .maven, .gradle, .node: "\(runner) test"
+        case .maven, .gradle, .amper, .node: "\(runner) test"
         case .pytest: "pytest"
         case .playwright: "playwright test"
         }
@@ -69,6 +69,8 @@ public struct TestSuite: Equatable, Sendable, Identifiable {
         switch tool {
         case .maven: return [base + "target/surefire-reports", base + "target/failsafe-reports"]
         case .gradle: return [base + "build/test-results"]
+        // Amper's JUnit run writes its reports under the module's task folders.
+        case .amper: return [base + "build/tasks"]
         default: return []
         }
     }
@@ -91,6 +93,8 @@ public struct TestSuite: Equatable, Sendable, Identifiable {
             return "\(runner) -B test" + (narrowed ? " -Dtest=" + Shell.quote(classes.joined(separator: ",")) + " -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false" : "")
         case .gradle:
             return "\(runner) test" + (narrowed ? classes.map { " --tests " + Shell.quote("*" + $0) }.joined() : "")
+        case .amper:
+            return "\(runner) test" + classes.map { " --include-classes " + Shell.quote("*" + $0) }.joined()
         case .node:
             // CI stops watch mode (react-scripts, vitest); verbose makes jest name every test.
             var extra: [String] = []
@@ -156,6 +160,7 @@ public enum TestSuites {
         if names.contains("build.gradle") || names.contains("build.gradle.kts") {
             return TestSuite(folder: folder, tool: .gradle, runner: names.contains("gradlew") ? "./gradlew" : "gradle", side: .backEnd)
         }
+        if let runner = amperRunner(names: names, folder: folder, read: read) { return TestSuite(folder: folder, tool: .amper, runner: runner, side: .backEnd) }
         if names.contains("Cargo.toml") { return TestSuite(folder: folder, tool: .cargo, runner: "cargo", side: .backEnd) }
         if names.contains("package.json"), let text = read(prefix + "package.json"), let package = JSONValue(line: text),
            let script = package["scripts"]?["test"]?.string, !script.contains("no test specified") {
@@ -165,6 +170,16 @@ public enum TestSuites {
             || names.contains("requirements.txt") && (names.contains { $0.hasPrefix("test_") && $0.hasSuffix(".py") } || has(prefix + "tests/__init__.py") || has(prefix + "tests/conftest.py")) {
             return TestSuite(folder: folder, tool: .pytest, runner: "python3", side: .backEnd)
         }
+        return nil
+    }
+
+    /// Amper (Kotlin's own build tool): a module.yaml with a product, or a project.yaml beside
+    /// the `kotlin` or `amper` wrapper script. The wrapper runs it when there is one.
+    static func amperRunner(names: Set<String>, folder: String, read: (String) -> String?) -> String? {
+        let prefix = folder.isEmpty ? "" : folder + "/"
+        let wrapper = names.contains("kotlin") ? "./kotlin" : names.contains("amper") ? "./amper" : nil
+        if names.contains("module.yaml"), read(prefix + "module.yaml")?.contains("product:") == true { return wrapper ?? "amper" }
+        if names.contains("project.yaml"), let wrapper { return wrapper }
         return nil
     }
 

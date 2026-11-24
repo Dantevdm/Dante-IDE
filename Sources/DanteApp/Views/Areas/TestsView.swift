@@ -134,7 +134,7 @@ struct TestsView: View {
             Image(systemName: "questionmark.circle").font(.dante(size: 18)).foregroundStyle(theme.amber.color)
             VStack(alignment: .leading, spacing: 3) {
                 Text("Dante can’t tell how to run these tests").font(.dante(size: 13.5, weight: .semibold)).foregroundStyle(theme.text.color)
-                Text("It looks for a pom.xml, build.gradle, a package.json with a test script, go.mod, Cargo.toml, Package.swift or a pytest setup, up to four folders down. Set test.command in .dante/project.yaml, or let \(session.agentName) work it out.")
+                Text("It looks for a pom.xml, build.gradle, an Amper module.yaml, a package.json with a test script, go.mod, Cargo.toml, Package.swift or a pytest setup, up to four folders down. Set test.command in .dante/project.yaml, or let \(session.agentName) work it out.")
                     .font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)

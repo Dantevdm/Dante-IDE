@@ -17,13 +17,20 @@ public struct BliksemRoute: Hashable, Sendable, Identifiable, Codable {
     public var method: String
     /// As written in the code: `/orders/{id}`, `/orders/:id`, `/orders/<int:id>`.
     public var path: String
+    /// A task from `.dante/bliksem.yaml`: its name, its own headers and body, and how often it
+    /// runs relative to the others.
+    public var name: String?
+    public var headers: [String: String]?
+    public var body: String?
+    public var weight: Int?
 
     public init(method: String, path: String) {
         self.method = method.uppercased()
         self.path = path.hasPrefix("/") ? path : "/" + path
     }
 
-    public var id: String { method + " " + path }
+    public var id: String { name.map { "task: " + $0 } ?? method + " " + path }
+    public var isTask: Bool { name != nil }
     /// Reads don't change anything, so they're the only routes hit unless writes are asked for.
     public var isRead: Bool { ["GET", "HEAD", "OPTIONS"].contains(method) }
     public var takesBody: Bool { ["POST", "PUT", "PATCH"].contains(method) }
@@ -177,6 +184,21 @@ public struct LoadPlan: Equatable, Sendable, Codable {
         ])
     }
 
+    /// Steps of users held for `step` seconds each (1, 2, 5, 10, 20, 50…) up to `most`, to find
+    /// the most it can take; the run stops early once it breaks.
+    public static func limit(most: Int, step: Int = 10) -> LoadPlan {
+        let most = min(max(most, 1), Bliksem.maxUsers)
+        var counts: [Int] = []
+        var scale = 1
+        while counts.last.map({ $0 < most }) ?? true {
+            for factor in [1, 2, 5] where (counts.last ?? 0) < most {
+                counts.append(min(factor * scale, most))
+            }
+            scale *= 10
+        }
+        return LoadPlan(stages: counts.map { Stage(name: "\($0) user\($0 == 1 ? "" : "s")", seconds: Double(step), from: $0, to: $0) })
+    }
+
     public var duration: Double { stages.reduce(0) { $0 + $1.seconds } }
     public var peak: Int { min(stages.map { max($0.from, $0.to) }.max() ?? 1, Bliksem.maxUsers) }
 
@@ -227,6 +249,18 @@ public struct BliksemRouteStats: Equatable, Sendable, Identifiable, Codable {
         guard let (code, _) = statuses.max(by: { ($0.value, -$0.key) < ($1.value, -$1.key) }) else { return "—" }
         return code == 0 ? "no answer" : String(code)
     }
+}
+
+/// A rate the system held.
+public struct Throughput: Equatable, Sendable, Codable {
+    /// Requests a second, averaged over the window.
+    public var rate: Double
+    /// The slowest second in the window.
+    public var floor: Int
+    public var users: Int
+    /// When the window began.
+    public var second: Int
+    public var p95: Double
 }
 
 /// Where the system stopped keeping up.
@@ -284,6 +318,26 @@ public enum BliksemStats {
         return nil
     }
 
+    /// The best rate held for `window` seconds in a row while healthy (at most 1% failing, 95%
+    /// within the slow limit), before the breaking point. Each window counts at its slowest
+    /// second, so one lucky second isn't called the maximum.
+    public static func maxThroughput(_ seconds: [BliksemSecond], before breaking: Int? = nil, window: Int = 3) -> Throughput? {
+        let usable = seconds.filter { breaking == nil || $0.second < breaking! }
+        guard usable.count >= window else { return nil }
+        var best: Throughput?
+        for start in 0...(usable.count - window) {
+            let run = usable[start..<(start + window)]
+            guard run.allSatisfy({ $0.requests >= 1 && $0.failingShare <= 0.01 && $0.p95 <= Bliksem.slowP95 }),
+                  zip(run, run.dropFirst()).allSatisfy({ $1.second == $0.second + 1 }) else { continue }
+            let floor = run.map(\.requests).min() ?? 0
+            let rate = Double(run.reduce(0) { $0 + $1.requests }) / Double(window)
+            let candidate = Throughput(rate: rate, floor: floor, users: run.map(\.users).max() ?? 0, second: run.first!.second,
+                                       p95: run.map(\.p95).max() ?? 0)
+            if best.map({ (floor, rate) > ($0.floor, $0.rate) }) ?? true { best = candidate }
+        }
+        return best
+    }
+
     /// "180 ms", "1.4 s".
     public static func time(_ seconds: Double) -> String {
         seconds < 1 ? "\(Int((seconds * 1000).rounded())) ms" : String(format: "%.1f s", seconds)
@@ -301,13 +355,17 @@ public struct LoadSummary: Equatable, Sendable, Codable {
     public var p99: Double
     public var peakUsers: Int
     public var breakingPoint: BreakingPoint?
+    /// The most it handled while still healthy, held for a few seconds.
+    public var maxThroughput: Throughput?
 
     public static func make(_ samples: [BliksemSample], timeline: [BliksemSecond], duration: Double) -> LoadSummary {
         let times = samples.filter { !$0.failed }.map(\.duration).sorted()
+        let breaking = BliksemStats.breakingPoint(timeline)
         return LoadSummary(requests: samples.count, failures: samples.count { $0.failed }, seconds: duration,
                            peakRate: timeline.map(\.requests).max() ?? 0,
                            p50: BliksemStats.percentile(times, 50), p95: BliksemStats.percentile(times, 95), p99: BliksemStats.percentile(times, 99),
-                           peakUsers: timeline.map(\.users).max() ?? 0, breakingPoint: BliksemStats.breakingPoint(timeline))
+                           peakUsers: timeline.map(\.users).max() ?? 0, breakingPoint: breaking,
+                           maxThroughput: BliksemStats.maxThroughput(timeline, before: breaking?.second))
     }
 
     public var rate: Double { seconds > 0 ? Double(requests) / seconds : 0 }
@@ -315,7 +373,8 @@ public struct LoadSummary: Equatable, Sendable, Codable {
 
     public var verdict: String {
         if requests == 0 { return "Nothing answered: is the app running at that address?" }
-        if let point = breakingPoint { return "It broke at \(point.users) users, \(point.second) s in: \(point.reason)." }
-        return "It held up to \(peakUsers) users: \(Int(rate.rounded())) requests a second, 95% within \(BliksemStats.time(p95))."
+        let most = maxThroughput.map { " At most \($0.rate.formatted(.number.precision(.fractionLength(0)))) requests a second while healthy, at \($0.users) users." } ?? ""
+        if let point = breakingPoint { return "It broke at \(point.users) users, \(point.second) s in: \(point.reason).\(most)" }
+        return "It held up to \(peakUsers) users: \(Int(rate.rounded())) requests a second, 95% within \(BliksemStats.time(p95)).\(most)"
     }
 }

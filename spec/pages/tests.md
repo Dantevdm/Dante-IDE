@@ -10,7 +10,7 @@ Tests shows every test in the code by kind (Front-end, Back-end, Integration, Se
 ## Highlights
 - Every run counts: yours from this page, and the test commands Claude, Codex and jobs run, so the page always shows the latest result.
 - Tests are grouped by kind, not folder: Front-end (tests of the web app's code), Back-end (server code tested on its own), Unit (code on neither side), Integration, Security, End-to-end, UI and Performance, or the project's own kinds from test.categories.
-- Each app folder with its own runner (Maven, Gradle, npm, Go, pytest, Cargo, Swift), up to four folders down, runs in its own folder; Maven and Gradle results are read from the JUnit reports they write.
+- Each app folder with its own runner (Maven, Gradle, Amper, npm, Go, pytest, Cargo, Swift), up to four folders down, runs in its own folder; Maven, Gradle and Amper results are read from the JUnit reports they write. Amper is Kotlin's own build tool: a `module.yaml` with a `product:`, run through the `kotlin` (or `amper`) wrapper beside it as `./kotlin test`, narrowed by class with `--include-classes`; its reports are found under `build/tasks`.
 - Choose a run in the strip to see the page as that run left it.
 - Playwright browser tests run beside a folder's unit tests, as a suite of their own, and each failure shows what the browser saw: its screenshots, the video and the trace.
 

@@ -51,6 +51,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Tables come only from CREATE TABLE statements in the repo (and ORM table names); a live database is never read.
 - A file naming six or more services is a catalogue, not a caller, so it draws no links.
 - Route examples in comments are skipped.
+- Ktor routes are read from its routing DSL: `get("/x") { … }` and friends, a bare `get { … }` under a `route("/x")` block, nested `route` prefixes, and route functions (`fun Route.orderRoutes()`) in other files placed under every block that calls them. Commented-out routes and strings don't count.
 - A route annotation spread over several lines (`@GetMapping(` then `value = "/status",` then `produces = …)`, as generated controllers write them) is read whole; `value =` or `path =` wins over other strings in it.
 - Parts that use each other in a loop keep their first tier rather than being stretched across.
 - Access comes from Spring Security config (permitAll, authenticated, ignoring, anyRequest) and annotations, Express-style middleware, Python decorators and dependencies, and Go middleware; without any auth library, routes are open with that as the reason.

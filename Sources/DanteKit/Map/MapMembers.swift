@@ -203,7 +203,7 @@ extension SystemMap {
 
         // Routes, each to the method that handles it.
         var served: [Int: [String]] = [:]
-        let found = isJVM(file) ? annotatedRoutes(in: text) : routes(in: text)
+        let found = serverRoutes(file: file, text: text)
         let rules = found.isEmpty ? AccessRules() : AccessRules.load(files: files, read: read)
         for route in found {
             let index = isJVM(file) ? members.firstIndex { !$0.isType && $0.line >= route.line }
@@ -401,7 +401,7 @@ extension SystemMap {
                 }
             }
         }
-        func serves(_ file: String) -> Bool { !(isJVM(file) ? annotatedRoutes(in: text(file)) : routes(in: text(file))).isEmpty }
+        func serves(_ file: String) -> Bool { !serverRoutes(file: file, text: text(file)).isEmpty }
         var chain = direct
         var calls: [(from: String, to: String)] = []
         var frontier = direct.filter { !serves($0) }
@@ -437,7 +437,7 @@ extension SystemMap {
             let callees = Set(calls.filter { $0.from == file }.map(\.to))
             let names = Set(callees.map(stem))
             let fields = fieldTypes(in: body, types: names).filter { names.contains($0.value) }.map(\.key)
-            for route in isJVM(file) ? annotatedRoutes(in: body) : routes(in: body) {
+            for route in serverRoutes(file: file, text: body) {
                 let index = isJVM(file) ? members.firstIndex { !$0.isType && $0.line >= route.line }
                     : members.lastIndex { $0.line <= route.line }
                 if let index, !callees.isEmpty, !direct.contains(file) {

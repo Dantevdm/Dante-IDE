@@ -298,8 +298,9 @@ public struct SystemMap: Equatable, Sendable {
         var webhookFiles: [(group: String, file: String)] = []
         var groups: [String: (items: [Item], owners: [String: Int])] = [:]
         var accessRules: AccessRules? = projectAccessRules
+        let ktor = ktorRoutes(files: backendFiles, text: text)
         for file in backendFiles {
-            let found = isJVM(file) ? annotatedRoutes(in: text(file)) : routes(in: text(file))
+            let found = ktor[file] ?? serverRoutes(file: file, text: text(file))
             guard !found.isEmpty else { continue }
             let ownerID = owner(file)?.id
             if accessRules == nil { accessRules = AccessRules.load(files: files, read: read) }
@@ -710,6 +711,15 @@ public struct SystemMap: Equatable, Sendable {
             }
         }
         return found
+    }
+
+    /// One file's routes, read on its own (a Ktor route function's are under no prefix).
+    static func serverRoutes(file: String, text: String) -> [Route] {
+        if isKtor(file, text) {
+            let found = ktorScan(text).routes
+            if !found.isEmpty { return found }
+        }
+        return isJVM(file) ? annotatedRoutes(in: text) : routes(in: text)
     }
 
     static func isJVM(_ path: String) -> Bool {

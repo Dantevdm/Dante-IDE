@@ -49,7 +49,7 @@ public struct TestOutputParser: Sendable {
 
     public mutating func consume(_ rawLine: String) {
         let line = rawLine.trimmingCharacters(in: .whitespaces)
-        if swiftTesting(line) || xcTest(line) || cargo(line) || goTest(line) || pytest(line) || playwright(line) || jest(line) { return }
+        if swiftTesting(line) || xcTest(line) || cargo(line) || goTest(line) || pytest(line) || playwright(line) || junitTree(line) || jest(line) { return }
     }
 
     // MARK: Swift
@@ -160,6 +160,24 @@ public struct TestOutputParser: Sendable {
         default: .failed
         }
         record(TestResult(suite: String(match.1), name: String(match.2), status: status))
+        return true
+    }
+
+    /// The JUnit Platform's console tree (Amper prints it):
+    /// `├─ MigrationTest ✔`, then `│  ├─ freshDatabase() ✔` or `│  └─ upgrades() ✘ expected 2`.
+    private mutating func junitTree(_ line: String) -> Bool {
+        guard let first = line.first, "│├└╷╵".contains(first),
+              let match = line.firstMatch(of: /^[│├└╷╵─\s]+(.+?)\s+(✔|✘|↷)(?:\s+(.*))?$/) else { return false }
+        let name = String(match.1)
+        guard name.hasSuffix(")") || name.contains("(") else {
+            // A class: the tests under it belong to it.
+            if !name.contains(" ") || !name.hasPrefix("JUnit") { currentFile = name }
+            return true
+        }
+        let bare = name.hasSuffix("()") ? String(name.dropLast(2)) : name
+        let status: TestResult.Status = match.2 == "✔" ? .passed : match.2 == "✘" ? .failed : .skipped
+        let issues = status == .failed ? match.3.map { [TestResult.Issue(message: String($0), file: nil, line: nil)] } ?? [] : []
+        record(TestResult(suite: currentFile ?? "", name: bare, status: status, issues: issues))
         return true
     }
 

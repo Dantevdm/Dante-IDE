@@ -37,7 +37,18 @@ final class BliksemModel {
     var findingTargets = false
     var problem: String?
 
+    // Tasks from .dante/bliksem.yaml
+    var tasks: BliksemTasks?
+    /// Variables the tasks file names that nothing here sets.
+    var missingVariables: [String] = []
+
     // Load
+    enum Shape: String, CaseIterable, Identifiable {
+        case standard, limit
+        var id: String { rawValue }
+        var title: String { self == .standard ? "Ramp and spike" : "Find the limit" }
+    }
+    var shape: Shape = .standard
     var peakUsers = 20
     var seconds = 60
     var loadTick: BliksemRunner.Tick?
@@ -62,7 +73,23 @@ final class BliksemModel {
     private var root: URL?
 
     var selectedRoutes: [BliksemRoute] {
-        routes.filter { chosen.contains($0.id) && ($0.isRead || includeWrites) }
+        routes.filter { chosen.contains($0.id) && ($0.isRead || $0.isTask || includeWrites) }
+    }
+
+    /// The load plan the settings make.
+    var plan: LoadPlan {
+        shape == .limit ? LoadPlan.limit(most: min(peakUsers * 2, Bliksem.maxUsers)) : LoadPlan.standard(peak: peakUsers, seconds: seconds)
+    }
+
+    /// The process's environment, mise, then .env and .env.local, later ones winning.
+    nonisolated static func environment(root: URL) -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        env.merge(Mise.overlay(for: root)) { _, own in own }
+        for name in [".env", ".env.local"] {
+            guard let text = try? String(contentsOf: root.appending(path: name), encoding: .utf8) else { continue }
+            env.merge(EnvFile.values(text)) { _, file in file }
+        }
+        return env
     }
 
     // MARK: Loading
@@ -87,8 +114,11 @@ final class BliksemModel {
             let modules = await MapView.modules(root: root, files: files)
             system = await Task.detached(priority: .utility) { SystemMap.build(files: files, read: read, compose: compose, modules: modules) }.value
         }
-        let found = BliksemRoute.from(system)
-        if found.map(\.id) != routes.map(\.id) {
+        let file = BliksemTasks.load(projectRoot: root)
+        tasks = file
+        missingVariables = file.map { file in file.missing(env: Self.environment(root: root)) } ?? []
+        let found = (file?.tasks ?? []) + BliksemRoute.from(system)
+        if found != routes {
             let known = Set(routes.map(\.id))
             routes = found
             // New reads are chosen; writes only when asked for, and choices already made stay.
@@ -130,7 +160,7 @@ final class BliksemModel {
             let url = URL(string: "http://localhost:\(holder.port)")!
             if !candidates.contains(where: { $0.0 == url }) { candidates.append((url, holder.listening.command + " in this project")) }
         }
-        let probes = Array(routes.filter(\.isRead).prefix(3))
+        let probes = Array(routes.filter { $0.isRead && !$0.isTask }.prefix(3))
         let scored = await withTaskGroup(of: (URL, String, Int)?.self) { group in
             for (url, source) in candidates {
                 group.addTask { await Self.probe(url, routes: probes).map { (url, source, $0.1) } }
@@ -196,7 +226,10 @@ final class BliksemModel {
 
     func start(session: Session, root: URL) {
         guard running == nil, let base = checkedTarget(root: root) else { return }
-        let routes = selectedRoutes
+        // Tasks and headers are filled from the environment only now, and only for this run.
+        let filled = tasks?.filled(env: Self.environment(root: root))
+        let routes = selectedRoutes.map { route in filled?.tasks.first { $0.id == route.id } ?? route }
+        let headers = filled?.headers ?? [:]
         guard !routes.isEmpty else {
             problem = "Choose at least one route to send to."
             return
@@ -205,14 +238,15 @@ final class BliksemModel {
         running = mode
         switch mode {
         case .load:
-            let plan = LoadPlan.standard(peak: peakUsers, seconds: seconds)
+            let plan = self.plan
+            let stops = shape == .limit
             loadPlan = plan
             loadTick = nil
             loadSummary = nil
             task = Task {
-                let runner = BliksemRunner(base: base, hosts: hosts, connections: plan.peak)
+                let runner = BliksemRunner(base: base, hosts: hosts, connections: plan.peak, headers: headers)
                 let began = ContinuousClock.now
-                let samples = await runner.load(plan: plan, routes: routes) { tick in
+                let samples = await runner.load(plan: plan, routes: routes, stopsWhenBroken: stops) { tick in
                     Task { @MainActor in self.loadTick = tick }
                 }
                 let elapsed = ContinuousClock.now - began
@@ -223,11 +257,11 @@ final class BliksemModel {
                 self.finish()
             }
         case .fuzz:
-            let cases = Fuzz.cases(for: routes, includeWrites: includeWrites, kinds: fuzzKinds)
+            let cases = Fuzz.cases(for: routes.filter { !$0.isTask }, includeWrites: includeWrites, kinds: fuzzKinds)
             fuzzProgress = BliksemRunner.FuzzProgress(done: 0, total: cases.count, findings: [])
             fuzzDone = false
             task = Task {
-                let runner = BliksemRunner(base: base, hosts: hosts, timeout: 8, connections: 8)
+                let runner = BliksemRunner(base: base, hosts: hosts, timeout: 8, connections: 8, headers: headers)
                 let findings = await runner.fuzz(cases) { progress in
                     Task { @MainActor in
                         guard !self.fuzzDone else { return }
@@ -252,7 +286,7 @@ final class BliksemModel {
             session.serviceKeeper.youStopped([service], all: services)
             Self.remember(restore: plan, root: root)
             task = Task {
-                let runner = BliksemRunner(base: base, hosts: hosts, timeout: 5, connections: 20)
+                let runner = BliksemRunner(base: base, hosts: hosts, timeout: 5, connections: 20, headers: headers)
                 let outcome = await runner.chaos(plan, routes: routes, projectRoot: root) { tick in
                     Task { @MainActor in
                         guard self.chaosOutcome == nil else { return }

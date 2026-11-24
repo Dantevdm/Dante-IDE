@@ -61,6 +61,10 @@ public struct TestCommand: Equatable, Sendable {
             let gradle = has("gradlew") ? "./gradlew" : "gradle"
             return TestCommand(label: "\(gradle) test", arguments: [gradle, "test"], readsXUnit: false)
         }
+        if let amper = TestSuites.amperRunner(names: Set((try? fileManager.contentsOfDirectory(atPath: root.path)) ?? []), folder: "",
+                                              read: { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }) {
+            return TestCommand(label: "\(amper) test", arguments: [amper, "test"], readsXUnit: false, reportFolders: ["build/tasks"])
+        }
         if has("package.json"),
            let data = fileManager.contents(atPath: root.appending(path: "package.json").path),
            let package = JSONValue(line: String(decoding: data, as: UTF8.self)),
@@ -119,6 +123,13 @@ public struct TestCommand: Equatable, Sendable {
             return TestCommand(label: "\(label) · \(count)", arguments: narrowedArguments, readsXUnit: readsXUnit)
         case "python3":
             return narrowed(tests.map { "\($0.suite)::\($0.name)" })
+        case "./kotlin", "./amper", "amper":
+            // Amper narrows by class; a test's suite is its class.
+            let classes = Set(tests.map { $0.suite.components(separatedBy: ".").last ?? $0.suite }).filter { !$0.isEmpty }.sorted()
+            guard !classes.isEmpty else { return nil }
+            var command = narrowed(classes.flatMap { ["--include-classes", "*" + $0] })
+            command.reportFolders = reportFolders
+            return command
         case "sh" where arguments.count == 3:
             // A custom test.command: narrow the go test or pytest inside it.
             let script = arguments[2]
@@ -245,7 +256,8 @@ public final class TestRun {
             guard let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
             for case let file as URL in walker where file.pathExtension == "xml" {
                 guard let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
-                      modified >= since.addingTimeInterval(-2), let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                      modified >= since.addingTimeInterval(-2), let text = try? String(contentsOf: file, encoding: .utf8),
+                      text.contains("<testsuite") else { continue }
                 texts.append(text)
             }
         }

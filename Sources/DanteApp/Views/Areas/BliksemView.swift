@@ -54,8 +54,10 @@ struct BliksemView: View {
 
     private var startHelp: String {
         switch model.mode {
-        case .load: "Sends requests from up to \(LoadPlan.standard(peak: model.peakUsers, seconds: model.seconds).peak) users at once for \(model.seconds) s"
-        case .fuzz: "Sends \(Fuzz.cases(for: model.selectedRoutes, includeWrites: model.includeWrites, kinds: model.fuzzKinds).count) odd requests, four at a time"
+        case .load: model.shape == .limit
+            ? "Adds users step by step, up to \(model.plan.peak), and stops once it breaks"
+            : "Sends requests from up to \(model.plan.peak) users at once for \(model.seconds) s"
+        case .fuzz: "Sends \(Fuzz.cases(for: model.selectedRoutes.filter { !$0.isTask }, includeWrites: model.includeWrites, kinds: model.fuzzKinds).count) odd requests, four at a time"
         case .chaos: "Runs a light load, \(model.fault.label.lowercased()) for 20 s, puts it back and times the recovery"
         }
     }
@@ -146,16 +148,31 @@ struct BliksemView: View {
         switch model.mode {
         case .load:
             Card("Load") {
-                Stepper(value: $model.peakUsers, in: 1...((model.targetsLive ? LiveLoadTest.maxUsers : Bliksem.maxUsers) / 2), step: model.peakUsers < 10 ? 1 : 5) {
-                    settingRow("Users at peak", "\(model.peakUsers), spiking to \(min(model.peakUsers * 2, Bliksem.maxUsers))")
-                }
-                .disabled(model.running != nil)
-                Picker(selection: $model.seconds) {
-                    ForEach([30, 60, 120, 300], id: \.self) { Text($0 < 60 ? "\($0) s" : "\($0 / 60) min").tag($0) }
-                } label: { settingRow("How long", "") }
+                Picker(selection: $model.shape) {
+                    ForEach(BliksemModel.Shape.allCases) { Text($0.title).tag($0) }
+                } label: { settingRow("Shape", "") }
                     .pickerStyle(.segmented)
                     .disabled(model.running != nil)
-                StagesStrip(plan: LoadPlan.standard(peak: model.peakUsers, seconds: model.seconds), elapsed: model.running == .load ? model.loadTick?.elapsed : nil)
+                    .help("Ramp and spike checks it copes with a busy hour; Find the limit adds users step by step to find its maximum throughput")
+                Stepper(value: $model.peakUsers, in: 1...((model.targetsLive ? LiveLoadTest.maxUsers : Bliksem.maxUsers) / 2), step: model.peakUsers < 10 ? 1 : 5) {
+                    if model.shape == .limit {
+                        settingRow("Most users", "\(model.plan.peak)")
+                    } else {
+                        settingRow("Users at peak", "\(model.peakUsers), spiking to \(min(model.peakUsers * 2, Bliksem.maxUsers))")
+                    }
+                }
+                .disabled(model.running != nil)
+                if model.shape == .standard {
+                    Picker(selection: $model.seconds) {
+                        ForEach([30, 60, 120, 300], id: \.self) { Text($0 < 60 ? "\($0) s" : "\($0 / 60) min").tag($0) }
+                    } label: { settingRow("How long", "") }
+                        .pickerStyle(.segmented)
+                        .disabled(model.running != nil)
+                } else {
+                    Text("10 s at each step (\(model.plan.stages.map { String($0.to) }.joined(separator: ", ")) users). It stops a few seconds after it breaks; the highest rate it held while healthy is its maximum throughput.")
+                        .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                }
+                StagesStrip(plan: model.plan, elapsed: model.running == .load ? model.loadTick?.elapsed : nil)
             }
         case .fuzz:
             Card("Garbage") {
@@ -221,8 +238,9 @@ struct BliksemView: View {
             if !model.routesLoaded {
                 Text("Reading the routes from the code…").font(.dante(size: 12.5)).foregroundStyle(theme.text3.color)
             } else if routes.isEmpty {
-                Text("No routes found in the code. Bliksem takes the API's routes from the Map; a project whose server Dante can't read gets no routes yet.")
+                Text("No routes found in the code. Bliksem takes the API's routes from the Map; a project whose server Dante can't read gets no routes yet. Tasks in \(BliksemTasks.path) work either way.")
                     .font(.dante(size: 12.5)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                tasksNote
             } else {
                 if model.includeWrites, routes.contains(where: { !$0.isRead }) {
                     Text("Writes are on: these requests can create, change and delete data. Point Bliksem at a throwaway database.")
@@ -234,6 +252,7 @@ struct BliksemView: View {
                         routeRow(route)
                     }
                 }
+                tasksNote
                 if routes.count > 10 {
                     LinkButton(showsAllRoutes ? "Show fewer" : "Show all \(routes.count) routes") { showsAllRoutes.toggle() }
                 }
@@ -241,8 +260,37 @@ struct BliksemView: View {
         }
     }
 
+    /// The tasks file: what it is, what it still needs, and the agent to write it.
+    @ViewBuilder
+    private var tasksNote: some View {
+        let tasks = model.tasks
+        VStack(alignment: .leading, spacing: 6) {
+            if !model.missingVariables.isEmpty {
+                Label("\(BliksemTasks.path) needs \(model.missingVariables.joined(separator: ", ")). Set \(model.missingVariables.count == 1 ? "it" : "them") in .env or .env.local (never in the file), then come back.",
+                      systemImage: "key.fill")
+                    .font(.dante(size: 12)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(tasks?.problems ?? [], id: \.self) { problem in
+                Label(problem, systemImage: "exclamationmark.triangle").font(.dante(size: 12)).foregroundStyle(theme.amber.color)
+            }
+            HStack(alignment: .top, spacing: 10) {
+                Text(tasks == nil
+                     ? "Measure the real work too: tasks in \(BliksemTasks.path) send requests with headers (an API key from .env) and real bodies, like a full calculation or a document render."
+                     : "\(tasks?.tasks.count ?? 0) task\(tasks?.tasks.count == 1 ? "" : "s") from \(BliksemTasks.path), with \(tasks?.headers.isEmpty == false ? "its headers on every request" : "no shared headers").")
+                    .font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Button {
+                    session.askClaude(BliksemTasks.brief(routes: model.routes.filter { !$0.isTask }, hasFile: tasks != nil))
+                } label: { Label(tasks == nil ? "Write tasks" : "Add tasks", systemImage: "wand.and.stars") }
+                    .buttonStyle(DanteButtonStyle())
+                    .help("Asks \(session.agentName) to read the handlers and write realistic requests into \(BliksemTasks.path), with secrets as ${NAME} references")
+            }
+        }
+        .padding(.top, 6)
+    }
+
     private func routeRow(_ route: BliksemRoute) -> some View {
-        let usable = route.isRead || model.includeWrites
+        let usable = route.isRead || route.isTask || model.includeWrites
         let on = model.chosen.contains(route.id) && usable
         let stats = model.mode == .load ? model.loadTick?.routes.first { $0.route == route.id } : nil
         return Button {
@@ -253,7 +301,12 @@ struct BliksemView: View {
                 Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(on ? theme.accent.color : theme.text3.color)
                 Text(route.method).font(.dante(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(route.isRead ? theme.green.color : theme.amber.color).frame(width: 52, alignment: .leading)
-                Text(route.path).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(usable ? theme.text.color : theme.text3.color).lineLimit(1)
+                if let name = route.name {
+                    Text(name).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
+                    Text(route.path).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
+                } else {
+                    Text(route.path).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(usable ? theme.text.color : theme.text3.color).lineLimit(1)
+                }
                 Spacer(minLength: 8)
                 if let stats {
                     Text("\(stats.requests.formatted()) · \(stats.usual) · p95 \(BliksemStats.time(stats.p95))")
@@ -264,7 +317,8 @@ struct BliksemView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(usable ? "Sent as \(route.method) \(route.samplePath)" : "A write: turn on Include writes to send it")
+        .help(route.isTask ? "A task from \(BliksemTasks.path): \(route.method) \(route.path)\(route.body == nil ? "" : " with its body")\(route.weight.map { ", weight \($0)" } ?? "")"
+              : usable ? "Sent as \(route.method) \(route.samplePath)" : "A write: turn on Include writes to send it")
     }
 
     // MARK: Results
@@ -281,7 +335,7 @@ struct BliksemView: View {
     @ViewBuilder
     private var loadResults: some View {
         if let tick = model.loadTick, let plan = model.loadPlan {
-            Card(model.running == .load ? "\(tick.stage) · \(tick.users) users" : "Last run") {
+            Card(model.running == .load ? (tick.stage.first?.isNumber == true ? "Step: \(tick.stage)" : "\(tick.stage) · \(tick.users) users") : "Last run") {
                 if model.running == nil, model.loadSummary != nil { askButton }
             } content: {
                 let summary = model.loadSummary ?? LoadSummary.make([], timeline: tick.timeline, duration: tick.elapsed)
@@ -293,6 +347,12 @@ struct BliksemView: View {
                 BliksemChart(timeline: tick.timeline, duration: plan.duration, breaking: (model.loadSummary?.breakingPoint ?? BliksemStats.breakingPoint(tick.timeline))?.second,
                              bands: [], live: model.running == .load)
                     .frame(height: 190)
+                let refused = tick.routes.filter { ["401", "403"].contains($0.usual) }
+                if !refused.isEmpty {
+                    Label("\(refused.count) of \(tick.routes.count) answered mostly \(refused[0].usual): they want a key, so these figures measure the refusal, not the work. Put the header in \(BliksemTasks.path) (headers: X-API-Key: ${NAME}) and the value in .env.",
+                          systemImage: "lock.fill")
+                        .font(.dante(size: 12)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
+                }
                 if summary.requests == 0, model.running == nil {
                     Text("Nothing answered. Check the target is the API and that it's running.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
@@ -311,6 +371,10 @@ struct BliksemView: View {
             figure("p50", BliksemStats.time(summary?.p50 ?? recent.last?.p50 ?? 0))
             figure("p95", BliksemStats.time(summary?.p95 ?? recent.last?.p95 ?? 0))
             if let summary { figure("p99", BliksemStats.time(summary.p99)) }
+            if let most = summary?.maxThroughput ?? (summary == nil ? BliksemStats.maxThroughput(timeline, before: BliksemStats.breakingPoint(timeline)?.second) : nil) {
+                figure("Max healthy", "\(Int(most.rate.rounded()))/s")
+                    .help("The most requests a second it held for 3 s in a row with at most 1% failing and 95% within \(BliksemStats.time(Bliksem.slowP95)), at \(most.users) users")
+            }
             figure("Failed", requests == 0 ? "—" : String(format: "%.1f%%", Double(failures) / Double(requests) * 100), bad: failures > 0)
         }
     }
@@ -397,6 +461,9 @@ struct BliksemView: View {
             guard let summary = model.loadSummary else { return "" }
             lines.append("Bliksem load test against \(model.target): \(summary.verdict)")
             lines.append("\(summary.requests) requests over \(Int(summary.seconds)) s, up to \(summary.peakUsers) users; p50 \(BliksemStats.time(summary.p50)), p95 \(BliksemStats.time(summary.p95)), p99 \(BliksemStats.time(summary.p99)); \(summary.failures) failed.")
+            if let most = summary.maxThroughput {
+                lines.append("Maximum healthy throughput: \(Int(most.rate.rounded())) requests a second at \(most.users) users (p95 \(BliksemStats.time(most.p95))).")
+            }
             lines.append("Slowest and failing routes:")
             for route in (model.loadTick?.routes ?? []).prefix(8) {
                 lines.append("- \(route.route): \(route.requests) requests, mostly \(route.usual), p95 \(BliksemStats.time(route.p95)), \(route.failures) failed")
@@ -463,11 +530,11 @@ private struct StagesStrip: View {
                     VStack(alignment: .leading, spacing: 3) {
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 3).fill(theme.track.color)
-                            RoundedRectangle(cornerRadius: 3).fill(index == 2 ? theme.red.color : theme.accent.color)
+                            RoundedRectangle(cornerRadius: 3).fill(stage.name == "Spike" ? theme.red.color : theme.accent.color)
                                 .frame(width: max(0, (width * stage.seconds / max(plan.duration, 1) - 2) * share))
                         }
                         .frame(height: 6)
-                        Text("\(stage.name) \(stage.from == stage.to ? "\(stage.to)" : "\(stage.from)→\(stage.to)")")
+                        Text(stage.name.first?.isNumber == true ? stage.name : "\(stage.name) \(stage.from == stage.to ? "\(stage.to)" : "\(stage.from)→\(stage.to)")")
                             .font(.dante(size: 10.5)).foregroundStyle(theme.text3.color).lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading).clipped()
                     }
