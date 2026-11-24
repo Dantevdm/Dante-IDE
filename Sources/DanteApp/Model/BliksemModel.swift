@@ -68,6 +68,25 @@ final class BliksemModel {
     var chaosOutcome: BliksemRunner.ChaosOutcome?
     var chaosPlan: ChaosPlan?
 
+    // Watching the target: CPU and memory, and a JVM's stacks
+    /// What serves the target, found when a run starts.
+    var watchSource: WatchSource?
+    var resources: [ResourceSample] = []
+    var profiling = true
+    var profile: Profile?
+    /// Why the last run couldn't be profiled.
+    var profileNote: String?
+    /// The last load run's requests, for each route's spread of times.
+    var samples: [BliksemSample] = []
+    var chaosSuggestions: [ChaosSuggestion] = []
+    /// The route opened in the list.
+    var openRoute: String?
+    /// Each opened route's picture, by route id (nil inside when the code can't be read).
+    var flows: [String: RouteFlow?] = [:]
+    var readingFlows: Set<String> = []
+    private var files: [String] = []
+    private var watchers: [Task<Void, Never>] = []
+
     private(set) var running: Mode?
     private var task: Task<Void, Never>?
     private var root: URL?
@@ -104,6 +123,8 @@ final class BliksemModel {
             routes = []
         }
         await restoreLeftBroken(root: root)
+        if files != workspace.files { flows = [:]; readingFlows = [] }
+        files = workspace.files
         let system: SystemMap
         if let cache = session.mapCache, cache.revision == workspace.revision, let cached = cache.system {
             system = cached
@@ -243,8 +264,10 @@ final class BliksemModel {
             loadPlan = plan
             loadTick = nil
             loadSummary = nil
+            samples = []
             task = Task {
                 let runner = BliksemRunner(base: base, hosts: hosts, connections: plan.peak, headers: headers)
+                await self.startWatching(base: base, root: root, profiles: self.profiling)
                 let began = ContinuousClock.now
                 let samples = await runner.load(plan: plan, routes: routes, stopsWhenBroken: stops) { tick in
                     Task { @MainActor in self.loadTick = tick }
@@ -254,6 +277,8 @@ final class BliksemModel {
                 let duration = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
                 self.loadTick = BliksemRunner.Tick(elapsed: min(duration, plan.duration), users: 0, stage: "Done", timeline: timeline, routes: BliksemStats.routes(samples))
                 self.loadSummary = LoadSummary.make(samples, timeline: timeline, duration: max(duration, 1))
+                self.samples = samples
+                self.stopWatching()
                 self.finish()
             }
         case .fuzz:
@@ -285,8 +310,10 @@ final class BliksemModel {
             // Keep running would put it back on its own; tell it this one is ours for now.
             session.serviceKeeper.youStopped([service], all: services)
             Self.remember(restore: plan, root: root)
+            chaosSuggestions = []
             task = Task {
                 let runner = BliksemRunner(base: base, hosts: hosts, timeout: 5, connections: 20, headers: headers)
+                await self.startWatching(base: base, root: root, profiles: false)
                 let outcome = await runner.chaos(plan, routes: routes, projectRoot: root) { tick in
                     Task { @MainActor in
                         guard self.chaosOutcome == nil else { return }
@@ -299,10 +326,107 @@ final class BliksemModel {
                 self.chaosTick = BliksemRunner.ChaosTick(phase: .done, elapsed: outcome.times.ended,
                                                          timeline: BliksemStats.seconds(outcome.samples) { _ in plan.users }, times: outcome.times)
                 if let problem = outcome.problem { self.problem = problem }
+                self.stopWatching()
+                if let analysis = outcome.analysis { await self.suggest(analysis, plan: plan, root: root) }
                 self.finish()
                 await self.loadServices(root: root)
             }
         }
+    }
+
+    // MARK: Watching
+
+    /// The program or container serving `base` on this Mac: a running compose service
+    /// publishing its port, or the program listening on it.
+    func findSource(base: URL, root: URL) async -> WatchSource? {
+        guard let host = base.host(percentEncoded: false)?.lowercased(), ["localhost", "127.0.0.1", "::1"].contains(host) else { return nil }
+        let port = base.port ?? (base.scheme == "https" ? 443 : 80)
+        if case .success(let containers) = await ContainerState.load(projectRoot: root),
+           let container = containers.first(where: { $0.state == "running" && $0.ports.contains { $0.contains(":\(port)->") } }) {
+            return .container(name: container.name, service: container.service)
+        }
+        if let listening = await ListeningPort.load().first(where: { $0.port == port && !$0.isDocker }) {
+            return .process(pid: listening.pid, command: listening.command)
+        }
+        return nil
+    }
+
+    private func startWatching(base: URL, root: URL, profiles: Bool) async {
+        resources = []
+        profile = nil
+        profileNote = nil
+        watchSource = await findSource(base: base, root: root)
+        guard let source = watchSource else { return }
+        let start = ContinuousClock.now
+        watchers.append(Task.detached {
+            await BliksemWatcher.resources(source, root: root, since: start) { sample in
+                Task { @MainActor in self.resources.append(sample) }
+            }
+        })
+        guard profiles else { return }
+        switch await BliksemWatcher.dumpCommand(source, root: root) {
+        case .success(let command):
+            let files = files
+            let read = MapView.reader(root: root)
+            let packages = await Task.detached(priority: .utility) { Profile.packages(files: files, read: read) }.value
+            guard !packages.isEmpty else {
+                profileNote = "The profiler shows the project’s own code, and no Kotlin or Java package was found in it."
+                return
+            }
+            profile = Profile(packages: packages)
+            watchers.append(Task.detached {
+                await BliksemWatcher.profile(command: command, root: root) { stacks in
+                    Task { @MainActor in self.profile?.add(stacks) }
+                }
+            })
+        case .failure(let refusal):
+            profileNote = refusal.explanation
+        }
+    }
+
+    private func stopWatching() {
+        for watcher in watchers { watcher.cancel() }
+        watchers = []
+    }
+
+    // MARK: Routes opened
+
+    /// The route in the code behind a row (a task's handler, or the route itself).
+    func handler(of route: BliksemRoute) -> BliksemRoute? { route.handler(in: routes) }
+
+    /// Reads the picture of what a route does, once.
+    func loadFlow(_ route: BliksemRoute, root: URL) {
+        guard flows[route.id] == nil, !readingFlows.contains(route.id) else { return }
+        guard let handler = handler(of: route), let file = handler.file, let line = handler.line else {
+            flows[route.id] = .some(nil)
+            return
+        }
+        readingFlows.insert(route.id)
+        let files = files
+        let read = MapView.reader(root: root)
+        let title = "\(handler.method) \(handler.path)"
+        Task {
+            let flow = await Task.detached(priority: .userInitiated) { RouteFlow.build(file: file, line: line, title: title, files: files, read: read) }.value
+            self.readingFlows.remove(route.id)
+            self.flows[route.id] = .some(flow)
+        }
+    }
+
+    /// The figures of one route from the last load run.
+    func times(of route: BliksemRoute) -> [Double] {
+        samples.filter { $0.route == route.id && !$0.failed }.map(\.duration).sorted()
+    }
+
+    // MARK: Chaos advice
+
+    private func suggest(_ analysis: ChaosAnalysis, plan: ChaosPlan, root: URL) async {
+        let files = files
+        let read = MapView.reader(root: root)
+        let health = routes.first { !$0.isTask && $0.file != nil && LocalHealth.routes.contains($0.path) }
+            .flatMap { route in route.file.map { ($0, route.line ?? 1) } }
+        chaosSuggestions = await Task.detached(priority: .utility) {
+            ChaosAdvice.suggest(analysis, service: plan.service, fault: plan.fault, files: files, read: read, healthRoute: health)
+        }.value
     }
 
     /// Stops the run; a chaos run still puts its service back first.

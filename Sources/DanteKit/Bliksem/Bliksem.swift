@@ -23,6 +23,9 @@ public struct BliksemRoute: Hashable, Sendable, Identifiable, Codable {
     public var headers: [String: String]?
     public var body: String?
     public var weight: Int?
+    /// Where the code serves it, from the Map.
+    public var file: String?
+    public var line: Int?
 
     public init(method: String, path: String) {
         self.method = method.uppercased()
@@ -51,7 +54,9 @@ public struct BliksemRoute: Hashable, Sendable, Identifiable, Codable {
         var routes: [BliksemRoute] = []
         for part in map.parts where part.lane == .api && part.kind == .routes {
             for item in part.items {
-                guard let route = parse(item.text), !route.path.contains("*"), seen.insert(route.id).inserted else { continue }
+                guard var route = parse(item.text), !route.path.contains("*"), seen.insert(route.id).inserted else { continue }
+                route.file = item.file
+                route.line = item.line
                 routes.append(route)
             }
         }
@@ -75,6 +80,23 @@ public struct BliksemRoute: Hashable, Sendable, Identifiable, Codable {
     }
 
     public var parameters: [String] { path.split(separator: "/").compactMap(Self.parameter) }
+
+    /// Whether a concrete path (a task's, query and all) is this route's: same method, fixed
+    /// segments equal, parameters matching anything.
+    public func serves(method: String, path concrete: String) -> Bool {
+        guard method.uppercased() == self.method else { return false }
+        let bare = concrete.split(separator: "?", maxSplits: 1).first.map(String.init) ?? concrete
+        let mine = path.split(separator: "/")
+        let theirs = bare.split(separator: "/")
+        guard mine.count == theirs.count else { return false }
+        return zip(mine, theirs).allSatisfy { Self.parameter($0) != nil || $0 == $1 }
+    }
+
+    /// The route in the code that a task calls.
+    public func handler(in routes: [BliksemRoute]) -> BliksemRoute? {
+        guard isTask else { return file == nil ? nil : self }
+        return routes.first { !$0.isTask && $0.file != nil && $0.serves(method: method, path: path) }
+    }
 
     /// The path with each parameter given `value(name)`.
     public func filled(_ value: (String) -> String) -> String {

@@ -38,6 +38,7 @@ struct BliksemView: View {
                     settingsCard
                 }
                 results
+                profileCard
                 routesCard
             }
         }
@@ -173,6 +174,10 @@ struct BliksemView: View {
                         .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
                 }
                 StagesStrip(plan: model.plan, elapsed: model.running == .load ? model.loadTick?.elapsed : nil)
+                Toggle("Profile the code while it runs", isOn: $model.profiling)
+                    .toggleStyle(.checkbox).font(.dante(size: 12))
+                    .disabled(model.running != nil)
+                    .help("For a JVM, takes thread dumps (jcmd Thread.print) four times a second and shows which of the project’s methods the time went to. CPU and memory are watched either way")
             }
         case .fuzz:
             Card("Garbage") {
@@ -222,7 +227,8 @@ struct BliksemView: View {
 
     private var routesCard: some View {
         @Bindable var model = model
-        let routes = model.routes
+        // Chosen routes first, each group in its own order.
+        let routes = model.routes.filter { model.chosen.contains($0.id) } + model.routes.filter { !model.chosen.contains($0.id) }
         let shown = showsAllRoutes ? routes : Array(routes.prefix(10))
         return Card("Routes") {
             HStack(spacing: 10) {
@@ -293,32 +299,52 @@ struct BliksemView: View {
         let usable = route.isRead || route.isTask || model.includeWrites
         let on = model.chosen.contains(route.id) && usable
         let stats = model.mode == .load ? model.loadTick?.routes.first { $0.route == route.id } : nil
-        return Button {
-            guard model.running == nil, usable else { return }
-            if model.chosen.contains(route.id) { model.chosen.remove(route.id) } else { model.chosen.insert(route.id) }
-        } label: {
+        let open = model.openRoute == route.id
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(on ? theme.accent.color : theme.text3.color)
-                Text(route.method).font(.dante(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(route.isRead ? theme.green.color : theme.amber.color).frame(width: 52, alignment: .leading)
-                if let name = route.name {
-                    Text(name).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
-                    Text(route.path).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
-                } else {
-                    Text(route.path).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(usable ? theme.text.color : theme.text3.color).lineLimit(1)
+                Button {
+                    guard model.running == nil, usable else { return }
+                    withAnimation(.snappy(duration: 0.25)) {
+                        if model.chosen.contains(route.id) { model.chosen.remove(route.id) } else { model.chosen.insert(route.id) }
+                    }
+                } label: {
+                    Image(systemName: on ? "checkmark.square.fill" : "square").foregroundStyle(on ? theme.accent.color : theme.text3.color)
+                        .frame(width: 18, height: 22).contentShape(Rectangle())
                 }
-                Spacer(minLength: 8)
-                if let stats {
-                    Text("\(stats.requests.formatted()) · \(stats.usual) · p95 \(BliksemStats.time(stats.p95))")
-                        .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(stats.failures > 0 ? theme.red.color : theme.text3.color)
+                .buttonStyle(.plain)
+                .help(route.isTask ? "A task from \(BliksemTasks.path): \(route.method) \(route.path)\(route.body == nil ? "" : " with its body")\(route.weight.map { ", weight \($0)" } ?? "")"
+                      : usable ? "Sent as \(route.method) \(route.samplePath)" : "A write: turn on Include writes to send it")
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { model.openRoute = open ? nil : route.id }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text(route.method).font(.dante(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(route.isRead ? theme.green.color : theme.amber.color).frame(width: 52, alignment: .leading)
+                        if let name = route.name {
+                            Text(name).font(.dante(size: 12.5, weight: .medium)).foregroundStyle(theme.text.color).lineLimit(1)
+                            Text(route.path).font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(theme.text3.color).lineLimit(1)
+                        } else {
+                            Text(route.path).font(.dante(size: 12.5, design: .monospaced)).foregroundStyle(usable ? theme.text.color : theme.text3.color).lineLimit(1)
+                        }
+                        Spacer(minLength: 8)
+                        if let stats {
+                            Text("\(stats.requests.formatted()) · \(stats.usual) · p95 \(BliksemStats.time(stats.p95))")
+                                .font(.dante(size: 11.5, design: .monospaced)).foregroundStyle(stats.failures > 0 ? theme.red.color : theme.text3.color)
+                        }
+                        Image(systemName: "chevron.right").font(.dante(size: 10, weight: .semibold)).foregroundStyle(theme.text3.color)
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                    }
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help(open ? "Close" : "What it does, its timings and where its time goes")
             }
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
+            if open {
+                BliksemRouteDetail(session: session, root: workspace.url, route: route)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .buttonStyle(.plain)
-        .help(route.isTask ? "A task from \(BliksemTasks.path): \(route.method) \(route.path)\(route.body == nil ? "" : " with its body")\(route.weight.map { ", weight \($0)" } ?? "")"
-              : usable ? "Sent as \(route.method) \(route.samplePath)" : "A write: turn on Include writes to send it")
     }
 
     // MARK: Results
@@ -353,10 +379,40 @@ struct BliksemView: View {
                           systemImage: "lock.fill")
                         .font(.dante(size: 12)).foregroundStyle(theme.amber.color).fixedSize(horizontal: false, vertical: true)
                 }
+                if let source = model.watchSource, model.running == .load || !model.resources.isEmpty {
+                    ResourceCharts(samples: model.resources, duration: plan.duration, source: source)
+                } else if model.running == nil, model.loadSummary != nil {
+                    Text("CPU and memory are watched when the target is one of this project’s compose services or a program running on this Mac.")
+                        .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+                }
                 if summary.requests == 0, model.running == nil {
                     Text("Nothing answered. Check the target is the API and that it's running.").font(.dante(size: 12)).foregroundStyle(theme.text3.color)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var profileCard: some View {
+        if model.mode == .load, let profile = model.profile {
+            let (busy, methods) = profile.methods()
+            Card("Where the time goes") {
+                Text("\(profile.samples) thread dumps").font(.dante(size: 11.5)).foregroundStyle(theme.text3.color)
+            } content: {
+                if busy == 0 {
+                    Text(model.running == .load ? "Sampling the JVM’s threads…" : "No sample caught the project’s own code running: the time went to waiting (the database, the network) or to libraries alone.")
+                        .font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("Of \(busy) moments the project’s code was running, these methods were on the stack. Open a route above to see its share.")
+                        .font(.dante(size: 11.5)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                    ProfileList(methods: Array(methods.prefix(12)), busy: busy) { frame in
+                        guard let name = frame.file, let file = workspace.files.first(where: { ($0 as NSString).lastPathComponent == name }) else { return }
+                        session.open(file: workspace.url.appending(path: file), line: frame.line ?? 1)
+                    }
+                }
+            }
+        } else if model.mode == .load, let note = model.profileNote, model.loadTick != nil {
+            Text(note).font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -443,6 +499,30 @@ struct BliksemView: View {
                 BliksemChart(timeline: tick.timeline, duration: max(tick.elapsed, (times?.ended ?? 0), plan.baseline + plan.outage + 10),
                              breaking: nil, bands: times.map { [(from: $0.broke, to: $0.restored, label: "broken")] } ?? [], live: model.running == .chaos)
                     .frame(height: 170)
+                if let source = model.watchSource, !model.resources.isEmpty {
+                    ResourceCharts(samples: model.resources, duration: max(tick.elapsed, plan.baseline + plan.outage + 10), source: source)
+                }
+                if model.running == nil, !model.chaosSuggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("What to do about it").font(.dante(size: 13, weight: .semibold)).foregroundStyle(theme.text.color)
+                        ForEach(model.chaosSuggestions) { suggestion in
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "lightbulb.fill").foregroundStyle(theme.amber.color).font(.dante(size: 12))
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(suggestion.title).font(.dante(size: 12.5, weight: .semibold)).foregroundStyle(theme.text.color)
+                                    Text(suggestion.evidence).font(.dante(size: 12)).foregroundStyle(theme.text2.color).fixedSize(horizontal: false, vertical: true)
+                                    Text(suggestion.fix).font(.dante(size: 12)).foregroundStyle(theme.text3.color).fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer(minLength: 8)
+                                Button { session.askClaude(ChaosAdvice.brief(suggestion, service: plan.service)) } label: { Text("Ask \(session.agentName)") }
+                                    .buttonStyle(DanteButtonStyle())
+                                    .help("Asks the agent in charge to make this change")
+                            }
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.amber.color.opacity(0.06)))
+                        }
+                    }
+                }
             }
         }
     }
