@@ -351,8 +351,10 @@ public struct SystemMap: Equatable, Sendable {
         for client in clients {
             let screenFiles = Dictionary(client.items.compactMap { item in item.file.map { ($0, item.text) } }) { a, _ in a }
             var screenCalls: [String: [String: Int]] = [:]
-            for file in code where clientOwning(file)?.id == client.id {
-                for path in calledPaths(in: text(file)) {
+            let clientFiles = code.filter { clientOwning($0)?.id == client.id }
+            let helpers = APIHelpers.find(in: clientFiles.map(text))
+            for file in clientFiles {
+                for path in calledPaths(in: text(file)) + helpers.paths(in: text(file)) {
                     guard let key = groups[routeGroup(path)] != nil ? routeGroup(path) : groupByCore[coreGroup(routeGroup(path))] else { continue }
                     if let screen = screenFiles[file] {
                         screenCalls[screen, default: [:]]["route:" + key, default: 0] += 1

@@ -178,7 +178,7 @@ public struct RunnableApp: Identifiable, Equatable, Sendable {
 
     // MARK: JVM
 
-    /// A Spring Boot, Quarkus or Micronaut service, run through the project's wrapper
+    /// A Spring Boot, Quarkus, Micronaut or Ktor service, run through the project's wrapper
     /// (mvnw, gradlew) when it has one, in its folder or a parent.
     static func jvm(folder: String, build text: String, maven: Bool, files: [String]) -> RunnableApp? {
         if maven, text.contains("<packaging>pom</packaging>") { return nil }
@@ -190,6 +190,9 @@ public struct RunnableApp: Identifiable, Equatable, Sendable {
             (framework, goal) = ("Quarkus", ("quarkus:dev", "quarkusDev"))
         } else if text.contains("micronaut") {
             (framework, goal) = ("Micronaut", ("mn:run", "run"))
+        } else if text.contains("io.ktor") {
+            // Gradle's application plugin runs `main`; Maven through the exec plugin.
+            (framework, goal) = ("Ktor", ("compile exec:java", "run"))
         } else {
             return nil
         }

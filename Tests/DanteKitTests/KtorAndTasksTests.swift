@@ -154,3 +154,78 @@ struct AmperTests {
         #expect(parser.results.last?.issues.first?.message == "expected 2 but was 3")
     }
 }
+
+struct KtorAccessAndHelpersTests {
+    let server = """
+    package shop
+    import io.ktor.server.auth.*
+
+    fun Application.module() {
+        routing {
+            route("/api") {
+                get("/health") { call.respond("ok") }
+                post("/auth/login") { call.respond(auth.login()) }
+                authenticate("session") {
+                    get("/me") { call.respond(me()) }
+                    // a comment with a { brace
+                    get("/orders") { call.respond("{") }
+                }
+                get("/catalogue") { call.respond(list()) }
+            }
+        }
+    }
+    """
+    let api = """
+    export const tokenStore = { set: (t: string) => save(t) }
+    async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+      const headers = new Headers(init.headers)
+      const res = await fetch(`/api${path}`, { ...init, headers })
+      return res.json()
+    }
+    export const api = {
+      login: (email: string) => request<Login>('/auth/login', { method: 'POST' }),
+      me: () => request<User>('/me'),
+      orders: () => request('/orders'),
+    }
+    """
+
+    @Test func authenticateBlocksSecureTheirRoutes() {
+        let lines = server.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        func line(_ text: String) -> Int { (lines.firstIndex { $0.contains(text) } ?? 0) + 1 }
+        #expect(SystemMap.ktorAuthenticate(around: line("get(\"/me\")"), in: lines)?.name == "session")
+        #expect(SystemMap.ktorAuthenticate(around: line("get(\"/orders\")"), in: lines) != nil)
+        #expect(SystemMap.ktorAuthenticate(around: line("get(\"/catalogue\")"), in: lines) == nil)
+        #expect(SystemMap.ktorAuthenticate(around: line("get(\"/health\")"), in: lines) == nil)
+    }
+
+    @Test func mapFollowsTheFrontendsFetchHelper() {
+        let files = ["server/src/main/kotlin/shop/Application.kt", "web/package.json", "web/src/lib/api.ts", "web/src/pages/Orders.tsx"]
+        let texts = [files[0]: server, files[1]: #"{"dependencies":{"react":"19"},"scripts":{"dev":"vite"}}"#, files[2]: api,
+                     files[3]: "export default function Orders() { return api.orders() }"]
+        let map = SystemMap.build(files: files, read: { texts[$0] })
+        let called = Set(map.links.filter { $0.from.hasPrefix("client:") || $0.from.hasPrefix("screen:") }.map(\.to))
+        #expect(called.contains("route:/api/me"))
+        #expect(called.contains("route:/api/orders"))
+        #expect(called.contains("route:/api/auth"))
+        let me = map.parts.first { $0.id == "route:/api/me" }?.items.first?.access
+        #expect(me?.level == .secured)
+        let catalogue = map.parts.first { $0.id == "route:/api/catalogue" }?.items.first?.access
+        #expect(catalogue?.level == .open)
+    }
+
+    @Test func helpersAndBaseURLs() {
+        let helpers = APIHelpers.find(in: [api])
+        #expect(helpers.functions == ["request": "/api"])
+        #expect(helpers.paths(in: api).sorted() == ["/api/auth/login", "/api/me", "/api/orders"])
+        let axios = APIHelpers.find(in: ["const http = axios.create({ baseURL: '/api/v1' })"])
+        #expect(axios.paths(in: "http.get<Order[]>('/orders'); http.post('/orders', o)") == ["/api/v1/orders", "/api/v1/orders"])
+        #expect(APIHelpers.find(in: ["fetch(`/api${p}`)"]).isEmpty)
+    }
+
+    @Test func ktorIsARunnableBackend() {
+        let files = ["backend/build.gradle.kts", "backend/gradlew", "backend/src/main/kotlin/Application.kt"]
+        let apps = RunnableApp.detect(files: files, read: { _ in #"implementation("io.ktor:ktor-server-netty-jvm:3.0")"# })
+        #expect(apps.map(\.stack) == ["Ktor"])
+        #expect(apps.first?.command == "./gradlew run")
+    }
+}

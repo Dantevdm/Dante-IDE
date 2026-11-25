@@ -146,6 +146,9 @@ extension SystemMap {
             }
             return Access(level: .secured, reason: .protected, note: "Spring Security's rules don't name it; Spring then requires a login.")
         }
+        if (file as NSString).pathExtension.lowercased() == "kt", has(text, "io.ktor") {
+            return openAccess(path: path, text: text, how: "No authenticate { } block around it, so Ktor lets anyone call it", file: nil, line: nil, permitted: false)
+        }
         if isJVM(file) {
             return openAccess(path: path, text: text, how: "The project has no Spring Security, so nothing here checks the caller", file: nil, line: nil, permitted: false)
         }
@@ -184,6 +187,45 @@ extension SystemMap {
         return Access(level: .open, reason: reason, note: how + ". " + why, file: file, line: line)
     }
 
+    /// The `authenticate("name") {` block a Ktor route's line (1-based) sits in, if any: the
+    /// braces from the top of the file, strings and comments skipped.
+    static func ktorAuthenticate(around line: Int, in lines: [String]) -> (name: String, line: Int)? {
+        var stack: [(name: String, line: Int)?] = []
+        var inBlockComment = false
+        for index in 0..<min(line - 1, lines.count) {
+            let text = lines[index]
+            let opener = text.firstMatch(of: /\bauthenticate\s*\(([^)]*)\)\s*\{/).map { match -> (String, Int) in
+                let names = String(match.1).replacing(/[\s"]/, with: "")
+                return (names.isEmpty ? "" : names, index + 1)
+            }
+            var quote: Character?
+            var previous: Character = " "
+            var openedHere = false
+            for char in text {
+                defer { previous = char }
+                if inBlockComment {
+                    if previous == "*", char == "/" { inBlockComment = false }
+                    continue
+                }
+                if let open = quote {
+                    if char == open, previous != "\\" { quote = nil }
+                    continue
+                }
+                if char == "\"" || char == "'" { quote = char; continue }
+                if previous == "/", char == "/" { break }
+                if previous == "/", char == "*" { inBlockComment = true; continue }
+                if char == "{" {
+                    // The first brace on an `authenticate(…) {` line is its block.
+                    stack.append(opener != nil && !openedHere ? opener : nil)
+                    openedHere = true
+                } else if char == "}", !stack.isEmpty {
+                    stack.removeLast()
+                }
+            }
+        }
+        return stack.last { $0 != nil } ?? nil
+    }
+
     /// An annotation or middleware on the route itself, or on its class, file or router.
     static func securedInCode(file: String, line: Int, text: String) -> Access? {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
@@ -191,6 +233,10 @@ extension SystemMap {
         let routeLine = lines[line - 1]
         func found(_ how: String, at number: Int) -> Access {
             Access(level: .secured, reason: .protected, note: "Needs a signed-in caller: \(how).", file: file, line: number)
+        }
+        // Ktor: the route sits inside an `authenticate { }` block.
+        if (file as NSString).pathExtension.lowercased() == "kt", let block = ktorAuthenticate(around: line, in: lines) {
+            return found("inside authenticate(\(block.name)) { }", at: block.line)
         }
         if isJVM(file) {
             // Method annotations sit just above the mapping (or below it, before the method).
