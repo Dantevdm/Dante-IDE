@@ -58,6 +58,19 @@ struct DanteCommands: Commands {
         }
 
         CommandGroup(after: .textEditing) {
+            // SwiftUI leaves out AppKit's Find menu; these reach the focused text view's find bar.
+            Menu("Find") {
+                Button("Find…") { TextFinding.perform(.showFindInterface) }
+                    .shortcut("find")
+                Button("Find and Replace…") { TextFinding.perform(.showReplaceInterface) }
+                    .shortcut("findReplace")
+                Button("Find Next") { TextFinding.perform(.nextMatch) }
+                    .shortcut("findNext")
+                Button("Find Previous") { TextFinding.perform(.previousMatch) }
+                    .shortcut("findPrevious")
+                Button("Use Selection for Find") { TextFinding.perform(.setSearchString) }
+                    .shortcut("useSelectionForFind")
+            }
             Divider()
             Button("Search or Ask…") { session?.palette = .all }
                 .shortcut("searchOrAsk")
@@ -209,5 +222,17 @@ struct DanteCommands: Commands {
                 set: { VoiceController.shared.setWakeWord($0) }))
             Divider()
         }
+    }
+}
+
+/// Sends a find action to whatever text view has focus (the editor, the query editor, logs),
+/// as AppKit's own Find menu does: `performTextFinderAction(_:)` reads the action from the
+/// sender's tag.
+@MainActor
+enum TextFinding {
+    static func perform(_ action: NSTextFinder.Action) {
+        let sender = NSMenuItem()
+        sender.tag = action.rawValue
+        NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: nil, from: sender)
     }
 }

@@ -152,13 +152,12 @@ public struct CodeEditorView: NSViewRepresentable {
         textView.autoresizingMask = [.width, .height]
         textView.textContainer?.lineFragmentPadding = 6
 
-        let scrollView = NSScrollView()
+        let scrollView = CodeScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
-        scrollView.scrollerStyle = .overlay
 
         let ruler = LineNumberRuler(textView: textView)
         scrollView.verticalRulerView = ruler
@@ -917,5 +916,15 @@ public final class CodeTextView: NSTextView {
         if let first = fragment.textLineFragments.first { frame.size.height = first.typographicBounds.height }
         color.setFill()
         NSRect(x: 0, y: frame.minY + textContainerOrigin.y, width: bounds.width, height: frame.height).fill()
+    }
+}
+
+/// Scrollers that stay on screen whenever the text is longer or wider than the view, so a
+/// long line shows it runs on. Overlay scrollers only appear while scrolling, and AppKit puts
+/// them back whenever the system's scroll bar setting changes, so the style is held here.
+final class CodeScrollView: NSScrollView {
+    override var scrollerStyle: NSScroller.Style {
+        get { .legacy }
+        set { super.scrollerStyle = .legacy }
     }
 }
