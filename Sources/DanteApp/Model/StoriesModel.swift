@@ -134,7 +134,8 @@ final class StoriesModel {
         hasKit = fm.fileExists(atPath: config.path) && helper != nil
         kitOutdated = helper.flatMap(StoryKit.version(of:)).map { $0 < StoryKit.version } ?? false
         let prefix = found.folder.isEmpty ? "" : found.folder + "/"
-        hasPlaywright = [prefix + "node_modules/@playwright/test", "node_modules/@playwright/test"].contains { fm.fileExists(atPath: root.appending(path: $0).path) }
+        hasPlaywright = [folder + "/node_modules/@playwright/test", prefix + "node_modules/@playwright/test", "node_modules/@playwright/test"]
+            .contains { fm.fileExists(atPath: root.appending(path: $0).path) }
         storyFiles = StoryKit.storyFiles(files, folder: folder)
         let written = storyFiles.map { ($0 as NSString).lastPathComponent } + features.map(\.name)
         let access = access
@@ -152,7 +153,8 @@ final class StoriesModel {
         let url = root.appending(path: folder)
         do {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-            let files = StoryKit.files { name in try? String(contentsOf: url.appending(path: name), encoding: .utf8) }
+            let files = StoryKit.files(existing: { name in try? String(contentsOf: url.appending(path: name), encoding: .utf8) },
+                                       ownPackage: target?.served == true)
             for file in files { try file.text.write(to: url.appending(path: file.name), atomically: true, encoding: .utf8) }
             problem = nil
         } catch {

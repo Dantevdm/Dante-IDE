@@ -62,6 +62,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 - A hash router's screens open at /#/path; a Vite base path is put in front.
 - Dynamic route segments end the path, since there's no id to fill in.
 
+- Pages a backend serves from its resources (`resources/static/debug/index.html` with its scripts, Spring's `src/main/resources/static`, `src/main/webapp`) are a web client named after their folder ("Served by the backend at /debug"), with arrows from their scripts' calls to the routes; `static/` and `public/` folders elsewhere stay skipped as build output.
 - A command-line tool with no web side (a Python CLI over boto3) still draws a picture: the tool and its commands in Clients, its package in Backend, and the AWS services it calls in Outside. The commands open where they're declared; tests' commands don't count. Python `client("…")` calls count only for known AWS service names in a project that imports boto3.
 
 ## Acceptance

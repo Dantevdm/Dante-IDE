@@ -207,7 +207,7 @@ public struct SystemMap: Equatable, Sendable {
     }
 
     public static func build(files: [String], read: (String) -> String?, compose: ComposeFile? = nil, modules: ArchitectureGraph? = nil, findsClients: Bool = true, accessRules projectAccessRules: AccessRules? = nil) -> SystemMap {
-        let code = files.filter(isCode)
+        let code = files.filter { isCode($0) || ServedPages.isScript($0) }
         var parts: [Part] = []
         var links: [String: Link] = [:]
         func link(_ from: String, _ to: String, _ weight: Int = 1) {
@@ -637,9 +637,24 @@ public struct SystemMap: Equatable, Sendable {
         }
         // The repo root only counts when nothing else looks like a server.
         if roots[""] != nil, roots.count > 1 { roots[""] = nil }
+        // Pages a backend serves from its resources (a page with scripts, not a lone error page).
+        var served: [String: [(name: String, file: String)]] = [:]
+        for file in files where ServedPages.isPage(file) {
+            guard let name = ServedPages.screenName(of: file), let text = read(file), text.contains("<script") else { continue }
+            served[(file as NSString).deletingLastPathComponent, default: []].append((name, file))
+        }
+        let servedRoots = served.keys.filter { root in !served.keys.contains { $0 != root && root.hasPrefix($0 + "/") } }
         // Nested roots (frontend/app inside frontend) collapse into the outer one.
         let kept = roots.keys.filter { root in !roots.keys.contains { $0 != root && !$0.isEmpty && root.hasPrefix($0 + "/") } }
-        return kept.sorted().map { root in
+        let pages = servedRoots.sorted().map { root -> Part in
+            let screens = served.filter { $0.key == root || $0.key.hasPrefix(root + "/") }.values.flatMap { $0 }.sorted { $0.name < $1.name }
+            let urlPath = ServedPages.place(of: root)?.urlPath ?? "/"
+            let name = urlPath == "/" ? "Web pages" : (urlPath as NSString).lastPathComponent
+            let detail = "Served by the backend at \(urlPath) · \(screens.count) page\(screens.count == 1 ? "" : "s")"
+            return Part(id: "client:" + root, name: name, lane: .clients, kind: .web, detail: detail, path: root,
+                        items: screens.map { Item($0.name, file: $0.file) })
+        }
+        let apps = kept.sorted().map { root in
             let framework = roots[root]!
             let screens = self.screens(files: files, root: root)
             let mobile = ["Flutter", "React Native", "Expo"].contains(framework)
@@ -649,6 +664,7 @@ public struct SystemMap: Equatable, Sendable {
             return Part(id: "client:" + (root.isEmpty ? "." : root), name: name, lane: .clients, kind: mobile ? .mobile : .web,
                         detail: detail, path: root.isEmpty ? "." : root, items: screens.map { Item($0.name, file: $0.file) })
         }
+        return apps + pages
     }
 
     static func framework(packageJSON text: String) -> String? {

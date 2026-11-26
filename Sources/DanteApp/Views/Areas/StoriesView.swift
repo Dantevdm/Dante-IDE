@@ -34,7 +34,7 @@ struct StoriesView: View {
                     ProgressView().controlSize(.small).frame(maxWidth: .infinity)
                 } else if model.apps.isEmpty {
                     EmptyState(symbol: "film.stack", title: "No web app found",
-                               message: "Stories walk through a web front-end in a real browser. The Map found none in this project: no React, Vue, Svelte, Angular or similar app with a package.json.") { EmptyView() }
+                               message: "Stories walk through a web front-end in a real browser. The Map found none in this project: no React, Vue, Svelte, Angular or similar app, and no pages the backend serves from its resources (resources/static, src/main/webapp).") { EmptyView() }
                 } else {
                     setupCard
                     if model.isRunning { runningLine }
@@ -71,8 +71,8 @@ struct StoriesView: View {
             }
             if let target = model.target {
                 check(ok: model.listening == true, waiting: model.listening == nil || model.starting,
-                      title: model.listening == true ? "\(target.name) answers at localhost:\(target.port)"
-                          : model.starting ? "Starting \(target.name)…" : "Nothing answers at localhost:\(target.port) yet",
+                      title: model.listening == true ? "\(target.served ? "The backend" : target.name) answers at localhost:\(target.port)\(target.served ? target.path : "")"
+                          : model.starting ? "Starting \(target.served ? "the backend" : target.name)…" : "Nothing answers at localhost:\(target.port) yet",
                       detail: model.listening == true ? "The port came from \(target.portSource)." : "Stories need the app running: `\(target.command)`.") {
                     if model.listening != true, !model.starting {
                         Button("Start it") { model.startApp(session: session) }.buttonStyle(DanteButtonStyle())
@@ -81,10 +81,15 @@ struct StoriesView: View {
                     Button { Task { await model.refresh(root: workspace.url) } } label: { Image(systemName: "arrow.clockwise") }
                         .buttonStyle(.borderless).help("Check again")
                 }
-                check(ok: model.hasPlaywright, title: model.hasPlaywright ? "Playwright is installed" : "Playwright isn’t installed in \(target.name)",
-                      detail: model.hasPlaywright ? "Stories run in Chromium through the app’s own copy." : "It adds @playwright/test to the app and downloads Chromium, so you run it yourself.") {
+                check(ok: model.hasPlaywright, title: model.hasPlaywright ? "Playwright is installed" : target.served ? "Playwright isn’t installed for the stories" : "Playwright isn’t installed in \(target.name)",
+                      detail: model.hasPlaywright ? "Stories run in Chromium through the app’s own copy."
+                          : target.served ? "The backend has no node project, so Playwright goes into the stories folder on its own, with Chromium. You run it yourself."
+                          : "It adds @playwright/test to the app and downloads Chromium, so you run it yourself.") {
                     if !model.hasPlaywright {
-                        Button("Type the install command") { session.typeInTerminal(StoryKit.installCommand(frontend: target.folder, tool: target.tool)) }
+                        Button("Type the install command") {
+                            session.typeInTerminal(target.served && model.folder != nil ? StoryKit.installCommand(storiesFolder: model.folder!)
+                                                   : StoryKit.installCommand(frontend: target.folder, tool: target.tool))
+                        }
                             .buttonStyle(DanteButtonStyle())
                             .help("Types it into the terminal for you to read and run")
                     }

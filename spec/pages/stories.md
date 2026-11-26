@@ -35,7 +35,7 @@ Stories tell how each feature of the web app works, step by step, in a real brow
 - Open the picture, Video (the browser's recording), Trace (Playwright's trace viewer in a terminal tab), and the code links.
 
 ## States
-- No web app in the project: says stories need a web front-end and the Map found none.
+- No web app in the project: says stories need a web front-end and the Map found none (no framework app and no pages the backend serves).
 - The app isn't running, Playwright isn't installed or the kit isn't set up: the app card says so with the way forward, and runs are disabled.
 - No stories yet: says to pick the stories to tell and ask the agent.
 - A run that broke before any story ran (a syntax error in a story): its reason from Playwright's output in an amber line.
@@ -43,6 +43,7 @@ Stories tell how each feature of the web app works, step by step, in a real brow
 - Never passed: a broken scenario that hasn't passed before leans to the story being wrong.
 
 ## Edge cases
+- Pages a backend serves from its resources (`resources/static/<folder>`, `src/main/resources/static|public`, `META-INF/resources`, `src/main/webapp`; HTML with scripts) are a web app too: the address is the backend's port (application.yaml/.conf/.properties, `embeddedServer(port = …)`, else 8080) and the folder's URL path (`/debug`), it starts with the project's mise dev task or the build tool's run command, and the stories go in `stories/` at the backend's folder with their own package.json, where the typed install puts Playwright.
 - The app's address is its dev server's port (from package.json, the framework config or the env file), or the compose service that runs it.
 - The helper is rewritten only when Dante wrote it and its kit version is older; the config is never rewritten.
 - A call the story failed on purpose (failApi, fakeApi) is never blamed.
@@ -52,6 +53,7 @@ Stories tell how each feature of the web app works, step by step, in a real brow
 - Stories never run on a remote project's host; they need the app on this Mac.
 
 ## Acceptance
+- A Ktor project whose only front-end is `resources/static/console/index.html` (with a script) lists the app "console" at localhost:8080/console, and Set up writes `stories/package.json` beside the kit.
 - On a project with a React app on localhost, Set up stories writes stories/playwright.config.ts and dante-story.ts, and Run all tells each scenario with a picture per step.
 - A scenario whose POST /api/orders answers 500 says so, names the handler's file and line, and blames the app.
 - A scenario that can't find getByRole('button', { name: 'Pay' }) after the screen's file changed says the screen never showed it and lists the file.

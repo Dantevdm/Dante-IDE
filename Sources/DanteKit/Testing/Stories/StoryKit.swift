@@ -29,15 +29,18 @@ public enum StoryKit {
     /// The files to write into the stories folder: the config only when there's none (people
     /// change it), the helper when missing or written by an older kit, and a .gitignore for the
     /// run's output. `existing` reads a file in the folder by name.
-    public static func files(existing: (String) -> String?) -> [(name: String, text: String)] {
+    /// `ownPackage` adds a package.json for Playwright alone, for pages a backend serves, which
+    /// have no node project to add it to.
+    public static func files(existing: (String) -> String?, ownPackage: Bool = false) -> [(name: String, text: String)] {
         var out: [(String, String)] = []
         if existing(configName) == nil { out.append((configName, config)) }
+        if ownPackage, existing("package.json") == nil { out.append(("package.json", package)) }
         if let helper = existing(helperName) {
             if let written = version(of: helper), written < version { out.append((helperName, self.helper)) }
         } else {
             out.append((helperName, self.helper))
         }
-        if existing(".gitignore") == nil { out.append((".gitignore", "test-results/\nplaywright-report/\n")) }
+        if existing(".gitignore") == nil { out.append((".gitignore", "test-results/\nplaywright-report/\n" + (ownPackage ? "node_modules/\n" : ""))) }
         return out
     }
 
@@ -75,6 +78,22 @@ public enum StoryKit {
         }
         return cd + add + " && ./node_modules/.bin/playwright install chromium"
     }
+
+    /// The same for stories with their own package.json (`files(ownPackage:)`): Playwright goes
+    /// into the stories folder, not the backend.
+    public static func installCommand(storiesFolder folder: String) -> String {
+        "cd \(Shell.quote(folder)) && npm install -D @playwright/test && ./node_modules/.bin/playwright install chromium"
+    }
+
+    static let package = """
+    {
+      "name": "stories",
+      "private": true,
+      "description": "Front-end stories for the pages the backend serves, run by Dante with Playwright.",
+      "scripts": { "stories": "playwright test" }
+    }
+
+    """
 
     public static let config = """
     // \(marker)\(version)). Stories run with their own settings, so the project's other

@@ -22,6 +22,9 @@ public enum WebPreview {
         /// The compose service that runs it, when the project's compose file has one: then
         /// `command` is `docker compose up -d <service>` and `port` the port it publishes.
         public var service: String?
+        /// Pages the backend serves (`ServedPages`): `folder` is the backend's module, `port`
+        /// and `command` the backend's.
+        public var served = false
 
         public var url: URL { URL(string: "http://localhost:\(port)" + path) ?? URL(string: "http://localhost:\(port)/")! }
     }
@@ -49,6 +52,8 @@ public enum WebPreview {
     /// server's port (or its first published port). Nil when compose doesn't run it, or runs it
     /// without publishing a port the browser could reach.
     public static func throughCompose(_ target: Target, compose: ComposeFile) -> Target? {
+        // A backend the project starts with its own mise task runs that way.
+        if target.served, target.tool == "mise" { return nil }
         let app = RunnableApp(folder: target.folder, name: target.name, kind: .frontend, stack: "", command: target.command)
         guard let name = RunnableApp.service(for: app, in: compose),
               let service = compose.services.first(where: { $0.name == name }),
@@ -91,6 +96,14 @@ public enum WebPreview {
                               files: [String], read: (String) -> String?) -> Target {
         let prefix = folder.isEmpty || folder == "." ? "" : folder + "/"
         let root = prefix.isEmpty ? "" : String(prefix.dropLast())
+        if let place = ServedPages.place(of: root), !files.contains(prefix + "package.json") {
+            let (port, source) = ServedPages.port(module: place.module, files: files, read: read)
+            let (command, tool) = ServedPages.command(module: place.module, files: files, read: read)
+            let page = screen?.file ?? [prefix + "index.html", prefix + "index.htm"].first { files.contains($0) }
+            let path = page.map { ServedPages.urlPath(of: $0, text: read($0)) } ?? (place.urlPath == "/" ? "/" : place.urlPath + "/")
+            return Target(folder: place.module, name: name, port: port, portSource: source, path: path, routeFound: page != nil,
+                          command: command, tool: tool, installCommand: "", served: true)
+        }
         let package = read(prefix + "package.json") ?? ""
         let (port, source) = self.port(prefix: prefix, package: package, files: files, read: read)
         var path = "/"
