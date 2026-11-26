@@ -72,6 +72,18 @@ struct Composer: View {
                     .padding(.vertical, 2)
 
                 if claude.state == .working {
+                    // Mid-turn, ↩ queues the message: it's sent when the agent finishes.
+                    if hasDraft {
+                        Button(action: send) {
+                            Image(systemName: "text.badge.plus").font(.dante(size: 10, weight: .semibold))
+                                .frame(width: 24, height: 24)
+                                .foregroundStyle(canSend ? theme.onAccent.color : theme.text3.color)
+                                .background(Circle().fill(canSend ? theme.accent.color : theme.raised.color))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canSend)
+                        .help(claude.pendingApprovals.isEmpty ? "Queue (↩): sent when \(claude.engine.title) finishes" : "Answer the waiting step (↩)")
+                    }
                     Button(action: claude.interrupt) {
                         Image(systemName: "stop.fill").font(.dante(size: 9))
                             .frame(width: 24, height: 24)
@@ -145,9 +157,13 @@ struct Composer: View {
         if case .unavailable = claude.state { true } else { false }
     }
 
+    private var hasDraft: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !session.claudeAttachments.isEmpty
+    }
+
+    /// Idle sends; working queues (or answers a waiting step), as `ClaudeSession.send` does.
     private var canSend: Bool {
-        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !session.claudeAttachments.isEmpty)
-            && session.attachmentsLoading == 0 && claude.state == .idle
+        hasDraft && session.attachmentsLoading == 0 && (claude.state == .idle || claude.state == .working)
     }
 
     private var placeholder: String {

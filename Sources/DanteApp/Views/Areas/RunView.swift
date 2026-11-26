@@ -9,29 +9,36 @@ struct RunView: View {
     let session: Session
     let workspace: Workspace
 
-    /// Live is the deployed app (`operate:` in project.yaml); This Mac is the compose services.
-    enum Place: String { case live, local }
+    /// Live is the deployed app (`operate:` in project.yaml); This Mac is the compose services;
+    /// Grafana is the project's own, from any of its compose files.
+    enum Place: String { case live, local, grafana }
 
     @State private var latestTag: String?
     @State private var compose: ComposeFile?
     @State private var localChecks: [ProjectInfo.HealthCheck] = []
     @State private var chosen: Place?
+    @State private var grafana: GrafanaSetup?
 
     private var info: ProjectInfo { workspace.info }
     private var hasLive: Bool { !info.checks.isEmpty || info.logsCommand != nil || !info.alarms.isEmpty }
     private var hasLocal: Bool { compose != nil && !(compose?.services.isEmpty ?? true) }
+    private var places: [Place] {
+        [hasLive ? Place.live : nil, hasLocal ? .local : nil, grafana != nil ? .grafana : nil].compactMap { $0 }
+    }
     private var placeKey: String { "health.place." + workspace.url.path }
 
     /// The chosen place when it has something, else whichever does; This Mac first when the
     /// project has nothing live set up.
     private var place: Place {
-        if let chosen, chosen == .live ? hasLive : hasLocal { return chosen }
-        return hasLive ? .live : .local
+        if let chosen, places.contains(chosen) { return chosen }
+        return hasLive ? .live : hasLocal || grafana == nil ? .local : .grafana
     }
 
-    private var checks: [ProjectInfo.HealthCheck] { place == .live ? info.checks : localChecks }
+    /// What's watched for checks and errors: Grafana's view keeps watching This Mac (or Live).
+    private var watched: Place { place == .grafana ? (hasLocal ? .local : .live) : place }
+    private var checks: [ProjectInfo.HealthCheck] { watched == .live ? info.checks : localChecks }
     private var logsCommand: String? {
-        place == .live ? info.logsCommand : compose.map { LocalHealth.logsCommand(compose: $0) }
+        watched == .live ? info.logsCommand : compose.map { LocalHealth.logsCommand(compose: $0) }
     }
 
     var body: some View {
@@ -41,21 +48,24 @@ struct RunView: View {
             subtitle: nil
         ) {
             if let latestTag, place == .live { Chip(text: "\(latestTag) is the latest tag", symbol: "tag") }
-            if hasLive && hasLocal {
+            if places.count >= 2 {
                 Picker("", selection: Binding(get: { place }, set: { choose($0) })) {
-                    Text("Live").tag(Place.live)
-                    Text("This Mac").tag(Place.local)
+                    if hasLive { Text("Live").tag(Place.live) }
+                    if hasLocal { Text("This Mac").tag(Place.local) }
+                    if grafana != nil { Text("Grafana").tag(Place.grafana) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .help("Live is the deployed app, from operate: in .dante/project.yaml. This Mac is the compose services running here.")
+                .help("Live is the deployed app, from operate: in .dante/project.yaml. This Mac is the compose services running here. Grafana is the project's own dashboards.")
             }
-            if !checks.isEmpty {
+            if !checks.isEmpty, place != .grafana {
                 IconButton(symbol: "arrow.clockwise", label: "Check now") { Task { await session.health.poll() } }
             }
         } content: {
-            if !hasLive && !hasLocal {
+            if place == .grafana, let grafana {
+                GrafanaPanel(session: session, workspace: workspace, grafana: grafana)
+            } else if !hasLive && !hasLocal {
                 SetupCard(session: session)
             } else {
                 if place == .live, !info.alarms.isEmpty {
@@ -86,6 +96,11 @@ struct RunView: View {
             let files = workspace.files
             let loaded = ComposeFile.load(projectRoot: root)
             compose = loaded
+            let shell = session.remoteSync == nil ? Shell.environment() : [:]
+            // A remote project's Grafana runs on its host, not here.
+            let remote = session.remoteSync != nil
+            let found = remote ? nil : await Task.detached(priority: .utility) { GrafanaSetup.load(projectRoot: root, shell: shell).first }.value
+            if found != grafana { grafana = found }
             localChecks = await Task.detached(priority: .utility) {
                 guard let loaded else { return [ProjectInfo.HealthCheck]() }
                 return LocalHealth.checks(compose: loaded, files: files) { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
