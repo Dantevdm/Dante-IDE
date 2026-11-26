@@ -197,21 +197,33 @@ struct EnvironmentView: View {
                 "\(conflict.service) publishes port \(conflict.port), but \(conflict.holder.summary) is already listening there\(conflict.holder.belongs(to: workspace.url) ? ", started from this project" : "")."
             }.joined(separator: "\n") + "\n\nDocker can’t start a service on a port that’s taken.")
         }
+        // Files change all the time while something builds (Gradle writes into build/), so a
+        // change only re-reads the compose file and the apps; Docker is asked on its own clock
+        // below, and only asked again at once when the compose file itself changed.
         .task(id: workspace.revision) {
-            compose = ComposeFile.load(projectRoot: workspace.url)
-            let files = workspace.files, root = workspace.url, loaded = compose
-            apps = await Task.detached(priority: .utility) {
+            let loaded = ComposeFile.load(projectRoot: workspace.url)
+            let composeChanged = loaded != compose
+            if composeChanged { compose = loaded }
+            let files = workspace.files, root = workspace.url
+            let detected = await Task.detached(priority: .utility) {
                 RunnableApp.detect(files: files, read: { path in
                     let url = root.appending(path: path)
                     guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 256_000 else { return nil }
                     return try? String(contentsOf: url, encoding: .utf8)
                 }, compose: loaded)
             }.value
+            guard !Task.isCancelled else { return }
+            if detected != apps { apps = detected }
+            if composeChanged { await refresh() }
+        }
+        // Keep states current while the area is open.
+        .task(id: workspace.url) {
+            if compose == nil { compose = ComposeFile.load(projectRoot: workspace.url) }
             await refresh()
-            // Keep states current while the area is open.
-            while !Task.isCancelled, compose != nil {
+            while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
-                await refresh()
+                guard !Task.isCancelled else { return }
+                if compose != nil { await refresh() }
             }
         }
     }
@@ -311,9 +323,11 @@ struct EnvironmentView: View {
         }
     }
 
+    /// A cancelled check (the page went away, or another refresh took over) keeps what's shown:
+    /// a command cut short reads as Docker failing, which would blank the cards and the logs.
     private func refresh() async {
         // The project's containers outside compose, on this Mac (a remote host's aren't here).
-        if session.remoteSync == nil, let all = await DockerContainer.load() {
+        if session.remoteSync == nil, let all = await DockerContainer.load(), !Task.isCancelled {
             var next: [DockerContainer] = []
             for container in DockerContainer.related(all, project: workspace.name) {
                 // A stopped container's ports come from inspect, once.
@@ -324,10 +338,11 @@ struct EnvironmentView: View {
                     next.append(container)
                 }
             }
-            if next != others { others = next }
+            if !Task.isCancelled, next != others { others = next }
         }
         guard compose != nil else { containers = nil; return }
         let next = await ContainerState.load(projectRoot: workspace.url)
+        guard !Task.isCancelled else { return }
         if next != containers { containers = next }
         checkValues()
         if case .success(let list) = next { await session.forwardPorts(of: list) }
@@ -341,11 +356,13 @@ struct EnvironmentView: View {
         }
         // A remote project's ports are the host's; what holds them on this Mac doesn't matter.
         let nextHolders = session.remoteSync == nil ? await PortCheck.holders(await ListeningPort.load()) : []
+        guard !Task.isCancelled else { return }
         if nextHolders != holders { holders = nextHolders }
         var health: [String: String] = [:]
         for container in list where container.health == "unhealthy" && !container.name.isEmpty {
             health[container.service] = await ComposeDiagnosis.lastHealthFailure(container: container.name, in: workspace.url)
         }
+        guard !Task.isCancelled else { return }
         let next = ComposeDiagnosis.notes(services: compose.services, containers: list, holders: holders, healthOutput: health)
         if next != notes { notes = next }
     }
