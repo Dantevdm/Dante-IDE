@@ -62,7 +62,9 @@ public enum DataDetector {
 
     static let ignoredFolders = ["node_modules/", ".git/", "build/", "dist/", ".build/", "vendor/", "target/", "Pods/", ".venv/", "venv/"]
 
-    public static func detect(paths: [String], compose: ComposeFile? = nil, read: (String) -> String? = { _ in nil }) -> DataProfile {
+    /// `nested` are compose files below the top, by the folder each sits in.
+    public static func detect(paths: [String], compose: ComposeFile? = nil, nested: [(folder: String, file: ComposeFile)] = [],
+                              read: (String) -> String? = { _ in nil }) -> DataProfile {
         var signals: [DataProfile.Signal] = []
         var connections: [DatabaseConnection] = []
         var other: [String] = []
@@ -72,13 +74,14 @@ public enum DataDetector {
         }
         func store(_ name: String) { if !other.contains(name) { other.append(name) } }
         func orm(_ name: String) { if !orms.contains(name) { orms.append(name) } }
-        func add(_ connection: DatabaseConnection, inside: Bool = false) {
+        func addConnection(_ connection: DatabaseConnection, inside: Bool = false) {
             var connection = connection
             connection.insideDocker = inside
             if let index = connections.firstIndex(where: { $0.id == connection.id }) {
                 // Keep the first, but fill in what a later source knows.
                 if connections[index].service == nil { connections[index].service = connection.service }
                 if connections[index].devPassword == nil { connections[index].devPassword = connection.devPassword }
+                if connections[index].composeFolder == nil { connections[index].composeFolder = connection.composeFolder }
                 if inside { connections[index].insideDocker = true }
             } else {
                 connections.append(connection)
@@ -87,12 +90,22 @@ public enum DataDetector {
         let files = paths.filter { path in !ignoredFolders.contains { path.hasPrefix($0) || path.contains("/" + $0) } }
         let env = files.contains(".env") ? EnvFile.values(read(".env") ?? "") : [:]
 
-        // Docker Compose services.
-        for service in compose?.services ?? [] {
+        // Docker Compose services: the top's, then each folder's own.
+        let composes: [(folder: String?, file: ComposeFile)] = (compose.map { [(nil, $0)] } ?? []) + nested.map { ($0.folder, $0.file) }
+        for (folder, file) in composes {
+          let env = folder.map { folder in files.contains(folder + "/.env") ? EnvFile.values(read(folder + "/.env") ?? "") : [:] } ?? env
+          // A database that another service reaches by JDBC URL (Flyway's) names the database.
+          let jdbc = file.services.flatMap(\.environment.values).compactMap { SQLServer.connection(jdbc: $0) }.first
+          for service in file.services {
             let image = (service.image ?? "").lowercased()
             let name = image.split(separator: "/").last.map(String.init) ?? image
-            let composePath = compose?.url.lastPathComponent ?? "compose.yaml"
+            let composePath = folder.map { "\($0)/\(file.url.lastPathComponent)" } ?? file.url.lastPathComponent
             func value(_ key: String) -> String? { service.environment[key].map { EnvFile.interpolate($0, env: env) }.flatMap { $0.isEmpty ? nil : $0 } }
+            func add(_ connection: DatabaseConnection, inside: Bool) {
+                var connection = connection
+                connection.composeFolder = folder
+                addConnection(connection, inside: inside)
+            }
             if name.hasPrefix("postgres") || name.hasPrefix("postgis") || name.hasPrefix("timescale") || image.contains("pgvector") || name.hasPrefix("supabase/postgres") {
                 signal(.postgres, "\(service.name) service in \(composePath)", composePath)
                 let user = value("POSTGRES_USER") ?? "postgres"
@@ -110,6 +123,14 @@ public enum DataDetector {
                     database: value("MYSQL_DATABASE") ?? value("MARIADB_DATABASE") ?? "mysql", user: user, service: service.name, readOnly: false,
                     origin: .detected, note: "\(composePath) service", devPassword: password
                 ), inside: hostPort(service.ports, container: 3306) == nil)
+            } else if SQLServer.isServerImage(image) {
+                signal(.sqlserver, "\(service.name) service in \(composePath)", composePath)
+                let port = hostPort(service.ports, container: 1433)
+                add(DatabaseConnection(
+                    name: service.name, engine: .sqlserver, port: port ?? 1433,
+                    database: jdbc?.database ?? "master", user: "sa", service: service.name, readOnly: false,
+                    origin: .detected, note: "\(composePath) service", devPassword: value("MSSQL_SA_PASSWORD") ?? value("SA_PASSWORD")
+                ), inside: port == nil)
             } else if name.hasPrefix("redis") || name.hasPrefix("valkey") || name.hasPrefix("keydb") {
                 store("Redis")
             } else if name.hasPrefix("mongo") {
@@ -121,6 +142,7 @@ public enum DataDetector {
             } else if name.contains("kafka") || name.contains("redpanda") {
                 store("Kafka")
             }
+          }
         }
 
         // DATABASE_URLs in env files. Example files hold dev settings; .env is this Mac's own.
@@ -137,7 +159,20 @@ public enum DataDetector {
                     connection.service = match.service
                 }
                 signal(connection.engine, "\(key) in \(path)", path)
-                add(connection)
+                addConnection(connection)
+            }
+        }
+
+        // .NET settings: ConnectionStrings in appsettings.json and its environment copies.
+        for path in files where SQLServer.isAppSettings(path) {
+            for var connection in SQLServer.connections(appSettings: read(path) ?? "", path: path) {
+                if let match = connections.first(where: { $0.engine == connection.engine && $0.port == connection.port && DatabaseConnection.isLocal($0.host) && connection.isLocal }) {
+                    connection.service = match.service
+                    connection.composeFolder = match.composeFolder
+                    if connection.devPassword == nil { connection.devPassword = match.devPassword }
+                }
+                signal(connection.engine, "ConnectionStrings in \((path as NSString).lastPathComponent)", path)
+                addConnection(connection)
             }
         }
 
@@ -146,7 +181,7 @@ public enum DataDetector {
             let ext = (path as NSString).pathExtension.lowercased()
             guard ["sqlite", "sqlite3", "db", "db3"].contains(ext), !Self.isToolFile(path) else { continue }
             signal(.sqlite, "\((path as NSString).lastPathComponent)", path)
-            add(DatabaseConnection(name: (path as NSString).lastPathComponent, engine: .sqlite, database: (path as NSString).lastPathComponent,
+            addConnection(DatabaseConnection(name: (path as NSString).lastPathComponent, engine: .sqlite, database: (path as NSString).lastPathComponent,
                                    file: path, origin: .detected, note: Self.folderNote(path)))
         }
 
@@ -155,15 +190,18 @@ public enum DataDetector {
             ({ $0.hasSuffix("package.json") }, [
                 ("\"pg\"", .postgres, "pg"), ("\"postgres\"", .postgres, "postgres.js"), ("\"@neondatabase/serverless\"", .postgres, "Neon"),
                 ("\"@vercel/postgres\"", .postgres, "Vercel Postgres"), ("\"mysql2\"", .mysql, "mysql2"), ("\"mysql\"", .mysql, "mysql"),
+                ("\"mssql\"", .sqlserver, "mssql"), ("\"tedious\"", .sqlserver, "tedious"),
                 ("\"better-sqlite3\"", .sqlite, "better-sqlite3"), ("\"sqlite3\"", .sqlite, "sqlite3"), ("\"@libsql/client\"", .sqlite, "libSQL"),
             ]),
             ({ $0.hasSuffix("requirements.txt") || $0.hasSuffix("pyproject.toml") || $0.hasSuffix("Pipfile") || $0.hasSuffix("setup.py") }, [
                 ("psycopg", .postgres, "psycopg"), ("asyncpg", .postgres, "asyncpg"), ("pymysql", .mysql, "PyMySQL"),
                 ("mysqlclient", .mysql, "mysqlclient"), ("aiomysql", .mysql, "aiomysql"), ("aiosqlite", .sqlite, "aiosqlite"),
+                ("pyodbc", .sqlserver, "pyodbc"), ("pymssql", .sqlserver, "pymssql"),
             ]),
             ({ $0.hasSuffix("go.mod") }, [
                 ("jackc/pgx", .postgres, "pgx"), ("lib/pq", .postgres, "lib/pq"), ("go-sql-driver/mysql", .mysql, "go-sql-driver"),
                 ("mattn/go-sqlite3", .sqlite, "go-sqlite3"), ("modernc.org/sqlite", .sqlite, "modernc sqlite"),
+                ("go-mssqldb", .sqlserver, "go-mssqldb"),
             ]),
             ({ $0.hasSuffix("Cargo.toml") }, [
                 ("tokio-postgres", .postgres, "tokio-postgres"), ("rusqlite", .sqlite, "rusqlite"), ("mysql_async", .mysql, "mysql_async"),
@@ -177,6 +215,13 @@ public enum DataDetector {
             ]),
             ({ $0.hasSuffix("pom.xml") || $0.hasSuffix("build.gradle") || $0.hasSuffix("build.gradle.kts") }, [
                 ("org.postgresql", .postgres, "PostgreSQL JDBC"), ("mysql-connector", .mysql, "MySQL Connector/J"), ("sqlite-jdbc", .sqlite, "sqlite-jdbc"),
+                ("mssql-jdbc", .sqlserver, "Microsoft JDBC"),
+            ]),
+            ({ $0.hasSuffix(".csproj") || $0.hasSuffix(".fsproj") || $0.hasSuffix("Directory.Packages.props") }, [
+                ("Microsoft.Data.SqlClient", .sqlserver, "Microsoft.Data.SqlClient"), ("System.Data.SqlClient", .sqlserver, "System.Data.SqlClient"),
+                ("EntityFrameworkCore.SqlServer", .sqlserver, "EF Core SQL Server"), ("Npgsql", .postgres, "Npgsql"),
+                ("MySqlConnector", .mysql, "MySqlConnector"), ("Pomelo.EntityFrameworkCore.MySql", .mysql, "Pomelo MySQL"),
+                ("Microsoft.Data.Sqlite", .sqlite, "Microsoft.Data.Sqlite"),
             ]),
         ]
         let ormNeedles: [(String, String)] = [
@@ -184,14 +229,16 @@ public enum DataDetector {
             ("\"knex\"", "Knex"), ("\"sequelize\"", "Sequelize"), ("\"kysely\"", "Kysely"), ("\"mongoose\"", "Mongoose"),
             ("sqlalchemy", "SQLAlchemy"), ("alembic", "Alembic"), ("django", "Django ORM"), ("tortoise-orm", "Tortoise"),
             ("gorm.io", "GORM"), ("sqlx", "SQLx"), ("diesel", "Diesel"), ("activerecord", "Active Record"), ("'rails'", "Active Record"),
-            ("fluent", "Fluent"), ("hibernate", "Hibernate"), ("spring-boot-starter-data-jpa", "JPA"), ("flyway", "Flyway"), ("liquibase", "Liquibase"),
+            ("fluent", "Fluent"), ("hibernate", "Hibernate"), ("microsoft.entityframeworkcore", "Entity Framework Core"), ("\"dapper\"", "Dapper"), ("spring-boot-starter-data-jpa", "JPA"), ("flyway", "Flyway"), ("liquibase", "Liquibase"),
         ]
         for path in files where !path.contains("/node_modules/") {
             let name = (path as NSString).lastPathComponent
-            guard ["package.json", "requirements.txt", "pyproject.toml", "Pipfile", "setup.py", "go.mod", "Cargo.toml", "Gemfile", "Package.swift", "pom.xml", "build.gradle", "build.gradle.kts"].contains(name)
+            guard ["package.json", "requirements.txt", "pyproject.toml", "Pipfile", "setup.py", "go.mod", "Cargo.toml", "Gemfile", "Package.swift", "pom.xml", "build.gradle", "build.gradle.kts", "Directory.Packages.props"].contains(name)
+                  || name.hasSuffix(".csproj") || name.hasSuffix(".fsproj")
                   || name.hasPrefix("requirements") && name.hasSuffix(".txt"),
                   let text = read(path) else { continue }
-            let lower = text.lowercased()
+            // A Go module's indirect requirements are its dependencies' choices, not its own.
+            let lower = (name == "go.mod" ? text.split(separator: "\n").filter { !$0.contains("// indirect") }.joined(separator: "\n") : text).lowercased()
             for group in libraries where group.file(path) || (name.hasPrefix("requirements") && group.file("requirements.txt")) {
                 for (needle, engine, label) in group.needles where lower.contains(needle.lowercased()) {
                     signal(engine, "\(label) in \(name)", path)
@@ -221,7 +268,7 @@ public enum DataDetector {
                         let folder = (path as NSString).deletingLastPathComponent
                         let relative = file.hasPrefix("./") ? String(file.dropFirst(2)) : file
                         let full = folder.isEmpty ? relative : "\(folder)/\(relative)"
-                        add(DatabaseConnection(name: (relative as NSString).lastPathComponent, engine: .sqlite, database: relative,
+                        addConnection(DatabaseConnection(name: (relative as NSString).lastPathComponent, engine: .sqlite, database: relative,
                                                file: full, origin: .detected, note: "Prisma datasource"))
                     }
                 }
@@ -242,7 +289,8 @@ public enum DataDetector {
         // Migrations.
         var migrationFolders: [String: Int] = [:]
         let migrationRoots = ["prisma/migrations/", "db/migrate/", "migrations/", "alembic/versions/", "supabase/migrations/", "drizzle/",
-                              "db/migrations/", "database/migrations/", "src/main/resources/db/migration/", "sql/migrations/"]
+                              "db/migrations/", "database/migrations/", "src/main/resources/db/migration/", "sql/migrations/",
+                              "flyway/sql/", "Migrations/"]
         for path in files {
             for root in migrationRoots where path.hasPrefix(root) || path.contains("/" + root) {
                 let range = path.range(of: root)!
@@ -312,22 +360,31 @@ public enum EnvFile {
         return map
     }
 
-    /// Fills in `${VAR}`, `${VAR:-default}` and `$VAR` the way Compose does.
+    /// Fills in `${VAR}`, `${VAR:-default}`, `${VAR-default}`, `${VAR:?error}`, `${VAR?error}`,
+    /// `${VAR:+other}` and `$VAR` the way Compose does.
     public static func interpolate(_ value: String, env: [String: String]) -> String {
         guard value.contains("$") else { return value }
-        let pattern = #"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::?-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }
         var result = value
-        for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
+        for match in interpolation.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
             guard let whole = Range(match.range, in: result) else { continue }
-            let name = Range(match.range(at: 1), in: value).map { String(value[$0]) } ?? Range(match.range(at: 3), in: value).map { String(value[$0]) } ?? ""
-            let fallback = Range(match.range(at: 2), in: value).map { String(value[$0]) }
-            let replacement = env[name].flatMap { $0.isEmpty ? nil : $0 } ?? fallback
-            // Leave what can't be filled in, so callers can tell it's unresolved.
+            let name = Range(match.range(at: 1), in: value).map { String(value[$0]) } ?? Range(match.range(at: 4), in: value).map { String(value[$0]) } ?? ""
+            let operation = Range(match.range(at: 2), in: value).map { String(value[$0]) } ?? ""
+            let word = Range(match.range(at: 3), in: value).map { String(value[$0]) } ?? ""
+            let set = env[name]
+            // A colon makes an empty value count as unset.
+            let present = operation.hasPrefix(":") ? set.map { !$0.isEmpty } ?? false : set != nil
+            let replacement: String? = switch operation.last {
+            case "-": present ? set : word
+            case "+": present ? word : ""
+            // `?` is an error when unset: leave it, so callers can tell it's unresolved.
+            default: present ? set : nil
+            }
             if let replacement { result.replaceSubrange(whole, with: replacement) }
         }
         return result
     }
+
+    static let interpolation = try! NSRegularExpression(pattern: #"\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?[-?+])([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)"#)
 
     /// Sets keys, replacing existing lines in place and appending the rest under a comment.
     public static func setting(_ values: [(key: String, value: String)], in text: String?, comment: String? = nil) -> String {

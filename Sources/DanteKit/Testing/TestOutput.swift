@@ -49,6 +49,7 @@ public struct TestOutputParser: Sendable {
 
     public mutating func consume(_ rawLine: String) {
         let line = rawLine.trimmingCharacters(in: .whitespaces)
+        if dotnet(line) { return }
         if swiftTesting(line) || xcTest(line) || cargo(line) || goTest(line) || pytest(line) || playwright(line) || junitTree(line) || jest(line) { return }
     }
 
@@ -113,6 +114,59 @@ public struct TestOutputParser: Sendable {
         let suite = qualified.components(separatedBy: ".").last ?? qualified
         record(TestResult(suite: suite, name: name, status: status, duration: Double(match.4), issues: issues))
         return true
+    }
+
+    // MARK: .NET
+
+    /// Where `dotnet test` is in a failure's details: its message, then its stack trace.
+    private var dotnetFailure: (index: Int, section: String)?
+
+    private mutating func dotnet(_ line: String) -> Bool {
+        //   Passed Shop.Tests.OrderTests.AddsUp [3 ms]
+        //   Failed Shop.Tests.OrderTests.Breaks(count: 2) [12 ms]
+        //   Error Message:
+        //    Assert.Equal() Failure …
+        //   Stack Trace:
+        //      at Shop.Tests.OrderTests.Breaks(Int32 count) in /home/me/shop/tests/OrderTests.cs:line 14
+        if let match = line.firstMatch(of: /^(Passed|Failed|Skipped) (\S.*?) \[(< ?)?([\d.]+) ?(ms|s|m)\]$/) {
+            let full = String(match.2)
+            // Theory cases carry their arguments: split the name before them.
+            let bare = full.firstIndex(of: "(").map { String(full[..<$0]) } ?? full
+            let dot = bare.lastIndex(of: ".")
+            let suite = dot.map { String(bare[..<$0]) } ?? ""
+            let name = dot.map { String(full[full.index(after: $0)...]) } ?? full
+            let amount = Double(match.4) ?? 0
+            let seconds = match.5 == "ms" ? amount / 1000 : match.5 == "m" ? amount * 60 : amount
+            let status: TestResult.Status = match.1 == "Passed" ? .passed : match.1 == "Failed" ? .failed : .skipped
+            record(TestResult(suite: suite, name: name, status: status, duration: seconds))
+            dotnetFailure = status == .failed ? (results.firstIndex { $0.id == suite + "/" + name } ?? results.count - 1, "") : nil
+            return true
+        }
+        guard let failure = dotnetFailure, results.indices.contains(failure.index) else { return false }
+        if line == "Error Message:" || line == "Stack Trace:" || line == "Standard Output Messages:" {
+            dotnetFailure?.section = line
+            if line == "Error Message:", results[failure.index].issues.isEmpty { results[failure.index].issues = [.init(message: "")] }
+            return true
+        }
+        if line.isEmpty { return false }
+        switch failure.section {
+        case "Error Message:":
+            let message = results[failure.index].issues[0].message
+            results[failure.index].issues[0].message = message.isEmpty ? line : message + "\n" + line
+            return true
+        case "Stack Trace:":
+            if results[failure.index].issues.first?.line == nil, let match = line.firstMatch(of: /^at .+ in (.+):line (\d+)$/) {
+                if results[failure.index].issues.isEmpty { results[failure.index].issues = [.init(message: "Failed")] }
+                results[failure.index].issues[0].file = String(match.1)
+                results[failure.index].issues[0].line = Int(match.2)
+            }
+            return line.hasPrefix("at ")
+        case "Standard Output Messages:":
+            return true
+        default:
+            dotnetFailure = nil
+            return false
+        }
     }
 
     // MARK: Other runners

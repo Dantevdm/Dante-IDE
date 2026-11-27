@@ -47,8 +47,39 @@ public struct ComposeFile: Equatable, Sendable {
         fileNames.lazy.map { root.appending(path: $0) }.first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
+    /// Compose files below the top, relative to it (`service/database/compose.yml`): a repo
+    /// holding several projects keeps one beside each. At most four folders down, outside
+    /// dependencies and build output.
+    public static func nested(in files: [String]) -> [String] {
+        let skipped: Set<String> = ["node_modules", "vendor", "build", "dist", "target", "bin", "obj", ".git", "testdata", "fixtures", "examples"]
+        return files.filter { path in
+            let parts = path.split(separator: "/")
+            guard parts.count >= 2, parts.count <= 5, fileNames.contains(String(parts.last!)) else { return false }
+            return !parts.dropLast().contains { skipped.contains(String($0)) || $0.hasPrefix(".") }
+        }.sorted()
+    }
+
+    /// Every compose file below the top as one, for a whole-repo view of a project whose
+    /// services are spread over its groups' folders (nil when there are none).
+    public static func merged(projectRoot: URL, paths: [String]) -> ComposeFile? {
+        let files = paths.compactMap { load(projectRoot: projectRoot, path: $0) }
+        guard let first = files.first else { return nil }
+        var seen = Set<String>()
+        return ComposeFile(url: first.url, services: files.flatMap(\.services).filter { seen.insert($0.name).inserted })
+    }
+
+    /// A compose file anywhere in the project, by its path from the root.
+    public static func load(projectRoot: URL, path: String) -> ComposeFile? {
+        load(url: projectRoot.appending(path: path))
+    }
+
     public static func load(projectRoot: URL) -> ComposeFile? {
         guard let url = find(in: projectRoot) else { return nil }
+        return load(url: url)
+    }
+
+    static func load(url: URL) -> ComposeFile? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         guard let yaml = try? String(contentsOf: url, encoding: .utf8) else {
             return ComposeFile(url: url, services: [], parseError: "Couldn’t read \(url.lastPathComponent).")
         }

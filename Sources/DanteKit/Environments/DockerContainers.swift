@@ -42,6 +42,7 @@ public struct DockerContainer: Equatable, Sendable, Identifiable {
         let base = (image.split(separator: "/").last.map(String.init) ?? image).split(separator: ":").first.map { $0.lowercased() } ?? ""
         if ["postgres", "postgis", "timescaledb", "timescaledb-ha", "pgvector", "supabase-postgres"].contains(where: { base == $0 || base.hasPrefix($0 + "-") }) { return .postgres }
         if ["mysql", "mariadb", "percona"].contains(where: { base == $0 || base.hasPrefix($0 + "-") }) { return .mysql }
+        if SQLServer.isServerImage(image) { return .sqlserver }
         return nil
     }
 

@@ -143,6 +143,7 @@ struct NewDatabaseSheet: View {
         case .postgres: "Runs in Docker (\(engine.image!)) with a named volume, so data survives restarts. The usual choice for web apps."
         case .mysql: "Runs in Docker (\(engine.image!)) with a named volume. Pick it if production runs MySQL or MariaDB."
         case .sqlite: "A single file in the repo. No server, nothing to start; good for tools, prototypes and local-first apps."
+        case .sqlserver: "Runs in Docker (\(engine.image!)) as sa, with a named volume. Pick it for .NET apps or when production runs SQL Server."
         }
     }
 
@@ -204,6 +205,7 @@ struct NewDatabaseSheet: View {
         switch plan.engine {
         case .postgres: ["postgres:17-alpine", "postgres:16-alpine", "postgres:15-alpine", "pgvector/pgvector:pg17", "postgis/postgis:17-3.5-alpine"]
         case .mysql: ["mysql:8.4", "mysql:9", "mariadb:11"]
+        case .sqlserver: ["mcr.microsoft.com/mssql/server:2022-latest", "mcr.microsoft.com/mssql/server:2025-latest", "mcr.microsoft.com/mssql/server:2019-latest"]
         case .sqlite: []
         }
     }

@@ -123,6 +123,10 @@ public enum DeclarationScanner {
                     (regex(#"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|private|protected|static|final|synchronized|abstract|default|native)\s+)*(?:<[^>]+>\s+)?(?!return\b|new\b|else\b|throw\b|case\b)[\w.\[\]?]+(?:<[^()]*>)?(?:\[\])*\s+"# + id + #"\s*\([^;=]*$"#), .method)],
             .kotlin: [(regex(#"^\s*(?:(?:public|private|internal|data|sealed|abstract|open|enum)\s+)*(?:class|interface|object)\s+"# + id), .type),
                       (regex(#"^\s*(?:(?:public|private|internal|protected|override|suspend|inline|operator|infix|tailrec|open|final|abstract|actual|expect|external)\s+)*fun\s+(?:<[^>]*>\s*)?(?:\w+\.)?"# + id), .function)],
+            // Types (records with their parameters too), and methods: modifiers, a return type, the
+            // name and a parameter list, not a statement or a call.
+            .csharp: [(regex(#"^\s*(?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|sealed|abstract|partial|readonly|file|unsafe|new|ref)\s+)*(?:class|interface|enum|struct|record(?:\s+(?:struct|class))?)\s+"# + id), .type),
+                      (regex(#"^\s*(?:\[[^\]]*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|abstract|sealed|async|extern|unsafe|new|partial|readonly)\s+)+(?!return\b|new\b|await\b|throw\b|var\b)[\w.<>,\[\]?() ]+?\s+"# + id + #"\s*(?:<[^>]*>)?\s*\((?:[^;=]*$|[^;]*\)\s*=>)"#), .method)],
             .shell: [(regex(#"^\s*(?:function\s+)?([A-Za-z_][\w-]*)\s*\(\)\s*\{"#), .function)],
             .sql: [(regex(#"(?i)^\s*create\s+(?:or\s+replace\s+)?(?:temp(?:orary)?\s+)?(?:table|view|function|procedure|index|type)\s+(?:if\s+not\s+exists\s+)?([\w."]+)"#), .type)],
             .markdown: [(regex(#"^#{1,6}\s+(.+?)\s*#*\s*$"#), .heading)],

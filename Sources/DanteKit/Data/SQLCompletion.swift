@@ -203,6 +203,7 @@ public enum SQLCompletion {
         case .postgres: common + ["NOW", "DATE_TRUNC", "TO_CHAR", "STRING_AGG", "ARRAY_AGG", "JSONB_EXTRACT_PATH_TEXT", "GEN_RANDOM_UUID", "EXTRACT"]
         case .mysql: common + ["NOW", "DATE_FORMAT", "GROUP_CONCAT", "IFNULL", "CONCAT", "JSON_EXTRACT"]
         case .sqlite: common + ["DATETIME", "STRFTIME", "GROUP_CONCAT", "IFNULL", "JSON_EXTRACT"]
+        case .sqlserver: common + ["GETDATE", "SYSUTCDATETIME", "DATEADD", "DATEDIFF", "ISNULL", "CONCAT", "STRING_AGG", "TOP", "JSON_VALUE", "NEWID", "FORMAT"]
         }
     }
 

@@ -23,7 +23,7 @@ public struct NewDatabasePlan: Equatable, Sendable {
         let slug = Self.slug(project)
         self.engine = engine
         self.name = slug
-        self.user = engine == .mysql ? "app" : slug
+        self.user = engine == .mysql ? "app" : engine == .sqlserver ? "sa" : slug
         self.password = password
         self.port = port ?? engine.defaultPort ?? 0
         self.service = "db"
@@ -110,11 +110,30 @@ public struct NewDatabasePlan: Equatable, Sendable {
                 "    timeout: 3s",
                 "    retries: 20",
             ]
+        case .sqlserver:
+            [
+                "\(service):",
+                "  image: \(image)",
+                "  restart: unless-stopped",
+                "  environment:",
+                "    ACCEPT_EULA: \"Y\"",
+                "    MSSQL_SA_PASSWORD: ${\(passwordKey)}",
+                "  ports:",
+                "    - \"\(port):1433\"",
+                "  volumes:",
+                "    - \(volume):/var/opt/mssql",
+            ]
         case .sqlite: []
         }
     }
 
-    public var passwordKey: String { engine == .mysql ? "MYSQL_PASSWORD" : "POSTGRES_PASSWORD" }
+    public var passwordKey: String {
+        switch engine {
+        case .mysql: "MYSQL_PASSWORD"
+        case .sqlserver: "MSSQL_SA_PASSWORD"
+        case .postgres, .sqlite: "POSTGRES_PASSWORD"
+        }
+    }
 
     /// What goes in .env. The password lives there (git-ignored) and Compose reads it.
     public var envValues: [(key: String, value: String)] {
@@ -122,6 +141,8 @@ public struct NewDatabasePlan: Equatable, Sendable {
         case .postgres: [(passwordKey, password), (envKey, "postgres://\(user):\(password)@localhost:\(port)/\(name)")]
         case .mysql: [(passwordKey, password), (envKey, "mysql://\(user):\(password)@localhost:\(port)/\(name)")]
         case .sqlite: [(envKey, "file:./\(file)")]
+        // SQL Server starts with only its system databases; apps create theirs.
+        case .sqlserver: [(passwordKey, password), (envKey, "sqlserver://sa:\(password)@localhost:\(port)/master")]
         }
     }
 
@@ -139,6 +160,9 @@ public struct NewDatabasePlan: Equatable, Sendable {
                                file: file, origin: .saved, note: "created by Dante")
         case .postgres, .mysql:
             DatabaseConnection(name: service, engine: engine, port: port, database: name, user: user, service: service,
+                               readOnly: false, origin: .saved, note: "created by Dante")
+        case .sqlserver:
+            DatabaseConnection(name: service, engine: engine, port: port, database: "master", user: "sa", service: service,
                                readOnly: false, origin: .saved, note: "created by Dante")
         }
     }

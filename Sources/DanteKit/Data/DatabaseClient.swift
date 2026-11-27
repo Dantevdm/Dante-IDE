@@ -53,6 +53,8 @@ public enum DatabaseClient {
     }
 
     public static func route(for connection: DatabaseConnection, hasCompose: Bool, projectRoot: URL? = nil) -> Route {
+        // A compose file in a subfolder counts as much as one at the top.
+        let hasCompose = hasCompose || connection.composeFolder != nil
         // A remote project's host, which Dante can't look at first: the container when there
         // is one, else the host's own client. Either way "localhost" means the host.
         if let projectRoot, RemoteRegistry.project(containing: projectRoot) != nil {
@@ -110,6 +112,19 @@ public enum DatabaseClient {
             }
             pieces = ["-e", script]
             base = ["mysql"] + flags
+        case .sqlserver:
+            if let password { environment["SQLCMDPASSWORD"] = password }
+            let inside: Bool = if case .compose = route { true } else { false }
+            let flags = SQLServer.flags(for: connection, inside: inside)
+            switch route {
+            case .compose(let service):
+                // The script goes in on stdin (`input(for:on:)`).
+                return (["docker", "compose", "exec", "-T", "-e", "SQLCMDPASSWORD", service] + SQLServer.containerCommand(flags), environment)
+            case .local(let path):
+                return ([path] + flags, environment)
+            case .missing:
+                return (["sqlcmd"] + flags, environment)
+            }
         case .sqlite:
             var path = connection.fileURL(projectRoot: projectRoot)?.path ?? connection.database
             if let remote = RemoteRegistry.project(containing: projectRoot)?.project { path = remote.remotePath(forLocal: path) ?? path }
@@ -133,7 +148,13 @@ public enum DatabaseClient {
         }
     }
 
+    /// What the client reads on stdin: SQL Server's script, which sqlcmd splits into batches.
+    public static func input(for statements: [SQLStatement], on connection: DatabaseConnection) -> Data? {
+        connection.engine == .sqlserver ? Data(SQLServer.script(statements).utf8) : nil
+    }
+
     public static func run(_ script: String, on connection: DatabaseConnection, password: String?, projectRoot: URL, hasCompose: Bool) async -> QueryRun {
+        let hasCompose = hasCompose || connection.composeFolder != nil
         let statements = SQLScript.statements(script)
         guard !statements.isEmpty else { return QueryRun(error: "Nothing to run.") }
         if connection.readOnly, let write = statements.first(where: \.changesData) {
@@ -146,11 +167,15 @@ public enum DatabaseClient {
         let (arguments, environment) = command(for: statements, on: connection, password: password, route: route, projectRoot: projectRoot)
         let clock = ContinuousClock()
         let start = clock.now
-        let output = await Shell.run(arguments, in: projectRoot, trimming: false, extra: environment)
+        let folder = connection.composeDirectory(projectRoot: projectRoot)
+        let output = await Shell.run(arguments, in: folder, trimming: false, extra: environment,
+                                     input: input(for: statements, on: connection))
         let elapsed = clock.now - start
         var run = parse(output.stdout, statements: statements, engine: connection.engine)
         run.elapsed = elapsed
-        if !output.succeeded || run.results.count < statements.count {
+        if connection.engine == .sqlserver, let message = SQLServer.errors(in: output.stdout) {
+            run.error = message
+        } else if !output.succeeded || run.results.count < statements.count {
             let message = cleanError(output.stderr.isEmpty ? output.stdout : output.stderr)
             run.error = message.isEmpty ? "\(connection.engine.client) stopped (exit \(output.status))." : message
         }
@@ -181,7 +206,15 @@ public enum DatabaseClient {
             result.message = statement.returnsRows ? "No rows" : "Done"
             return result
         }
-        let table = engine == .mysql ? TabularText.tsv(text, limit: rowLimit + 1) : TabularText.csv(text, null: null, limit: rowLimit + 1)
+        let table = switch engine {
+        case .mysql: TabularText.tsv(text, limit: rowLimit + 1)
+        case .sqlserver: SQLServer.table(text, limit: rowLimit + 2)
+        case .postgres, .sqlite: TabularText.csv(text, null: null, limit: rowLimit + 1)
+        }
+        if engine == .sqlserver, table.isEmpty {
+            result.message = statement.returnsRows ? "No rows" : "Done"
+            return result
+        }
         // Postgres prints a status line ("UPDATE 3", "BEGIN") for statements without rows.
         if engine == .postgres, !statement.returnsRows, table.count == 1, table[0].count == 1, let line = table[0][0] {
             result.message = line

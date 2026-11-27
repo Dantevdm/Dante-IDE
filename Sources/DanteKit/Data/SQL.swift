@@ -28,8 +28,8 @@ public struct SQLStatement: Equatable, Sendable {
         let kind: Kind
         switch first {
         case "select", "with", "explain", "show", "values", "table", "describe", "desc", "pragma": kind = .read
-        case "insert", "update", "delete", "merge", "copy", "replace", "upsert", "call": kind = .write
-        case "begin", "commit", "rollback", "start", "set", "savepoint", "release", "use", "reset", "end": kind = .control
+        case "insert", "update", "delete", "merge", "copy", "replace", "upsert", "call", "exec", "execute": kind = .write
+        case "begin", "commit", "rollback", "start", "set", "savepoint", "release", "use", "reset", "end", "declare", "print": kind = .control
         default: kind = .schema
         }
         // A WITH whose body writes, or an EXPLAIN ANALYZE of a write, is a write.
@@ -113,10 +113,30 @@ public enum SQLScript {
                 continue
             }
             if c == ";" { flush(); i += 1; continue }
+            // SQL Server's batch separator: GO alone on its line.
+            if c == "g" || c == "G", isBatchSeparator(chars, at: i) {
+                flush()
+                while i < chars.count, chars[i] != "\n" { i += 1 }
+                continue
+            }
             current.append(c); i += 1
         }
         flush()
         return result
+    }
+
+    /// `GO` starting a line with nothing after it but spaces (or a repeat count).
+    private static func isBatchSeparator(_ chars: [Character], at index: Int) -> Bool {
+        var j = index - 1
+        while j >= 0, chars[j] == " " || chars[j] == "\t" { j -= 1 }
+        guard j < 0 || chars[j] == "\n" || chars[j] == "\r" else { return false }
+        guard index + 1 < chars.count, chars[index + 1] == "o" || chars[index + 1] == "O" else { return false }
+        var k = index + 2
+        while k < chars.count, chars[k] != "\n" {
+            guard chars[k] == " " || chars[k] == "\t" || chars[k] == "\r" || chars[k].isNumber else { return false }
+            k += 1
+        }
+        return true
     }
 
     /// `$$` or `$tag$` starting at `index`.
@@ -164,6 +184,7 @@ public enum SQLScript {
         switch engine {
         case .mysql: "`" + name.replacingOccurrences(of: "`", with: "``") + "`"
         case .postgres, .sqlite: "\"" + name.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        case .sqlserver: "[" + name.replacingOccurrences(of: "]", with: "]]") + "]"
         }
     }
 

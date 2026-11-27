@@ -386,6 +386,7 @@ public struct SystemMap: Equatable, Sendable {
             case .postgres: ["postgres", "pgx", "lib/pq", "psycopg", "asyncpg"]
             case .mysql: ["mysql", "mariadb"]
             case .sqlite: ["sqlite"]
+            case .sqlserver: ["sqlclient", "mssql", "sqlserver", "go-mssqldb", "tedious", "pyodbc", "pymssql"]
             }
             stores.append(("db:" + engine.rawValue, engine.name, .database, label, words))
         }
@@ -461,7 +462,9 @@ public struct SystemMap: Equatable, Sendable {
                     if !ownersWithTables.contains(owner.id) || store.kind != .database { link(owner.id, store.id) }
                 }
             }
-            if !linked { for part in backend where part.kind == .app { link(part.id, store.id) } }
+            // Nothing names it: the app uses it, when there's one app to say so of.
+            let apps = backend.filter { $0.kind == .app }
+            if !linked, apps.count == 1 { link(apps[0].id, store.id) }
         }
         for table in shownTables {
             let users = tableUsers[table] ?? [:]
@@ -564,7 +567,9 @@ public struct SystemMap: Equatable, Sendable {
             }
             let image = (service.image ?? "").lowercased()
             let base = (image.split(separator: "/").last.map(String.init) ?? image).split(separator: ":").first.map(String.init) ?? image
-            if let store = ["postgres": "db:postgres", "postgis": "db:postgres", "mysql": "db:mysql", "mariadb": "db:mysql"][base],
+            let storeID = SQLServer.isServerImage(image) ? "db:sqlserver"
+                : ["postgres": "db:postgres", "postgis": "db:postgres", "mysql": "db:mysql", "mariadb": "db:mysql"][base]
+            if let store = storeID,
                let index = parts.firstIndex(where: { $0.id == store }) {
                 parts[index].container = service.name
                 continue
@@ -737,7 +742,71 @@ public struct SystemMap: Equatable, Sendable {
             let found = ktorScan(text).routes
             if !found.isEmpty { return found }
         }
+        if (file as NSString).pathExtension.lowercased() == "cs" { return aspNetRoutes(in: text) }
         return isJVM(file) ? annotatedRoutes(in: text) : routes(in: text)
+    }
+
+    /// ASP.NET Core: minimal APIs (`app.MapGet("/orders", …)`, under groups made with
+    /// `var api = app.MapGroup("/api")`) and controllers (`[Route("api/[controller]")]` on
+    /// the class, `[HttpGet("{id}")]` on its actions).
+    static func aspNetRoutes(in text: String) -> [Route] {
+        guard has(text, ".Map") || has(text, "[Http") || has(text, "[Route") else { return [] }
+        let verbs = ["HttpGet": "GET", "HttpPost": "POST", "HttpPut": "PUT", "HttpPatch": "PATCH", "HttpDelete": "DELETE"]
+        var groups: [String: String] = [:]
+        var found: [Route] = []
+        var classRoute: String?
+        var classPrefix = ""
+        var className = ""
+        var pending: (verb: String?, path: String?, line: Int)?
+        for (number, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("//") || line.hasPrefix("*") || line.hasPrefix("/*") { continue }
+            // Minimal APIs.
+            if has(line, ".Map") {
+                if let match = line.firstMatch(of: /(\w+)\s*=\s*(\w+)\.MapGroup\(\s*"([^"]*)"/) {
+                    groups[String(match.1)] = join(groups[String(match.2)] ?? "", String(match.3))
+                    continue
+                }
+                if let match = line.firstMatch(of: /(\w+)\.Map(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"/) {
+                    found.append(Route(method: String(match.2).uppercased(), path: join(groups[String(match.1)] ?? "", String(match.3)), line: number + 1))
+                    continue
+                }
+            }
+            // Controllers: attributes in brackets, several to a line or one per line.
+            if line.hasPrefix("[") {
+                for attribute in line.matches(of: /(\w+)(?:\(\s*(?:template:\s*)?"([^"]*)"[^)]*\))?/) where line.contains("[" + attribute.1) || line.contains(", " + attribute.1) {
+                    let name = String(attribute.1)
+                    let path = attribute.2.map(String.init)
+                    if let verb = verbs[name] {
+                        pending = (verb, path ?? pending?.path, pending?.line ?? number + 1)
+                    } else if name == "Route" {
+                        if className.isEmpty { classRoute = path } else { pending = (pending?.verb, path, pending?.line ?? number + 1) }
+                    }
+                }
+                continue
+            }
+            if let match = line.firstMatch(of: /\bclass\s+(\w+)/) {
+                className = String(match.1)
+                let short = className.hasSuffix("Controller") ? String(className.dropLast("Controller".count)) : className
+                classPrefix = (classRoute ?? "").replacingOccurrences(of: "[controller]", with: short, options: .caseInsensitive)
+                classRoute = nil
+                pending = nil
+                continue
+            }
+            // The action the attributes belong to.
+            if let attributes = pending, line.contains("(") {
+                pending = nil
+                guard attributes.verb != nil || attributes.path != nil else { continue }
+                var path = attributes.path ?? ""
+                if let method = line.firstMatch(of: /(\w+)\s*(?:<[^>]*>)?\s*\(/) {
+                    path = path.replacingOccurrences(of: "[action]", with: String(method.1), options: .caseInsensitive)
+                }
+                let absolute = path.hasPrefix("/") || path.hasPrefix("~/")
+                let full = absolute ? join("", path.replacingOccurrences(of: "~/", with: "")) : join(classPrefix, path)
+                found.append(Route(method: attributes.verb, path: full, line: attributes.line))
+            }
+        }
+        return found
     }
 
     static func isJVM(_ path: String) -> Bool {

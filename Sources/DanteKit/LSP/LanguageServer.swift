@@ -15,15 +15,17 @@ public struct LanguageServer: Hashable, Sendable {
         LanguageServer(name: "gopls", commands: [["gopls"]], languageIDs: [.go: "go"]),
         LanguageServer(name: "rust-analyzer", commands: [["rust-analyzer"]], languageIDs: [.rust: "rust"]),
         LanguageServer(name: "clangd", commands: [["clangd"]], languageIDs: [.c: "c", .cpp: "cpp"]),
+        // csharp-ls finds the .sln or .csproj files under the folder it's given.
+        LanguageServer(name: "csharp-ls", commands: [["csharp-ls"]], languageIDs: [.csharp: "csharp"]),
     ]
 
     public static func `for`(_ language: Language) -> LanguageServer? {
         all.first { $0.languageIDs[language] != nil }
     }
 
-    /// Folders searched besides PATH: where Go, Cargo and Bun install tools.
+    /// Folders searched besides PATH: where Go, Cargo, Bun and .NET install tools.
     static func extraFolders(home: String) -> [String] {
-        ["\(home)/go/bin", "\(home)/.cargo/bin", "\(home)/.bun/bin", "/opt/homebrew/bin", "/usr/local/bin"]
+        ["\(home)/go/bin", "\(home)/.cargo/bin", "\(home)/.bun/bin", "\(home)/.dotnet/tools", "/opt/homebrew/bin", "/usr/local/bin"]
     }
 
     /// The first command whose executable can be found, with its full path.
@@ -53,7 +55,7 @@ public struct LanguageServer: Hashable, Sendable {
     /// first of the server's commands found on PATH or in the usual tool folders. xcrun
     /// commands are skipped; hosts are rarely Macs.
     public static func hostProbeScript(_ servers: [LanguageServer] = all) -> String {
-        var lines = [#"PATH="$PATH:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$HOME/.local/bin""#]
+        var lines = [#"PATH="$PATH:$HOME/go/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$HOME/.dotnet/tools:$HOME/.local/bin""#]
         for server in servers {
             let commands = server.commands.filter { $0.first != "xcrun" && !$0.isEmpty }
             guard !commands.isEmpty else { continue }

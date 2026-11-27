@@ -4,7 +4,7 @@ import Foundation
 /// A repo can hold several, at any depth; each runs in its own folder.
 public struct TestSuite: Equatable, Sendable, Identifiable {
     public enum Tool: String, Equatable, Sendable {
-        case swift, cargo, go, maven, gradle, amper, node, pytest, playwright
+        case swift, cargo, go, maven, gradle, amper, node, pytest, playwright, dotnet
 
         /// Tools that cover the folders below them (Maven modules, Gradle subprojects, npm
         /// workspaces), so a nested folder with the same tool isn't a suite of its own.
@@ -52,6 +52,7 @@ public struct TestSuite: Equatable, Sendable, Identifiable {
         case .maven, .gradle, .amper, .node: "\(runner) test"
         case .pytest: "pytest"
         case .playwright: "playwright test"
+        case .dotnet: "dotnet test"
         }
         return folder.isEmpty ? base : "\(base) in \(folder)"
     }
@@ -109,6 +110,15 @@ public struct TestSuite: Equatable, Sendable, Identifiable {
             return "CI=true \(runner) test" + separator + extra.map { " " + $0 }.joined()
         case .pytest:
             return "python3 -m pytest -v" + Array(Set(local)).sorted().map { " " + Shell.quote($0) }.joined()
+        case .dotnet:
+            // Normal verbosity names every test with its result; the filter matches the full
+            // name (Namespace.Class.Method), so a class or method name narrows it.
+            var line = "dotnet test --logger " + Shell.quote("console;verbosity=normal")
+            if narrowed {
+                let filter = (classes + names).map { "FullyQualifiedName~" + $0 }.joined(separator: "|")
+                line += " --filter " + Shell.quote(filter)
+            }
+            return line
         case .playwright:
             // Paths on the command line are matched against the testDir, so pass them whole.
             var arguments = Array(Set(local)).sorted().map(Shell.quote)
@@ -144,6 +154,11 @@ public enum TestSuites {
                 suites.append(TestSuite(folder: folder, tool: .playwright, runner: "playwright", side: .frontEnd,
                                         testDir: read(prefix + config).map(Playwright.testDir(inConfig:)) ?? "tests"))
             }
+            // .NET's test projects run from the solution above them, or on their own.
+            if let dotnet = dotnetSuite(in: folder, names: names, files: files, read: read) {
+                if !suites.contains(where: { $0.tool == .dotnet && ($0.folder.isEmpty || folder.hasPrefix($0.folder + "/")) }) { suites.append(dotnet) }
+                continue
+            }
             guard let suite = suite(in: folder, names: names, has: { fileSet.contains($0) }, read: read) else { continue }
             // A Maven module or npm workspace under a suite of the same kind is run by it.
             if suites.contains(where: { $0.tool != .playwright && $0.tool.family == suite.tool.family && ($0.folder.isEmpty || folder.hasPrefix($0.folder + "/")) }) { continue }
@@ -171,6 +186,22 @@ public enum TestSuites {
             return TestSuite(folder: folder, tool: .pytest, runner: "python3", side: .backEnd)
         }
         return nil
+    }
+
+    /// A folder with a solution (`.sln`, `.slnx`) holding a test project, or a test project
+    /// (one referencing the test SDK, xUnit, NUnit or MSTest) without a solution above it.
+    static func dotnetSuite(in folder: String, names: Set<String>, files: [String], read: (String) -> String?) -> TestSuite? {
+        let prefix = folder.isEmpty ? "" : folder + "/"
+        func isTestProject(_ path: String) -> Bool {
+            guard let text = read(path) else { return false }
+            return ["Microsoft.NET.Test.Sdk", "<IsTestProject>true", "xunit", "NUnit", "MSTest"].contains { text.contains($0) }
+        }
+        if names.contains(where: { $0.hasSuffix(".sln") || $0.hasSuffix(".slnx") }) {
+            let projects = files.filter { $0.hasPrefix(prefix) && ($0.hasSuffix(".csproj") || $0.hasSuffix(".fsproj")) && !$0.contains("/bin/") && !$0.contains("/obj/") }
+            return projects.contains(where: isTestProject) ? TestSuite(folder: folder, tool: .dotnet, runner: "dotnet", side: .backEnd) : nil
+        }
+        guard let project = names.first(where: { $0.hasSuffix(".csproj") || $0.hasSuffix(".fsproj") }), isTestProject(prefix + project) else { return nil }
+        return TestSuite(folder: folder, tool: .dotnet, runner: "dotnet", side: .backEnd)
     }
 
     /// Amper (Kotlin's own build tool): a module.yaml with a product, or a project.yaml beside

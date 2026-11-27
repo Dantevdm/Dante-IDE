@@ -16,6 +16,7 @@ struct DataOverview: View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 14, alignment: .top)], spacing: 14) {
                 connectionCard
+                if connection.engine == .sqlserver { BackupsCard(session: session, connection: connection) }
                 tablesCard
                 codeCard
                 if let advice { suggestionsCard(advice) }

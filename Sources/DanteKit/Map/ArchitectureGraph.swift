@@ -166,11 +166,109 @@ public struct ArchitectureGraph: Equatable, Sendable {
         return ArchitectureGraph(title: "Folders", source: "source folders", nodes: nodes, edges: [])
     }
 
-    /// Go packages from `go.mod` and the imports in each package's files: which package
-    /// uses which, and the outside modules they pull in. `read` returns a file's text.
+    /// Go packages from every `go.mod` and the imports in each package's files: which package
+    /// uses which, and the outside modules they pull in. A repo with several modules (one per
+    /// tool) gets them all. `read` returns a file's text.
     public static func goModules(files: [String], read: (String) -> String?) -> ArchitectureGraph? {
-        guard let modFile = files.filter({ ($0 as NSString).lastPathComponent == "go.mod" }).min(by: { $0.count < $1.count }),
-              let mod = read(modFile),
+        let mods = files.filter { ($0 as NSString).lastPathComponent == "go.mod" && !$0.split(separator: "/").contains { ["vendor", "node_modules", "testdata"].contains(String($0)) } }
+            .sorted { ($0.count, $0) < ($1.count, $1) }
+        guard mods.count > 1 else { return mods.first.flatMap { goModule(modFile: $0, files: files, read: read) } }
+        let folders = mods.map { ($0 as NSString).deletingLastPathComponent }
+        let graphs = mods.compactMap { mod -> ArchitectureGraph? in
+            let folder = (mod as NSString).deletingLastPathComponent
+            // A module's files stop where a module inside it starts.
+            let inner = folders.filter { $0 != folder && (folder.isEmpty || $0.hasPrefix(folder + "/")) }
+            let own = files.filter { file in !inner.contains { file.hasPrefix($0 + "/") } }
+            return goModule(modFile: mod, files: own, read: read)
+        }
+        return merged(graphs, title: "Go modules", source: "\(graphs.count) go.mod files and imports")
+    }
+
+    /// Several graphs as one: nodes by id (outside modules once), edges from all.
+    static func merged(_ graphs: [ArchitectureGraph], title: String, source: String) -> ArchitectureGraph? {
+        guard !graphs.isEmpty else { return nil }
+        if graphs.count == 1 { return graphs[0] }
+        var nodes: [Node] = []
+        var seen: Set<String> = []
+        for node in graphs.flatMap(\.nodes) where seen.insert(node.id).inserted { nodes.append(node) }
+        let edges = Set(graphs.flatMap(\.edges)).sorted { ($0.from, $0.to) < ($1.from, $1.to) }
+        nodes.sort { ($0.kind == .external ? 1 : 0, $0.id) < ($1.kind == .external ? 1 : 0, $1.id) }
+        return ArchitectureGraph(title: title, source: source, nodes: nodes, edges: edges)
+    }
+
+    /// .NET projects (`.csproj`, `.fsproj`) and the projects each references: an app for a
+    /// web, worker or console project, a library otherwise, tests for test projects.
+    public static func dotnetProjects(files: [String], read: (String) -> String?) -> ArchitectureGraph? {
+        let projects = files.filter { ($0.hasSuffix(".csproj") || $0.hasSuffix(".fsproj")) && !$0.split(separator: "/").contains { ["bin", "obj"].contains(String($0)) } }.sorted()
+        guard !projects.isEmpty else { return nil }
+        let folders = projects.map { ($0 as NSString).deletingLastPathComponent }
+        var nodes: [Node] = []
+        var edges: [Edge] = []
+        for (project, folder) in zip(projects, folders) {
+            let text = read(project) ?? ""
+            let name = ((project as NSString).lastPathComponent as NSString).deletingPathExtension
+            let inner = folders.filter { $0 != folder && (folder.isEmpty || $0.hasPrefix(folder + "/")) }
+            let prefix = folder.isEmpty ? "" : folder + "/"
+            let sources = files.filter { file in
+                file.hasPrefix(prefix) && [".cs", ".fs"].contains { file.hasSuffix($0) } && !inner.contains { file.hasPrefix($0 + "/") }
+                    && !file.split(separator: "/").contains { ["bin", "obj"].contains(String($0)) }
+            }.count
+            let isTest = text.contains("Microsoft.NET.Test.Sdk") || text.contains("<IsTestProject>true")
+            let kind: String
+            if text.contains("Microsoft.NET.Sdk.Web") { kind = "ASP.NET Core" }
+            else if text.contains("Microsoft.NET.Sdk.Worker") { kind = "worker" }
+            else if text.contains("<OutputType>Exe") || text.contains("<OutputType>WinExe") { kind = "console app" }
+            else { kind = isTest ? "tests" : "library" }
+            let isApp = ["ASP.NET Core", "worker", "console app"].contains(kind) && !isTest
+            nodes.append(Node(id: "dotnet:" + project, name: name, kind: isTest ? .test : isApp ? .app : .library, path: folder.isEmpty ? "." : folder,
+                              detail: "\(sources) file\(sources == 1 ? "" : "s") · \(kind)"))
+            for match in text.matches(of: /<ProjectReference\s+Include\s*=\s*"([^"]+)"/) {
+                let target = normalisedProjectPath(folder: folder, include: String(match.1))
+                if projects.contains(target) { edges.append(Edge(from: "dotnet:" + project, to: "dotnet:" + target)) }
+            }
+        }
+        return ArchitectureGraph(title: ".NET projects", source: "\(projects.count) project file\(projects.count == 1 ? "" : "s") and their references", nodes: nodes, edges: edges)
+    }
+
+    /// `..\\Shop.Core\\Shop.Core.csproj` from `src/Shop.Api` → `src/Shop.Core/Shop.Core.csproj`.
+    static func normalisedProjectPath(folder: String, include: String) -> String {
+        var parts = folder.split(separator: "/").map(String.init)
+        for part in include.replacingOccurrences(of: "\\", with: "/").split(separator: "/") {
+            if part == ".." { if !parts.isEmpty { parts.removeLast() } } else if part != "." { parts.append(String(part)) }
+        }
+        return parts.joined(separator: "/")
+    }
+
+    /// A repo holding projects in more than one stack, or several projects of one (two Go
+    /// tools beside a .NET service): every Go module and .NET project, plus a folder for each
+    /// other project, so none is left off the map. Nil when one stack's graph covers it.
+    public static func projects(files: [String], read: (String) -> String?) -> ArchitectureGraph? {
+        let dotnet = dotnetProjects(files: files, read: read)
+        let go = goModules(files: files, read: read)
+        guard dotnet != nil || go != nil else { return nil }
+        // Folders those cover; anything else with a manifest gets a folder node.
+        let covered = Set((dotnet?.nodes ?? []).compactMap(\.path) + (go?.nodes.filter { $0.kind == .app || $0.kind == .library }.compactMap(\.path) ?? []))
+        let goRoots = files.filter { ($0 as NSString).lastPathComponent == "go.mod" }.map { ($0 as NSString).deletingLastPathComponent }
+        let dotnetRoots = (dotnet?.nodes ?? []).compactMap(\.path)
+        let rest = files.filter { file in
+            ![goRoots, dotnetRoots].joined().contains { root in root.isEmpty || root == "." || file.hasPrefix(root + "/") } && !covered.contains((file as NSString).deletingLastPathComponent)
+        }
+        let others = rest.isEmpty ? nil : folders(rest).map { graph in
+            ArchitectureGraph(title: graph.title, source: graph.source, nodes: graph.nodes.filter { node in
+                // A folder that only holds the projects above isn't one of its own.
+                guard let path = node.path else { return true }
+                return !goRoots.contains { $0.hasPrefix(path + "/") } && !dotnetRoots.contains { $0.hasPrefix(path + "/") }
+            }, edges: graph.edges)
+        }
+        let parts = [go, dotnet, others].compactMap { $0 }.filter { !$0.nodes.isEmpty }
+        guard parts.count > 1 || dotnet != nil else { return nil }
+        let sources = [go.map { _ in "go.mod" }, dotnet.map { _ in "project files" }, others.map { _ in "folders" }].compactMap { $0 }
+        return merged(parts, title: "Projects", source: sources.joined(separator: ", ") + " and imports")
+    }
+
+    /// One Go module's packages.
+    static func goModule(modFile: String, files: [String], read: (String) -> String?) -> ArchitectureGraph? {
+        guard let mod = read(modFile),
               let module = mod.firstMatch(of: /(?m)^module\s+(\S+)/).map({ String($0.1) }) else { return nil }
         let base = (modFile as NSString).deletingLastPathComponent
         let prefix = base.isEmpty ? "" : base + "/"

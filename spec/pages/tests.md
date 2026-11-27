@@ -10,7 +10,7 @@ Tests shows every test in the code by kind (Front-end, Back-end, Integration, Se
 ## Highlights
 - Every run counts: yours from this page, and the test commands Claude, Codex and jobs run, so the page always shows the latest result.
 - Tests are grouped by kind, not folder: Front-end (tests of the web app's code), Back-end (server code tested on its own), Unit (code on neither side), Integration, Security, End-to-end, UI and Performance, or the project's own kinds from test.categories.
-- Each app folder with its own runner (Maven, Gradle, Amper, npm, Go, pytest, Cargo, Swift), up to four folders down, runs in its own folder; Maven, Gradle and Amper results are read from the JUnit reports they write. Amper is Kotlin's own build tool: a `module.yaml` with a `product:`, run through the `kotlin` (or `amper`) wrapper beside it as `./kotlin test`, narrowed by class with `--include-classes`; its reports are found under `build/tasks`.
+- Each app folder with its own runner (Maven, Gradle, Amper, npm, Go, pytest, Cargo, Swift, dotnet), up to four folders down, runs in its own folder; Maven, Gradle and Amper results are read from the JUnit reports they write. Amper is Kotlin's own build tool: a `module.yaml` with a `product:`, run through the `kotlin` (or `amper`) wrapper beside it as `./kotlin test`, narrowed by class with `--include-classes`; its reports are found under `build/tasks`.
 - Choose a run in the strip to see the page as that run left it.
 - Playwright browser tests run beside a folder's unit tests, as a suite of their own, and each failure shows what the browser saw: its screenshots, the video and the trace.
 
@@ -25,7 +25,7 @@ Tests shows every test in the code by kind (Front-end, Back-end, Integration, Se
 
 ## Actions
 - Run all: every app folder's runner, each in its folder, one after another (or test.command when the project sets it); the runners show as chips beside it. Greyed out, with a reason, when there's none.
-- Run a kind, a folder or one test from its section: each test runs with its own app's runner, narrowed (Maven -Dtest, Gradle --tests, the test files for npm and pytest, names for go, swift and cargo).
+- Run a kind, a folder or one test from its section: each test runs with its own app's runner, narrowed (Maven -Dtest, Gradle --tests, dotnet --filter FullyQualifiedName~, the test files for npm and pytest, names for go, swift and cargo).
 - Run for changes: the tests for the files changed in the working tree.
 - Re-run failed, or one failure from its row; Run these again repeats a narrowed run.
 - Ask the agent to fix the failures, or one; ask what untested code matters most, or to write tests for a file.
@@ -40,6 +40,7 @@ Tests shows every test in the code by kind (Front-end, Back-end, Integration, Se
 - An older run chosen: the overview says so, and the map, counts and failures are as that run left them (later runs don't count).
 
 ## Edge cases
+- .NET: a folder with a .sln (or a lone test project) holding a project that references Microsoft.NET.Test.Sdk runs `dotnet test` with the console logger at normal verbosity; Passed/Failed/Skipped lines, Error Message and the Stack Trace's `in file:line N` are read back. Tests are methods under [Fact], [Theory], [Test], [TestCase] or [TestMethod] in .cs and .fs files.
 - Runs are kept per Mac (Application Support/Dante/tests, the newest 40), never in the repo; Home, the timeline and the morning update read the same runs.
 - An agent's or job's command counts as a test run when it starts with a known runner (swift test, go test, cargo test, pytest, npm/pnpm/yarn/bun test, jest, vitest, mvn, gradle, dotnet test, xcodebuild test, rspec…) or contains the project's test.command; its results are read from the output it got back, so a very long output may be cut short.
 - Runs typed in the terminal aren't recorded.

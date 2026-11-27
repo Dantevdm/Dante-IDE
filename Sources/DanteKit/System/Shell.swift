@@ -9,6 +9,12 @@ public enum Shell {
         public var stdout: String
         public var stderr: String
 
+        public init(status: Int32, stdout: String, stderr: String) {
+            self.status = status
+            self.stdout = stdout
+            self.stderr = stderr
+        }
+
         public var succeeded: Bool { status == 0 }
         /// stderr when there is any, else stdout: what to show when a command fails.
         public var message: String { stderr.isEmpty ? stdout : stderr }
@@ -29,14 +35,16 @@ public enum Shell {
     /// status 124 (like `timeout(1)`). Pollers pass one, so a tool that hangs (a Docker daemon
     /// that's starting) can't pile up a stuck process and thread every round.
     public static func run(_ arguments: [String], in directory: URL, trimming: Bool = true, extra: [String: String] = [:],
-                           timeout: Duration? = nil, withoutMise: Bool = false) async -> Output {
+                           timeout: Duration? = nil, withoutMise: Bool = false, input stdin: Data? = nil) async -> Output {
         let remote = RemoteRegistry.project(containing: directory)
         let process = Process()
         let watch = Watch()
         let output: Output = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    let input = configure(process, arguments, in: directory, extra: extra, remote: remote, withoutMise: withoutMise)
+                    // A host's environment lines come first; the command reads whatever follows.
+                    let configured = configure(process, arguments, in: directory, extra: extra, remote: remote, withoutMise: withoutMise)
+                    let input = configured == nil && stdin == nil ? nil : (configured ?? Data()) + (stdin ?? Data())
                     let out = Pipe(), err = Pipe(), inPipe = Pipe()
                     process.standardOutput = out
                     process.standardError = err
@@ -55,8 +63,13 @@ public enum Shell {
                         }
                     }
                     if let input {
-                        try? inPipe.fileHandleForWriting.write(contentsOf: input)
-                        try? inPipe.fileHandleForWriting.close()
+                        // Written beside the reads, so a long script can't fill the pipe while
+                        // the command waits for its output to be read.
+                        let writer = inPipe.fileHandleForWriting
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            try? writer.write(contentsOf: input)
+                            try? writer.close()
+                        }
                     }
                     let errors = Box()
                     let group = DispatchGroup()

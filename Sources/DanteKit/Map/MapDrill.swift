@@ -196,6 +196,14 @@ extension ArchitectureGraph {
                     found.append(normalised(((base as NSString).deletingLastPathComponent) + "/" + path))
                 }
             }
+        case "cs":
+            // `using Shop.Data;` names a folder under the project by convention: the first part
+            // is the project's root namespace, the rest its folders.
+            for match in text.matches(of: /(?m)^\s*(?:global\s+)?using\s+(?:static\s+)?([A-Z][\w.]*)\s*;/) {
+                let parts = match.1.split(separator: ".")
+                guard parts.count >= 2, !["System", "Microsoft"].contains(String(parts[0])) else { continue }
+                found.append(normalised(base + "/" + parts.dropFirst().joined(separator: "/")))
+            }
         case "go":
             guard let goModule else { return [] }
             for path in goImports(text) where path.hasPrefix(goModule.path + "/") {

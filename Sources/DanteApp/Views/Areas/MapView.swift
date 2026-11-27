@@ -38,6 +38,10 @@ struct MapView: View {
     /// Where the shown view drew its boxes, for Copy and edit.
     @State private var infraLayout = MapLayoutRecorder()
     @State private var systemLayout = MapLayoutRecorder()
+    /// The projects in the repo and the groups they fall into (v1/, v2/).
+    @State private var layout = RepoLayout(projects: [], groups: [])
+    /// The group shown, by folder; empty for everything. Remembered per project on this Mac.
+    @State private var scope = ""
 
     private var level: String { trail.last?.id ?? "" }
     private var shown: SystemMap? { trail.last.flatMap { insides[$0.id] } ?? system }
@@ -67,6 +71,16 @@ struct MapView: View {
                 title: source == .infra ? "Infrastructure" : showsSystem || (source == .system && !loaded) ? "System map" : graph?.title ?? "Architecture",
                 subtitle: nil
             ) {
+                if layout.hasGroups {
+                    Picker("Project", selection: Binding(get: { scope }, set: { choose(scope: $0) })) {
+                        Text("Everything").tag("")
+                        ForEach(layout.groups) { group in Text(group.name).tag(group.path) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
+                    .help(layout.groups.map { "\($0.name): \($0.summary)" }.joined(separator: "\n"))
+                }
                 if sources.count > 1 {
                     Picker("Source", selection: $source) {
                         ForEach(sources) { Text($0.rawValue).tag($0) }
@@ -209,6 +223,23 @@ struct MapView: View {
         .disabled(current)
     }
 
+    /// Shows one group of the repo's projects, or everything.
+    private func choose(scope folder: String) {
+        guard folder != scope else { return }
+        scope = folder
+        UserDefaults.standard.set(folder, forKey: Self.scopeKey(workspace.url))
+        selected = nil
+        trail = []
+        insides = [:]
+        session.mapCache = nil
+        Task { await load() }
+    }
+
+    static func scopeKey(_ root: URL) -> String { "map.scope." + root.path }
+
+    /// The files the Map reads: the chosen group's, or all of them.
+    private var scopedFiles: [String] { RepoLayout.files(workspace.files, in: scope) }
+
     /// Opens a part: builds its inside once (off the main thread), then zooms into it.
     private func open(_ part: SystemMap.Part) {
         guard opening == nil, let map = shown else { return }
@@ -221,7 +252,7 @@ struct MapView: View {
             return
         }
         opening = part.id
-        let files = workspace.files
+        let files = scopedFiles
         let read = Self.reader(root: workspace.url)
         Task {
             let built = await Task.detached(priority: .userInitiated) { () -> (SystemMap, Set<String>)? in
@@ -288,14 +319,17 @@ struct MapView: View {
         }
     }
 
-    /// The module graph the system map is built on: SwiftPM's description, Go modules or folders.
-    static func modules(root: URL, files: [String]) async -> ArchitectureGraph? {
-        if FileManager.default.fileExists(atPath: root.appending(path: "Package.swift").path) {
+    /// The module graph the system map is built on: SwiftPM's description, the repo's projects
+    /// (Go modules and .NET projects, several stacks side by side), or folders.
+    static func modules(root: URL, files: [String], scoped: Bool = false) async -> ArchitectureGraph? {
+        if !scoped, FileManager.default.fileExists(atPath: root.appending(path: "Package.swift").path) {
             let output = await Shell.run(["swift", "package", "describe", "--type", "json"], in: root)
             return output.succeeded ? ArchitectureGraph.swiftPackage(describeJSON: output.stdout) : nil
         }
         return await Task.detached(priority: .userInitiated) {
-            ArchitectureGraph.goModules(files: files) { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
+            let read: (String) -> String? = { try? String(contentsOf: root.appending(path: $0), encoding: .utf8) }
+            return ArchitectureGraph.projects(files: files, read: read)
+                ?? ArchitectureGraph.goModules(files: files, read: read)
                 ?? ArchitectureGraph.folders(files)
         }.value
     }
@@ -303,7 +337,11 @@ struct MapView: View {
     private func load() async {
         // Coming back to the Map shows what was built for this revision instead of building
         // it again, which takes seconds on a big repo.
-        if let cache = session.mapCache, cache.revision == workspace.revision {
+        let files = workspace.files
+        layout = await Task.detached(priority: .userInitiated) { RepoLayout.detect(files: files) }.value
+        let saved = UserDefaults.standard.string(forKey: Self.scopeKey(workspace.url)) ?? ""
+        scope = layout.groups.contains { $0.path == saved } ? saved : ""
+        if let cache = session.mapCache, cache.revision == workspace.revision, cache.scope == scope {
             (modules, services, system, coverage, notes) = (cache.modules, cache.services, cache.system, cache.coverage, cache.notes)
             (insides, openable, infra) = (cache.insides, cache.openable, cache.infra)
             trail = trail.filter { insides[$0.id] != nil }
@@ -313,8 +351,10 @@ struct MapView: View {
         }
         let revision = workspace.revision
         let root = workspace.url
-        modules = await Self.modules(root: root, files: workspace.files)
-        let infraFiles = workspace.files
+        let scope = scope
+        let scoped = scopedFiles
+        modules = await Self.modules(root: root, files: scoped, scoped: !scope.isEmpty)
+        let infraFiles = scoped
         infra = await Task.detached(priority: .userInitiated) {
             Infrastructure.detect(files: infraFiles.filter(Infrastructure.isCandidate)) { path in
                 let url = root.appending(path: path)
@@ -322,14 +362,17 @@ struct MapView: View {
                 return try? String(contentsOf: url, encoding: .utf8)
             }
         }.value
-        let compose = ComposeFile.load(projectRoot: root)
+        // A group keeps its own compose file, below the top.
+        let compose = scope.isEmpty ? (ComposeFile.load(projectRoot: root) ?? ComposeFile.merged(projectRoot: root, paths: ComposeFile.nested(in: scoped)))
+            : ComposeFile.nested(in: scoped).first.flatMap { ComposeFile.load(projectRoot: root, path: $0) }
         services = compose.map(ArchitectureGraph.compose)
-        let files = workspace.files
+        let layout = layout
         let graph = modules
         let read = Self.reader(root: root)
         let (built, more) = await Task.detached(priority: .userInitiated) { () -> (SystemMap, Set<String>) in
-            let map = SystemMap.build(files: files, read: read, compose: compose, modules: graph)
-            return (map, Set(map.parts.filter { map.opens($0, files: files, read: read) }.map(\.id)))
+            // Everything at once: each part says which group it's from.
+            let map = SystemMap.build(files: scoped, read: read, compose: compose, modules: graph).labelled(by: scope.isEmpty ? layout : RepoLayout(projects: [], groups: []))
+            return (map, Set(map.parts.filter { map.opens($0, files: scoped, read: read) }.map(\.id)))
         }.value
         system = built
         // The code changed: opened parts are built again from it, the trail kept.
@@ -337,18 +380,18 @@ struct MapView: View {
         var rebuilt: [String: SystemMap] = [:]
         var kept: [SystemMap.Part] = []
         for part in trail {
-            guard let inside = await Task.detached(priority: .userInitiated, operation: { SystemMap.inside(part, files: files, read: read) }).value else { break }
+            guard let inside = await Task.detached(priority: .userInitiated, operation: { SystemMap.inside(part, files: scoped, read: read) }).value else { break }
             rebuilt[part.id] = inside
-            openable[part.id] = await Task.detached(priority: .userInitiated) { Set(inside.parts.filter { inside.opens($0, files: files, read: read) }.map(\.id)) }.value
+            openable[part.id] = await Task.detached(priority: .userInitiated) { Set(inside.parts.filter { inside.opens($0, files: scoped, read: read) }.map(\.id)) }.value
             kept.append(part)
         }
         insides = rebuilt
         trail = kept
-        coverage = await Task.detached(priority: .utility) { CoverageReport.load(root: root, files: files) }.value
+        coverage = await Task.detached(priority: .utility) { CoverageReport.load(root: root, files: scoped) }.value
         if !sources.contains(source) { source = sources.first ?? .modules }
         notes = try? String(contentsOf: root.appending(path: ".dante/architecture.md"), encoding: .utf8)
         if let selected, graph?.node(selected) == nil, shown?.part(selected) == nil { self.selected = nil }
-        session.mapCache = MapCache(revision: revision, modules: modules, services: services, system: system, coverage: coverage, notes: notes,
+        session.mapCache = MapCache(revision: revision, scope: scope, modules: modules, services: services, system: system, coverage: coverage, notes: notes,
                                     insides: insides, openable: openable, infra: infra)
         loaded = true
     }
@@ -357,6 +400,8 @@ struct MapView: View {
 /// The Map's last build for a window, so switching areas doesn't rebuild it.
 struct MapCache {
     var revision: Int
+    /// The group of projects it shows; empty for everything.
+    var scope = ""
     var modules: ArchitectureGraph?
     var services: ArchitectureGraph?
     var system: SystemMap?

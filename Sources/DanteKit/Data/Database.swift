@@ -1,10 +1,10 @@
 import Foundation
 
 /// The databases the Data area can open. Dante talks to each through its own command-line
-/// client (`psql`, `mysql`, `sqlite3`), or through the client inside the project's Docker
-/// Compose service when it isn't installed, so there's no driver to bundle.
+/// client (`psql`, `mysql`, `sqlite3`, `sqlcmd`), or through the client inside the project's
+/// Docker Compose service when it isn't installed, so there's no driver to bundle.
 public enum DatabaseEngine: String, Codable, CaseIterable, Sendable, Identifiable {
-    case postgres, mysql, sqlite
+    case postgres, mysql, sqlite, sqlserver
 
     public var id: String { rawValue }
 
@@ -13,6 +13,7 @@ public enum DatabaseEngine: String, Codable, CaseIterable, Sendable, Identifiabl
         case .postgres: "PostgreSQL"
         case .mysql: "MySQL"
         case .sqlite: "SQLite"
+        case .sqlserver: "SQL Server"
         }
     }
 
@@ -21,6 +22,7 @@ public enum DatabaseEngine: String, Codable, CaseIterable, Sendable, Identifiabl
         case .postgres: 5432
         case .mysql: 3306
         case .sqlite: nil
+        case .sqlserver: 1433
         }
     }
 
@@ -30,6 +32,7 @@ public enum DatabaseEngine: String, Codable, CaseIterable, Sendable, Identifiabl
         case .postgres: "psql"
         case .mysql: "mysql"
         case .sqlite: "sqlite3"
+        case .sqlserver: "sqlcmd"
         }
     }
 
@@ -39,6 +42,7 @@ public enum DatabaseEngine: String, Codable, CaseIterable, Sendable, Identifiabl
         case .postgres: "brew install libpq && brew link --force libpq"
         case .mysql: "brew install mysql-client && brew link --force mysql-client"
         case .sqlite: "brew install sqlite"
+        case .sqlserver: "brew install sqlcmd"
         }
     }
 
@@ -48,6 +52,17 @@ public enum DatabaseEngine: String, Codable, CaseIterable, Sendable, Identifiabl
         case .postgres: "postgres:17-alpine"
         case .mysql: "mysql:8.4"
         case .sqlite: nil
+        case .sqlserver: "mcr.microsoft.com/mssql/server:2022-latest"
+        }
+    }
+
+    /// The user a container of this engine starts with.
+    public var defaultUser: String {
+        switch self {
+        case .postgres: "postgres"
+        case .mysql: "root"
+        case .sqlite: ""
+        case .sqlserver: "sa"
         }
     }
 
@@ -56,6 +71,7 @@ public enum DatabaseEngine: String, Codable, CaseIterable, Sendable, Identifiabl
         "postgres": .postgres, "postgresql": .postgres, "postgis": .postgres,
         "mysql": .mysql, "mariadb": .mysql, "mysql2": .mysql,
         "sqlite": .sqlite, "sqlite3": .sqlite, "file": .sqlite,
+        "sqlserver": .sqlserver, "mssql": .sqlserver,
     ]
 }
 
@@ -94,6 +110,9 @@ public struct DatabaseConnection: Codable, Equatable, Hashable, Sendable, Identi
     /// A compose service that doesn't publish its port: only the client inside its container
     /// reaches it. Found afresh each time, so not saved.
     public var insideDocker = false
+    /// The folder of the compose file that runs it, relative to the project root, when that
+    /// isn't the root itself (`service/database`). Compose commands run there.
+    public var composeFolder: String?
     public init(id: String? = nil, name: String, engine: DatabaseEngine, host: String = "localhost", port: Int? = nil,
                 database: String, user: String = "", file: String? = nil, service: String? = nil, readOnly: Bool? = nil,
                 origin: Origin = .saved, note: String? = nil, devPassword: String? = nil) {
@@ -113,7 +132,13 @@ public struct DatabaseConnection: Codable, Equatable, Hashable, Sendable, Identi
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, engine, host, port, database, user, file, service, readOnly, origin, note
+        case id, name, engine, host, port, database, user, file, service, readOnly, origin, note, composeFolder
+    }
+
+    /// Where compose commands for its service run.
+    public func composeDirectory(projectRoot: URL) -> URL {
+        guard let composeFolder, !composeFolder.isEmpty else { return projectRoot }
+        return projectRoot.appending(path: composeFolder)
     }
 
     static func makeID(engine: DatabaseEngine, host: String, port: Int?, database: String, file: String?) -> String {
@@ -132,7 +157,13 @@ public struct DatabaseConnection: Codable, Equatable, Hashable, Sendable, Identi
         if engine == .sqlite { return file ?? database }
         let who = user.isEmpty ? "" : "\(user)@"
         let at = port.map { "\(host):\($0)" } ?? host
-        return "\(engine == .postgres ? "postgres" : "mysql")://\(who)\(at)/\(database)"
+        let scheme = switch engine {
+        case .postgres: "postgres"
+        case .mysql: "mysql"
+        case .sqlserver: "sqlserver"
+        case .sqlite: "sqlite"
+        }
+        return "\(scheme)://\(who)\(at)/\(database)"
     }
 
     /// The SQLite file's location.

@@ -16,6 +16,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Routes carry a lock: secured, open for a reason (a health check, sign-in, a webhook, docs), or open with nothing to explain it, which is flagged.
 - A table shows its columns, keys and what references it, with suggestions (missing indexes, keys, money in floating point) and copying at every level.
 - Selecting a box glides it into view; links draw themselves and pulse along the busiest paths.
+- A repo holding several projects (an old generation in Go beside a new one in .NET, say) gets a picker above the map: Everything, or one group at a time.
 
 ## Shows
 - Five lanes, left to right: Clients (web and mobile apps and their screens, and a command-line tool with its commands), API (route groups), Backend (services and packages), Data (databases, tables, queues, caches) and Outside (third-party services, and each AWS service the code's SDK clients name).
@@ -23,6 +24,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Links between boxes along real code paths: fetch calls to routes, routes to their handlers, imports, queries naming tables, hosts called.
 - A box's detail line: its kind, how many routes, screens or methods it has, its test coverage when a coverage report exists.
 - The view picker: System (this view), Infra, Modules and, with a compose file, Services.
+- The project picker, when the repo holds two or more groups of projects (the first folder where their build files part ways: `v1/` with two Go modules, `v2/` with a .NET solution): Everything, then each group with what it is ("2 Go projects", ".NET", "Go and Node"). In Everything each part's detail starts with its group's name.
 - An inspector beside the map for the selected box: what it uses, what uses it, its environment variables (secrets flagged), its files, and the code of a selected method.
 - For a route group: Access, each open route with why it's open (health check, sign-in, webhook, docs, permitAll in the security config) or that nothing explains it.
 - For a table: its columns (keys, types, nullability, what each foreign key names), what references it, the file and line of its CREATE TABLE, and its suggestions.
@@ -30,6 +32,7 @@ The Map draws the system from its code: the clients and their screens, the API r
 
 ## Actions
 - Click a box to select it and dim everything it isn't linked to.
+- Choose a group in the project picker: the map, its insides, coverage and the compose file it reads are that group's alone. The choice is kept per project on this Mac.
 - Copy and edit (in the header, for the System view and inside an opened part): name it, and what's shown becomes a diagram in Docs with the same positions, lanes as groups, icons and links (see docs.diagrams).
 - Open a box with an expand mark (or double-click it): parts open into folders, folders into files or classes, a class into its methods; the breadcrumb leads back out.
 - Open a table to trace it back: the code that reads or writes it, up to the routes that reach that code, with its columns and the tables its foreign keys name.
@@ -58,6 +61,9 @@ The Map draws the system from its code: the clients and their screens, the API r
 - Migrations apply in name order, so ALTERs and later CREATE INDEX statements change the table they name.
 - Suggestions are static: table sizes are unknown, so index advice is for when tables grow.
 - Tests and test folders aren't parts.
+- Several Go modules, .NET projects (.csproj/.fsproj, linked by ProjectReference, ASP.NET Core named) and other folders make one graph; bin/ and obj/ copies are skipped.
+- ASP.NET Core routes come from minimal APIs (MapGet/MapPost… with MapGroup prefixes) and controllers ([Route] on the class with [controller] and [action] filled in, [HttpGet("…")] on actions, a leading / overriding the class route).
+- A database with no name in the code links to the app only when there's one app; a dependency marked `// indirect` in go.mod doesn't count.
 - Opening a backend folder retains project-wide security rules, including configuration and build files outside that folder; route access stays the same as in the whole-system map.
 - A hash router's screens open at /#/path; a Vite base path is put in front.
 - Dynamic route segments end the path, since there's no id to fill in.

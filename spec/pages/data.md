@@ -1,7 +1,7 @@
 ---
 id: data
 title: Data
-phrases: [data, database, databases, tables, sql, queries, postgres, schema]
+phrases: [data, database, databases, tables, sql, queries, postgres, schema, sql server, backups, restore a backup]
 ---
 # Data (Local › Data)
 
@@ -10,6 +10,7 @@ Data connects to the project's databases: browse tables, run queries, read query
 ## Highlights
 - It finds databases from compose, env files and the project's containers.
 - Passwords are kept in the Keychain.
+- Postgres, MySQL, SQLite and SQL Server; SQL Server backups (.bak) can be restored into its container, and backed up from it.
 
 ## Shows
 - Databases: each connection found or added, with its engine, where it runs and whether it's reachable.
@@ -20,6 +21,7 @@ Data connects to the project's databases: browse tables, run queries, read query
 - Query results in a grid.
 - Query insights: the plan in plain words with index suggestions.
 - Migration preview: what a DDL script would change, checked against the schema.
+- Backups (SQL Server): `.bak` files in the project (outside node_modules, bin, obj and vendor) and in the container's /var/opt/mssql/backup, each with where it is, its size and age.
 
 
 ## Actions
@@ -32,10 +34,14 @@ Data connects to the project's databases: browse tables, run queries, read query
 - Copy a suggestion's SQL, or ask the agent to make the suggested changes as a new migration.
 - Arrive from the Map (a database's chip, Browse in Data on a table) with that connection and table open.
 - Delete a database the wizard created, with or without its data.
+- Restore… a backup (or Restore from a file… anywhere on this Mac): Dante copies it into the container's backup folder, reads RESTORE HEADERONLY and FILELISTONLY, and shows what it holds (database, server, date, SQL Server version, files). Restore as names the database (the backup's own name first); when that database exists the button says Replace and a warning says everything in it goes and connected apps are put out. Make sa the owner (on by default) runs ALTER AUTHORIZATION afterwards, since a backup from another server keeps an owner this one doesn't know. The restore runs against master: SINGLE_USER WITH ROLLBACK IMMEDIATE, RESTORE … WITH MOVE (files to /var/opt/mssql/data as `<db>.mdf`, `_log.ldf`), REPLACE, RECOVERY, then MULTI_USER.
+- Back up now…: a COPY_ONLY backup (`<db>-yyyy-MM-dd-HHmm.bak`) made in the container and copied to a folder you choose, beside the project's other backups by default; Show in Finder when it's done.
 
 ## States
 - No database: options to create one, connect, or design one with the agent.
 - Unreachable: the error, with a hint (container stopped, wrong port, password).
+- Backups for a SQL Server outside a container Dante knows: a sentence saying to restore it on the server itself.
+- Restore sheet: reading, ready, restoring, done or failed with SQL Server's own message.
 - A table from the Map that isn't in the database yet: a note that the migrations haven't run against it.
 
 
@@ -46,8 +52,12 @@ Data connects to the project's databases: browse tables, run queries, read query
 - A compose database that doesn't publish its port (no `ports:`) is reached with the client inside its container ("psql inside the db container"), even when psql is installed on this Mac, since nothing listens on localhost for it.
 - Statements run one per argument with a marker after each, so results line up.
 - Saved connections are per Mac, never in the repo.
+- SQL Server is found from compose services running an mssql image (in any folder, each with its own .env), JDBC URLs in a service's environment, appsettings*.json ConnectionStrings (matched to a compose service by port), and .csproj packages (SqlClient, EF Core SqlServer). `.\SQLEXPRESS` and `(localdb)` strings are Windows-only and skipped.
+- SQL Server runs through sqlcmd (on this Mac, or the image's /opt/mssql-tools18 inside the container), with the password in SQLCMDPASSWORD and the script on stdin in GO batches; tables browse with OFFSET … FETCH, names quote as [name], and plans come from SHOWPLAN_TEXT.
+- A compose file in a subfolder runs its commands in that folder.
 
 
 ## Acceptance
 - A read-only connection refuses statements that change data.
 - Passwords never appear on a command line or in a log.
+- A SQL Server compose service in a subfolder shows as a connection, browses its tables, and restoring a backup into a new name leaves the original database untouched.

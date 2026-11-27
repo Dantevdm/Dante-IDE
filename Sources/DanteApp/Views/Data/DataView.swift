@@ -111,6 +111,9 @@ struct DataView: View {
         .sheet(isPresented: Binding(get: { model.showsConnect }, set: { if !$0 { model.showsConnect = false; model.editing = nil } })) {
             ConnectSheet(session: session, workspace: workspace, editing: model.editing)
         }
+        .sheet(isPresented: Binding(get: { model.restoring != nil }, set: { if !$0, model.restoring?.stage != .restoring { model.restoring = nil } })) {
+            RestoreSheet(session: session)
+        }
     }
 }
 
@@ -370,6 +373,7 @@ struct EngineBadge: View {
         case .postgres: ("PG", theme.accent.color)
         case .mysql: ("MY", theme.amber.color)
         case .sqlite: ("SQ", theme.green.color)
+        case .sqlserver: ("MS", theme.red.color)
         }
         Text(letters)
             .font(.dante(size: size * 0.4, weight: .bold, design: .rounded))

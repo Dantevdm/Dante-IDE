@@ -190,6 +190,10 @@ import Testing
         let values = EnvFile.values("# c\nexport A=1\nB=\"two words\"\nC=x # note\n")
         #expect(values == ["A": "1", "B": "two words", "C": "x"])
         #expect(EnvFile.interpolate("${A}-${MISSING:-def}-$A-${NOPE}", env: ["A": "1"]) == "1-def-1-${NOPE}")
+        // Required values, and the other forms compose takes.
+        #expect(EnvFile.interpolate("${PW:?set it}", env: ["PW": "x1"]) == "x1")
+        #expect(EnvFile.interpolate("${PW:?}", env: [:]) == "${PW:?}")
+        #expect(EnvFile.interpolate("${E:-d}|${E-d}|${E:+on}|${E+on}|${U+on}", env: ["E": ""]) == "d|||on|")
     }
 
     @Test func setsKeysInPlace() {

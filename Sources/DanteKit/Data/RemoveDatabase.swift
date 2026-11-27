@@ -77,7 +77,7 @@ public struct DatabaseRemoval: Equatable, Sendable {
             return value.hasSuffix(bare) && (value.hasPrefix("file:") || value.hasPrefix("sqlite:") || value == bare || value == "./" + bare)
         }
         guard let port = connection.port, !connection.database.isEmpty else { return false }
-        let scheme = connection.engine == .mysql ? "mysql" : "postgres"
+        let scheme = connection.engine == .mysql ? "mysql" : connection.engine == .sqlserver ? "sqlserver" : "postgres"
         guard value.hasPrefix(scheme) else { return false }
         return ["@localhost:\(port)/\(connection.database)", "@127.0.0.1:\(port)/\(connection.database)"].contains { value.contains($0) }
             && (value.hasSuffix(connection.database) || value.contains("/\(connection.database)?"))

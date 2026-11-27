@@ -48,8 +48,8 @@ public struct DatabaseSchema: Equatable, Sendable {
         }
 
         public var id: String { qualifiedName }
-        /// schema.name, leaving out Postgres's default `public`.
-        public var qualifiedName: String { schema.map { $0 == "public" ? name : "\($0).\(name)" } ?? name }
+        /// schema.name, leaving out Postgres's default `public` and SQL Server's `dbo`.
+        public var qualifiedName: String { schema.map { $0 == "public" || $0 == "dbo" ? name : "\($0).\(name)" } ?? name }
         public var primaryKey: [String] { columns.filter(\.isPrimaryKey).map(\.name) }
         public var foreignKeys: [Column] { columns.filter { $0.references != nil } }
 
@@ -173,6 +173,30 @@ public enum SchemaQueries {
               from information_schema.tables where table_schema = database();
             select sum(data_length + index_length) from information_schema.tables where table_schema = database()
             """
+        case .sqlserver: """
+            select @@version;
+            select c.TABLE_SCHEMA, c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE
+                   + case when c.CHARACTER_MAXIMUM_LENGTH = -1 then '(max)'
+                          when c.CHARACTER_MAXIMUM_LENGTH is not null then '(' + cast(c.CHARACTER_MAXIMUM_LENGTH as varchar(10)) + ')' else '' end,
+                   c.IS_NULLABLE, c.COLUMN_DEFAULT, t.TABLE_TYPE
+              from INFORMATION_SCHEMA.COLUMNS c
+              join INFORMATION_SCHEMA.TABLES t on t.TABLE_SCHEMA = c.TABLE_SCHEMA and t.TABLE_NAME = c.TABLE_NAME
+             where c.TABLE_SCHEMA not in ('sys', 'INFORMATION_SCHEMA')
+             order by c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION;
+            select tc.TABLE_SCHEMA, tc.TABLE_NAME, kcu.COLUMN_NAME, tc.CONSTRAINT_TYPE, ccu.TABLE_SCHEMA, ccu.TABLE_NAME, ccu.COLUMN_NAME
+              from INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+              join INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu on kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME and kcu.TABLE_SCHEMA = tc.TABLE_SCHEMA
+              left join INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                on tc.CONSTRAINT_TYPE = 'FOREIGN KEY' and rc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME and rc.CONSTRAINT_SCHEMA = tc.TABLE_SCHEMA
+              left join INFORMATION_SCHEMA.KEY_COLUMN_USAGE ccu
+                on ccu.CONSTRAINT_NAME = rc.UNIQUE_CONSTRAINT_NAME and ccu.CONSTRAINT_SCHEMA = rc.UNIQUE_CONSTRAINT_SCHEMA and ccu.ORDINAL_POSITION = kcu.ORDINAL_POSITION
+             where tc.CONSTRAINT_TYPE in ('PRIMARY KEY', 'FOREIGN KEY');
+            select s.name, t.name, sum(case when p.index_id in (0, 1) then p.row_count else 0 end), sum(p.reserved_page_count) * 8192
+              from sys.tables t join sys.schemas s on s.schema_id = t.schema_id
+              join sys.dm_db_partition_stats p on p.object_id = t.object_id
+             group by s.name, t.name;
+            select sum(cast(size as bigint)) * 8192 from sys.database_files
+            """
         case .sqlite: """
             select 'SQLite ' || sqlite_version();
             select null, m.name, p.name, p.type, case when p."notnull" then 'NO' else 'YES' end, p.dflt_value, case m.type when 'view' then 'VIEW' else 'BASE TABLE' end
@@ -204,10 +228,11 @@ public enum SchemaQueries {
         guard results.count >= 4 else { return DatabaseSchema() }
         var schema = DatabaseSchema()
         schema.version = results[0].rows.first?.first.flatMap { $0 }.map(shortVersion)
-        let single = engine != .postgres
+        let single = engine != .postgres && engine != .sqlserver
+        let defaultSchema = engine == .sqlserver ? "dbo" : "public"
         var order: [String] = []
         var tables: [String: DatabaseSchema.Table] = [:]
-        func key(_ schemaName: String?, _ name: String) -> String { single ? name : "\(schemaName ?? "public").\(name)" }
+        func key(_ schemaName: String?, _ name: String) -> String { single ? name : "\(schemaName ?? defaultSchema).\(name)" }
         for row in results[1].rows where row.count >= 7 {
             guard let name = row[1], let column = row[2] else { continue }
             let id = key(row[0], name)
@@ -223,7 +248,7 @@ public enum SchemaQueries {
             if row[3] == "PRIMARY KEY" {
                 tables[id]?.columns[index].isPrimaryKey = true
             } else if let target = row[5] {
-                let targetName = single ? target : (row[4] ?? "public") == "public" ? target : "\(row[4]!).\(target)"
+                let targetName = single ? target : (row[4] ?? defaultSchema) == defaultSchema ? target : "\(row[4]!).\(target)"
                 tables[id]?.columns[index].references = (targetName, row[6] ?? "")
             }
         }
@@ -242,6 +267,10 @@ public enum SchemaQueries {
     public static func shortVersion(_ text: String) -> String {
         if text.hasPrefix("PostgreSQL") { return text.split(separator: " ").prefix(2).joined(separator: " ") }
         if text.hasPrefix("SQLite") { return text }
+        // "Microsoft SQL Server 2025 (RTM) - 17.0.1000.7 (X64) …"
+        if text.hasPrefix("Microsoft SQL Server") {
+            return text.split(separator: " ").prefix(5).joined(separator: " ").replacingOccurrences(of: "Microsoft ", with: "")
+        }
         return "MySQL " + (text.split(separator: "-").first.map(String.init) ?? text)
     }
 
@@ -252,7 +281,13 @@ public enum SchemaQueries {
         if let filter, !filter.trimmingCharacters(in: .whitespaces).isEmpty { sql += " where \(filter)" }
         if let orderBy { sql += " order by \(SQLScript.quote(orderBy, for: engine))\(descending ? " desc" : "")" }
         else if !table.primaryKey.isEmpty { sql += " order by " + table.primaryKey.map { SQLScript.quote($0, for: engine) }.joined(separator: ", ") }
-        sql += " limit \(limit) offset \(offset)"
+        if engine == .sqlserver {
+            // OFFSET needs an ORDER BY; (select null) keeps the table's own order.
+            if orderBy == nil, table.primaryKey.isEmpty { sql += " order by (select null)" }
+            sql += " offset \(offset) rows fetch next \(limit) rows only"
+        } else {
+            sql += " limit \(limit) offset \(offset)"
+        }
         return sql
     }
 
@@ -262,6 +297,8 @@ public enum SchemaQueries {
         case .postgres: "explain (format text, costs true) \(sql)"
         case .mysql: "explain format=tree \(sql)"
         case .sqlite: "explain query plan \(sql)"
+        // SHOWPLAN must be alone in its batch, which each statement is (`SQLServer.script`).
+        case .sqlserver: "set showplan_text on;\n\(sql);\nset showplan_text off"
         }
     }
 }

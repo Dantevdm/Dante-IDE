@@ -67,6 +67,11 @@ final class DataModel {
     private(set) var status: [String: Status] = [:]
     private(set) var schemas: [String: DatabaseSchema] = [:]
     private(set) var hasCompose = false
+    /// SQL Server backups in the project, and in each connection's container by its id.
+    private(set) var projectBackups: [DatabaseBackup] = []
+    var containerBackups: [String: [DatabaseBackup]] = [:]
+    var restoring: RestoreDraft?
+    var backupStatus: [String: BackupStatus] = [:]
     private(set) var startingService: String?
     let store = ConnectionStore()
 
@@ -117,7 +122,15 @@ final class DataModel {
         let compose = ComposeFile.load(projectRoot: workspace.url)
         hasCompose = compose != nil
         let root = workspace.url
-        profile = DataDetector.detect(paths: workspace.files, compose: compose) { path in
+        // A repo of several projects keeps a compose file beside each.
+        let nested = ComposeFile.nested(in: workspace.files).compactMap { path in
+            ComposeFile.load(projectRoot: root, path: path).map { ((path as NSString).deletingLastPathComponent, $0) }
+        }
+        projectBackups = SQLServerBackups.inProject(workspace.files).map { path in
+            let values = try? root.appending(path: path).resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            return DatabaseBackup(place: .project(path), bytes: values?.fileSize, modified: values?.contentModificationDate)
+        }
+        profile = DataDetector.detect(paths: workspace.files, compose: compose, nested: nested) { path in
             let url = root.appending(path: path)
             // Build files and env files are small; skip anything that isn't.
             guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 512_000 else { return nil }
@@ -234,7 +247,7 @@ final class DataModel {
         startingService = service
         defer { startingService = nil }
         let output = connection.service != nil
-            ? await Shell.run(["docker", "compose", "up", "-d", service], in: root)
+            ? await Shell.run(["docker", "compose", "up", "-d", service], in: connection.composeDirectory(projectRoot: root))
             : await Shell.run(["docker", "start", service], in: root)
         guard output.succeeded else {
             let names = ComposeVariables.named(inError: output.message)
@@ -459,4 +472,164 @@ final class DataModel {
     }
 
     func history(for connection: DatabaseConnection) -> [String] { history[connection.id] ?? [] }
+}
+
+
+// MARK: SQL Server backups
+
+extension DataModel {
+    /// A backup being restored, for the sheet: what the backup holds, where it goes, and how
+    /// far the restore has got.
+    struct RestoreDraft: Identifiable {
+        enum Stage: Equatable {
+            case reading, ready, restoring, done(String), failed(String)
+        }
+
+        let id = UUID()
+        var backup: DatabaseBackup
+        var connection: DatabaseConnection
+        var stage: Stage = .reading
+        var header = BackupHeader()
+        var files: [BackupFile] = []
+        /// The databases the server already holds, to warn before replacing one.
+        var existing: [String] = []
+        var database = ""
+        var makeSaOwner = true
+
+        var replaces: Bool { existing.contains { $0.caseInsensitiveCompare(database) == .orderedSame } }
+    }
+
+    /// Whether Dante can reach the server's container to copy a backup in or out.
+    func canRestore(_ connection: DatabaseConnection) -> Bool {
+        connection.engine == .sqlserver && (connection.service != nil || connection.container != nil)
+    }
+
+    /// The project's backups and the container's, newest first.
+    func backups(for connection: DatabaseConnection) -> [DatabaseBackup] {
+        (projectBackups + (containerBackups[connection.id] ?? [])).sorted { ($0.modified ?? .distantPast) > ($1.modified ?? .distantPast) }
+    }
+
+    /// Looks in the container's backup folder.
+    func loadContainerBackups(for connection: DatabaseConnection) async {
+        guard canRestore(connection) else { return }
+        let output = await dockerExec(connection, SQLServerBackups.listCommand)
+        guard output.succeeded else { return }
+        containerBackups[connection.id] = SQLServerBackups.parseList(output.stdout)
+    }
+
+    /// Opens the restore sheet and reads what the backup holds, copying it into the container
+    /// first when it isn't there yet.
+    func prepareRestore(_ backup: DatabaseBackup, on connection: DatabaseConnection) async {
+        var draft = RestoreDraft(backup: backup, connection: connection)
+        draft.database = backup.suggestedDatabase
+        restoring = draft
+        guard let root else { return }
+        let path = SQLServerBackups.containerPath(for: backup)
+        if let source = localFile(of: backup, root: root) {
+            _ = await dockerExec(connection, ["mkdir", "-p", SQLServerBackups.containerFolder])
+            let copied = await dockerCopy(connection, from: source.path, to: path, intoContainer: true)
+            guard copied.succeeded else { return failRestore(draft.id, "Couldn’t copy \(backup.name) into the container: \(copied.message)") }
+            // `cp` leaves the file root's; SQL Server reads it as its own user (mssql).
+            _ = await dockerExec(connection, SQLServerBackups.readableCommand(path), asRoot: true)
+        }
+        let master = masterConnection(connection)
+        let header = await DatabaseClient.run(SQLServerBackups.headerSQL(path: path), on: master, password: password(for: connection), projectRoot: root, hasCompose: hasCompose)
+        if let error = header.error { return failRestore(draft.id, "SQL Server couldn’t read \(backup.name): \(error)") }
+        let files = await DatabaseClient.run(SQLServerBackups.fileListSQL(path: path), on: master, password: password(for: connection), projectRoot: root, hasCompose: hasCompose)
+        if let error = files.error { return failRestore(draft.id, "SQL Server couldn’t list the files in \(backup.name): \(error)") }
+        let databases = await DatabaseClient.run(SQLServerBackups.databasesSQL, on: master, password: password(for: connection), projectRoot: root, hasCompose: hasCompose)
+        guard restoring?.id == draft.id else { return }
+        draft.header = SQLServerBackups.header(from: header.results.first)
+        draft.files = SQLServerBackups.files(from: files.results.first)
+        draft.existing = databases.results.first?.rows.compactMap { $0.first ?? nil } ?? []
+        if let name = draft.header.database { draft.database = name }
+        draft.stage = .ready
+        restoring = draft
+    }
+
+    private func failRestore(_ id: UUID, _ message: String) {
+        guard restoring?.id == id else { return }
+        restoring?.stage = .failed(message)
+    }
+
+    /// Restores the sheet's backup. Replacing a database puts its other sessions out first.
+    func restore() async {
+        guard let root, var draft = restoring, draft.stage == .ready else { return }
+        let name = draft.database.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        draft.stage = .restoring
+        restoring = draft
+        let connection = draft.connection
+        let sql = SQLServerBackups.restoreSQL(path: SQLServerBackups.containerPath(for: draft.backup), database: name, files: draft.files, makeSaOwner: draft.makeSaOwner)
+        let run = await DatabaseClient.run(sql, on: masterConnection(connection), password: password(for: connection), projectRoot: root, hasCompose: hasCompose)
+        guard restoring?.id == draft.id else { return }
+        if let error = run.error {
+            restoring?.stage = .failed(error)
+            return
+        }
+        restoring?.stage = .done(draft.replaces ? "\(name) now holds what \(draft.backup.name) held." : "\(name) is restored from \(draft.backup.name).")
+        // The open database may be the one just replaced.
+        if connection.database.caseInsensitiveCompare(name) == .orderedSame { await self.connect(connection) }
+        await loadContainerBackups(for: connection)
+    }
+
+    /// A copy-only backup of the connection's database, copied out of the container to
+    /// `folder` on this Mac.
+    func backUp(_ connection: DatabaseConnection, to folder: URL) async {
+        guard let root, canRestore(connection) else { return }
+        backupStatus[connection.id] = .working("Backing up \(connection.database)…")
+        let name = SQLServerBackups.backupName(database: connection.database)
+        let path = SQLServerBackups.containerFolder + "/" + name
+        _ = await dockerExec(connection, ["mkdir", "-p", SQLServerBackups.containerFolder])
+        let run = await DatabaseClient.run(SQLServerBackups.backupSQL(database: connection.database, path: path),
+                                           on: masterConnection(connection), password: password(for: connection), projectRoot: root, hasCompose: hasCompose)
+        if let error = run.error {
+            backupStatus[connection.id] = .failed(error)
+            return
+        }
+        let target = folder.appending(path: name)
+        let copied = await dockerCopy(connection, from: path, to: target.path, intoContainer: false)
+        backupStatus[connection.id] = copied.succeeded
+            ? .done("Saved \(name) in \(folder.lastPathComponent)/.", target)
+            : .failed("The backup is in the container at \(path), but copying it out failed: \(copied.message)")
+        await loadContainerBackups(for: connection)
+    }
+
+    enum BackupStatus: Equatable {
+        case working(String), done(String, URL), failed(String)
+    }
+
+    private func masterConnection(_ connection: DatabaseConnection) -> DatabaseConnection {
+        var master = connection
+        master.database = "master"
+        return master
+    }
+
+    private func localFile(of backup: DatabaseBackup, root: URL) -> URL? {
+        switch backup.place {
+        case .project(let path): root.appending(path: path)
+        case .file(let url): url
+        case .container: nil
+        }
+    }
+
+    private func dockerExec(_ connection: DatabaseConnection, _ arguments: [String], asRoot: Bool = false) async -> Shell.Output {
+        guard let root else { return Shell.Output(status: 1, stdout: "", stderr: "No project.") }
+        let user = asRoot ? ["-u", "0"] : []
+        if let service = connection.service {
+            return await Shell.run(["docker", "compose", "exec", "-T"] + user + [service] + arguments, in: connection.composeDirectory(projectRoot: root), timeout: .seconds(60))
+        }
+        return await Shell.run(["docker", "exec"] + user + [connection.container ?? ""] + arguments, in: root, timeout: .seconds(60))
+    }
+
+    /// `docker compose cp` for a compose service, `docker cp` for a container run by hand.
+    private func dockerCopy(_ connection: DatabaseConnection, from: String, to: String, intoContainer: Bool) async -> Shell.Output {
+        guard let root else { return Shell.Output(status: 1, stdout: "", stderr: "No project.") }
+        let name = connection.service ?? connection.container ?? ""
+        let (source, target) = intoContainer ? (from, "\(name):\(to)") : ("\(name):\(from)", to)
+        if connection.service != nil {
+            return await Shell.run(["docker", "compose", "cp", source, target], in: connection.composeDirectory(projectRoot: root))
+        }
+        return await Shell.run(["docker", "cp", source, target], in: root)
+    }
 }

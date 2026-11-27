@@ -96,6 +96,19 @@ public enum QueryPlan {
                     if above.hasPrefix("Filter:") { filter = String(above.dropFirst(7)) }
                 }
                 scans.append(Scan(name: unqualified(name), alias: nil, filter: filter))
+            case .sqlserver:
+                // SHOWPLAN_TEXT: "|--Table Scan(OBJECT:([shop].[dbo].[orders]), WHERE:([shop].[dbo].[orders].[status]=N'paid'))",
+                // or a clustered index scan, which reads the whole table just the same.
+                guard trimmed.contains("Table Scan(OBJECT:(") || trimmed.contains("Clustered Index Scan(OBJECT:(") else { continue }
+                let names = trimmed.matches(of: /\[([^\]]+)\]/).map { String($0.1) }
+                // db.schema.table, then (for a clustered index scan) the index.
+                let tableIndex = 2
+                guard names.count > tableIndex else { continue }
+                let filter = trimmed.range(of: "WHERE:(").map { range -> String in
+                    String(trimmed[range.upperBound...].dropLast(2)).replacingOccurrences(of: #"\[[^\]]+\]\.\[[^\]]+\]\.\[[^\]]+\]\."#, with: "", options: .regularExpression)
+                        .replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "")
+                }
+                scans.append(Scan(name: names[tableIndex], alias: nil, filter: filter))
             case .sqlite:
                 // "SCAN orders", "SCAN TABLE orders AS o"; "SCAN … USING INDEX" already uses one.
                 // The sqlite3 shell draws the plan as a tree: "`--SCAN o", "|--SEARCH …".

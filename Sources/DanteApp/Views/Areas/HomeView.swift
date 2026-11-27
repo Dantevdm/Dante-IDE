@@ -157,7 +157,7 @@ struct HomeView: View {
 
     /// The Map's build when it's for this revision, else one of our own.
     private func loadSketch() async {
-        if let cache = session.mapCache, cache.revision == workspace.revision, let system = cache.system {
+        if let cache = session.mapCache, cache.revision == workspace.revision, cache.scope.isEmpty, let system = cache.system {
             sketch = system.isUseful ? HomePulse.sketch(system) : nil
             return
         }

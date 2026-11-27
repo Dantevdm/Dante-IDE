@@ -125,6 +125,10 @@ public struct TestInventory: Equatable, Sendable {
         if lower.hasSuffix(".java") || lower.hasSuffix(".kt") { return lower.contains("test") && folders.contains("test") }
         if lower.hasSuffix(".rb") { return lower.hasSuffix("_spec.rb") || lower.hasSuffix("_test.rb") }
         if lower.hasSuffix(".rs") { return folders.contains("tests") }
+        // .NET: a test project's folder (Shop.Tests, Shop.UnitTests) or a …Tests.cs class.
+        if lower.hasSuffix(".cs") || lower.hasSuffix(".fs") {
+            return lower.hasSuffix("tests.cs") || lower.hasSuffix("test.cs") || folders.contains { $0.hasSuffix(".tests") || $0.hasSuffix("tests") || $0 == "test" }
+        }
         return false
     }
 
@@ -148,6 +152,8 @@ public struct TestInventory: Equatable, Sendable {
         nonisolated(unsafe) static let jvmTest = /(?:void|fun)\s+`?([\w ]+?)`?\s*\(/
         nonisolated(unsafe) static let rubyIt = /^\s*it\s+['"]([^'"]+)['"]/
         nonisolated(unsafe) static let rubyTest = /^\s*def\s+(test_\w+)/
+        nonisolated(unsafe) static let dotnetAttribute = /^\s*\[(?:[\w.]+\s*,\s*)*(?:Fact|Theory|Test|TestCase|TestMethod|DataTestMethod|SkippableFact)\b/
+        nonisolated(unsafe) static let dotnetMethod = /^\s*(?:(?:public|private|internal|protected|static|async|override|virtual)\s+)*[\w.<>\[\]?]+\s+(\w+)\s*\(/
     }
 
     /// The tests declared in one file.
@@ -200,6 +206,18 @@ public struct TestInventory: Equatable, Sendable {
                         found.append((String(match.1), index + 1, nil))
                         break
                     }
+                }
+            }
+        } else if lower.hasSuffix(".cs") {
+            // xUnit's [Fact] and [Theory], NUnit's [Test] and [TestCase], MSTest's [TestMethod]:
+            // the method on the next lines.
+            for (index, line) in lines.enumerated() where line.contains("[") {
+                guard line.firstMatch(of: Pattern.dotnetAttribute) != nil else { continue }
+                for next in lines.dropFirst(index + 1).prefix(4) where !next.trimmingCharacters(in: .whitespaces).hasPrefix("[") {
+                    if let match = next.firstMatch(of: Pattern.dotnetMethod) {
+                        found.append((String(match.1), index + 1, nil))
+                    }
+                    break
                 }
             }
         } else if lower.hasSuffix(".rb") {

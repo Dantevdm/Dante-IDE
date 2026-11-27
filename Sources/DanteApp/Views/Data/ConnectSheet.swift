@@ -74,7 +74,9 @@ struct ConnectSheet: View {
             }
 
             if engine != .sqlite {
-                dataField("Paste a URL", detail: "postgres://user:password@host:5432/db — Dante fills in the fields below and keeps the password in the Keychain.") {
+                dataField("Paste a URL", detail: engine == .sqlserver
+                          ? "A .NET connection string (Server=localhost,1433;Database=app;User Id=sa;…) or a JDBC URL — Dante fills in the fields below and keeps the password in the Keychain."
+                          : "postgres://user:password@host:5432/db — Dante fills in the fields below and keeps the password in the Keychain.") {
                     TextField("DATABASE_URL", text: $url)
                         .textFieldStyle(.roundedBorder)
                         .font(.dante(size: 12.5, design: .monospaced))
@@ -156,13 +158,15 @@ struct ConnectSheet: View {
         .background(theme.card.color)
         .onChange(of: engine) {
             if editing == nil, let defaultPort = engine.defaultPort { port = defaultPort }
+            if editing == nil, engine == .sqlserver, user == NSUserName() { user = "sa" }
             test = nil
         }
         .task { await findLocalDatabases() }
     }
 
     private func fill(from text: String) {
-        guard let parsed = DatabaseConnection.parse(url: text) else { return }
+        // A URL, or a .NET connection string (Server=…;Database=…) or a JDBC URL for SQL Server.
+        guard let parsed = DatabaseConnection.parse(url: text) ?? SQLServer.connection(adoNet: text) ?? SQLServer.connection(jdbc: text) else { return }
         engine = parsed.engine
         if parsed.engine == .sqlite {
             file = parsed.file ?? ""
