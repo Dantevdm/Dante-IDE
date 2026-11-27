@@ -40,6 +40,7 @@ struct StandardsView: View {
             if let notice {
                 Text(notice).font(.dante(size: 12)).foregroundStyle(theme.text2.color)
             }
+            CustomerSection(session: session, workspace: workspace)
             docsSection
             ForEach(standards.themeSets) { set in setSection(set) }
             if standards.themeSets.isEmpty {
@@ -63,7 +64,8 @@ struct StandardsView: View {
 
     private var subtitle: String {
         let docs = standards.docs.count, themes = standards.themeCount
-        return "\(docs) standard\(docs == 1 ? "" : "s") · \(themes) theme\(themes == 1 ? "" : "s")"
+        let customers = workspace.customers.map(\.name)
+        return (customers.isEmpty ? "" : "For \(customers.joined(separator: " and ")) · ") + "\(docs) standard\(docs == 1 ? "" : "s") · \(themes) theme\(themes == 1 ? "" : "s")"
     }
 
     // MARK: Docs

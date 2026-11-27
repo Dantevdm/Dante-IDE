@@ -35,6 +35,8 @@ public struct DelegateServer: Sendable {
     public var hands = false
     /// The project's and the company's standards and themes: everything, a theme or a doc.
     public var uiStandards: (@Sendable (_ theme: String?, _ doc: String?) -> String)?
+    /// The customers applied to the project, read when the server starts (`DANTE_CUSTOMERS`).
+    public var customers: [CustomerProfile] = []
     /// The agents' own browser (`DANTE_BROWSER=1`).
     public var browser: BrowserTools?
     /// Searches the project by meaning: the question and how many pieces, as text for the agent.
@@ -126,6 +128,9 @@ public struct DelegateServer: Sendable {
         server.uiStandards = { theme, doc in
             StandardsBrief.report(Standards.load(projectRoot: projectRoot, files: FileIndex.scan(projectRoot), library: library), theme: theme, doc: doc)
         }
+        if let value = environment[DelegateEnvironment.customers], !value.isEmpty {
+            server.customers = CustomerChoice.applied(environmentValue: value)
+        }
         server.motionFrames = { folder, times in await MotionFrames.await(root: projectRoot, folder: folder, times: times) }
         let online = environment[DelegateEnvironment.securityOnline] == "1"
         server.securityReport = {
@@ -191,6 +196,9 @@ public struct DelegateServer: Sendable {
         if motionFrames != nil { parts.append("motion_frames renders frames of a motion piece (docs/motion/…) so you can look at your own work.") }
         if offersLocal { parts.append("Local models on this Mac: delegate small, checkable jobs to save the user's Claude usage, and review what comes back.") }
         if uiStandards != nil { parts.append("ui_standards gives the team's standards and frontend themes (the theme.json format, each theme, the company library): read it before building or restyling a frontend, or making a theme.") }
+        if !customers.isEmpty {
+            parts.append("This project is built for \(customers.map(\.name).joined(separator: " and ")): customer_rules gives their rules, naming, processes and guides, and customer_check checks the project or a name against them. Read customer_rules before infrastructure, naming or process work.")
+        }
         if securityReport != nil { parts.append("security_report runs Dante's security scan and returns the score and findings the user sees on the Security page: start there for any question about the project's security.") }
         if searchCode != nil { parts.append("search_code finds code by what it does, for questions grep can't answer.") }
         if look != nil { parts.append("look (Looker) reads screenshots and images on this Mac when a vision model is installed.") }
@@ -210,6 +218,7 @@ public struct DelegateServer: Sendable {
         if motionFrames != nil { tools.append(Self.motionTool) }
         if offersLocal { tools += Self.localTools }
         if uiStandards != nil { tools.append(Self.standardsTool) }
+        if !customers.isEmpty { tools += Self.customerTools }
         if securityReport != nil { tools.append(Self.securityTool) }
         if searchCode != nil { tools.append(Self.searchTool) }
         if decide != nil { tools.append(Self.decideTool) }
@@ -224,7 +233,7 @@ public struct DelegateServer: Sendable {
 
     /// Every job tool takes a `why`, so the Agents area can say who checked what and why.
     static func askingWhy(_ tool: JSONValue) -> JSONValue {
-        guard !["local_models", "search_code", "security_report", "ui_standards", "dante_pages", "show_page", "open_file", "diagram_guide", "motion_frames"].contains(tool["name"]?.string ?? ""),
+        guard !["local_models", "search_code", "security_report", "ui_standards", "customer_rules", "customer_check", "dante_pages", "show_page", "open_file", "diagram_guide", "motion_frames"].contains(tool["name"]?.string ?? ""),
               Hands.Tool(rawValue: tool["name"]?.string ?? "") == nil, BrowserTools.Tool(rawValue: tool["name"]?.string ?? "") == nil, var object = tool.object,
               var schema = object["inputSchema"]?.object, var properties = schema["properties"]?.object else { return tool }
         properties["why"] = ["type": "string", "description": "One short sentence for the user: why you're asking (for example \"check the migration can't lock the table\")."]
@@ -418,6 +427,24 @@ public struct DelegateServer: Sendable {
         ]],
     ]
 
+    static let customerTools: [JSONValue] = [
+        [
+            "name": "customer_rules",
+            "description": "How the customer this project is built for always works: their infrastructure tool, rules (with severity), naming standards, processes such as an RFC before an infrastructure change, the skills to use, their theme and their guides. With no input, all of it; with topic, one rule, naming, process or guide in full.",
+            "inputSchema": ["type": "object", "properties": [
+                "topic": ["type": "string", "description": "A rule, naming, process or guide's title or id."],
+            ]],
+        ],
+        [
+            "name": "customer_check",
+            "description": "Check against the customer's standards. With name (and what, the kind of name such as \"IAM role name\" or \"export\"), says whether that name follows their naming before you use it. With no input, checks the whole project (forbidden files, rule patterns, infrastructure tool and format, names in CloudFormation templates) and lists the findings worst first. Runs on the user's Mac.",
+            "inputSchema": ["type": "object", "properties": [
+                "name": ["type": "string", "description": "A name to check, e.g. a stack export or role name."],
+                "what": ["type": "string", "description": "The kind of name."],
+            ]],
+        ],
+    ]
+
     static let securityTool: JSONValue = [
         "name": "security_report",
         "description": "Run Dante's security scan of this project again and get what its Security page shows: the score out of 100, the grade, and the findings most severe first, each with where it is and how to fix it. Covers secrets, personal information (POPIA), encryption, injection, containers, CI, infrastructure and, with the scanners installed, dependencies. Use it first for any question about the project's security, a score or what's critical, instead of exploring the code or sending sub-agents; then read only what it names. Runs on the user's Mac in seconds and updates the page they see.",
@@ -554,6 +581,18 @@ public struct DelegateServer: Sendable {
             let theme = arguments["theme"]?.string.flatMap { $0.isEmpty ? nil : $0 }
             let doc = arguments["doc"]?.string.flatMap { $0.isEmpty ? nil : $0 }
             return Self.text(await Task.detached { uiStandards(theme, doc) }.value)
+        case "customer_rules":
+            return Self.text(CustomerBrief.report(customers, topic: arguments["topic"]?.string))
+        case "customer_check":
+            if let name = arguments["name"]?.string, !name.isEmpty {
+                return Self.text(CustomerBrief.checkName(customers, name: name, what: arguments["what"]?.string))
+            }
+            guard let root = fileRoot else { return Self.text("There's no project to check here.", isError: true) }
+            let customers = customers
+            let findings = await Task.detached {
+                CustomerCheck.run(customers, files: FileIndex.scan(root), read: { CustomerCheck.readText(root.appending(path: $0)) })
+            }.value
+            return Self.text(CustomerBrief.checkReport(findings))
         case "security_report":
             guard let securityReport else { return Self.text("Dante's security scan isn’t available here.", isError: true) }
             let started = Date()

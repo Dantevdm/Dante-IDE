@@ -257,6 +257,11 @@ public final class ClaudeSession {
     /// nil for none. Takes effect on the next message.
     public var team: (agents: String, brief: String)?
     private var startedTeam: String?
+    /// The customers that apply to the project (`CustomerProfile`): their rules and processes
+    /// put a note on edits, and their own MCP servers go to Claude Code beside Dante's.
+    public var customers: [CustomerProfile] = []
+    private var startedCustomerServers: [CustomerProfile.Server] = []
+    private var customerServers: [CustomerProfile.Server] { customers.flatMap(\.servers) }
     /// The signed-in Claude account (`ClaudeAccount.identity`). Claude Code reads its sign-in
     /// once, so a different account continues the conversation in a new process.
     public var account: String?
@@ -521,7 +526,7 @@ public final class ClaudeSession {
         }
         // Rules are passed at launch, so pick up edits to project.yaml by resuming in a new process.
         if process != nil, rules() != startedRules || asksFirst != startedAsksFirst || requestedModel != startedModel || (engine == .claude && (requestedEffort != startedEffort || requestedFastMode != startedFastMode)) || delegateCommand != startedDelegate
-            || delegateEnvironment != startedDelegateEnvironment || team?.agents != startedTeam || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
+            || delegateEnvironment != startedDelegateEnvironment || team?.agents != startedTeam || (engine == .claude && customerServers != startedCustomerServers) || engine != startedEngine || (engine == .codex && codexModel != startedCodexModel) {
             stop()
         }
         // A remote project's Claude Code uses the host's sign-in, not this Mac's.
@@ -909,8 +914,9 @@ public final class ClaudeSession {
                                                   codex: environment[DelegateEnvironment.codex] != nil) {
                 prompt += "\n\n" + brief
             }
-            let json = MCPConfigFile.json(command: delegate, environment: environment)
-            if environment.isEmpty {
+            let servers = Dictionary(customerServers.map { ($0.name, $0.config) }, uniquingKeysWith: { first, _ in first })
+            let json = MCPConfigFile.json(command: delegate, environment: environment, servers: servers)
+            if environment.isEmpty && servers.isEmpty {
                 mcpConfig = json
             } else if let file = try? MCPConfigFile.write(json) {
                 mcpConfigFile = file
@@ -932,6 +938,7 @@ public final class ClaudeSession {
         allowRules = ClaudePermissions.load(root: root).allow
         startedDelegate = delegateCommand
         startedDelegateEnvironment = delegateEnvironment
+        startedCustomerServers = customerServers
         startedModel = requestedModel
         startedEffort = requestedEffort
         startedFastMode = requestedFastMode
@@ -1349,7 +1356,7 @@ public final class ClaudeSession {
                     } else if Hands.Tool.of(mcpName: request.toolName) != nil, approvalLevel == .everything, !hasNote, guarded != .ask {
                         // At Everything Hands go ahead; the kill switch and refusals still hold.
                         approve(id)
-                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames", "mcp__dante__ui_standards"].contains(request.toolName)
+                    } else if ["mcp__dante__delegate", "mcp__dante__local_models", "mcp__dante__search_code", "mcp__dante__look", "mcp__dante__security_report", "mcp__dante__dante_pages", "mcp__dante__show_page", "mcp__dante__open_file", "mcp__dante__diagram_guide", "mcp__dante__motion_frames", "mcp__dante__ui_standards", "mcp__dante__customer_rules", "mcp__dante__customer_check"].contains(request.toolName)
                                 || BrowserTools.Tool.of(mcpName: request.toolName) != nil {
                         // Dante's own local tools: nothing leaves the Mac (the browser only
                         // visits the app here). Grok and Jev send material away, so they
@@ -1368,6 +1375,7 @@ public final class ClaudeSession {
             }
             let change = ProposedChange.make(toolName: request.toolName, input: request.input, root: root)
             let security = change.map { SecurityReview.findings(in: $0, root: root) } ?? []
+            let customerNote = change.flatMap { CustomerCheck.note(for: $0, root: root, customers: customers) }
             if index[id] == nil {
                 append(TranscriptItem(id: id, content: .tool(ToolActivity(id: id, name: request.toolName, input: request.input, status: .running))))
             }
@@ -1385,7 +1393,7 @@ public final class ClaudeSession {
                 updateTool(id) {
                     $0.input = request.input
                     $0.change = change
-                    $0.ruleNote = note
+                    $0.ruleNote = [note, customerNote].compactMap { $0 }.joined(separator: " ")
                     $0.securityNote = SecurityReview.note(for: security)
                     $0.securityBlocks = SecurityReview.blocks(security)
                     $0.status = .awaitingApproval(requestID: request.requestID)
@@ -1394,6 +1402,7 @@ public final class ClaudeSession {
                 updateTool(id) {
                     $0.input = request.input
                     $0.change = change
+                    $0.ruleNote = customerNote
                     $0.securityNote = SecurityReview.note(for: security)
                     $0.securityBlocks = SecurityReview.blocks(security)
                     $0.status = .awaitingApproval(requestID: request.requestID)

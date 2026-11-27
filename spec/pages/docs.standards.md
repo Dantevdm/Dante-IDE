@@ -1,11 +1,11 @@
 ---
 id: docs.standards
 title: Standards
-phrases: [standards, ui standards, house standards, principles, design standards, themes, customer themes, frontend themes, theme, new theme, company library, style guide]
+phrases: [customer, customers, customer rules, naming standards, rfc process, standards, ui standards, house standards, principles, design standards, themes, customer themes, frontend themes, theme, new theme, company library, style guide]
 ---
 # Standards (Docs › Standards)
 
-Standards are the house rules every app the team builds follows: principles and UI standards as docs, and the frontend themes (a folder per customer with a theme.json, its logos and its font) a frontend must take its colours, type, corners and logos from. They're references for coding: they come from the project and from the company library, a folder on this Mac outside every repo, and new themes are made here, by hand or by the agent in charge. They don't appear on the Map.
+Standards are the house rules every app the team builds follows: principles and UI standards as docs, and the frontend themes (a folder per customer with a theme.json, its logos and its font) a frontend must take its colours, type, corners and logos from. They're references for coding: they come from the project and from the company library, a folder on this Mac outside every repo, and new themes are made here, by hand or by the agent in charge. They don't appear on the Map. A customer is the way you always work for one client, kept in the company library and applied per project: the rules the code keeps, naming standards, processes such as an RFC, the infrastructure tool they always use, their theme, the skills that know their world and MCP servers of their own; the agents follow what applies, like a small MCP per customer.
 
 ## Highlights
 - Every themes folder in the project is found on its own (any `<folder>/<name>/theme.json`, builds and node_modules skipped), with its default theme from the folder's README.
@@ -14,7 +14,10 @@ Standards are the house rules every app the team builds follows: principles and 
 - New theme: a customer's name, colours, corners, font and pictures, with a live preview and contrast check, written as a folder beside the others or in the company library; or the agent in charge makes it.
 - The agents are told the standards in their brief, and Dante's ui_standards tool gives them the docs, every theme and the theme.json format.
 
+- Customers: Apply to this project, switch off any part of theirs that doesn't fit, and Dante tells the agents, checks the code, notes an agent's edit that breaks a rule or needs their process, and hands the agents customer_rules and customer_check.
+
 ## Shows
+- Customer, first: a card per customer applied to this project (their summary; Infrastructure, Theme, Rules with severity and Checked or Told to the agents, Naming with the shape, Process with its steps, Skills and MCP servers, each with a switch; anything customer.yaml gets wrong in amber; What the check found, worst first, each opening its file at the line; a chip with the count; Edit and Stop applying), then a row per other customer in the library (its counts or summary, "Looks like theirs: …" when the git remote, the folder's path or a file says so, Edit and Apply to this project), and New customer and the customers folder in Finder.
 - The header: the counts (docs and themes), Docs (back to the library), Library (the library's path in the tooltip; click to use another folder), New standard and New theme.
 - Docs: a row per standards doc, project ones first (docs/standards/, standards/, .dante/standards/ or documentation/standards/) then the company library's, each with its first line and where it lives.
 - A section per themes folder: its folder (or Company library), the default theme, how the app picks a theme (a Live chip with `?theme=`, or the build variable's name), "Copy all to the library" and "New theme here"; then a card per theme: a small sign-in page, the name, the customer, the primary colours as dots, a Default chip and a problem count.
@@ -22,18 +25,27 @@ Standards are the house rules every app the team builds follows: principles and 
 - The Docs library's Standards strip (after Diagrams and motion) and a Standards row in the Docs sidebar.
 
 ## Actions
+- New customer: a name makes `customers/<name>/customer.yaml` in the company library, every section filled with an example, and opens it in Code. Edit opens it; saving reloads the page.
+- Apply to this project, Stop applying and each part's switch are kept on this Mac per project (never in the repo) and take effect from the agent's next message.
 - Open a theme card for its sheet; Open the app in it; Copy VAR=name; New theme from this…; Copy to the company library (or, from the library, Copy into a project's themes folder); Open theme.json (in Code inside the project, else the default app); Show in Finder.
 - New theme: Save in (each themes folder, the company library, or a new themes/ folder), Start from (a theme whose font and defaults it takes), customer (the folder name comes from it, lower case with dashes), product, copyright, tagline, primary, secondary and accent colours with the text colour on primary worked out, a separate sidebar colour, corners, and logo, reversed logo, mark and sign-in picture from files. Make theme writes theme.json and copies the pictures (and the starting theme's font files with their licence); Ask <agent> to make it sends the same as a request with the format.
 - New standard: writes docs/standards/ui-standards.md from an outline naming the project's themes (never over an existing file) and opens it Side by Side.
 - Library: Dante's own library, Application Support/Dante/standards, is used until another folder is chosen (outside the project; a folder inside it is refused). Its docs (markdown, plus a themes folder's README as the guide to its themes) and its themes (in themes/, or the folder itself when it holds theme folders) show for every project on this Mac. A library that is the open project's own themes folder isn't shown twice.
 
 ## States
+- No customers in the library: a card saying what a customer is, with New customer….
+- A customer applied with nothing filled in: "Nothing filled in yet".
+- The check finds nothing: the chip says it keeps every checked rule; rules without a pattern are only told to the agents.
 - No themes: an empty state saying what a theme is and where Dante finds them, with Company library… and New theme…; standards docs still list above it.
 - A theme with problems shows an amber count on its card and the list in its sheet; a theme that can't be read as JSON isn't listed.
 - A frontend that picks its theme at build time has no Open in it buttons; one with no themes folder shows no theme line.
 - The app not running: Open the app in it says so and offers Start it, like the Map's Open in browser.
 
 ## Edge cases
+- customer.yaml (in `customers/<id>/`, beside markdown guides the agents can read): name, summary, detect (remotes, paths, files), theme, infrastructure (tool and format for CloudFormation, notes), rules (title, severity blocker/issue/note, detail, `forbid` globs, `require` globs, `pattern` with `files`), naming (what, `pattern` or `shape` with `*`, example, `of`: file, logical-id, export, tag:<Key> or a CloudFormation property such as RoleName, `type` for one resource type, `files`), process (title, when, steps, `paths`), skills (name, when) and mcp (servers as in Claude Code's mcpServers). Lists may be single values and ids come from titles.
+- The infrastructure check flags another tool's files (Terraform, CDK, Bicep, Pulumi, or CloudFormation when they use another) and, for CloudFormation in JSON, templates in YAML.
+- Each rule or naming keeps at most 25 findings; files over 2 MB aren't read.
+- Their MCP servers go to Claude Code beside Dante's (never one called dante) for local projects; remote projects and Codex get the brief and customer tools only.
 - A theme falls back to its folder's default field by field, except the customer's own: customer name, copyright, tagline and pictures. A theme without pictures shows the customer's initials, never another customer's logo.
 - Colours are read as `#rrggbb`, `#rgb` or `H S% L%`; anything else is listed as a problem and the default's is used.
 - Files a theme names must be inside its folder; fonts are registered for the preview only, from the theme's woff2/ttf/otf files.
@@ -42,6 +54,8 @@ Standards are the house rules every app the team builds follows: principles and 
 - Theme folders inside dist, build, node_modules, .next and similar are ignored.
 
 ## Acceptance
+- A customer with a blocker rule `"Resource"\s*:\s*"\*"` in `**/*.json`, CloudFormation in JSON and an export shape `${AppId}-${StackName}-${Environment}-*`: applied to a project with a JSON template granting `"Resource": "*"`, a `main.tf` and an export `${AWS::StackName}-Old`, the card lists the rule at its line, Terraform here, and the export, blockers first; the agent's edit adding `"Resource": "*"` to infra/ carries the rule and the RFC process as a note.
+- Switching off a rule removes it from the agents' brief and the check; Stop applying removes the customer from the next message.
 - A project with web/themes/{base,acme}/theme.json and a `?theme=` reader shows both themes, base as Default, with the Live chip; Open the app in it opens `http://localhost:<port>/?theme=acme` (before any `#` route).
 - A theme with an unreadable colour and a missing logo shows two problems.
 - New theme with a customer "Kelp & Co." writes kelp-co/theme.json that reads back the same and shows as a card at once.

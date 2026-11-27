@@ -139,6 +139,15 @@ extension Session {
         workspace?.close(document)
     }
 
+    /// Closes several tabs, asking once about unsaved changes among them.
+    func close(_ documents: [EditorDocument]) {
+        guard !documents.isEmpty, confirmDiscardingChanges(in: documents) else { return }
+        for document in documents {
+            languages?.closed(document)
+            workspace?.close(document)
+        }
+    }
+
     func closeActiveTab() {
         if let document = workspace?.activeDocument {
             close(document)

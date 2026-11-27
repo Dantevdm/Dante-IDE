@@ -626,6 +626,10 @@ final class Session {
 
     /// Settings Claude starts with; a change applies from the next message.
     func applyClaudePreferences(to claude: ClaudeSession? = nil) {
+        // Every conversation in the window when none is named: the main one and the jobs'.
+        if claude == nil {
+            for job in jobs.sessions.values { applyClaudePreferences(to: job) }
+        }
         guard let claude = claude ?? self.claude else { return }
         claude.automaticTaskRouting = Preferences.shared.automaticTaskRouting
         claude.routesToLocalModels = Preferences.shared.delegatesToLocalModels
@@ -664,6 +668,13 @@ final class Session {
         // Its own browser, for the main conversation and jobs alike; it only visits the app here.
         if Preferences.shared.agentsBrowse, claude.remote == nil { environment[BrowserTools.environment] = "1" }
         if let library = Preferences.shared.standardsLibraryURL { environment[DelegateEnvironment.standards] = library.path }
+        // The customers applied here: their rules note edits, their tools and servers go along.
+        if let workspace, claude.remote == nil {
+            claude.customers = workspace.customers
+            if let value = workspace.customerChoice.environmentValue(library: workspace.customerLibrary) { environment[DelegateEnvironment.customers] = value }
+        } else {
+            claude.customers = []
+        }
         // The server always carries the Security page's scan; with Codex in charge, also Claude
         // for second opinions.
         claude.delegateCommand = Self.danteCommand

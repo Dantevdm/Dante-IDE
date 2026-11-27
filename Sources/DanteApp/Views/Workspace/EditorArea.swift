@@ -1,3 +1,4 @@
+import AppKit
 import DanteEditor
 import DanteKit
 import SwiftUI
@@ -212,9 +213,11 @@ private struct TabBar: View {
                     TabItem(
                         document: document,
                         isActive: document.id == workspace.activeDocumentID,
+                        isInOtherPane: workspace.split?.otherDocumentID == document.id && document.id != workspace.activeDocumentID,
                         select: { workspace.activeDocumentID = document.id; session.git.diff = nil },
                         close: { session.close(document) }
                     )
+                    .contextMenu { menu(for: document) }
                 }
             }
         }
@@ -225,10 +228,52 @@ private struct TabBar: View {
     }
 }
 
+private extension TabBar {
+    /// Right-click on a tab: side by side (any file: code, a PDF, an image, a doc), closing
+    /// tabs in bulk and its path.
+    @ViewBuilder func menu(for document: EditorDocument) -> some View {
+        let pane = workspace.pane(of: document.id)
+        Button("Split Right") { session.git.diff = nil; workspace.show(document.id, onRight: true) }
+            .disabled(pane == true)
+        Button("Split Left") { session.git.diff = nil; workspace.show(document.id, onRight: false) }
+            .disabled(pane == false)
+        if workspace.split != nil {
+            Button("Close Split") { workspace.closeSplit() }
+        }
+        Divider()
+        Button("Close") { session.close(document) }
+        Button("Close Others") { session.close(workspace.documents.filter { $0.id != document.id }) }
+            .disabled(workspace.documents.count < 2)
+        Button("Close Tabs to the Right") {
+            guard let index = workspace.documents.firstIndex(where: { $0.id == document.id }) else { return }
+            session.close(Array(workspace.documents[(index + 1)...]))
+        }
+        .disabled(workspace.documents.last?.id == document.id)
+        Button("Close All") { session.close(workspace.documents) }
+        Divider()
+        Button("Copy Path") { copy(document.url.path) }
+        Button("Copy Relative Path") { copy(relativePath(document)) }
+        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([document.url]) }
+    }
+
+    func relativePath(_ document: EditorDocument) -> String {
+        let root = workspace.url.standardizedFileURL.path + "/"
+        let path = document.url.standardizedFileURL.path
+        return path.hasPrefix(root) ? String(path.dropFirst(root.count)) : path
+    }
+
+    func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
 private struct TabItem: View {
     @Environment(\.theme) private var theme
     let document: EditorDocument
     let isActive: Bool
+    /// Showing in the split's other pane.
+    var isInOtherPane = false
     let select: () -> Void
     let close: () -> Void
     @State private var hovering = false
@@ -261,7 +306,11 @@ private struct TabItem: View {
         .frame(height: 36)
         .background(isActive ? theme.codeBackground.color : .clear)
         .overlay(alignment: .top) {
-            if isActive { Rectangle().fill(theme.accent.color).frame(height: 2) }
+            if isActive {
+                Rectangle().fill(theme.accent.color).frame(height: 2)
+            } else if isInOtherPane {
+                Rectangle().fill(theme.accent.color.opacity(0.4)).frame(height: 2)
+            }
         }
         .overlay(alignment: .trailing) { Rectangle().fill(theme.line.color).frame(width: 1) }
         .contentShape(Rectangle())

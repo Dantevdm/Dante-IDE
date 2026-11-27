@@ -119,11 +119,14 @@ public enum MCPConfigFile {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: "Dante/mcp")
     }
 
-    /// The config's JSON: the dante server with its environment.
-    public static func json(command: String, environment: [String: String]) -> String {
+    /// The config's JSON: the dante server with its environment, and other servers beside it
+    /// (a customer's own; never one called dante).
+    public static func json(command: String, environment: [String: String], servers: [String: JSONValue] = [:]) -> String {
         var server: [String: JSONValue] = ["type": "stdio", "command": .string(command), "args": ["mcp"]]
         if !environment.isEmpty { server["env"] = .object(environment.mapValues { .string($0) }) }
-        return JSONValue.object(["mcpServers": ["dante": .object(server)]]).jsonLine
+        var all = servers.filter { $0.key != "dante" }
+        all["dante"] = .object(server)
+        return JSONValue.object(["mcpServers": .object(all)]).jsonLine
     }
 
     /// Writes a config into `folder` (0700) as a 0600 file and returns its path.
@@ -155,6 +158,8 @@ public enum DelegateEnvironment {
     public static let local = "DANTE_LOCAL"
     /// The company standards library chosen in Settings › Files.
     public static let standards = "DANTE_STANDARDS"
+    /// The customers applied to the project (`CustomerChoice.environmentValue`).
+    public static let customers = "DANTE_CUSTOMERS"
     /// The Grok model chosen in Settings.
     public static let grokModel = "DANTE_GROK_MODEL"
     /// The Codex CLI to ask, when the user lets Claude ask Codex.

@@ -113,6 +113,9 @@ public enum ClaudeBrief {
         if let standards = workspace.standards, let brief = StandardsBrief.brief(standards) {
             sections.append(Section(title: "House standards", source: "docs/standards and themes", text: brief))
         }
+        if let brief = CustomerBrief.brief(workspace.customers) {
+            sections.append(Section(title: "Customer", source: "company library › customers", text: brief))
+        }
         let rules = workspace.claudeRules
         if !rules.isEmpty {
             var parts: [String] = []

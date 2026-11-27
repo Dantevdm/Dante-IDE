@@ -17,6 +17,11 @@ public final class Workspace {
     public private(set) var phaseDocs: [String: PhaseDoc] = [:]
     /// House standards and themes, from the project and the company library. Nil until read.
     public private(set) var standards: Standards?
+    /// Every customer in the company library, and which apply here (chosen on this Mac).
+    public private(set) var customerLibrary: [CustomerProfile] = []
+    public private(set) var customerChoice = CustomerChoice()
+    /// The customers that apply, with their switched-off parts left out.
+    public var customers: [CustomerProfile] { customerChoice.applied(from: customerLibrary) }
     /// Name, summary and health checks from project.yaml.
     public private(set) var info = ProjectInfo()
     /// Bumped whenever files change on disk or through the editor, so views that read
@@ -62,6 +67,33 @@ public final class Workspace {
         split = Split(otherDocumentID: active, focusIsRight: true)
     }
 
+    /// Shows a document in the left or right pane and focuses it, splitting the editor when
+    /// it's one pane (the other pane keeps what was showing, so a tab opens beside the file
+    /// you're in, like IntelliJ's Split Right).
+    public func show(_ id: EditorDocument.ID, onRight right: Bool) {
+        guard documents.contains(where: { $0.id == id }) else { return }
+        guard var split else {
+            split = Split(otherDocumentID: activeDocumentID ?? id, focusIsRight: right)
+            activeDocumentID = id
+            return
+        }
+        if split.focusIsRight != right {
+            split.otherDocumentID = activeDocumentID ?? id
+            split.focusIsRight = right
+            self.split = split
+        }
+        activeDocumentID = id
+    }
+
+    /// Which pane shows a document when the editor is split: true for the right, false for
+    /// the left, nil when it isn't showing (or both sides show it).
+    public func pane(of id: EditorDocument.ID) -> Bool? {
+        guard let split, let active = activeDocumentID, active != split.otherDocumentID else { return nil }
+        if id == active { return split.focusIsRight }
+        if id == split.otherDocumentID { return !split.focusIsRight }
+        return nil
+    }
+
     /// Back to one pane, keeping the focused one.
     public func closeSplit() {
         split = nil
@@ -100,8 +132,20 @@ public final class Workspace {
     public func reloadStandards(library: URL?) async {
         let root = url
         let files = files
-        let next = await Task.detached(priority: .utility) { Standards.load(projectRoot: root, files: files, library: library) }.value
+        let (next, customers) = await Task.detached(priority: .utility) {
+            (Standards.load(projectRoot: root, files: files, library: library), CustomerLibrary.load(library: library))
+        }.value
         if next != standards { standards = next }
+        if customers != customerLibrary { customerLibrary = customers }
+        let choice = CustomerChoice.load(projectRoot: root)
+        if choice != customerChoice { customerChoice = choice }
+    }
+
+    /// Applies customers, or parts of them, to this project on this Mac.
+    public func setCustomerChoice(_ choice: CustomerChoice) {
+        guard choice != customerChoice else { return }
+        customerChoice = choice
+        choice.save(projectRoot: url)
     }
 
     // MARK: Plan
